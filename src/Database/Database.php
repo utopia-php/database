@@ -807,6 +807,7 @@ class Database
      * @param Document $collection
      * @param array<Document> $documents
      * @return array<Document>
+     * @throws DatabaseException
      */
     protected function refetchDocuments(Document $collection, array $documents): array
     {
@@ -814,21 +815,27 @@ class Database
             return $documents;
         }
 
-        $docIds = array_map(fn ($doc) => $doc->getId(), $documents);
+        $sequences = array_map(function ($doc) {
+            $sequence = $doc->getSequence();
+            if ($sequence === null) {
+                throw new DatabaseException('Cannot refetch document without a $sequence: ' . $doc->getId());
+            }
+            return $sequence;
+        }, $documents);
 
         // Fetch fresh copies with computed operator values
         $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-            fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
+            fn () => $this->find($collection->getId(), [Query::equal('$sequence', $sequences)])
         ));
 
         $refetchedMap = [];
         foreach ($refetched as $doc) {
-            $refetchedMap[$doc->getId()] = $doc;
+            $refetchedMap[$doc->getSequence()] = $doc;
         }
 
         $result = [];
         foreach ($documents as $doc) {
-            $result[] = $refetchedMap[$doc->getId()] ?? $doc;
+            $result[] = $refetchedMap[$doc->getSequence()] ?? $doc;
         }
 
         return $result;

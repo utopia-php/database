@@ -6181,7 +6181,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+        $hasOperators = false;
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6394,6 +6395,21 @@ class Database
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
+            // If operators were used, refetch inside the transaction so the returned value reflects
+            // this operation's own write (read-your-writes). Refetching after commit could observe a
+            // concurrent update and return that value instead of the result of this operation.
+            foreach ($document->getArrayCopy() as $value) {
+                if (Operator::isOperator($value)) {
+                    $hasOperators = true;
+                    break;
+                }
+            }
+
+            if ($hasOperators) {
+                $refetched = $this->refetchDocuments($collection, [$document]);
+                $document = $refetched[0];
+            }
+
             return $document;
         });
 
@@ -6404,26 +6420,16 @@ class Database
         // Purge again after commit so readers cannot re-cache the pre-commit version
         $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
-        // If operators were used, refetch (outside the transaction) to get committed computed values
-        $hasOperators = false;
-        foreach ($document->getArrayCopy() as $value) {
-            if (Operator::isOperator($value)) {
-                $hasOperators = true;
-                break;
-            }
-        }
-
-        if ($hasOperators) {
-            $refetched = $this->refetchDocuments($collection, [$document]);
-            $document = $refetched[0];
-        }
-
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth));
             $document = $documents[0];
         }
 
-        $document = $this->decode($collection, $document);
+        // The operator refetch already returns a decoded document (via find()); decoding again
+        // would double-apply the decode filters.
+        if (!$hasOperators) {
+            $document = $this->decode($collection, $document);
+        }
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {

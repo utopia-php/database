@@ -550,6 +550,60 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testUpdateDocumentOperatorDoesNotDoubleDecodeFilters(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // A deliberately non-idempotent filter: decoding a second time corrupts the value
+        // (json_decode of the already-plaintext value yields null). This surfaces a double-decode.
+        $database->addFilter(
+            'operator_double_decode',
+            function (mixed $value) {
+                return json_encode(['data' => base64_encode((string) $value)]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $decoded = json_decode($value, true);
+                return base64_decode($decoded['data']);
+            }
+        );
+
+        $collectionId = 'test_operator_double_decode';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'secret', Database::VAR_STRING, 128, false, filters: ['operator_double_decode']);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 5,
+            'secret' => 'hunter2',
+        ]));
+
+        // The operator refetch happens inside the transaction and already decodes via find().
+        // Decoding the returned document again would run the filter twice and corrupt 'secret'.
+        $updated = $database->updateDocument($collectionId, 'doc1', new Document([
+            'count' => Operator::increment(10),
+        ]));
+
+        $this->assertEquals(15, $updated->getAttribute('count'));
+        $this->assertEquals('hunter2', $updated->getAttribute('secret'));
+
+        // A normal read decodes exactly once — the operator path must match it.
+        $fresh = $database->getDocument($collectionId, 'doc1');
+        $this->assertEquals('hunter2', $fresh->getAttribute('secret'));
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorErrorHandling(): void
     {
         /** @var Database $database */

@@ -971,6 +971,125 @@ trait DocumentTests
         }
     }
 
+    public function testTextByteTruncationCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        // Byte-capacity validation relies on attribute metadata, which
+        // schemaless adapters don't store, so there is nothing to enforce.
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+
+        // A `text` attribute at its maximum allowed size. On MySQL/MariaDB this
+        // maps to a TEXT column, which is limited to 65,535 *bytes*.
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        // The Structure validator caps a TEXT column at its 65,535-byte capacity,
+        // measuring the value's actual byte length. A 20,000-char emoji value is
+        // 80,000 bytes (4 bytes per char in utf8mb4), so it exceeds the column's
+        // byte capacity and must be rejected up front with a clean
+        // StructureException, rather than letting the database raise error 1406
+        // (data truncation).
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => $value,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        try {
+            $database->createDocument(__FUNCTION__, $document);
+            $this->fail('Expected StructureException for over-capacity text value');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
+        }
+    }
+
+    public function testTextByteTruncationValid(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        // A value that fills the column's full byte capacity is stored and
+        // round-trips intact. 65,535 ASCII chars are exactly 65,535 bytes, so
+        // byte-based validation accepts the whole column, where the previous
+        // char-based cap would have rejected anything over 16,383 chars.
+        $okValue = \str_repeat('a', 65535);
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => $okValue,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $created = $database->createDocument(__FUNCTION__, $document);
+        $fetched = $database->getDocument(__FUNCTION__, $created->getId());
+        $this->assertEquals($okValue, $fetched->getAttribute('text'));
+    }
+
+    public function testTextByteTruncationUpdate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => \str_repeat('a', 16383),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $created = $database->createDocument(__FUNCTION__, $document);
+
+        // An oversized value is rejected on update, the same as on create.
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
+
+        try {
+            $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('text', $value));
+            $this->fail('Expected StructureException for over-capacity text value on update');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
+        }
+    }
+
     public function testUpsertDocumentsInc(): void
     {
         /** @var Database $database */

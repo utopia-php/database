@@ -1601,11 +1601,11 @@ class MariaDB extends SQL
 
             case Database::VAR_STRING:
                 // $size = $size * 4; // Convert utf8mb4 size to bytes
-                if ($size > 16777215) {
+                if ($size > Database::MAX_MEDIUMTEXT_BYTES) {
                     return 'LONGTEXT';
                 }
 
-                if ($size > 65535) {
+                if ($size > Database::MAX_TEXT_BYTES) {
                     return 'MEDIUMTEXT';
                 }
 

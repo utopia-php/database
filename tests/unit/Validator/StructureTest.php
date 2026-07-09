@@ -368,6 +368,116 @@ class StructureTest extends TestCase
         $this->assertEquals('Invalid document structure: Attribute "title" has invalid type. Value must be a valid string and no longer than 256 chars', $validator->getDescription());
     }
 
+    public function testTextByteSafeValidationTooBig(): void
+    {
+        // A legacy `text` attribute whose declared size (1MB) exceeds the real
+        // 65,535-byte capacity of a TEXT column. Such attributes exist in older
+        // databases created before VAR_TEXT was capped, so the limit must come
+        // from the column type, not from the (untrustworthy) declared size.
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'text',
+                    'type' => Database::VAR_TEXT,
+                    'format' => '',
+                    'size' => 1048576,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, Database::VAR_INTEGER);
+
+        $base = [
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        // A TEXT column is limited to 65,535 bytes. Validation measures the
+        // value's actual byte length, so a value over that capacity is rejected
+        // even though the declared $size (1MB) would allow the character count.
+        $tooBig = \str_repeat('a', 65536);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $tooBig])));
+        $this->assertEquals('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
+    }
+
+    public function testTextByteSafeValidationMultibyte(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'text',
+                    'type' => Database::VAR_TEXT,
+                    'format' => '',
+                    'size' => 1048576,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, Database::VAR_INTEGER);
+
+        $base = [
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        // Multi-byte content over the byte capacity is rejected the same way
+        // (20,000 emoji = 80,000 bytes in utf8mb4).
+        $multibyte = \str_repeat('📝', 20000);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['text' => $multibyte])));
+    }
+
+    public function testTextByteSafeValidationValid(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'text',
+                    'type' => Database::VAR_TEXT,
+                    'format' => '',
+                    'size' => 1048576,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, Database::VAR_INTEGER);
+
+        $base = [
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        // A value that fills the column's full byte capacity is accepted.
+        $ok = \str_repeat('a', 65535);
+        $this->assertEquals(true, $validator->isValid(new Document($base + ['text' => $ok])));
+    }
+
     public function testArrayOfStringsValidation(): void
     {
         $validator = new Structure(
@@ -959,7 +1069,26 @@ class StructureTest extends TestCase
             'published' => true,
             'tags' => ['dog', 'cat', 'mouse'],
             'feedback' => 'team@appwrite.io',
-            'text_field' => \str_repeat('a', 65535),
+            'text_field' => \str_repeat('a', 65535), // fills the TEXT column's full byte capacity
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
+        ])));
+
+        // 'text_field' is optional (required => false). Structure short-circuits
+        // on `$required === false && is_null($value)` and `continue`s before
+        // building or running any validators, so the null never reaches the
+        // ByteLength check (which would otherwise reject it, since
+        // is_string(null) is false). Hence a null optional text value passes.
+        $this->assertEquals(true, $validator->isValid(new Document([
+            '$collection' => ID::custom('posts'),
+            'title' => 'Demo Title',
+            'description' => 'Demo description',
+            'rating' => 5,
+            'price' => 1.99,
+            'published' => true,
+            'tags' => ['dog', 'cat', 'mouse'],
+            'feedback' => 'team@appwrite.io',
+            'text_field' => null,
             '$createdAt' => '2000-04-01T12:00:00.000+00:00',
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
@@ -978,7 +1107,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
 
         $this->assertEquals(false, $validator->isValid(new Document([
             '$collection' => ID::custom('posts'),
@@ -994,7 +1123,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string and no longer than 65535 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "text_field" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
     }
 
     public function testMediumtextValidation(): void
@@ -1032,7 +1161,58 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "mediumtext_field" has invalid type. Value must be a valid string and no longer than 16777215 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "mediumtext_field" has invalid type. Value must be a valid string no longer than 16777215 bytes', $validator->getDescription());
+    }
+
+    public function testMediumtextSizedValidation(): void
+    {
+        // A mediumtext attribute with a declared size of 100. The declared size
+        // is enforced as a byte limit (ByteLength), independent of the column's
+        // physical 16MB ceiling.
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'mediumtext',
+                    'type' => Database::VAR_MEDIUMTEXT,
+                    'format' => '',
+                    'size' => 100,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, Database::VAR_INTEGER);
+
+        $base = [
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        // A value of exactly 100 bytes fits the declared size.
+        $exact = \str_repeat('a', 100);
+        $this->assertEquals(true, $validator->isValid(new Document($base + ['mediumtext' => $exact])));
+
+        // 101 bytes exceeds the declared size of 100 bytes and is rejected.
+        $tooBig = \str_repeat('a', 101);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['mediumtext' => $tooBig])));
+        $this->assertEquals('Invalid document structure: Attribute "mediumtext" has invalid type. Value must be a valid string no longer than 100 bytes', $validator->getDescription());
+
+        // Each '📝' is 4 bytes in utf8mb4, so 25 chars = 100 bytes fits exactly,
+        // while 26 chars = 104 bytes exceeds the declared 100-byte size.
+        $exactMultibyte = \str_repeat('📝', 25);
+        $this->assertEquals(true, $validator->isValid(new Document($base + ['mediumtext' => $exactMultibyte])));
+
+        $tooBigMultibyte = \str_repeat('📝', 26);
+        $this->assertEquals(false, $validator->isValid(new Document($base + ['mediumtext' => $tooBigMultibyte])));
+        $this->assertEquals('Invalid document structure: Attribute "mediumtext" has invalid type. Value must be a valid string no longer than 100 bytes', $validator->getDescription());
     }
 
     public function testLongtextValidation(): void
@@ -1070,7 +1250,7 @@ class StructureTest extends TestCase
             '$updatedAt' => '2000-04-01T12:00:00.000+00:00'
         ])));
 
-        $this->assertEquals('Invalid document structure: Attribute "longtext_field" has invalid type. Value must be a valid string and no longer than 4294967295 chars', $validator->getDescription());
+        $this->assertEquals('Invalid document structure: Attribute "longtext_field" has invalid type. Value must be a valid string no longer than 4294967295 bytes', $validator->getDescription());
     }
 
     public function testStringTypeArrayValidation(): void

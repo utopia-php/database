@@ -35,15 +35,6 @@ use Utopia\Database\Query;
  */
 class SQLite extends MariaDB
 {
-    /**
-     * MariaDB byte ceilings for TEXT-family types, mirrored so PRAGMA-based
-     * introspection produces the same characterMaximumLength values that
-     * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
-     */
-    private const MARIADB_TEXT_BYTES = '65535';
-    private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
-    private const MARIADB_LONGTEXT_BYTES = '4294967295';
-
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const FTS_TABLE_SUFFIX = '_fts';
 
@@ -2973,19 +2964,25 @@ class SQLite extends MariaDB
                 break;
         }
 
+        /**
+         * MariaDB byte ceilings for TEXT-family types, mirrored so PRAGMA-based
+         * introspection produces the same characterMaximumLength values that
+         * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
+         */
+
         if ($this->emulateMySQL) {
             switch ($dataType) {
                 case 'text':
-                    $result['characterMaximumLength'] = self::MARIADB_TEXT_BYTES;
+                    $result['characterMaximumLength'] = '' .  Database::MAX_TEXT_BYTES;
                     break;
 
                 case 'mediumtext':
-                    $result['characterMaximumLength'] = self::MARIADB_MEDIUMTEXT_BYTES;
+                    $result['characterMaximumLength'] = '' . Database::MAX_MEDIUMTEXT_BYTES;
                     break;
 
                 case 'longtext':
                 case 'json':
-                    $result['characterMaximumLength'] = self::MARIADB_LONGTEXT_BYTES;
+                    $result['characterMaximumLength'] = '' .  Database::MAX_LONGTEXT_BYTES;
                     break;
 
                 case 'tinyint':

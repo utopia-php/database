@@ -431,6 +431,179 @@ trait OperatorTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testUpdateDocumentsOperatorsWithSelect(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'test_operators_with_select';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'category', Database::VAR_STRING, 50, true);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'score', Database::VAR_FLOAT, 0, false, 0.0);
+
+        for ($i = 1; $i <= 3; $i++) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => "select_doc_{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'category' => 'A',
+                'count' => $i * 10,
+                'score' => $i * 1.5,
+            ]));
+        }
+
+        // Update with an operator while selecting only a subset of attributes.
+        // The operator path refetches to compute values; it must still honor the caller's select.
+        $updated = [];
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'count' => Operator::increment(100),
+            ]),
+            [Query::select(['count']), Query::orderAsc('$id')],
+            onNext: function (Document $doc) use (&$updated) {
+                $updated[] = $doc;
+            }
+        );
+
+        $this->assertEquals(3, $count);
+        $this->assertCount(3, $updated);
+
+        // A plain find with the same select defines the expected projection.
+        $found = $database->find($collectionId, [Query::select(['count']), Query::orderAsc('$id')]);
+
+        foreach ($updated as $index => $doc) {
+            // Computed operator value is present and correct.
+            $this->assertEquals(($index + 1) * 10 + 100, $doc->getAttribute('count'));
+
+            // The operator path must return the same projection as a normal select find,
+            // i.e. it must not leak the non-selected attributes (regression check).
+            $this->assertEquals(
+                \array_keys($found[$index]->getArrayCopy()),
+                \array_keys($doc->getArrayCopy())
+            );
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testUpdateDocumentsOperatorsBatchLargerThanDefaultLimit(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'test_operators_large_batch';
+        $database->createCollection($collectionId);
+
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+
+        // More documents than find()'s default limit (25) so the refetch must page/limit correctly.
+        $total = 60;
+        for ($i = 1; $i <= $total; $i++) {
+            $database->createDocument($collectionId, new Document([
+                '$id' => "batch_doc_{$i}",
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'count' => $i,
+            ]));
+        }
+
+        // Update every document with an operator. The refetch must return computed values for the
+        // whole batch, not just the first 25 rows (which would otherwise fall back to stale values).
+        $updated = [];
+        $count = $database->updateDocuments(
+            $collectionId,
+            new Document([
+                'count' => Operator::increment(1000),
+            ]),
+            [],
+            batchSize: $total,
+            onNext: function (Document $doc) use (&$updated) {
+                $updated[$doc->getId()] = $doc;
+            }
+        );
+
+        $this->assertEquals($total, $count);
+        $this->assertCount($total, $updated);
+
+        // Every document must reflect the computed operator value.
+        for ($i = 1; $i <= $total; $i++) {
+            $doc = $updated["batch_doc_{$i}"] ?? null;
+            $this->assertNotNull($doc, "Missing callback document batch_doc_{$i}");
+            $this->assertEquals($i + 1000, $doc->getAttribute('count'), "Stale value for batch_doc_{$i}");
+
+            // And it must be persisted, not just returned.
+            $fresh = $database->getDocument($collectionId, "batch_doc_{$i}");
+            $this->assertEquals($i + 1000, $fresh->getAttribute('count'));
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testUpdateDocumentOperatorDoesNotDoubleDecodeFilters(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForOperators()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // A deliberately non-idempotent filter: decoding a second time corrupts the value
+        // (json_decode of the already-plaintext value yields null). This surfaces a double-decode.
+        $database->addFilter(
+            'operator_double_decode',
+            function (mixed $value) {
+                return json_encode(['data' => base64_encode((string) $value)]);
+            },
+            function (mixed $value) {
+                if (is_null($value)) {
+                    return;
+                }
+                $decoded = json_decode($value, true);
+                return base64_decode($decoded['data']);
+            }
+        );
+
+        $collectionId = 'test_operator_double_decode';
+        $database->createCollection($collectionId);
+        $database->createAttribute($collectionId, 'count', Database::VAR_INTEGER, 0, false, 0);
+        $database->createAttribute($collectionId, 'secret', Database::VAR_STRING, 128, false, filters: ['operator_double_decode']);
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'count' => 5,
+            'secret' => 'hunter2',
+        ]));
+
+        // The operator refetch happens inside the transaction and already decodes via find().
+        // Decoding the returned document again would run the filter twice and corrupt 'secret'.
+        $updated = $database->updateDocument($collectionId, 'doc1', new Document([
+            'count' => Operator::increment(10),
+        ]));
+
+        $this->assertEquals(15, $updated->getAttribute('count'));
+        $this->assertEquals('hunter2', $updated->getAttribute('secret'));
+
+        // A normal read decodes exactly once — the operator path must match it.
+        $fresh = $database->getDocument($collectionId, 'doc1');
+        $this->assertEquals('hunter2', $fresh->getAttribute('secret'));
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testOperatorErrorHandling(): void
     {
         /** @var Database $database */

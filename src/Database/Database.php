@@ -811,29 +811,47 @@ class Database
      *
      * @param Document $collection
      * @param array<Document> $documents
+     * @param array<Query> $selections Select queries from the caller, preserved so the refetch honors the original projection
      * @return array<Document>
+     * @throws DatabaseException
      */
-    protected function refetchDocuments(Document $collection, array $documents): array
+    protected function refetchDocuments(Document $collection, array $documents, array $selections = []): array
     {
         if (empty($documents)) {
             return $documents;
         }
 
-        $docIds = array_map(fn ($doc) => $doc->getId(), $documents);
+        $sequences = array_map(function ($doc) {
+            $sequence = $doc->getSequence();
+            if ($sequence === null) {
+                throw new DatabaseException('Cannot refetch document without a $sequence: ' . $doc->getId());
+            }
+            return $sequence;
+        }, $documents);
 
-        // Fetch fresh copies with computed operator values
-        $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-            fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
-        ));
-
+        // Fetch fresh copies with computed operator values, preserving the caller's projection.
+        // Chunk by maxQueryValues (the batch can be up to INSERT_BATCH_SIZE) and bound each find()
+        // to the chunk size, otherwise find()'s default limit would silently drop rows past it.
         $refetchedMap = [];
-        foreach ($refetched as $doc) {
-            $refetchedMap[$doc->getId()] = $doc;
+        foreach (\array_chunk($sequences, \max(1, $this->maxQueryValues)) as $chunk) {
+            $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
+                fn () => $this->find(
+                    $collection->getId(),
+                    array_merge([
+                        Query::equal('$sequence', $chunk),
+                        Query::limit(\count($chunk)),
+                    ], $selections)
+                )
+            ));
+
+            foreach ($refetched as $doc) {
+                $refetchedMap[$doc->getSequence()] = $doc;
+            }
         }
 
         $result = [];
-        foreach ($documents as $doc) {
-            $result[] = $refetchedMap[$doc->getId()] ?? $doc;
+        foreach ($documents as $index => $doc) {
+            $result[$index] = $refetchedMap[$sequences[$index]] ?? $doc;
         }
 
         return $result;
@@ -6168,7 +6186,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+        $hasOperators = false;
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6381,8 +6400,9 @@ class Database
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
-            // If operators were used, refetch document to get computed values
-            $hasOperators = false;
+            // If operators were used, refetch inside the transaction so the returned value reflects
+            // this operation's own write (read-your-writes). Refetching after commit could observe a
+            // concurrent update and return that value instead of the result of this operation.
             foreach ($document->getArrayCopy() as $value) {
                 if (Operator::isOperator($value)) {
                     $hasOperators = true;
@@ -6410,7 +6430,11 @@ class Database
             $document = $documents[0];
         }
 
-        $document = $this->decode($collection, $document);
+        // The operator refetch already returns a decoded document (via find()); decoding again
+        // would double-apply the decode filters.
+        if (!$hasOperators) {
+            $document = $this->decode($collection, $document);
+        }
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
@@ -6628,14 +6652,19 @@ class Database
             }
 
             if ($hasOperators) {
-                $batch = $this->refetchDocuments($collection, $batch);
+                $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
             }
 
             foreach ($batch as $index => $doc) {
                 $doc = $this->adapter->castingAfter($collection, $doc);
                 $doc->removeAttribute('$skipPermissionsUpdate');
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                $doc = $this->decode($collection, $doc);
+                // The operator refetch goes through find(), which already returns fully decoded
+                // documents. Decoding again would double-apply the decode filters (and, because
+                // this call passes no selections, re-materialize non-selected attributes).
+                if (!$hasOperators) {
+                    $doc = $this->decode($collection, $doc);
+                }
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {

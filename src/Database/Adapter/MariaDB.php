@@ -1037,22 +1037,14 @@ class MariaDB extends SQL
              * Update Attributes
              */
             $keyIndex = 0;
-            $opIndex = 0;
-            $operators = [];
-
-            // Separate regular attributes from operators
-            foreach ($attributes as $attribute => $value) {
-                if (Operator::isOperator($value)) {
-                    $operators[$attribute] = $value;
-                }
-            }
+            $operatorBinds = [];
 
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
 
                 // Check if this is an operator or regular attribute
-                if (isset($operators[$attribute])) {
-                    $operatorSQL = $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
+                if (Operator::isOperator($value)) {
+                    $operatorSQL = $this->getOperatorSQL($column, $value, $operatorBinds);
                     $columns .= $operatorSQL . ',';
                 } else {
                     $bindKey = 'key_' . $keyIndex;
@@ -1084,26 +1076,29 @@ class MariaDB extends SQL
             }
 
             $keyIndex = 0;
-            $opIndexForBinding = 0;
             foreach ($attributes as $attribute => $value) {
                 // Handle operators separately
-                if (isset($operators[$attribute])) {
-                    $this->bindOperatorParams($stmt, $operators[$attribute], $opIndexForBinding);
-                } else {
-                    // Convert spatial arrays to WKT, json_encode non-spatial arrays
-                    if (\in_array($attribute, $spatialAttributes, true)) {
-                        if (\is_array($value)) {
-                            $value = $this->convertArrayToWKT($value);
-                        }
-                    } elseif (is_array($value)) {
-                        $value = json_encode($value);
-                    }
-
-                    $bindKey = 'key_' . $keyIndex;
-                    $value = (is_bool($value)) ? (int)$value : $value;
-                    $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                    $keyIndex++;
+                if (Operator::isOperator($value)) {
+                    continue;
                 }
+
+                // Convert spatial arrays to WKT, json_encode non-spatial arrays
+                if (\in_array($attribute, $spatialAttributes, true)) {
+                    if (\is_array($value)) {
+                        $value = $this->convertArrayToWKT($value);
+                    }
+                } elseif (is_array($value)) {
+                    $value = json_encode($value);
+                }
+
+                $bindKey = 'key_' . $keyIndex;
+                $value = (is_bool($value)) ? (int)$value : $value;
+                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
+                $keyIndex++;
+            }
+
+            foreach ($operatorBinds as $bindKey => $bindValue) {
+                $stmt->bindValue($bindKey, $bindValue, $this->getPDOType($bindValue));
             }
 
             $stmt->execute();
@@ -1159,7 +1154,7 @@ class MariaDB extends SQL
         };
 
         $updateColumns = [];
-        $opIndex = 0;
+        $operatorBinds = [];
 
         if (!empty($attribute)) {
             // Increment specific column by its new value in place
@@ -1175,7 +1170,7 @@ class MariaDB extends SQL
                 $filteredAttr = $this->filter($attr);
 
                 if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex);
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $operatorBinds);
                     if ($operatorSQL !== null) {
                         $updateColumns[] = $operatorSQL;
                     }
@@ -1199,11 +1194,8 @@ class MariaDB extends SQL
             $stmt->bindValue($key, $binding, $this->getPDOType($binding));
         }
 
-        $opIndexForBinding = 0;
-        foreach (\array_keys($attributes) as $attr) {
-            if (isset($operators[$attr])) {
-                $this->bindOperatorParams($stmt, $operators[$attr], $opIndexForBinding);
-            }
+        foreach ($operatorBinds as $bindKey => $bindValue) {
+            $stmt->bindValue($bindKey, $bindValue, $this->getPDOType($bindValue));
         }
 
         return $stmt;
@@ -1951,10 +1943,10 @@ class MariaDB extends SQL
      *
      * @param string $column
      * @param Operator $operator
-     * @param int &$bindIndex
+     * @param array<string, mixed> $binds
      * @return ?string
      */
-    protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string
+    protected function getOperatorSQL(string $column, Operator $operator, array &$binds): ?string
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
@@ -1963,92 +1955,114 @@ class MariaDB extends SQL
         switch ($method) {
             // Numeric operators
             case Operator::TYPE_INCREMENT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
+                    $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    // Compare with the operand moved across (`col > max - val`) instead of
+                    // `col + val > max`, so the guard never overflows BIGINT when col is near the
+                    // integer range limit. Inclusive: a result landing exactly on max still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
             case Operator::TYPE_DECREMENT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
-                    $minKey = "op_{$bindIndex}";
-                    $bindIndex++;
+                    $minKey = $this->registerOperatorBind($binds, $values[1]);
+                    // `col < min + val` rather than `col - val < min`: overflow-safe near the
+                    // integer range limit. Inclusive: a result landing exactly on min still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
             case Operator::TYPE_MULTIPLY:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
+                    $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    // Compare via division (`col > max/val`, sign-aware) instead of computing
+                    // `col * val`, which would overflow BIGINT for large operands. The factor's
+                    // sign flips the inequality. Inclusive: a result exactly on max still applies.
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
             case Operator::TYPE_DIVIDE:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 if (isset($values[1])) {
-                    $minKey = "op_{$bindIndex}";
-                    $bindIndex++;
+                    $minKey = $this->registerOperatorBind($binds, $values[1]);
                     return "{$quotedColumn} = CASE
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) / :$bindKey";
 
             case Operator::TYPE_MODULO:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 1);
                 return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
             case Operator::TYPE_POWER:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $exponent = $values[0] ?? 1;
+                $bindKey = $this->registerOperatorBind($binds, $exponent);
                 if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $bindIndex++;
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 1)) > LOG(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
-                    END";
+                    $maxKey = $this->registerOperatorBind($binds, $values[1]);
+                    $col = "COALESCE({$quotedColumn}, 0)";
+
+                    // Leave the value unchanged only for undefined inputs, then apply the power if
+                    // the result stays within the max. The exponent is constant, so only the
+                    // undefined guard its value can actually trigger is emitted.
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+
+                    $whens = [];
+                    if ($exponent < 0) {
+                        // 0 to a negative power is undefined (POWER would error / return NULL).
+                        $whens[] = "WHEN {$col} = 0 THEN {$col}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        // A negative base to a fractional exponent is not a real number.
+                        $whens[] = "WHEN {$col} < 0 THEN {$col}";
+                    }
+                    // Cap by magnitude via logarithms so POWER() never runs on a value that would
+                    // overflow (base^exp > max  <=>  exp * LOG(base) > LOG(max)).
+                    if ($exponent == 0) {
+                        // Every base to the zeroth power is 1 (including 0^0), which the magnitude
+                        // check below can't see for a base of 0. The result 1 exceeds the max when
+                        // max < 1, i.e. LOG(max) < 0 (LOG also coerces the bound value numerically).
+                        $whens[] = "WHEN LOG(:$maxKey) < 0 THEN {$col}";
+                    } elseif ($oddInteger) {
+                        // An odd exponent keeps a negative base negative, and a negative result is
+                        // always within a positive max, so only cap positive bases; negative bases
+                        // fall through to POWER() and their (negative) result is applied.
+                        $whens[] = "WHEN {$col} > 0 AND :$bindKey * LOG({$col}) > LOG(:$maxKey) THEN {$col}";
+                    } else {
+                        // Otherwise the result is non-negative, so its magnitude equals its value —
+                        // cap either sign. ABS() keeps LOG() defined for a negative even-power base.
+                        $whens[] = "WHEN {$col} <> 0 AND :$bindKey * LOG(ABS({$col})) > LOG(:$maxKey) THEN {$col}";
+                    }
+
+                    $whenSql = \implode(' ', $whens);
+                    return "{$quotedColumn} = CASE {$whenSql} ELSE POWER({$col}, :$bindKey) END";
                 }
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
                 // String operators
             case Operator::TYPE_STRING_CONCAT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? '');
                 return "{$quotedColumn} = CONCAT(COALESCE({$quotedColumn}, ''), :$bindKey)";
 
             case Operator::TYPE_STRING_REPLACE:
-                $searchKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $replaceKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $searchKey = $this->registerOperatorBind($binds, $values[0] ?? '');
+                $replaceKey = $this->registerOperatorBind($binds, $values[1] ?? '');
                 return "{$quotedColumn} = REPLACE({$quotedColumn}, :$searchKey, :$replaceKey)";
 
                 // Boolean operators
@@ -2057,29 +2071,30 @@ class MariaDB extends SQL
 
                 // Array operators
             case Operator::TYPE_ARRAY_APPEND:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(IFNULL({$quotedColumn}, JSON_ARRAY()), :$bindKey)";
 
             case Operator::TYPE_ARRAY_PREPEND:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = JSON_MERGE_PRESERVE(:$bindKey, IFNULL({$quotedColumn}, JSON_ARRAY()))";
 
             case Operator::TYPE_ARRAY_INSERT:
-                $indexKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $indexKey = $this->registerOperatorBind($binds, $values[0] ?? 0);
+                $valueKey = $this->registerOperatorBind($binds, json_encode($values[1] ?? null));
                 return "{$quotedColumn} = JSON_ARRAY_INSERT(
-                    {$quotedColumn}, 
-                    CONCAT('$[', :$indexKey, ']'), 
+                    {$quotedColumn},
+                    CONCAT('$[', :$indexKey, ']'),
                     JSON_EXTRACT(:$valueKey, '$')
                 )";
 
             case Operator::TYPE_ARRAY_REMOVE:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $removeValue = $values[0] ?? null;
+                // Cast scalars to string so the value binds as PDO::PARAM_STR, preserving the
+                // pre-refactor behavior (it was bound with an explicit PARAM_STR). JSON_TABLE
+                // extracts `value` as TEXT, so the search term must compare as text — without
+                // the cast, getPDOType() would bind a number as PARAM_INT. Do not drop it.
+                $removeValue = is_array($removeValue) ? json_encode($removeValue) : (string)$removeValue;
+                $bindKey = $this->registerOperatorBind($binds, $removeValue);
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
@@ -2093,8 +2108,7 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_INTERSECT:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
@@ -2105,8 +2119,7 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_DIFF:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, json_encode($values));
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(jt1.value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt1
@@ -2117,10 +2130,10 @@ class MariaDB extends SQL
                 ), JSON_ARRAY())";
 
             case Operator::TYPE_ARRAY_FILTER:
-                $conditionKey = "op_{$bindIndex}";
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $condition = $values[0] ?? 'equal';
+                $filterValue = $values[1] ?? null;
+                $conditionKey = $this->registerOperatorBind($binds, $condition);
+                $valueKey = $this->registerOperatorBind($binds, $filterValue === null ? null : json_encode($filterValue));
                 return "{$quotedColumn} = IFNULL((
                     SELECT JSON_ARRAYAGG(value)
                     FROM JSON_TABLE({$quotedColumn}, '\$[*]' COLUMNS(value TEXT PATH '\$')) AS jt
@@ -2139,13 +2152,11 @@ class MariaDB extends SQL
 
                 // Date operators
             case Operator::TYPE_DATE_ADD_DAYS:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 0);
                 return "{$quotedColumn} = DATE_ADD({$quotedColumn}, INTERVAL :$bindKey DAY)";
 
             case Operator::TYPE_DATE_SUB_DAYS:
-                $bindKey = "op_{$bindIndex}";
-                $bindIndex++;
+                $bindKey = $this->registerOperatorBind($binds, $values[0] ?? 0);
                 return "{$quotedColumn} = DATE_SUB({$quotedColumn}, INTERVAL :$bindKey DAY)";
 
             case Operator::TYPE_DATE_SET_NOW:

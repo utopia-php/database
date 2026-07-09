@@ -349,6 +349,11 @@ abstract class Adapter
     {
         // Clear existing callback
         $this->before($event, 'timeout');
+
+        // Adapters that apply the timeout from this property on every statement
+        // (e.g. Postgres SET statement_timeout) would otherwise keep enforcing a
+        // cleared timeout on all subsequent queries.
+        $this->timeout = 0;
     }
 
     /**

@@ -15,7 +15,7 @@ RUN composer install \
 FROM php:8.5.8-cli-alpine AS compile
 
 ENV PHP_REDIS_VERSION="6.3.0" \
-    PHP_SWOOLE_VERSION="v6.1.6" \
+    PHP_SWOOLE_VERSION="v6.2.2" \
     PHP_XDEBUG_VERSION="3.5.3" \
     PHP_MONGODB_VERSION="2.3.3"
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
@@ -45,10 +45,7 @@ RUN apk update && apk add --no-cache \
       && cd / \
       && rm -rf /tmp/mongodb)) \
  && docker-php-ext-enable mongodb \
- && for ext in opcache pgsql pdo_mysql pdo_pgsql; do \
-      docker-php-ext-configure $ext && make -C /usr/src/php/ext/$ext -j$(nproc) && cp /usr/src/php/ext/$ext/modules/*.so $(php-config --extension-dir)/; \
-    done \
- && docker-php-ext-enable opcache pgsql pdo_mysql pdo_pgsql \
+ && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
  && apk del libpq-dev \
  && rm -rf /var/cache/apk/*
 

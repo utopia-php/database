@@ -30,22 +30,22 @@ RUN apk update && apk add --no-cache \
     g++ \
     git \
     file \
+    openssl-dev \
     brotli-dev \
     linux-headers \
     docker-cli \
     docker-cli-compose \
- && (pecl install mongodb-$PHP_MONGODB_VERSION \
-    || (git clone --depth 1 --branch $PHP_MONGODB_VERSION --recurse-submodules https://github.com/mongodb/mongo-php-driver.git /tmp/mongodb \
-      && cd /tmp/mongodb \
-      && git submodule update --init --recursive \
-      && phpize \
-      && ./configure \
-      && make \
-      && cp modules/mongodb.so $(php-config --extension-dir)/ \
-      && cd / \
-      && rm -rf /tmp/mongodb)) \
+ && git clone --depth 1 --branch $PHP_MONGODB_VERSION --recurse-submodules https://github.com/mongodb/mongo-php-driver.git /tmp/mongodb \
+ && cd /tmp/mongodb \
+ && git submodule update --init --recursive \
+ && phpize \
+ && ./configure \
+ && make -j$(nproc) \
+ && cp "$(find . -name mongodb.so -print -quit)" "$(php-config --extension-dir)/" \
+ && cd / \
+ && rm -rf /tmp/mongodb \
  && docker-php-ext-enable mongodb \
- && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
+ && docker-php-ext-install pgsql pdo_mysql pdo_pgsql \
  && apk del libpq-dev \
  && rm -rf /var/cache/apk/*
 

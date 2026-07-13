@@ -40,7 +40,7 @@ RUN apk update && apk add --no-cache \
       && phpize \
       && ./configure \
       && make \
-      && make install \
+      && cp modules/mongodb.so $(php-config --extension-dir)/ \
       && cd / \
       && rm -rf /tmp/mongodb)) \
  && docker-php-ext-enable mongodb \

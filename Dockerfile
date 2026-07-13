@@ -45,7 +45,9 @@ RUN apk update && apk add --no-cache \
       && cd / \
       && rm -rf /tmp/mongodb)) \
  && docker-php-ext-enable mongodb \
- && docker-php-ext-install opcache pgsql pdo_mysql pdo_pgsql \
+ && for ext in opcache pgsql pdo_mysql pdo_pgsql; do \
+      docker-php-ext-configure $ext && make -C /usr/src/php/ext/$ext -j$(nproc) && cp /usr/src/php/ext/$ext/modules/*.so $(php-config --extension-dir)/; \
+    done \
  && apk del libpq-dev \
  && rm -rf /var/cache/apk/*
 

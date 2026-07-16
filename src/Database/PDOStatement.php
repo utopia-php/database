@@ -10,11 +10,19 @@ use Utopia\Console;
  * against the fresh connection, previously bound parameters/columns/attributes
  * are replayed, and the failed execute() is retried.
  *
- * Recovery is attempted only for execute(), and only outside a transaction:
- * re-running any other method (fetch, rowCount, ...) without a fresh execute
- * would return data from an unexecuted statement, and a connection cannot be
- * healed in place mid-transaction (the uncommitted state is gone, so the call
- * is rethrown for Adapter::withTransaction to roll back and replay).
+ * Transparent retry is attempted only for execute(), and only outside a
+ * transaction: re-running any other method (fetch, rowCount, ...) without a
+ * fresh execute would return data from an unexecuted statement, and a
+ * connection cannot be healed in place mid-transaction (the uncommitted state
+ * is gone, so the call is rethrown for Adapter::withTransaction to roll back
+ * and replay).
+ *
+ * In every lost-connection case that cannot be retried, the poisoned connection
+ * is still discarded (reconnect) before the rethrow: the failed fetch/execute
+ * leaves the socket wire-desynced, and a pooled connection reclaimed with a
+ * partial result frame still buffered would bleed that frame into the next
+ * borrower's query. Reconnecting guarantees the connection returned to the pool
+ * is always clean.
  *
  * @mixin \PDOStatement
  * @implements \IteratorAggregate<int, mixed>
@@ -108,20 +116,28 @@ class PDOStatement implements \IteratorAggregate
         try {
             return $this->statement->{$method}(...$args);
         } catch (\Throwable $e) {
-            if (
-                \strcasecmp($method, 'execute') !== 0
-                || $this->pdo->inTransaction()
-                || !Connection::hasError($e)
-            ) {
+            if (!Connection::hasError($e)) {
                 throw $e;
             }
 
-            Console::warning('[Database] ' . $e->getMessage());
-            Console::warning('[Database] Lost connection detected. Re-preparing statement...');
+            if (\strcasecmp($method, 'execute') === 0 && !$this->pdo->inTransaction()) {
+                Console::warning('[Database] ' . $e->getMessage());
+                Console::warning('[Database] Lost connection detected. Re-preparing statement...');
 
-            $this->reprepare();
+                $this->reprepare();
 
-            return $this->statement->{$method}(...$args);
+                return $this->statement->{$method}(...$args);
+            }
+
+            // A lost connection during fetch/fetchAll/closeCursor, or during
+            // execute inside a transaction, cannot be retried in place -- but the
+            // socket is now wire-desynced and may still hold a partial result
+            // frame. Drop the connection so it can never be reclaimed to the pool
+            // and bleed that frame into the next borrower's query; the rethrow
+            // still lets withTransaction roll back and replay on a fresh one.
+            $this->pdo->reconnect();
+
+            throw $e;
         }
     }
 

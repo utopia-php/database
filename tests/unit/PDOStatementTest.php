@@ -69,10 +69,12 @@ class PDOStatementTest extends TestCase
         $this->assertTrue($statement->execute());
     }
 
-    public function testExecuteRethrowsAndDoesNotReconnectInsideTransaction(): void
+    public function testExecuteInsideTransactionReconnectsThenRethrows(): void
     {
         $pdo = $this->pdoMock(inTransaction: true);
-        $pdo->expects($this->never())->method('reconnect');
+        // Cannot retry in place (the uncommitted state is gone), but the poisoned
+        // socket must still be dropped so it is not reclaimed to the pool.
+        $pdo->expects($this->once())->method('reconnect');
         $pdo->expects($this->never())->method('prepareNative');
 
         $statement = $this->statementMock();
@@ -133,15 +135,20 @@ class PDOStatementTest extends TestCase
         $this->assertSame($statement, $wrapper->getIterator());
     }
 
-    public function testDoesNotReconnectForNonExecuteMethods(): void
+    public function testFetchPhaseLostConnectionReconnectsBeforeRethrowing(): void
     {
+        // DAT-1904: a lost connection during the fetch phase leaves the socket
+        // wire-desynced (a partial result frame may remain buffered). The poisoned
+        // connection must be dropped (reconnect) before the rethrow so it can never
+        // be reclaimed to the pool and bled into the next borrower's query.
         $pdo = $this->pdoMock(inTransaction: false);
-        $pdo->expects($this->never())->method('reconnect');
+        $pdo->expects($this->once())->method('reconnect');
+        // Not re-prepared/retried in place: a fresh fetch would read no rows.
         $pdo->expects($this->never())->method('prepareNative');
 
         $statement = $this->statementMock();
         $statement->expects($this->once())
-            ->method('fetch')
+            ->method('fetchAll')
             ->willThrowException(new PDOException('server has gone away'));
 
         $wrapper = new PDOStatement($pdo, $statement, 'SELECT 1');
@@ -149,7 +156,29 @@ class PDOStatementTest extends TestCase
         $this->expectException(PDOException::class);
         $this->expectExceptionMessage('server has gone away');
 
-        $wrapper->fetch();
+        $wrapper->fetchAll();
+    }
+
+    public function testDoesNotReconnectForNonExecuteNonConnectionError(): void
+    {
+        // A business-logic error (not a lost connection) leaves the pooled
+        // connection untouched: reconnecting a healthy connection would thrash the
+        // pool on every ordinary query error.
+        $pdo = $this->pdoMock(inTransaction: false);
+        $pdo->expects($this->never())->method('reconnect');
+        $pdo->expects($this->never())->method('prepareNative');
+
+        $statement = $this->statementMock();
+        $statement->expects($this->once())
+            ->method('fetchAll')
+            ->willThrowException(new PDOException('SQLSTATE[42000]: Syntax error'));
+
+        $wrapper = new PDOStatement($pdo, $statement, 'SELECT 1');
+
+        $this->expectException(PDOException::class);
+        $this->expectExceptionMessage('Syntax error');
+
+        $wrapper->fetchAll();
     }
 
     public function testBindParamReplaysCurrentValueAfterReconnect(): void

@@ -4883,23 +4883,33 @@ class Database
             // compare equal under strict equality (e.g. in updateDocument).
             $document = $this->casting($collection, $document);
 
-            if ($collection->getId() !== self::METADATA) {
+            // Defend the by-id read invariant: a cache entry whose body carries a
+            // different $id than requested is a poisoned key (a mismatched read
+            // was persisted under this key). Serving it returns the wrong document
+            // for every reader until the entry expires. Purge it and fall through
+            // to the source read instead of trusting the poisoned copy.
+            if ($this->isForeignDocument($document, $id)) {
+                Console::error("Cache for '{$collection->getId()}:{$id}' held foreign document '{$document->getId()}'; purging and refetching");
+                $this->purgeCachedDocument($collection->getId(), $id);
+            } else {
+                if ($collection->getId() !== self::METADATA) {
 
-                if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, [
-                    ...$collection->getRead(),
-                    ...($documentSecurity ? $document->getRead() : [])
-                ]))) {
+                    if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, [
+                        ...$collection->getRead(),
+                        ...($documentSecurity ? $document->getRead() : [])
+                    ]))) {
+                        return $this->createDocumentInstance($collection->getId(), []);
+                    }
+                }
+
+                $this->trigger(self::EVENT_DOCUMENT_READ, $document);
+
+                if ($this->isTtlExpired($collection, $document)) {
                     return $this->createDocumentInstance($collection->getId(), []);
                 }
+
+                return $document;
             }
-
-            $this->trigger(self::EVENT_DOCUMENT_READ, $document);
-
-            if ($this->isTtlExpired($collection, $document)) {
-                return $this->createDocumentInstance($collection->getId(), []);
-            }
-
-            return $document;
         }
 
         // Capture the generation before reading: if a concurrent purge advances
@@ -4922,6 +4932,14 @@ class Database
 
         if ($document->isEmpty()) {
             return $this->createDocumentInstance($collection->getId(), []);
+        }
+
+        // A row whose $id differs from the requested id is a source-level identity
+        // violation (e.g. a result-set delivered on the wrong pooled connection),
+        // not a cache artifact. Never cache or return it: caching would poison this
+        // key, and returning it would serve one document's body under another's id.
+        if ($this->isForeignDocument($document, $id)) {
+            throw new DatabaseException("getDocument('{$collection->getId()}', '{$id}') returned document with mismatched \$id '{$document->getId()}'");
         }
 
         if ($this->isTtlExpired($collection, $document)) {
@@ -4977,6 +4995,19 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
+    }
+
+    /**
+     * Whether a document read for $id came back carrying a different, non-empty
+     * $id — i.e. another row's body served under this key. A partial selection
+     * that omits $id yields an empty id and is not treated as foreign, so the
+     * check never false-positives on a legitimate projection.
+     */
+    private function isForeignDocument(Document $document, string $id): bool
+    {
+        $actual = $document->getId();
+
+        return $actual !== '' && $actual !== $id;
     }
 
     private function isTtlExpired(Document $collection, Document $document): bool

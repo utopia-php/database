@@ -1443,6 +1443,10 @@ class MariaDB extends SQL
                 $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($query->getValues()[0]);
                 return "NOT ST_Contains({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0", null) . ")";
 
+            case Query::TYPE_IS_NULL:
+            case Query::TYPE_IS_NOT_NULL:
+                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+
             default:
                 throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
         }

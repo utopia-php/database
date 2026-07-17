@@ -1564,6 +1564,10 @@ class Postgres extends SQL
                     ? "NOT ST_Covers({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")"
                     : "ST_Covers({$alias}.{$attribute}, " . $this->getSpatialGeomFromText(":{$placeholder}_0") . ")";
 
+            case Query::TYPE_IS_NULL:
+            case Query::TYPE_IS_NOT_NULL:
+                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+
             default:
                 throw new DatabaseException('Unknown spatial query method: ' . $query->getMethod());
         }

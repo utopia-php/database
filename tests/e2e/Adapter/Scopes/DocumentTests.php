@@ -664,6 +664,217 @@ trait DocumentTests
         }
     }
 
+    public function testCacheEmptyDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'cacheEmpty';
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+        $cache = $database->getCache();
+
+        // A read of a missing id records a negative ("not found") marker so
+        // repeated lookups don't keep hitting the adapter.
+        $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+
+        [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'ghost');
+        $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached); // Database::CACHE_EMPTY_MARKER
+
+        // Creating the id must invalidate that marker so the row is visible.
+        $database->createDocument($collection, new Document([
+            '$id' => 'ghost',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'real',
+        ]));
+
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $hashKey));
+
+        $document = $database->getDocument($collection, 'ghost');
+        $this->assertFalse($document->isEmpty());
+        $this->assertEquals('real', $document->getAttribute('name'));
+
+        // Same guarantee through the batch create path.
+        $this->assertTrue($database->getDocument($collection, 'batch')->isEmpty());
+        [, $batchKey, $batchHash] = $database->getCacheKeys($collection, 'batch');
+        $this->assertArrayHasKey('$empty', $cache->load($batchKey, Database::TTL, $batchHash));
+
+        $database->createDocuments($collection, [
+            new Document([
+                '$id' => 'batch',
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'batched',
+            ]),
+        ]);
+
+        $this->assertFalse($cache->load($batchKey, Database::TTL, $batchHash));
+        $this->assertEquals('batched', $database->getDocument($collection, 'batch')->getAttribute('name'));
+
+        // A locking read must never publish anything to the cache.
+        $this->assertTrue($database->getDocument($collection, 'phantom', forUpdate: true)->isEmpty());
+        [, $phantomKey, $phantomHash] = $database->getCacheKeys($collection, 'phantom');
+        $this->assertFalse($cache->load($phantomKey, Database::TTL, $phantomHash));
+    }
+
+    public function testCacheEmptyDocumentSelect(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        $collection = 'cacheEmptySelect';
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+
+        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+        // The document key is select-independent, but the hashKey is not: a
+        // projection is folded into it. So a projected read and a plain read of
+        // the same missing id are cached under different slots of the same key.
+        [, $documentKey, $plainHash] = $database->getCacheKeys($collection, 'ghost');
+
+        // validateSelections() appends the internal attributes to the user
+        // selection before it forms the key; mirror that set to address the
+        // projected slot (getCacheKeys sorts, so order does not matter).
+        $selects = ['name', '$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'];
+        [, , $selectHash] = $database->getCacheKeys($collection, 'ghost', $selects);
+        $this->assertNotEquals($plainHash, $selectHash);
+
+        // Projected read caches its marker under the projected slot only.
+        $this->assertTrue($database->getDocument($collection, 'ghost', [Query::select(['name'])])->isEmpty());
+        $this->assertArrayHasKey('$empty', $cache->load($documentKey, Database::TTL, $selectHash));
+        $this->assertFalse(
+            $cache->load($documentKey, Database::TTL, $plainHash),
+            'A projected read must not populate the no-projection cache slot'
+        );
+
+        // Plain read fills the plain slot with its own marker. Both slots of the
+        // document key now hold an "empty" marker.
+        $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+        $this->assertArrayHasKey('$empty', $cache->load($documentKey, Database::TTL, $plainHash));
+
+        // Inserting the id purges the whole document key, so BOTH slots clear.
+        $database->createDocument($collection, new Document([
+            '$id' => 'ghost',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'real',
+        ]));
+
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $plainHash));
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $selectHash));
+    }
+
+    public function testCacheEmptyGetCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        $collectionId = 'cacheEmptyCollection';
+
+        // getCollection() reads getDocument(METADATA, id) under the hood, so a
+        // lookup of a non-existent collection negatively caches its absence
+        // under the metadata key.
+        $this->assertTrue($database->getCollection($collectionId)->isEmpty());
+
+        [, $metaKey, $metaHash] = $database->getCacheKeys(Database::METADATA, $collectionId);
+        $cached = $cache->load($metaKey, Database::TTL, $metaHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+
+        // createCollection() writes the metadata row via createDocument(METADATA),
+        // which must purge that marker — otherwise the collection would keep
+        // reading back as "not found".
+        $collection = $database->createCollection($collectionId, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+        $this->assertFalse($collection->isEmpty());
+
+        $this->assertFalse($cache->load($metaKey, Database::TTL, $metaHash));
+
+        $fetched = $database->getCollection($collectionId);
+        $this->assertFalse($fetched->isEmpty());
+        $this->assertEquals($collectionId, $fetched->getId());
+
+        // Recreating it must now be rejected as a duplicate. This proves the
+        // marker was genuinely invalidated: a lingering "not found" would make
+        // createCollection's own existence check pass and wrongly proceed.
+        try {
+            $database->createCollection($collectionId);
+            $this->fail('Expected DuplicateException when recreating an existing collection');
+        } catch (DuplicateException) {
+            // expected
+        }
+    }
+
+    public function testCacheEmptyDocumentSecurity(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $auth = $database->getAuthorization();
+        $cache = $database->getCache();
+
+        $collection = 'cacheEmptyDocSecurity';
+
+        // Document-level security with no collection-wide read: access is
+        // decided per document.
+        $auth->skip(function () use ($database, $collection) {
+            $database->createCollection($collection, permissions: [], documentSecurity: true);
+            $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+            $database->createDocument($collection, new Document([
+                '$id' => 'secret',
+                '$permissions' => [
+                    Permission::read(Role::user('userA')),
+                ],
+                'name' => 'classified',
+            ]));
+        });
+
+        try {
+            // userB cannot read 'secret'. The row exists, so this denial must
+            // NOT record a negative marker under the shared (user-independent)
+            // cache key — doing so would hide the row from userA.
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('userB')->toString());
+
+            $this->assertTrue($database->getDocument($collection, 'secret')->isEmpty());
+
+            [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'secret');
+            $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+            $this->assertFalse(
+                \is_array($cached) && isset($cached['$empty']),
+                'A permission-denied read of an existing document must not populate the negative cache'
+            );
+
+            // userA has read permission and must still see the document,
+            // proving userB's forbidden read did not poison the cache.
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('userA')->toString());
+
+            $document = $database->getDocument($collection, 'secret');
+            $this->assertFalse($document->isEmpty());
+            $this->assertEquals('classified', $document->getAttribute('name'));
+
+            // A genuinely missing id is user-independent, so it is still safe to
+            // cache as empty even under document security.
+            $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+            [, $ghostKey, $ghostHash] = $database->getCacheKeys($collection, 'ghost');
+            $this->assertArrayHasKey('$empty', $cache->load($ghostKey, Database::TTL, $ghostHash));
+        } finally {
+            $auth->cleanRoles();
+            $auth->addRole(Role::any()->toString());
+        }
+    }
+
     public function testCreateDocumentsWithAutoIncrement(): void
     {
         /** @var Database $database */

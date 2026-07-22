@@ -179,6 +179,12 @@ class Database
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
 
+    // Marker key stored in place of a document to represent a cached "not
+    // found" result. Attribute keys cannot start with '$', so this never
+    // collides with a real document payload. Lives under the standard TTL and
+    // is purged by the create/upsert paths so a newly inserted id is visible.
+    private const CACHE_EMPTY_MARKER = '$empty';
+
     // Events
     public const EVENT_ALL = '*';
 
@@ -4875,6 +4881,11 @@ class Database
             }
         }
 
+        // Negative cache hit
+        if (\is_array($cached) && isset($cached[self::CACHE_EMPTY_MARKER])) {
+            return $this->createDocumentInstance($collection->getId(), []);
+        }
+
         if ($cached) {
             $document = $this->createDocumentInstance($collection->getId(), $cached);
 
@@ -4921,6 +4932,18 @@ class Database
         );
 
         if ($document->isEmpty()) {
+            if (!$forUpdate && empty($relationships)) {
+                try {
+                    $marker = [self::CACHE_EMPTY_MARKER => true];
+
+                    if ($this->cache->saveWithLease($documentKey, $marker, $hashKey, $generation) !== false) {
+                        $this->cache->save($collectionKey, 'empty', $documentKey);
+                    }
+                } catch (Exception $e) {
+                    Console::warning('Failed to save empty document to cache: ' . $e->getMessage());
+                }
+            }
+
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
@@ -5700,6 +5723,10 @@ class Database
             return $this->adapter->createDocument($collection, $document);
         });
 
+        // Clear any negative-cache entry for this id: a prior read may have
+        // recorded it as missing before this insert committed.
+        $this->purgeCreatedDocumentCache($collection, $document);
+
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             // Use the write stack depth for proper MAX_DEPTH enforcement during creation
             $fetchDepth = count($this->relationshipWriteStack);
@@ -5825,6 +5852,9 @@ class Database
                 $document = $this->adapter->castingAfter($collection, $document);
                 $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
+
+                // Clear any negative-cache entry recorded before this insert.
+                $this->purgeCreatedDocumentCache($collection, $document);
 
                 try {
                     $onNext && $onNext($document);
@@ -8425,6 +8455,30 @@ class Database
         $this->cache->purge($documentKey);
 
         return true;
+    }
+
+    /**
+     * Invalidate any cache entry for a freshly created document.
+     *
+     * A read of a not-yet-created id caches a negative ("not found") marker;
+     * once the id is inserted that marker must be cleared so the document
+     * becomes visible immediately. Resolves the correct tenant first when
+     * tenant-per-document is enabled, so the purge targets the right key.
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @return void
+     * @throws Exception
+     */
+    private function purgeCreatedDocumentCache(Document $collection, Document $document): void
+    {
+        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            $this->withTenant($document->getTenant(), function () use ($collection, $document) {
+                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            });
+        } else {
+            $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+        }
     }
 
     /**

@@ -1061,6 +1061,11 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        return true;
+    }
+
     /**
      * Is hostname supported?
      *

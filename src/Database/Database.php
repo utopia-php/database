@@ -179,6 +179,9 @@ class Database
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
 
+    // Cache "Not Found" results
+    private const CACHE_EMPTY_MARKER = '$empty';
+
     // Events
     public const EVENT_ALL = '*';
 
@@ -4875,6 +4878,11 @@ class Database
             }
         }
 
+        // Negative cache hit
+        if (\is_array($cached) && isset($cached[self::CACHE_EMPTY_MARKER])) {
+            return $this->createDocumentInstance($collection->getId(), []);
+        }
+
         if ($cached) {
             $document = $this->createDocumentInstance($collection->getId(), $cached);
 
@@ -4921,6 +4929,18 @@ class Database
         );
 
         if ($document->isEmpty()) {
+            if (!$forUpdate && empty($relationships)) {
+                try {
+                    $marker = [self::CACHE_EMPTY_MARKER => true];
+
+                    if ($this->cache->saveWithLease($documentKey, $marker, $hashKey, $generation) !== false) {
+                        $this->cache->save($collectionKey, 'empty', $documentKey);
+                    }
+                } catch (Exception $e) {
+                    Console::warning('Failed to save empty document to cache: ' . $e->getMessage());
+                }
+            }
+
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
@@ -5700,6 +5720,10 @@ class Database
             return $this->adapter->createDocument($collection, $document);
         });
 
+        // Clear any negative-cache entry for this id: a prior read may have
+        // recorded it as missing before this insert committed.
+        $this->withDocumentTenant($document, fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId()));
+
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             // Use the write stack depth for proper MAX_DEPTH enforcement during creation
             $fetchDepth = count($this->relationshipWriteStack);
@@ -5825,6 +5849,9 @@ class Database
                 $document = $this->adapter->castingAfter($collection, $document);
                 $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
+
+                // Clear any negative-cache entry recorded before this insert.
+                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId()));
 
                 try {
                     $onNext && $onNext($document);
@@ -7528,13 +7555,7 @@ class Database
                     $doc = $this->decode($collection, $doc);
                 }
 
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
+                $this->withDocumentTenant($doc, fn () => $this->purgeCachedDocument($collection->getId(), $doc->getId()));
 
                 $old = $chunk[$index]->getOld();
 
@@ -8350,13 +8371,7 @@ class Database
             });
 
             foreach ($batch as $index => $document) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
-                }
+                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocument($collection->getId(), $document->getId()));
                 try {
                     $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
@@ -8425,6 +8440,27 @@ class Database
         $this->cache->purge($documentKey);
 
         return true;
+    }
+
+    /**
+     * Run a per-document cache operation under the document's own tenant.
+     *
+     * With tenant-per-document, cache keys are scoped by the adapter's current
+     * tenant, so a document's purge must run under that document's tenant to
+     * target the right key; otherwise the callback runs as-is.
+     *
+     * @param Document $document
+     * @param callable():mixed $callback
+     * @return void
+     * @throws Exception
+     */
+    private function withDocumentTenant(Document $document, callable $callback): void
+    {
+        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            $this->withTenant($document->getTenant(), $callback);
+        } else {
+            $callback();
+        }
     }
 
     /**

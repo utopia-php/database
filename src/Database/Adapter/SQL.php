@@ -397,17 +397,36 @@ abstract class SQL extends Adapter
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_READ, $sql);
 
-        $stmt = $this->getPDO()->prepare($sql);
+        $stmt = null;
+        $document = [];
+        $exception = null;
 
-        $stmt->bindValue(':_uid', $id);
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
 
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->getTenant());
+            $stmt->bindValue(':_uid', $id);
+
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->getTenant());
+            }
+
+            $this->execute($stmt);
+            $document = $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $exception = $e;
+        } finally {
+            if ($stmt !== null) {
+                try {
+                    $stmt->closeCursor();
+                } catch (PDOException $e) {
+                    $exception ??= $e;
+                }
+            }
         }
 
-        $stmt->execute();
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
+        if ($exception !== null) {
+            throw $this->processException($exception);
+        }
 
         if (empty($document)) {
             return new Document([]);

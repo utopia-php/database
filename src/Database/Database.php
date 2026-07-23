@@ -5725,7 +5725,7 @@ class Database
 
         // Clear any negative-cache entry for this id: a prior read may have
         // recorded it as missing before this insert committed.
-        $this->purgeCreatedDocumentCache($collection, $document);
+        $this->withDocumentTenant($document, fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId()));
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             // Use the write stack depth for proper MAX_DEPTH enforcement during creation
@@ -5854,7 +5854,7 @@ class Database
                 $document = $this->decode($collection, $document);
 
                 // Clear any negative-cache entry recorded before this insert.
-                $this->purgeCreatedDocumentCache($collection, $document);
+                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId()));
 
                 try {
                     $onNext && $onNext($document);
@@ -7558,13 +7558,7 @@ class Database
                     $doc = $this->decode($collection, $doc);
                 }
 
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
+                $this->withDocumentTenant($doc, fn () => $this->purgeCachedDocument($collection->getId(), $doc->getId()));
 
                 $old = $chunk[$index]->getOld();
 
@@ -8380,13 +8374,7 @@ class Database
             });
 
             foreach ($batch as $index => $document) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
-                }
+                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocument($collection->getId(), $document->getId()));
                 try {
                     $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
@@ -8458,26 +8446,23 @@ class Database
     }
 
     /**
-     * Invalidate any cache entry for a freshly created document.
+     * Run a per-document cache operation under the document's own tenant.
      *
-     * A read of a not-yet-created id caches a negative ("not found") marker;
-     * once the id is inserted that marker must be cleared so the document
-     * becomes visible immediately. Resolves the correct tenant first when
-     * tenant-per-document is enabled, so the purge targets the right key.
+     * With tenant-per-document, cache keys are scoped by the adapter's current
+     * tenant, so a document's purge must run under that document's tenant to
+     * target the right key; otherwise the callback runs as-is.
      *
-     * @param Document $collection
      * @param Document $document
+     * @param callable():mixed $callback
      * @return void
      * @throws Exception
      */
-    private function purgeCreatedDocumentCache(Document $collection, Document $document): void
+    private function withDocumentTenant(Document $document, callable $callback): void
     {
         if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-            $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
-            });
+            $this->withTenant($document->getTenant(), $callback);
         } else {
-            $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            $callback();
         }
     }
 

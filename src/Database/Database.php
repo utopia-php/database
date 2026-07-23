@@ -179,10 +179,7 @@ class Database
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
 
-    // Marker key stored in place of a document to represent a cached "not
-    // found" result. Attribute keys cannot start with '$', so this never
-    // collides with a real document payload. Lives under the standard TTL and
-    // is purged by the create/upsert paths so a newly inserted id is visible.
+    // Cache "Not Found" results
     private const CACHE_EMPTY_MARKER = '$empty';
 
     // Events

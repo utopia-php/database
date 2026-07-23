@@ -709,7 +709,9 @@ trait DocumentTests
         // Same guarantee through the batch create path.
         $this->assertTrue($database->getDocument($collection, 'batch')->isEmpty());
         [, $batchKey, $batchHash] = $database->getCacheKeys($collection, 'batch');
-        $this->assertArrayHasKey('$empty', $cache->load($batchKey, Database::TTL, $batchHash));
+        $cached = $cache->load($batchKey, Database::TTL, $batchHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
 
         $database->createDocuments($collection, [
             new Document([
@@ -763,7 +765,9 @@ trait DocumentTests
 
         // Projected read caches its marker under the projected slot only.
         $this->assertTrue($database->getDocument($collection, 'ghost', [Query::select(['name'])])->isEmpty());
-        $this->assertArrayHasKey('$empty', $cache->load($documentKey, Database::TTL, $selectHash));
+        $cached = $cache->load($documentKey, Database::TTL, $selectHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
         $this->assertFalse(
             $cache->load($documentKey, Database::TTL, $plainHash),
             'A projected read must not populate the no-projection cache slot'
@@ -772,7 +776,9 @@ trait DocumentTests
         // Plain read fills the plain slot with its own marker. Both slots of the
         // document key now hold an "empty" marker.
         $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
-        $this->assertArrayHasKey('$empty', $cache->load($documentKey, Database::TTL, $plainHash));
+        $cached = $cache->load($documentKey, Database::TTL, $plainHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
 
         // Inserting the id purges the whole document key, so BOTH slots clear.
         $database->createDocument($collection, new Document([
@@ -895,7 +901,9 @@ trait DocumentTests
             // cache as empty even under document security.
             $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
             [, $ghostKey, $ghostHash] = $database->getCacheKeys($collection, 'ghost');
-            $this->assertArrayHasKey('$empty', $cache->load($ghostKey, Database::TTL, $ghostHash));
+            $ghostCached = $cache->load($ghostKey, Database::TTL, $ghostHash);
+            $this->assertIsArray($ghostCached);
+            $this->assertArrayHasKey('$empty', $ghostCached);
         } finally {
             $auth->cleanRoles();
             $auth->addRole(Role::any()->toString());

@@ -1123,10 +1123,6 @@ abstract class Adapter
     abstract public function getSupportForCacheSkipOnFailure(): bool;
 
     /**
-     * Does this adapter use the Database cache layer? Adapters that are
-     * themselves a fast key-value store (e.g. Redis) run with a no-op cache,
-     * so cached reads/writes do not persist.
-     *
      * @return bool
      */
     abstract public function getSupportForCaching(): bool;

@@ -518,6 +518,11 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function getSupportForCaching(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForReconnection(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

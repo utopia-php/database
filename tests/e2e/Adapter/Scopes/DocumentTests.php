@@ -668,6 +668,14 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $collection = 'cacheEmpty';
         $database->createCollection($collection, permissions: [
@@ -675,8 +683,6 @@ trait DocumentTests
             Permission::create(Role::any()),
         ], documentSecurity: false);
         $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
-
-        $cache = $database->getCache();
 
         // A read of a missing id records a negative ("not found") marker so
         // repeated lookups don't keep hitting the adapter.
@@ -728,6 +734,13 @@ trait DocumentTests
         $database = $this->getDatabase();
         $cache = $database->getCache();
 
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collection = 'cacheEmptySelect';
         $database->createCollection($collection, permissions: [
             Permission::read(Role::any()),
@@ -778,6 +791,13 @@ trait DocumentTests
         $database = $this->getDatabase();
         $cache = $database->getCache();
 
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
         $collectionId = 'cacheEmptyCollection';
 
         // getCollection() reads getDocument(METADATA, id) under the hood, so a
@@ -822,6 +842,13 @@ trait DocumentTests
         $database = $this->getDatabase();
         $auth = $database->getAuthorization();
         $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
         $collection = 'cacheEmptyDocSecurity';
 

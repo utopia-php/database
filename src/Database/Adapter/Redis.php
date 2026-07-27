@@ -870,6 +870,13 @@ class Redis extends Adapter
         return false;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        // The Redis adapter is itself the store; reads hit Redis directly and
+        // it runs with a no-op cache, so the Database cache layer is bypassed.
+        return false;
+    }
+
     public function getSupportForReconnection(): bool
     {
         return false;
@@ -3993,8 +4000,20 @@ class Redis extends Adapter
             return false;
         }
 
-        $this->rollbackJournal();
-        $this->inTransaction--;
+        try {
+            $this->rollbackJournal();
+            $this->inTransaction--;
+        } catch (\Throwable $e) {
+            // A failed rollback (mid-replay) leaves the transaction in an
+            // indeterminate state. Discard all pending journal state so the
+            // connection is clean for reuse. Both must be cleared together to
+            // preserve the count($journalStack) === inTransaction invariant:
+            // resetting only the counter would strand parent frames that later
+            // transactions merge into, growing the stack without bound.
+            $this->inTransaction = 0;
+            $this->journalStack = [];
+            throw $e;
+        }
 
         return true;
     }

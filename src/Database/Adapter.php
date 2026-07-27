@@ -456,7 +456,8 @@ abstract class Adapter
                     $action instanceof AuthorizationException ||
                     $action instanceof RelationshipException ||
                     $action instanceof ConflictException ||
-                    $action instanceof LimitException
+                    $action instanceof LimitException ||
+                    $action instanceof TimeoutException
                 ) {
                     throw $action;
                 }

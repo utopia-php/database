@@ -7497,7 +7497,9 @@ class Database
                         continue;
                     }
                     $fresh = $this->authorization->skip(fn () => $this->silent(
-                        fn () => $this->getDocument($collection->getId(), $old->getId(), forUpdate: true)
+                        fn () => $this->getSharedTables() && $this->getTenantPerDocument()
+                            ? $this->withTenant($old->getTenant(), fn () => $this->getDocument($collection->getId(), $old->getId(), forUpdate: true))
+                            : $this->getDocument($collection->getId(), $old->getId(), forUpdate: true)
                     ));
                     if ($fresh->isEmpty()) {
                         throw new ConflictException('Document was deleted after the request timestamp');

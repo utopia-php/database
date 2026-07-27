@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 
@@ -116,5 +117,45 @@ class TransactionRetryTest extends TestCase
 
         $this->assertInstanceOf(TimeoutException::class, $thrown);
         $this->assertSame(1, $attempts);
+    }
+
+    /**
+     * A failed rollback in the Redis adapter must reset the depth counter and
+     * the journal stack together. Resetting only the counter would strand the
+     * parent frames, breaking the count($journalStack) === inTransaction
+     * invariant and letting later transactions merge into a stale frame.
+     */
+    public function testRedisRollbackFailureClearsJournalStack(): void
+    {
+        if (!\extension_loaded('redis')) {
+            $this->markTestSkipped('redis extension not loaded');
+        }
+
+        $adapter = new class (new \Redis()) extends RedisAdapter {
+            protected function rollbackJournal(): void
+            {
+                throw new \RuntimeException('rollback replay failed');
+            }
+        };
+
+        $adapter->startTransaction();
+        $adapter->startTransaction();
+
+        $thrown = null;
+        try {
+            $adapter->rollbackTransaction();
+        } catch (\Throwable $e) {
+            $thrown = $e;
+        }
+
+        $this->assertInstanceOf(\RuntimeException::class, $thrown);
+
+        $inTransaction = new \ReflectionProperty(RedisAdapter::class, 'inTransaction');
+        $inTransaction->setAccessible(true);
+        $this->assertSame(0, $inTransaction->getValue($adapter));
+
+        $journalStack = new \ReflectionProperty(RedisAdapter::class, 'journalStack');
+        $journalStack->setAccessible(true);
+        $this->assertSame([], $journalStack->getValue($adapter));
     }
 }

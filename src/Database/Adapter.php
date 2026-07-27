@@ -438,16 +438,15 @@ abstract class Adapter
                 $this->commitTransaction();
                 return $result;
             } catch (\Throwable $action) {
+                $rollback = null;
                 try {
                     $this->rollbackTransaction();
-                } catch (\Throwable $rollback) {
-                    if ($attempts < $retries) {
-                        \usleep($sleep * ($attempts + 1));
-                        continue;
-                    }
-
+                } catch (\Throwable $rollbackError) {
+                    // Not every adapter resets the depth counter when its
+                    // rollback throws (e.g. Redis), so reset it here to avoid
+                    // leaking transaction state onto the reused connection.
+                    $rollback = $rollbackError;
                     $this->inTransaction = 0;
-                    throw $rollback;
                 }
 
                 if (
@@ -467,7 +466,7 @@ abstract class Adapter
                     continue;
                 }
 
-                throw $action;
+                throw $rollback ?? $action;
             }
         }
 

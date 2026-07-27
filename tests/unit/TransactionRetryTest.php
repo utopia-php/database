@@ -86,4 +86,35 @@ class TransactionRetryTest extends TestCase
         $this->assertInstanceOf(\RuntimeException::class, $thrown);
         $this->assertSame(3, $attempts);
     }
+
+    /**
+     * Rollback cleanup can itself fail (adapters throw a DatabaseException from
+     * rollbackTransaction()). A non-retriable action must still abort after a
+     * single attempt and propagate the original action, not be retried or
+     * masked by the rollback error.
+     */
+    public function testNonRetriableActionAbortsWhenRollbackFails(): void
+    {
+        $adapter = new class () extends DatabaseMemory {
+            public function rollbackTransaction(): bool
+            {
+                throw new \RuntimeException('rollback failed');
+            }
+        };
+
+        $attempts = 0;
+        $thrown = null;
+
+        try {
+            $adapter->withTransaction(function () use (&$attempts) {
+                $attempts++;
+                throw new TimeoutException('Query timed out');
+            });
+        } catch (\Throwable $e) {
+            $thrown = $e;
+        }
+
+        $this->assertInstanceOf(TimeoutException::class, $thrown);
+        $this->assertSame(1, $attempts);
+    }
 }

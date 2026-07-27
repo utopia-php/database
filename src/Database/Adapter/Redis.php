@@ -4000,8 +4000,15 @@ class Redis extends Adapter
             return false;
         }
 
-        $this->rollbackJournal();
-        $this->inTransaction--;
+        try {
+            $this->rollbackJournal();
+            $this->inTransaction--;
+        } catch (\Throwable $e) {
+            // Match the SQL/Mongo contract: a failed rollback resets the depth
+            // counter so leaked transaction state can't corrupt connection reuse.
+            $this->inTransaction = 0;
+            throw $e;
+        }
 
         return true;
     }

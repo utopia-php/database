@@ -7499,7 +7499,10 @@ class Database
                     $fresh = $this->authorization->skip(fn () => $this->silent(
                         fn () => $this->getDocument($collection->getId(), $old->getId(), forUpdate: true)
                     ));
-                    if (!$fresh->isEmpty() && $fresh->getUpdatedAt() !== $old->getUpdatedAt()) {
+                    if ($fresh->isEmpty()) {
+                        throw new ConflictException('Document was deleted after the request timestamp');
+                    }
+                    if ($fresh->getUpdatedAt() !== $old->getUpdatedAt()) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
                 }

@@ -870,6 +870,13 @@ class Redis extends Adapter
         return false;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        // The Redis adapter is itself the store; reads hit Redis directly and
+        // it runs with a no-op cache, so the Database cache layer is bypassed.
+        return false;
+    }
+
     public function getSupportForReconnection(): bool
     {
         return false;

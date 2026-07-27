@@ -1940,6 +1940,11 @@ class Memory extends Adapter
         return false;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        return true;
+    }
+
     public function getSupportForReconnection(): bool
     {
         return false;

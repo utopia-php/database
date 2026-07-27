@@ -1123,6 +1123,11 @@ abstract class Adapter
     abstract public function getSupportForCacheSkipOnFailure(): bool;
 
     /**
+     * @return bool
+     */
+    abstract public function getSupportForCaching(): bool;
+
+    /**
      * Is reconnection supported?
      *
      * @return bool

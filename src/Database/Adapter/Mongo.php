@@ -3682,6 +3682,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        return true;
+    }
+
     /**
      * Is hostname supported?
      *

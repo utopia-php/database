@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "17a58fb8abac14f34ded3cfc0c7efb73",
+    "content-hash": "3730b91e8fc95a7ec85362b9bbfea3c0",
     "packages": [
         {
             "name": "brick/math",
@@ -2036,16 +2036,16 @@
         },
         {
             "name": "utopia-php/cache",
-            "version": "3.4.0",
+            "version": "4.0.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/cache.git",
-                "reference": "5c292d4df156f8b008f29fa6b033834b906bf328"
+                "reference": "2ab50440114a7699b8a017ee2ecd8bcd9d54ac5e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/cache/zipball/5c292d4df156f8b008f29fa6b033834b906bf328",
-                "reference": "5c292d4df156f8b008f29fa6b033834b906bf328",
+                "url": "https://api.github.com/repos/utopia-php/cache/zipball/2ab50440114a7699b8a017ee2ecd8bcd9d54ac5e",
+                "reference": "2ab50440114a7699b8a017ee2ecd8bcd9d54ac5e",
                 "shasum": ""
             },
             "require": {
@@ -2054,7 +2054,7 @@
                 "ext-redis": "*",
                 "php": ">=8.3",
                 "utopia-php/circuit-breaker": "0.3.*",
-                "utopia-php/pools": "1.*",
+                "utopia-php/pools": "2.*",
                 "utopia-php/telemetry": "*"
             },
             "require-dev": {
@@ -2084,9 +2084,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/cache/issues",
-                "source": "https://github.com/utopia-php/cache/tree/3.4.0"
+                "source": "https://github.com/utopia-php/cache/tree/4.0.0"
             },
-            "time": "2026-07-01T15:44:35+00:00"
+            "time": "2026-07-31T13:04:45+00:00"
         },
         {
             "name": "utopia-php/circuit-breaker",
@@ -2261,16 +2261,16 @@
         },
         {
             "name": "utopia-php/pools",
-            "version": "1.1.0",
+            "version": "2.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/pools.git",
-                "reference": "fd5aa7e89685ffc74f9dff3d23c270ef30c7bbf3"
+                "reference": "48905dac1b8f8050c2e07bdda32a018ca33982fc"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/pools/zipball/fd5aa7e89685ffc74f9dff3d23c270ef30c7bbf3",
-                "reference": "fd5aa7e89685ffc74f9dff3d23c270ef30c7bbf3",
+                "url": "https://api.github.com/repos/utopia-php/pools/zipball/48905dac1b8f8050c2e07bdda32a018ca33982fc",
+                "reference": "48905dac1b8f8050c2e07bdda32a018ca33982fc",
                 "shasum": ""
             },
             "require": {
@@ -2311,9 +2311,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/pools/issues",
-                "source": "https://github.com/utopia-php/pools/tree/1.1.0"
+                "source": "https://github.com/utopia-php/pools/tree/2.0.1"
             },
-            "time": "2026-07-17T10:19:09+00:00"
+            "time": "2026-07-31T12:19:18+00:00"
         },
         {
             "name": "utopia-php/telemetry",
@@ -4633,7 +4633,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {
@@ -4643,6 +4643,6 @@
         "ext-mbstring": "*",
         "ext-redis": "*"
     },
-    "platform-dev": [],
-    "plugin-api-version": "2.6.0"
+    "platform-dev": {},
+    "plugin-api-version": "2.9.0"
 }

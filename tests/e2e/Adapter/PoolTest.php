@@ -59,7 +59,7 @@ class PoolTest extends Base
                 password: $dbPass,
                 config: MySQL::getPDOAttributes(),
             ));
-        });
+        }, timeout: 0.0);
 
         $database = new Database(new Pool($pool), $cache);
 

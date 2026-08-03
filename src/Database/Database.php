@@ -8562,7 +8562,19 @@ class Database
             }
         }
 
-        if ($uniqueOrderBy === false) {
+        $vectorSearch = false;
+        foreach ($filters as $filter) {
+            if (\in_array($filter->getMethod(), Query::VECTOR_TYPES)) {
+                $vectorSearch = true;
+                break;
+            }
+        }
+
+        // A vector search is ordered by distance, and a vector index can only answer that one
+        // sort key. Appending a tie break makes the ordering unsatisfiable from the index and
+        // costs a full scan of the collection. The tie break exists to hold a page boundary
+        // still, so it is only owed to a cursor.
+        if ($uniqueOrderBy === false && (!$vectorSearch || !empty($cursor))) {
             $orderAttributes[] = '$sequence';
         }
 

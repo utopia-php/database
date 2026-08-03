@@ -1755,7 +1755,7 @@ class Postgres extends SQL
     }
 
     /**
-     * Get vector distance calculation for ORDER BY clause
+     * Get the SQL expression measuring distance between a vector attribute and the query vector
      *
      * @param Query $query
      * @param array<string, mixed> $binds
@@ -1763,7 +1763,7 @@ class Postgres extends SQL
      * @return string|null
      * @throws DatabaseException
      */
-    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    protected function getSQLVectorDistance(Query $query, array &$binds, string $alias): ?string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
@@ -1783,6 +1783,15 @@ class Postgres extends SQL
             Query::TYPE_VECTOR_EUCLIDEAN => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
             default => null,
         };
+    }
+
+    /**
+     * @param string $distance
+     * @return string
+     */
+    protected function getSQLReadableDistance(string $distance): string
+    {
+        return "{$distance}::text";
     }
 
     /**

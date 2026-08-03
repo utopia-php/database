@@ -63,6 +63,9 @@ class Database
     // Vector types
     public const VAR_VECTOR = 'vector';
 
+    // Vector query result key
+    public const VECTOR_DISTANCE = '$distance';
+
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
 

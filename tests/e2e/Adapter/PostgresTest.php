@@ -77,6 +77,58 @@ class PostgresTest extends Base
     }
 
     /**
+     * Reading must be answerable from the row alone. The permissions table holds the same fact,
+     * but reaching it needs a join, and a join has to be resolved before anything can be ordered,
+     * which costs a full read of the collection whenever the ordering could have come from an
+     * index instead.
+     */
+    public function testReadDoesNotTouchThePermissionsTable(): void
+    {
+        $database = $this->getDatabase();
+
+        // no collection level read, so the permission is enforced per document
+        $database->createCollection('permsPlan', permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true);
+
+        $database->createAttribute('permsPlan', 'title', Database::VAR_STRING, 64, true);
+
+        foreach (['visible' => Role::any(), 'hidden' => Role::user('nobody')] as $title => $role) {
+            $database->createDocument('permsPlan', new Document([
+                '$permissions' => [Permission::read($role)],
+                'title' => $title,
+            ]));
+        }
+
+        $table = $database->getNamespace() . '_permsPlan_perms';
+
+        $scans = function () use ($table): int {
+            self::$pdo->query('SELECT pg_stat_force_next_flush()');
+            self::$pdo->query('SELECT pg_stat_clear_snapshot()');
+
+            $statement = self::$pdo->prepare('SELECT COALESCE(SUM(seq_scan + COALESCE(idx_scan, 0)), 0) FROM pg_stat_user_tables WHERE relname = :table');
+            $statement->execute([':table' => $table]);
+
+            return (int)$statement->fetchColumn();
+        };
+
+        $before = $scans();
+
+        $results = $database->find('permsPlan');
+
+        $this->assertCount(1, $results, 'Only the readable document may come back');
+        $this->assertSame('visible', $results[0]->getAttribute('title'));
+
+        $this->assertSame(
+            $before,
+            $scans(),
+            'A read must be satisfied from the row, without reaching the permissions table'
+        );
+
+        $database->deleteCollection('permsPlan');
+    }
+
+    /**
      * A vector search must order by distance alone, because a vector index can answer exactly
      * one sort key. Adding a second one does not merely make the index look expensive, it makes
      * it unusable, and the collection is read in full instead.

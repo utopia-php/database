@@ -1837,6 +1837,10 @@ class Postgres extends SQL
             $roles
         );
 
+        if ($permissions === []) {
+            return 'FALSE';
+        }
+
         return '(' . \implode(' OR ', $permissions) . ')';
     }
 

@@ -217,7 +217,7 @@ class Postgres extends SQL
                 \"_createdAt\" TIMESTAMP(3) DEFAULT NULL,
                 \"_updatedAt\" TIMESTAMP(3) DEFAULT NULL,
                 " . \implode(' ', $attributeStrings) . "
-                _permissions TEXT DEFAULT NULL
+                _permissions JSONB DEFAULT NULL
             );
         ";
 
@@ -226,20 +226,24 @@ class Postgres extends SQL
             $createdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_created");
             $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
             $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
+            $permissionsIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permissions");
             $collection .= "
 				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai, \"_tenant\");
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_createdAt\");
             	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (_tenant, \"_updatedAt\");
             	CREATE INDEX \"{$tenantIdIndex}\" ON {$this->getSQLTable($id)} (_tenant, _id);
+            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions);
 			";
         } else {
             $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
             $createdIndex = $this->getShortKey("{$namespace}_{$id}_created");
             $updatedIndex = $this->getShortKey("{$namespace}_{$id}_updated");
+            $permissionsIndex = $this->getShortKey("{$namespace}_{$id}_permissions");
             $collection .= "
 				CREATE UNIQUE INDEX \"{$uidIndex}\" ON {$this->getSQLTable($id)} (\"_uid\" COLLATE utf8_ci_ai);
             	CREATE INDEX \"{$createdIndex}\" ON {$this->getSQLTable($id)} (\"_createdAt\");
             	CREATE INDEX \"{$updatedIndex}\" ON {$this->getSQLTable($id)} (\"_updatedAt\");
+            	CREATE INDEX \"{$permissionsIndex}\" ON {$this->getSQLTable($id)} USING gin (_permissions);
 			";
         }
 
@@ -1755,7 +1759,7 @@ class Postgres extends SQL
     }
 
     /**
-     * Get vector distance calculation for ORDER BY clause
+     * Get the SQL expression measuring distance between a vector attribute and the query vector
      *
      * @param Query $query
      * @param array<string, mixed> $binds
@@ -1763,7 +1767,7 @@ class Postgres extends SQL
      * @return string|null
      * @throws DatabaseException
      */
-    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    protected function getSQLVectorDistance(Query $query, array &$binds, string $alias): ?string
     {
         $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
 
@@ -1783,6 +1787,61 @@ class Postgres extends SQL
             Query::TYPE_VECTOR_EUCLIDEAN => "({$alias}.{$attribute} <-> :vector_{$placeholder}::vector)",
             default => null,
         };
+    }
+
+    /**
+     * @param string $distance
+     * @return string
+     */
+    protected function getSQLReadableDistance(string $distance): string
+    {
+        return "{$distance}::text";
+    }
+
+    /**
+     * Match the permission against the copy carried on the row rather than joining the
+     * permissions table.
+     *
+     * Both hold the same fact, written together, but a semi join has to be resolved before
+     * anything can be ordered, which forces the whole collection to be read whenever the
+     * ordering could otherwise have come from an index. Matching on the row leaves the
+     * planner free to cost the permission against the ordering, so a selective permission
+     * drives from the GIN index and a permissive one is a cheap filter over whichever index
+     * the ordering wanted.
+     *
+     * @param string $collection
+     * @param array<string> $roles
+     * @param string $alias
+     * @param string $type
+     * @return string
+     * @throws DatabaseException
+     */
+    protected function getSQLPermissionsCondition(
+        string $collection,
+        array $roles,
+        string $alias,
+        string $type = Database::PERMISSION_READ
+    ): string {
+        if (!\in_array($type, Database::PERMISSIONS)) {
+            throw new DatabaseException('Unknown permission type: ' . $type);
+        }
+
+        $column = "{$this->quote($alias)}.{$this->quote('_permissions')}";
+
+        // Containment rather than jsonb's ?| key operator: PDO reads a lone ? as a positional
+        // placeholder, and doubling it to escape breaks once a named placeholder is repeated,
+        // which the cursor conditions do. Each role is its own @> so the index can answer them
+        // as a BitmapOr; jsonb_exists_any would express it in one call but is not indexable.
+        $permissions = \array_map(
+            fn ($role) => "{$column} @> {$this->getPDO()->quote(\json_encode(["{$type}(\"{$role}\")"]))}::jsonb",
+            $roles
+        );
+
+        if ($permissions === []) {
+            return 'FALSE';
+        }
+
+        return '(' . \implode(' OR ', $permissions) . ')';
     }
 
     /**

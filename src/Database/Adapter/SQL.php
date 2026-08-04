@@ -20,6 +20,8 @@ use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
+    protected const VECTOR_DISTANCE_COLUMN = '_distance';
+
     protected mixed $pdo;
 
     /**
@@ -1810,16 +1812,31 @@ abstract class SQL extends Adapter
     ): mixed;
 
     /**
-     * Get vector distance calculation for ORDER BY clause
+     * Get the SQL expression measuring distance between a vector attribute and the query vector
      *
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $alias
      * @return string|null
      */
-    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    protected function getSQLVectorDistance(Query $query, array &$binds, string $alias): ?string
     {
         return null;
+    }
+
+    /**
+     * Render a vector distance expression in a form safe to read back into PHP
+     *
+     * A distance is undefined for a zero vector and can overflow for a large one, so the
+     * expression can evaluate to NaN or infinity. Those cannot survive the trip into a PHP
+     * float, so the value is carried as text and interpreted during hydration.
+     *
+     * @param string $distance
+     * @return string
+     */
+    protected function getSQLReadableDistance(string $distance): string
+    {
+        return $distance;
     }
 
     /**
@@ -3064,18 +3081,17 @@ abstract class SQL extends Adapter
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        // Add vector distance calculations to ORDER BY
-        $vectorOrders = [];
+        $vectorDistances = [];
         foreach ($vectorQueries as $query) {
-            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
-            if ($vectorOrder) {
-                $vectorOrders[] = $vectorOrder;
+            $vectorDistance = $this->getSQLVectorDistance($query, $binds, $alias);
+            if ($vectorDistance) {
+                $vectorDistances[] = $vectorDistance;
             }
         }
 
-        if (!empty($vectorOrders)) {
+        if (!empty($vectorDistances)) {
             // Vector orders should come first for similarity search
-            $orders = \array_merge($vectorOrders, $orders);
+            $orders = \array_merge($vectorDistances, $orders);
         }
 
         $sqlOrder = !empty($orders) ? 'ORDER BY ' . implode(', ', $orders) : '';
@@ -3093,8 +3109,15 @@ abstract class SQL extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
+        $projection = $this->getAttributeProjection($selections, $alias);
+
+        if (!empty($vectorDistances)) {
+            $readable = $this->getSQLReadableDistance($vectorDistances[0]);
+            $projection .= ", {$readable} AS {$this->quote(static::VECTOR_DISTANCE_COLUMN)}";
+        }
+
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$projection}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
@@ -3146,6 +3169,11 @@ abstract class SQL extends Adapter
             if (\array_key_exists('_permissions', $document)) {
                 $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
                 unset($results[$index]['_permissions']);
+            }
+            if (\array_key_exists(static::VECTOR_DISTANCE_COLUMN, $document)) {
+                $value = $document[static::VECTOR_DISTANCE_COLUMN];
+                $results[$index][Database::VECTOR_DISTANCE] = \is_numeric($value) ? (float)$value : null;
+                unset($results[$index][static::VECTOR_DISTANCE_COLUMN]);
             }
 
             $results[$index] = new Document($results[$index]);

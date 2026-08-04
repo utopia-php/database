@@ -302,6 +302,162 @@ trait VectorTests
         $database->deleteCollection('vectorQueries');
     }
 
+    public function testVectorDistance(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForVectors()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('vectorDistance');
+        $database->createAttribute('vectorDistance', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('vectorDistance', 'embedding', Database::VAR_VECTOR, 3, true);
+
+        $vectors = [
+            'identical' => [1.0, 0.0, 0.0],
+            'scaled' => [2.0, 0.0, 0.0],
+            'orthogonal' => [0.0, 1.0, 0.0],
+            'opposite' => [-1.0, 0.0, 0.0],
+        ];
+
+        foreach ($vectors as $name => $embedding) {
+            $database->createDocument('vectorDistance', new Document([
+                '$permissions' => [
+                    Permission::read(Role::any())
+                ],
+                'name' => $name,
+                'embedding' => $embedding,
+            ]));
+        }
+
+        $target = [1.0, 0.0, 0.0];
+
+        $results = $database->find('vectorDistance', [
+            Query::vectorCosine('embedding', $target)
+        ]);
+
+        $this->assertCount(4, $results);
+
+        $cosine = [];
+        foreach ($results as $result) {
+            $distance = $result->getAttribute(Database::VECTOR_DISTANCE);
+
+            $this->assertIsFloat($distance, "Cosine distance for '{$result->getAttribute('name')}' must be a float");
+
+            $cosine[$result->getAttribute('name')] = $distance;
+        }
+
+        // Cosine distance is 1 - cosine similarity, so magnitude is irrelevant
+        $this->assertEqualsWithDelta(0.0, $cosine['identical'], 0.000001, 'Identical vector must have zero cosine distance');
+        $this->assertEqualsWithDelta(0.0, $cosine['scaled'], 0.000001, 'Cosine distance must ignore magnitude');
+        $this->assertEqualsWithDelta(1.0, $cosine['orthogonal'], 0.000001, 'Orthogonal vector must have cosine distance of 1');
+        $this->assertEqualsWithDelta(2.0, $cosine['opposite'], 0.000001, 'Opposite vector must have cosine distance of 2');
+
+        // The returned distance must agree with the order the rows came back in,
+        // otherwise a caller ranking by the number would disagree with the database
+        $distances = \array_map(
+            fn (Document $result) => $result->getAttribute(Database::VECTOR_DISTANCE),
+            $results
+        );
+
+        $sorted = $distances;
+        \sort($sorted);
+        $this->assertSame($sorted, $distances, 'Results must be returned in ascending distance order');
+
+        // Cosine similarity, which is what a caller displays as a relevance score
+        $this->assertEqualsWithDelta(1.0, 1 - $cosine['identical'], 0.000001);
+        $this->assertEqualsWithDelta(0.0, 1 - $cosine['orthogonal'], 0.000001);
+        $this->assertEqualsWithDelta(-1.0, 1 - $cosine['opposite'], 0.000001);
+
+        $results = $database->find('vectorDistance', [
+            Query::vectorEuclidean('embedding', $target)
+        ]);
+
+        $euclidean = [];
+        foreach ($results as $result) {
+            $euclidean[$result->getAttribute('name')] = $result->getAttribute(Database::VECTOR_DISTANCE);
+        }
+
+        $this->assertEqualsWithDelta(0.0, $euclidean['identical'], 0.000001, 'Identical vector must have zero euclidean distance');
+        $this->assertEqualsWithDelta(1.0, $euclidean['scaled'], 0.000001, 'Euclidean distance must account for magnitude');
+        $this->assertEqualsWithDelta(\sqrt(2), $euclidean['orthogonal'], 0.000001);
+        $this->assertEqualsWithDelta(2.0, $euclidean['opposite'], 0.000001);
+
+        // The dot product operator returns the negative inner product so that
+        // ascending order still means most similar first
+        $results = $database->find('vectorDistance', [
+            Query::vectorDot('embedding', $target)
+        ]);
+
+        $dot = [];
+        foreach ($results as $result) {
+            $dot[$result->getAttribute('name')] = $result->getAttribute(Database::VECTOR_DISTANCE);
+        }
+
+        $this->assertEqualsWithDelta(-1.0, $dot['identical'], 0.000001);
+        $this->assertEqualsWithDelta(-2.0, $dot['scaled'], 0.000001);
+        $this->assertEqualsWithDelta(0.0, $dot['orthogonal'], 0.000001);
+        $this->assertEqualsWithDelta(1.0, $dot['opposite'], 0.000001);
+
+        // A distance is only meaningful relative to a query vector, so a plain
+        // find must not carry one
+        $results = $database->find('vectorDistance');
+
+        $this->assertCount(4, $results);
+        foreach ($results as $result) {
+            $this->assertNull(
+                $result->getAttribute(Database::VECTOR_DISTANCE),
+                'A find without a vector query must not return a distance'
+            );
+        }
+
+        // Selecting a subset of attributes builds a different projection
+        $results = $database->find('vectorDistance', [
+            Query::select(['name']),
+            Query::vectorCosine('embedding', $target),
+            Query::limit(1),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame('identical', $results[0]->getAttribute('name'));
+        $this->assertEqualsWithDelta(0.0, $results[0]->getAttribute(Database::VECTOR_DISTANCE), 0.000001);
+
+        // Cosine distance to a zero vector divides by a zero magnitude, so the engine answers
+        // NaN. That has no honest float representation and must not read back as 0.0, which
+        // would claim the pair is identical
+        $database->createDocument('vectorDistance', new Document([
+            '$permissions' => [
+                Permission::read(Role::any())
+            ],
+            'name' => 'zero',
+            'embedding' => [0.0, 0.0, 0.0],
+        ]));
+
+        $results = $database->find('vectorDistance', [
+            Query::vectorCosine('embedding', $target)
+        ]);
+
+        $this->assertCount(5, $results);
+
+        $zero = null;
+        foreach ($results as $result) {
+            if ($result->getAttribute('name') === 'zero') {
+                $zero = $result;
+            }
+        }
+
+        $this->assertNotNull($zero, 'The zero vector must still be returned');
+        $this->assertNull(
+            $zero->getAttribute(Database::VECTOR_DISTANCE),
+            'An undefined distance must be null, not a number'
+        );
+
+        $database->deleteCollection('vectorDistance');
+    }
+
     public function testVectorQueryValidation(): void
     {
         /** @var Database $database */

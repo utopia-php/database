@@ -307,7 +307,7 @@ class MariaDB extends SQL
             $statement->execute();
             $size = $statement->fetchColumn();
         } catch (PDOException $e) {
-                    throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
 
         return (int) $size;

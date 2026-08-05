@@ -283,34 +283,34 @@ class MariaDB extends SQL
         $database = $this->getDatabase();
         $permissions = $collection . '_perms';
 
-        $collectionSize = $this->getPDO()->prepare("
-            SELECT SUM(data_length + index_length)  
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE table_name = :name AND
-            table_schema = :database
-         ");
-
-        $permissionsSize = $this->getPDO()->prepare("
-            SELECT SUM(data_length + index_length)  
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE table_name = :permissions AND
-            table_schema = :database
+        // Both tables in one round trip. Keep the equality predicates: LIKE and IN are
+        // not indexed here, they scan every table in the schema.
+        $statement = $this->getPDO()->prepare("
+            SELECT SUM(size) FROM (
+                SELECT data_length + index_length AS size
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE table_name = :name AND
+                table_schema = :database
+                UNION ALL
+                SELECT data_length + index_length AS size
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE table_name = :permissions AND
+                table_schema = :database
+            ) AS sizes
         ");
 
-        $collectionSize->bindParam(':name', $collection);
-        $collectionSize->bindParam(':database', $database);
-        $permissionsSize->bindParam(':permissions', $permissions);
-        $permissionsSize->bindParam(':database', $database);
+        $statement->bindParam(':name', $collection);
+        $statement->bindParam(':permissions', $permissions);
+        $statement->bindParam(':database', $database);
 
         try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
-            $size = $collectionSize->fetchColumn() + $permissionsSize->fetchColumn();
+            $statement->execute();
+            $size = $statement->fetchColumn();
         } catch (PDOException $e) {
-            throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
+                    throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());
         }
 
-        return $size;
+        return (int) $size;
     }
 
     /**

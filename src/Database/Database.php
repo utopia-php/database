@@ -9520,6 +9520,9 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 foreach ($query->getValues() as $value) {
+                    if (!\is_string($value)) {
+                        throw new QueryException('Attribute selection must be a string, got ' . \get_debug_type($value));
+                    }
                     if (\str_contains($value, '.')) {
                         $relationshipSelections[] = $value;
                         continue;
@@ -10011,7 +10014,7 @@ class Database
 
             $values = $query->getValues();
             foreach ($values as $valueIndex => $value) {
-                if (!\str_contains($value, '.')) {
+                if (!\is_string($value) || !\str_contains($value, '.')) {
                     continue;
                 }
 

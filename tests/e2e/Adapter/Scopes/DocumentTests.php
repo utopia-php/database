@@ -3627,6 +3627,68 @@ trait DocumentTests
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
+    /**
+     * A batch insert stamps every row with the same `$createdAt` — createDocuments() takes
+     * one timestamp for the whole batch — so ordering by that timestamp alone leaves the
+     * order of those rows to the tie break Database::find() appends.
+     *
+     * The tie break follows the direction of the leading timestamp, so a descending order
+     * returns the batch newest-inserted first. It used to be appended ascending regardless,
+     * which both reversed the rows inside a tied group and produced a mixed-direction
+     * ORDER BY that no ascending index can answer.
+     */
+    public function testFindOrderByCreateDateTieBreak(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('tieBreak', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        $this->assertEquals(true, $database->createAttribute('tieBreak', 'name', Database::VAR_STRING, 128, true));
+
+        $documents = [];
+        foreach (['alpha', 'bravo', 'charlie'] as $name) {
+            $documents[] = new Document([
+                'name' => $name,
+                '$permissions' => [Permission::read(Role::any())],
+            ]);
+        }
+
+        $this->assertEquals(3, $database->createDocuments('tieBreak', $documents));
+
+        $created = $database->find('tieBreak', [Query::orderAsc('$sequence')]);
+        $this->assertCount(3, $created);
+
+        // The batch shares one timestamp, otherwise the tie break is never consulted.
+        $this->assertEquals($created[0]->getCreatedAt(), $created[2]->getCreatedAt());
+
+        $descending = $database->find('tieBreak', [Query::orderDesc('$createdAt')]);
+        $this->assertEquals(
+            [$created[2]->getSequence(), $created[1]->getSequence(), $created[0]->getSequence()],
+            \array_map(fn (Document $document) => $document->getSequence(), $descending)
+        );
+
+        $ascending = $database->find('tieBreak', [Query::orderAsc('$createdAt')]);
+        $this->assertEquals(
+            [$created[0]->getSequence(), $created[1]->getSequence(), $created[2]->getSequence()],
+            \array_map(fn (Document $document) => $document->getSequence(), $ascending)
+        );
+
+        // The tie break sits behind the caller's own order, so `name` still decides the
+        // rows the timestamp ties — placing a unique key ahead of it would leave it unread.
+        $byName = $database->find('tieBreak', [
+            Query::orderDesc('$createdAt'),
+            Query::orderAsc('name'),
+        ]);
+        $this->assertEquals(
+            ['alpha', 'bravo', 'charlie'],
+            \array_map(fn (Document $document) => $document->getAttribute('name'), $byName)
+        );
+    }
+
     public function testFindCreatedBefore(): void
     {
         /** @var Database $database */

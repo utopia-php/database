@@ -8579,10 +8579,9 @@ class Database
             $leadingOrderType = $orderTypes[0] ?? Database::ORDER_ASC;
 
             if (\in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)) {
-                \array_splice($orderAttributes, 1, 0, ['$sequence']);
-                \array_splice($orderTypes, 1, 0, [$leadingOrderType]);
+                $orderAttributes[] = '$sequence';
+                $orderTypes[] = $leadingOrderType;
             } else {
-                // Everything else keeps the ascending tie break it has always had.
                 $orderAttributes[] = '$sequence';
                 $orderTypes[] = Database::ORDER_ASC;
             }

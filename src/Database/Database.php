@@ -8575,7 +8575,17 @@ class Database
         // costs a full scan of the collection. The tie break exists to hold a page boundary
         // still, so it is only owed to a cursor.
         if ($uniqueOrderBy === false && (!$vectorSearch || !empty($cursor))) {
-            $orderAttributes[] = '$sequence';
+            $leadingAttribute = $orderAttributes[0] ?? null;
+            $leadingOrderType = $orderTypes[0] ?? Database::ORDER_ASC;
+
+            if (\in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)) {
+                \array_splice($orderAttributes, 1, 0, ['$sequence']);
+                \array_splice($orderTypes, 1, 0, [$leadingOrderType]);
+            } else {
+                // Everything else keeps the ascending tie break it has always had.
+                $orderAttributes[] = '$sequence';
+                $orderTypes[] = Database::ORDER_ASC;
+            }
         }
 
         if (!empty($cursor)) {

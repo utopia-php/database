@@ -8575,7 +8575,16 @@ class Database
         // costs a full scan of the collection. The tie break exists to hold a page boundary
         // still, so it is only owed to a cursor.
         if ($uniqueOrderBy === false && (!$vectorSearch || !empty($cursor))) {
-            $orderAttributes[] = '$sequence';
+            $leadingAttribute = $orderAttributes[0] ?? null;
+            $leadingOrderType = $orderTypes[0] ?? Database::ORDER_ASC;
+
+            if (\in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)) {
+                $orderAttributes[] = '$sequence';
+                $orderTypes[] = $leadingOrderType;
+            } else {
+                $orderAttributes[] = '$sequence';
+                $orderTypes[] = Database::ORDER_ASC;
+            }
         }
 
         if (!empty($cursor)) {
@@ -9520,6 +9529,9 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 foreach ($query->getValues() as $value) {
+                    if (!\is_string($value)) {
+                        throw new QueryException('Attribute selection must be a string, got ' . \get_debug_type($value));
+                    }
                     if (\str_contains($value, '.')) {
                         $relationshipSelections[] = $value;
                         continue;
@@ -10011,7 +10023,7 @@ class Database
 
             $values = $query->getValues();
             foreach ($values as $valueIndex => $value) {
-                if (!\str_contains($value, '.')) {
+                if (!\is_string($value) || !\str_contains($value, '.')) {
                     continue;
                 }
 

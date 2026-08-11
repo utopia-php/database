@@ -46,12 +46,21 @@ class Document extends ArrayObject
             }
 
             foreach ($value as $childKey => $child) {
-                // An array value is either a list of nested sub-documents or a list of
-                // plain items (dates, numbers, strings): wrap the former, leave the latter.
-                // is_array() tells them apart and avoids array-accessing a non-array
-                // value (e.g. a UTCDateTime), which would otherwise fatal.
+                if ($child instanceof self) {
+                    continue;
+                }
+
                 if (\is_array($child) && (isset($child['$id']) || isset($child['$collection']))) {
                     $value[$childKey] = new self($child);
+                } elseif ($child instanceof \ArrayAccess && (isset($child['$id']) || isset($child['$collection']))) {
+                    if ($child instanceof \Traversable) {
+                        $value[$childKey] = new self(\iterator_to_array($child));
+                    } elseif (\method_exists($child, 'getArrayCopy')) {
+                        $value[$childKey] = new self($child->getArrayCopy());
+                    } elseif (\method_exists($child, 'toArray')) {
+                        $value[$childKey] = new self($child->toArray());
+                    }
+                    // If none of the above, we cannot safely enumerate the offsets — leave as-is.
                 }
             }
 

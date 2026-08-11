@@ -1267,7 +1267,7 @@ class Mongo extends Adapter
 
         $resultArray = $this->client->toArray($result[0]);
         $result = $this->replaceChars('_', '$', $resultArray);
-        $document = new Document($result);
+        $document = new Document($this->convertStdClassToArray($result));
         $document = $this->castingAfter($collection, $document);
 
         // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
@@ -1308,6 +1308,7 @@ class Mongo extends Adapter
         $options = $this->getTransactionOptions();
         $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
         $result = $this->replaceChars('_', '$', $result);
+        $result = $this->convertStdClassToArray($result);
         // in order to keep the original object refrence.
         foreach ($result as $key => $value) {
             $document->setAttribute($key, $value);
@@ -1366,7 +1367,7 @@ class Mongo extends Adapter
                 switch ($type) {
                     case Database::VAR_INTEGER:
                     case Database::VAR_BIGINT:
-                        $node = (int)$node;
+                        $node = is_object($node) ? (int)(string)$node : (int)$node;
                         break;
                     case Database::VAR_DATETIME:
                         $node = $this->convertUTCDateToString($node);
@@ -1400,6 +1401,10 @@ class Mongo extends Adapter
 
     private function convertStdClassToArray(mixed $value): mixed
     {
+        if (is_object($value) && (get_class($value) === 'MongoDB\BSON\Int64' || $value instanceof \MongoDB\BSON\Int64)) {
+            return (int)(string)$value;
+        }
+
         if (is_object($value) && get_class($value) === stdClass::class) {
             return array_map($this->convertStdClassToArray(...), get_object_vars($value));
         }
@@ -1587,7 +1592,7 @@ class Mongo extends Adapter
 
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->replaceChars('_', '$', $this->client->toArray($document));
-            $documents[$index] = new Document($documents[$index]);
+            $documents[$index] = new Document($this->convertStdClassToArray($documents[$index]));
         }
 
         return $documents;

@@ -417,4 +417,46 @@ class DocumentTest extends TestCase
         $this->assertNull($empty->getSequence());
         $this->assertNotSame('', $empty->getSequence());
     }
+
+    public function testNonArrayAccessObjectsInArray(): void
+    {
+        $mockObject = new class () {
+            public function __toString(): string
+            {
+                return '-3408048000';
+            }
+        };
+
+        $doc = new Document([
+            '$id' => 'test_non_array_access',
+            'listOfIntegers' => [
+                $mockObject,
+            ],
+        ]);
+
+        $this->assertEquals('test_non_array_access', $doc->getId());
+        $this->assertCount(1, $doc->getAttribute('listOfIntegers'));
+        $this->assertSame($mockObject, $doc->getAttribute('listOfIntegers')[0]);
+    }
+
+    public function testArrayAccessHydrationInArray(): void
+    {
+        $arrayAccessObject = new \ArrayObject([
+            '$id' => 'nested_doc',
+            'name' => 'nested_name',
+        ]);
+
+        $doc = new Document([
+            '$id' => 'parent_doc',
+            'children' => [
+                $arrayAccessObject,
+            ],
+        ]);
+
+        $this->assertEquals('parent_doc', $doc->getId());
+        $this->assertCount(1, $doc->getAttribute('children'));
+        $this->assertInstanceOf(Document::class, $doc->getAttribute('children')[0]);
+        $this->assertEquals('nested_doc', $doc->getAttribute('children')[0]->getId());
+        $this->assertEquals('nested_name', $doc->getAttribute('children')[0]->getAttribute('name'));
+    }
 }

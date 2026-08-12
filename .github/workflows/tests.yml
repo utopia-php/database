@@ -25,6 +25,9 @@ jobs:
         uses: docker/build-push-action@1104d471370f9806843c095c1db02b5a90c5f8b6 # v3.3.1
         with:
           context: .
+          build-args: |
+            UTOPIA_CACHE_REFERENCE=d7c0806f9bbdafee794849398f65e8ece322711d
+            UTOPIA_MONGO_REFERENCE=daea8f8213c33f52e8b66d0f5366428bf2f5a4b8
           push: false
           tags: ${{ env.IMAGE }}
           load: true

@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -991,6 +992,21 @@ trait ObjectAttributeTests
         $cached = $database->getDocument($collectionId, 'emptyObject');
         $this->assertSame('{}', json_encode($cached->getAttribute('meta')));
 
+        $updated = $database->updateDocument($collectionId, 'emptyObject', new Document([
+            'meta' => new \stdClass(),
+        ]));
+        $this->assertSame($cached->getUpdatedAt(), $updated->getUpdatedAt());
+        $this->assertSame('{}', json_encode($updated->getAttribute('meta')));
+
+        try {
+            $database->updateDocument($collectionId, 'emptyObject', new Document([
+                'meta' => [],
+            ]));
+            $this->fail('Changing an empty object to an empty array must require update permission');
+        } catch (AuthorizationException) {
+            $this->addToAssertionCount(1);
+        }
+
         $database->deleteCollection($collectionId);
     }
 
@@ -1029,11 +1045,20 @@ trait ObjectAttributeTests
         $this->assertSame('{"x":1}', json_encode($readMeta['arr'][1]));
         $this->assertSame('[]', json_encode($readMeta['emptyArray']));
 
-        $cachedMeta = $database->getDocument($collectionId, 'nestedEmptyObjects')->getAttribute('meta');
+        $cached = $database->getDocument($collectionId, 'nestedEmptyObjects');
+        $cachedMeta = $cached->getAttribute('meta');
         $this->assertSame('{}', json_encode($cachedMeta['inner']));
         $this->assertSame('{}', json_encode($cachedMeta['arr'][0]));
         $this->assertSame('{"x":1}', json_encode($cachedMeta['arr'][1]));
         $this->assertSame('[]', json_encode($cachedMeta['emptyArray']));
+
+        $updatedMeta = $cachedMeta;
+        $updatedMeta['inner'] = new \stdClass();
+        $updatedMeta['arr'][0] = new \stdClass();
+        $updated = $database->updateDocument($collectionId, 'nestedEmptyObjects', new Document([
+            'meta' => $updatedMeta,
+        ]));
+        $this->assertSame($cached->getUpdatedAt(), $updated->getUpdatedAt());
 
         $database->deleteCollection($collectionId);
     }

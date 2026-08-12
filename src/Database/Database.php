@@ -739,6 +739,29 @@ class Database
         return $value;
     }
 
+    private static function valuesEqual(mixed $value, mixed $old): bool
+    {
+        if ($value instanceof \stdClass && $old instanceof \stdClass) {
+            return self::valuesEqual((array)$value, (array)$old);
+        }
+
+        if (is_array($value) && is_array($old)) {
+            if (array_keys($value) !== array_keys($old)) {
+                return false;
+            }
+
+            foreach ($value as $key => $item) {
+                if (!self::valuesEqual($item, $old[$key])) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return $value === $old;
+    }
+
     /**
      * Add listener to events
      * Passing a null $callback will remove the listener
@@ -6385,7 +6408,7 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    if ($value !== $oldValue) {
+                    if (!self::valuesEqual($value, $oldValue)) {
                         $shouldUpdate = true;
                         break;
                     }

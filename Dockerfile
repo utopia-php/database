@@ -1,5 +1,8 @@
 FROM composer:2.8 AS composer
 
+ARG UTOPIA_CACHE_REFERENCE=''
+ARG UTOPIA_MONGO_REFERENCE=''
+
 WORKDIR /usr/local/src/
 
 COPY composer.lock /usr/local/src/
@@ -10,7 +13,21 @@ RUN composer install \
     --optimize-autoloader \
     --no-plugins \
     --no-scripts \
-    --prefer-dist
+    --prefer-dist \
+ && if [ -n "$UTOPIA_CACHE_REFERENCE" ] || [ -n "$UTOPIA_MONGO_REFERENCE" ]; then \
+      test -n "$UTOPIA_CACHE_REFERENCE" \
+      && test -n "$UTOPIA_MONGO_REFERENCE" \
+      && git init /tmp/utopia-cache \
+      && git -C /tmp/utopia-cache remote add origin https://github.com/utopia-php/monorepo.git \
+      && git -C /tmp/utopia-cache fetch --depth 1 origin "$UTOPIA_CACHE_REFERENCE" \
+      && git -C /tmp/utopia-cache checkout --detach FETCH_HEAD \
+      && cp -R /tmp/utopia-cache/packages/cache/src/. vendor/utopia-php/cache/src/ \
+      && git init /tmp/utopia-mongo \
+      && git -C /tmp/utopia-mongo remote add origin https://github.com/utopia-php/mongo.git \
+      && git -C /tmp/utopia-mongo fetch --depth 1 origin "$UTOPIA_MONGO_REFERENCE" \
+      && git -C /tmp/utopia-mongo checkout --detach FETCH_HEAD \
+      && cp -R /tmp/utopia-mongo/src/. vendor/utopia-php/mongo/src/; \
+    fi
 
 FROM php:8.5.8-cli-alpine AS compile
 

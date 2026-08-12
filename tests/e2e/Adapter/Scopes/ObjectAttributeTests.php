@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -960,6 +961,105 @@ trait ObjectAttributeTests
         $this->assertEquals('def2', $results[0]->getId());
 
         // Clean up
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testObjectAttributeEmptyObject(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForObject()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+
+        $created = $database->createDocument($collectionId, new Document([
+            '$id' => 'emptyObject',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => new \stdClass(),
+        ]));
+
+        $this->assertSame('{}', json_encode($created->getAttribute('meta')));
+
+        $database->purgeCachedDocument($collectionId, 'emptyObject');
+        $read = $database->getDocument($collectionId, 'emptyObject');
+
+        $this->assertSame('{}', json_encode($read->getAttribute('meta')));
+        $cached = $database->getDocument($collectionId, 'emptyObject');
+        $this->assertSame('{}', json_encode($cached->getAttribute('meta')));
+
+        $updated = $database->updateDocument($collectionId, 'emptyObject', new Document([
+            'meta' => new \stdClass(),
+        ]));
+        $this->assertSame($cached->getUpdatedAt(), $updated->getUpdatedAt());
+        $this->assertSame('{}', json_encode($updated->getAttribute('meta')));
+
+        try {
+            $database->updateDocument($collectionId, 'emptyObject', new Document([
+                'meta' => [],
+            ]));
+            $this->fail('Changing an empty object to an empty array must require update permission');
+        } catch (AuthorizationException) {
+            $this->addToAssertionCount(1);
+        }
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testObjectAttributeNestedEmptyObjects(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForObject()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+
+        $created = $database->createDocument($collectionId, new Document([
+            '$id' => 'nestedEmptyObjects',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => [
+                'inner' => new \stdClass(),
+                'arr' => [new \stdClass(), ['x' => 1]],
+                'emptyArray' => [],
+            ],
+        ]));
+        $createdMeta = $created->getAttribute('meta');
+        $this->assertSame('{}', json_encode($createdMeta['inner']));
+        $this->assertSame('{}', json_encode($createdMeta['arr'][0]));
+        $this->assertSame('{"x":1}', json_encode($createdMeta['arr'][1]));
+        $this->assertSame('[]', json_encode($createdMeta['emptyArray']));
+
+        $database->purgeCachedDocument($collectionId, 'nestedEmptyObjects');
+        $readMeta = $database->getDocument($collectionId, 'nestedEmptyObjects')->getAttribute('meta');
+        $this->assertSame('{}', json_encode($readMeta['inner']));
+        $this->assertSame('{}', json_encode($readMeta['arr'][0]));
+        $this->assertSame('{"x":1}', json_encode($readMeta['arr'][1]));
+        $this->assertSame('[]', json_encode($readMeta['emptyArray']));
+
+        $cached = $database->getDocument($collectionId, 'nestedEmptyObjects');
+        $cachedMeta = $cached->getAttribute('meta');
+        $this->assertSame('{}', json_encode($cachedMeta['inner']));
+        $this->assertSame('{}', json_encode($cachedMeta['arr'][0]));
+        $this->assertSame('{"x":1}', json_encode($cachedMeta['arr'][1]));
+        $this->assertSame('[]', json_encode($cachedMeta['emptyArray']));
+
+        $updatedMeta = $cachedMeta;
+        $updatedMeta['inner'] = new \stdClass();
+        $updatedMeta['arr'][0] = new \stdClass();
+        $updated = $database->updateDocument($collectionId, 'nestedEmptyObjects', new Document([
+            'meta' => $updatedMeta,
+        ]));
+        $this->assertSame($cached->getUpdatedAt(), $updated->getUpdatedAt());
+
         $database->deleteCollection($collectionId);
     }
 

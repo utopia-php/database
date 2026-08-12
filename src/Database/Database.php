@@ -669,7 +669,7 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return array|null
+             * @return mixed
              */
             function (?string $value) {
                 if (is_null($value)) {
@@ -690,7 +690,7 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (!\is_array($value)) {
+                if (!\is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
 
@@ -708,10 +708,58 @@ class Database
                 if (!is_string($value)) {
                     return $value;
                 }
-                $decoded = json_decode($value, true);
-                return is_array($decoded) ? $decoded : $value;
+                $decoded = self::decodeObject($value);
+
+                return is_array($decoded) || $decoded instanceof \stdClass ? $decoded : $value;
             }
         );
+    }
+
+    private static function decodeObject(string $value): mixed
+    {
+        if (preg_match('/\{\s*\}/', $value) === 0) {
+            return json_decode($value, true);
+        }
+
+        return self::toAssociative(json_decode($value));
+    }
+
+    private static function toAssociative(mixed $value): mixed
+    {
+        if ($value instanceof \stdClass) {
+            $properties = (array)$value;
+
+            return $properties === [] ? $value : array_map(self::toAssociative(...), $properties);
+        }
+
+        if (is_array($value)) {
+            return array_map(self::toAssociative(...), $value);
+        }
+
+        return $value;
+    }
+
+    private static function valuesEqual(mixed $value, mixed $old): bool
+    {
+        if ($value instanceof \stdClass && $old instanceof \stdClass) {
+            return self::valuesEqual((array)$value, (array)$old);
+        }
+
+        if (is_array($value) && is_array($old)) {
+            if (array_keys($value) !== array_keys($old)) {
+                return false;
+            }
+
+            foreach ($value as $key => $item) {
+                if (!self::valuesEqual($item, $old[$key])) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return $value === $old;
     }
 
     /**
@@ -6360,7 +6408,7 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    if ($value !== $oldValue) {
+                    if (!self::valuesEqual($value, $oldValue)) {
                         $shouldUpdate = true;
                         break;
                     }

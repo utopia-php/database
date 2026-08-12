@@ -2202,16 +2202,16 @@
         },
         {
             "name": "utopia-php/mongo",
-            "version": "1.5.1",
+            "version": "1.5.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/mongo.git",
-                "reference": "3ece830d1d72d2c9f68c656738e285629b5c72a9"
+                "reference": "20f9a644a356599fdd6265ba48696fc42a1f1881"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/3ece830d1d72d2c9f68c656738e285629b5c72a9",
-                "reference": "3ece830d1d72d2c9f68c656738e285629b5c72a9",
+                "url": "https://api.github.com/repos/utopia-php/mongo/zipball/20f9a644a356599fdd6265ba48696fc42a1f1881",
+                "reference": "20f9a644a356599fdd6265ba48696fc42a1f1881",
                 "shasum": ""
             },
             "require": {
@@ -2257,9 +2257,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/mongo/issues",
-                "source": "https://github.com/utopia-php/mongo/tree/1.5.1"
+                "source": "https://github.com/utopia-php/mongo/tree/1.5.2"
             },
-            "time": "2026-08-02T00:46:11+00:00"
+            "time": "2026-08-12T06:57:25+00:00"
         },
         {
             "name": "utopia-php/pools",

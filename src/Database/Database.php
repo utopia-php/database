@@ -669,7 +669,7 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return array|null
+             * @return mixed
              */
             function (?string $value) {
                 if (is_null($value)) {
@@ -690,7 +690,7 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (!\is_array($value)) {
+                if (!\is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
 
@@ -708,10 +708,35 @@ class Database
                 if (!is_string($value)) {
                     return $value;
                 }
-                $decoded = json_decode($value, true);
-                return is_array($decoded) ? $decoded : $value;
+                $decoded = self::decodeObject($value);
+
+                return is_array($decoded) || $decoded instanceof \stdClass ? $decoded : $value;
             }
         );
+    }
+
+    private static function decodeObject(string $value): mixed
+    {
+        if (preg_match('/\{\s*\}/', $value) === 0) {
+            return json_decode($value, true);
+        }
+
+        return self::toAssociative(json_decode($value));
+    }
+
+    private static function toAssociative(mixed $value): mixed
+    {
+        if ($value instanceof \stdClass) {
+            $properties = (array)$value;
+
+            return $properties === [] ? $value : array_map(self::toAssociative(...), $properties);
+        }
+
+        if (is_array($value)) {
+            return array_map(self::toAssociative(...), $value);
+        }
+
+        return $value;
     }
 
     /**

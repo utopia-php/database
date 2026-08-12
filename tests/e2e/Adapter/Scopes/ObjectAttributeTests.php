@@ -963,6 +963,81 @@ trait ObjectAttributeTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testObjectAttributeEmptyObject(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForObject()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+
+        $created = $database->createDocument($collectionId, new Document([
+            '$id' => 'emptyObject',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => new \stdClass(),
+        ]));
+
+        $this->assertSame('{}', json_encode($created->getAttribute('meta')));
+
+        $database->purgeCachedDocument($collectionId, 'emptyObject');
+        $read = $database->getDocument($collectionId, 'emptyObject');
+
+        $this->assertSame('{}', json_encode($read->getAttribute('meta')));
+        $cached = $database->getDocument($collectionId, 'emptyObject');
+        $this->assertSame('{}', json_encode($cached->getAttribute('meta')));
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testObjectAttributeNestedEmptyObjects(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForObject()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+
+        $created = $database->createDocument($collectionId, new Document([
+            '$id' => 'nestedEmptyObjects',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => [
+                'inner' => new \stdClass(),
+                'arr' => [new \stdClass(), ['x' => 1]],
+                'emptyArray' => [],
+            ],
+        ]));
+        $createdMeta = $created->getAttribute('meta');
+        $this->assertSame('{}', json_encode($createdMeta['inner']));
+        $this->assertSame('{}', json_encode($createdMeta['arr'][0]));
+        $this->assertSame('{"x":1}', json_encode($createdMeta['arr'][1]));
+        $this->assertSame('[]', json_encode($createdMeta['emptyArray']));
+
+        $database->purgeCachedDocument($collectionId, 'nestedEmptyObjects');
+        $readMeta = $database->getDocument($collectionId, 'nestedEmptyObjects')->getAttribute('meta');
+        $this->assertSame('{}', json_encode($readMeta['inner']));
+        $this->assertSame('{}', json_encode($readMeta['arr'][0]));
+        $this->assertSame('{"x":1}', json_encode($readMeta['arr'][1]));
+        $this->assertSame('[]', json_encode($readMeta['emptyArray']));
+
+        $cachedMeta = $database->getDocument($collectionId, 'nestedEmptyObjects')->getAttribute('meta');
+        $this->assertSame('{}', json_encode($cachedMeta['inner']));
+        $this->assertSame('{}', json_encode($cachedMeta['arr'][0]));
+        $this->assertSame('{"x":1}', json_encode($cachedMeta['arr'][1]));
+        $this->assertSame('[]', json_encode($cachedMeta['emptyArray']));
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testMetadataWithVector(): void
     {
         /** @var Database $database */

@@ -20,6 +20,8 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Query\CursorDirection;
+use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\ColumnType;
 
 #[AllowMockObjectsWithoutExpectations]
 class FindLogicTest extends TestCase
@@ -57,6 +59,7 @@ class FindLogicTest extends TestCase
                 Capability::IndexArray,
                 Capability::UniqueIndex,
                 Capability::DefinedAttributes,
+                Capability::Vectors,
             ]);
         });
         $this->adapter->method('castingBefore')->willReturnArgument(1);
@@ -266,6 +269,54 @@ class FindLogicTest extends TestCase
             ->willReturn([]);
 
         $this->database->find('testCol', [Query::orderAsc('$sequence')]);
+    }
+
+    public function testVectorFindOmitsSequenceWithoutCursor(): void
+    {
+        $attributes = [
+            new Document(['$id' => 'embedding', 'key' => 'embedding', 'type' => ColumnType::Vector->value, 'size' => 2, 'required' => false, 'array' => false]),
+        ];
+        $this->setupCollectionLookup('testCol', $attributes);
+        $this->adapter->expects($this->once())
+            ->method('find')
+            ->with(
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->callback(fn (array $orderAttributes): bool => ! \in_array('$sequence', $orderAttributes, true)),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+            )
+            ->willReturn([]);
+
+        $this->database->find('testCol', [Query::vectorCosine('embedding', [0.1, 0.2])]);
+    }
+
+    public function testDateOrderInsertsMatchingSequenceTieBreakSecond(): void
+    {
+        $this->setupCollectionLookup('testCol');
+        $this->adapter->expects($this->once())
+            ->method('find')
+            ->with(
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                ['$createdAt', '$sequence', '$updatedAt'],
+                [OrderDirection::Desc, OrderDirection::Desc, OrderDirection::Asc],
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+            )
+            ->willReturn([]);
+
+        $this->database->find('testCol', [
+            Query::orderDesc('$createdAt'),
+            Query::orderAsc('$updatedAt'),
+        ]);
     }
 
     public function testFindCursorValidationThrowsOnEmptyCursorAttribute(): void

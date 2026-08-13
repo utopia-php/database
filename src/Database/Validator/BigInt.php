@@ -6,9 +6,9 @@ use Utopia\Validator;
 
 class BigInt extends Validator
 {
-    public const SIGNED_MIN = '-9223372036854775808';
-    public const SIGNED_MAX = '9223372036854775807';
-    public const UNSIGNED_MAX = '18446744073709551615';
+    public const string SIGNED_MIN = '-9223372036854775808';
+    public const string SIGNED_MAX = '9223372036854775807';
+    public const string UNSIGNED_MAX = '18446744073709551615';
 
     public function __construct(
         private readonly bool $signed,

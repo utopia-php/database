@@ -689,7 +689,7 @@ trait DocumentTests
 
         // The Redis adapter runs with a no-op cache (reads hit Redis directly),
         // so there is no cache layer to inspect.
-        if (!$database->getAdapter()->getSupportForCaching()) {
+        if (!$database->getAdapter()->supports(Capability::Caching)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -699,7 +699,7 @@ trait DocumentTests
             Permission::read(Role::any()),
             Permission::create(Role::any()),
         ], documentSecurity: false);
-        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+        $this->assertTrue($database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 128)));
 
         // A read of a missing id records a negative ("not found") marker so
         // repeated lookups don't keep hitting the adapter.
@@ -755,7 +755,7 @@ trait DocumentTests
 
         // The Redis adapter runs with a no-op cache (reads hit Redis directly),
         // so there is no cache layer to inspect.
-        if (!$database->getAdapter()->getSupportForCaching()) {
+        if (!$database->getAdapter()->supports(Capability::Caching)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -766,7 +766,7 @@ trait DocumentTests
             Permission::create(Role::any()),
         ], documentSecurity: false);
 
-        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+        $this->assertTrue($database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 128)));
 
         // The document key is select-independent, but the hashKey is not: a
         // projection is folded into it. So a projected read and a plain read of
@@ -816,7 +816,7 @@ trait DocumentTests
 
         // The Redis adapter runs with a no-op cache (reads hit Redis directly),
         // so there is no cache layer to inspect.
-        if (!$database->getAdapter()->getSupportForCaching()) {
+        if (!$database->getAdapter()->supports(Capability::Caching)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -868,7 +868,7 @@ trait DocumentTests
 
         // The Redis adapter runs with a no-op cache (reads hit Redis directly),
         // so there is no cache layer to inspect.
-        if (!$database->getAdapter()->getSupportForCaching()) {
+        if (!$database->getAdapter()->supports(Capability::Caching)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -879,7 +879,7 @@ trait DocumentTests
         // decided per document.
         $auth->skip(function () use ($database, $collection) {
             $database->createCollection($collection, permissions: [], documentSecurity: true);
-            $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+            $this->assertTrue($database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 128)));
             $database->createDocument($collection, new Document([
                 '$id' => 'secret',
                 '$permissions' => [
@@ -1174,7 +1174,7 @@ trait DocumentTests
 
         // Byte-capacity validation relies on attribute metadata, which
         // schemaless adapters don't store, so there is nothing to enforce.
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1183,7 +1183,7 @@ trait DocumentTests
 
         // A `text` attribute at its maximum allowed size. On MySQL/MariaDB this
         // maps to a TEXT column, which is limited to 65,535 *bytes*.
-        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+        $database->createAttribute(__FUNCTION__, new Attribute(key: 'text', type: ColumnType::Text, size: Database::MAX_TEXT_BYTES));
 
         // The Structure validator caps a TEXT column at its 65,535-byte capacity,
         // measuring the value's actual byte length. A 20,000-char emoji value is
@@ -1218,13 +1218,13 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+        $database->createAttribute(__FUNCTION__, new Attribute(key: 'text', type: ColumnType::Text, size: Database::MAX_TEXT_BYTES));
 
         // A value that fills the column's full byte capacity is stored and
         // round-trips intact. 65,535 ASCII chars are exactly 65,535 bytes, so
@@ -1253,13 +1253,13 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $database->createCollection(__FUNCTION__);
-        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+        $database->createAttribute(__FUNCTION__, new Attribute(key: 'text', type: ColumnType::Text, size: Database::MAX_TEXT_BYTES));
 
         $document = new Document([
             '$id' => 'first',

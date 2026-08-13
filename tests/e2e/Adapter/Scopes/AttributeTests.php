@@ -1820,7 +1820,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchCreateAttributes()) {
+        if (!$database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1828,12 +1828,11 @@ trait AttributeTests
         $collectionName = 'bigint_ignores_size_limit';
         $database->createCollection($collectionName);
 
-        $attributes = [[
-            '$id' => 'foo',
-            'type' => Database::VAR_BIGINT,
-            'size' => 9999,
-            'required' => false
-        ]];
+        $attributes = [new Attribute(
+            key: 'foo',
+            type: ColumnType::BigInteger,
+            size: 9999,
+        )];
 
         $result = $database->createAttributes($collectionName, $attributes);
         $this->assertTrue($result);
@@ -1860,19 +1859,11 @@ trait AttributeTests
 
         $this->assertTrue($database->createAttribute(
             $collectionName,
-            'signed_bigint',
-            Database::VAR_BIGINT,
-            0,
-            false,
-            signed: true
+            new Attribute(key: 'signed_bigint', type: ColumnType::BigInteger),
         ));
         $this->assertTrue($database->createAttribute(
             $collectionName,
-            'unsigned_bigint',
-            Database::VAR_BIGINT,
-            0,
-            false,
-            signed: false
+            new Attribute(key: 'unsigned_bigint', type: ColumnType::BigInteger, signed: false),
         ));
 
         $collection = $database->getCollection($collectionName);
@@ -1896,14 +1887,12 @@ trait AttributeTests
         $this->assertEquals(0, $signedAttribute['size']);
         $this->assertEquals(0, $unsignedAttribute['size']);
 
-        $largeUnsignedAttribute = [[
-            '$id' => 'unsigned_bigint_large',
-            'type' => Database::VAR_BIGINT,
-            'size' => 0,
-            'required' => false,
-            'signed' => false,
-            'default' => '18446744073709551615'
-        ]];
+        $largeUnsignedAttribute = [new Attribute(
+            key: 'unsigned_bigint_large',
+            type: ColumnType::BigInteger,
+            default: '18446744073709551615',
+            signed: false,
+        )];
         $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
     }
 

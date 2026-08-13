@@ -6,10 +6,12 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Query\Schema\ColumnType;
 
 class ForUpdateCacheTest extends TestCase
 {
@@ -27,8 +29,8 @@ class ForUpdateCacheTest extends TestCase
 
         $this->database->create();
         $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
-        $this->database->createAttribute('projects', 'description', Database::VAR_STRING, 255, false);
+        $this->database->createAttribute('projects', new Attribute(key: 'name', type: ColumnType::String, size: 255));
+        $this->database->createAttribute('projects', new Attribute(key: 'description', type: ColumnType::String, size: 255));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [

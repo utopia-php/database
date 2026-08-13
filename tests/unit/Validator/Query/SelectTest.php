@@ -2,11 +2,13 @@
 
 namespace Tests\Unit\Validator\Query;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
 class SelectTest extends TestCase
@@ -56,12 +58,11 @@ class SelectTest extends TestCase
      * a malformed value that way.
      *
      * @param array<mixed> $values
-     *
-     * @dataProvider nonStringSelections
      */
+    #[DataProvider('nonStringSelections')]
     public function testANonStringSelectionIsRefusedByType(array $values, string $expected): void
     {
-        $this->assertFalse($this->validator->isValid(Query::select($values)));
+        $this->assertFalse($this->validator->isValid(new Query(Method::Select, values: $values)));
         $this->assertSame($expected, $this->validator->getDescription());
     }
 

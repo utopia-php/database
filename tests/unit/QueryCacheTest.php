@@ -6,11 +6,14 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
 
 class QueryCacheTest extends TestCase
 {
@@ -40,7 +43,7 @@ class QueryCacheTest extends TestCase
         ?string $namespace = null,
     ): array {
         foreach ($queries as $query) {
-            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
+            if ($query instanceof Query && $query->getMethod() === Method::OrderRandom) {
                 return $database->find($collection, $queries);
             }
         }
@@ -391,15 +394,7 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'projectId', type: ColumnType::String, size: 255),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -444,15 +439,7 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'projectId', type: ColumnType::String, size: 255),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -490,15 +477,7 @@ class QueryCacheTest extends TestCase
         $cache = new JsonHashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->createCollection('metrics', [
-            new Document([
-                '$id' => 'value',
-                'type' => Database::VAR_FLOAT,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'value', type: ColumnType::Double),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -533,15 +512,7 @@ class QueryCacheTest extends TestCase
             ],
         ]);
         $database->createCollection('secrets', [
-            new Document([
-                '$id' => 'secret',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => ['wrapped'],
-            ]),
+            new Attribute(key: 'secret', type: ColumnType::String, size: 255, filters: ['wrapped']),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -569,15 +540,7 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'projectId', type: ColumnType::String, size: 255),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -612,15 +575,7 @@ class QueryCacheTest extends TestCase
         $database = $this->createDatabase($cache);
         $database->getAuthorization()->skip(function () use ($database): void {
             $database->createCollection('secureRules', [
-                new Document([
-                    '$id' => 'projectId',
-                    'type' => Database::VAR_STRING,
-                    'size' => 255,
-                    'required' => false,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
+                new Attribute(key: 'projectId', type: ColumnType::String, size: 255),
             ], permissions: [
                 Permission::create(Role::any()),
             ], documentSecurity: true);
@@ -755,15 +710,7 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'projectId', type: ColumnType::String, size: 255),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -802,15 +749,7 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            new Attribute(key: 'projectId', type: ColumnType::String, size: 255),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),

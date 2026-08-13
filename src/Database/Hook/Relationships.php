@@ -985,7 +985,10 @@ class Relationships implements Hook
 
             $values = $query->getValues();
             foreach ($values as $valueIndex => $value) {
-                /** @var string $value */
+                if (! \is_string($value)) {
+                    throw new QueryException('Select queries must contain only string attributes.');
+                }
+
                 if (! \str_contains($value, '.')) {
                     continue;
                 }

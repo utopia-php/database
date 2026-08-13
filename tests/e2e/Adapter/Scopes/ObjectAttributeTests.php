@@ -692,13 +692,13 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Objects)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
         $collectionId = ID::unique();
         $database->createCollection($collectionId);
-        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         // An object attribute has no per-key schema, so there is no typed cast
         // to lean on: whatever the adapter decodes is what reaches the client.
@@ -737,13 +737,13 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Objects)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
         $collectionId = ID::unique();
         $database->createCollection($collectionId);
-        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         $created = $database->createDocument($collectionId, new Document([
             '$id' => 'emptyObject',
@@ -783,13 +783,13 @@ trait ObjectAttributeTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForObject()) {
+        if (!$database->getAdapter()->supports(Capability::Objects)) {
             $this->markTestSkipped('Adapter does not support object attributes');
         }
 
         $collectionId = ID::unique();
         $database->createCollection($collectionId);
-        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         $created = $database->createDocument($collectionId, new Document([
             '$id' => 'nestedEmptyObjects',

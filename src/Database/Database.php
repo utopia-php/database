@@ -26,6 +26,7 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
 /**
@@ -51,6 +52,8 @@ class Database
     public const MAX_DOUBLE = PHP_FLOAT_MAX;
 
     public const MAX_VECTOR_DIMENSIONS = 16000;
+
+    public const string VECTOR_DISTANCE = '$distance';
 
     public const MAX_ARRAY_INDEX_LENGTH = 255;
 
@@ -80,6 +83,8 @@ class Database
 
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
+
+    private const CACHE_EMPTY_MARKER = '$empty';
 
     public const INSERT_BATCH_SIZE = 1_000;
 
@@ -2218,6 +2223,7 @@ class Database
 
             $payload = \json_encode([
                 'selects' => $sortedSelects,
+                'relationships' => $this->relationshipHook?->isEnabled() ?? false,
                 'filters' => $filterSignatures,
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
@@ -2228,6 +2234,160 @@ class Database
             $documentKey ?? '',
             $documentHashKey ?? '',
         ];
+    }
+
+    /**
+     * Stable cache key for cached query entries on a collection.
+     */
+    public function getQueryCacheKey(string $collectionId, ?string $namespace = null): string
+    {
+        $hostname = $this->adapter->supports(Capability::Hostname)
+            ? $this->adapter->getHostname()
+            : '';
+
+        return \sprintf(
+            '%s-cache-%s:%s:%s:collection:%s:query',
+            $this->cacheName,
+            $hostname,
+            $namespace ?? $this->getNamespace(),
+            $this->adapter->getTenant(),
+            $collectionId,
+        );
+    }
+
+    /**
+     * Stable cache field for cached query entries on a collection.
+     *
+     * @param  array<Query>  $queries
+     */
+    public function getQueryCacheField(
+        ?Document $collection = null,
+        array $queries = [],
+        string $field = 'documents',
+        PermissionType $forPermission = PermissionType::Read,
+    ): ?string {
+        $this->checkQueryTypes($queries);
+
+        if ($forPermission !== PermissionType::Read) {
+            return null;
+        }
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Method::OrderRandom) {
+                return null;
+            }
+        }
+
+        $authorizationRoles = \array_values(\array_unique($this->authorization->getRoles()));
+        \sort($authorizationRoles);
+
+        $queryPayload = [
+            'version' => 1,
+            'authorization' => [
+                'enabled' => $this->authorization->getStatus(),
+                'roles' => $authorizationRoles,
+            ],
+            'database' => $this->getDatabase(),
+            'queries' => \array_map(
+                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                $queries,
+            ),
+            'relationships' => $this->relationshipHook?->isEnabled() ?? false,
+            'filters' => $this->getActiveFilterSignatures(),
+        ];
+
+        $schemaHash = '';
+        if ($collection !== null && ! $collection->isEmpty()) {
+            $schemaHash = \md5(
+                (\json_encode($collection->getAttribute('attributes', [])) ?: '')
+                .(\json_encode($collection->getAttribute('indexes', [])) ?: '')
+                .(\json_encode($collection->getAttribute('$permissions', [])) ?: '')
+                .(\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
+            );
+        }
+
+        return \sprintf(
+            '%s:%s:%s',
+            $schemaHash,
+            \md5(\json_encode($queryPayload) ?: ''),
+            $field,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeQueryCacheQuery(Query $query): array
+    {
+        $serialized = [
+            'method' => $query->getMethod()->value,
+        ];
+
+        if ($query->getAttribute() !== '') {
+            $serialized['attribute'] = $query->getAttribute();
+        }
+
+        $values = [];
+        foreach ($query->getValues() as $value) {
+            if ($value instanceof Query) {
+                $values[] = $this->serializeQueryCacheQuery($value);
+                continue;
+            }
+
+            $values[] = $this->normalizeQueryCacheQueryValue($value);
+        }
+
+        $serialized['values'] = $values;
+
+        return $serialized;
+    }
+
+    private function normalizeQueryCacheQueryValue(mixed $value): mixed
+    {
+        if ($value instanceof Document) {
+            $value = $value->getArrayCopy();
+        }
+
+        if (! \is_array($value)) {
+            return $value;
+        }
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->normalizeQueryCacheQueryValue($item);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function getActiveFilterSignatures(): array
+    {
+        $filterSignatures = [];
+        if (! $this->filter) {
+            return $filterSignatures;
+        }
+
+        $disabled = $this->disabledFilters ?? [];
+
+        foreach (self::$filters as $name => $callbacks) {
+            if (isset($disabled[$name]) || \array_key_exists($name, $this->instanceFilters)) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        foreach ($this->instanceFilters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        \ksort($filterSignatures);
+
+        return $filterSignatures;
     }
 
     /**

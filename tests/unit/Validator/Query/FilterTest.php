@@ -46,22 +46,23 @@ class FilterTest extends TestCase
             new Document([
                 '$id' => 'bigint_unsigned',
                 'key' => 'bigint_unsigned',
-                'type' => Database::VAR_BIGINT,
+                'type' => ColumnType::BigInteger->value,
                 'array' => false,
                 'signed' => false,
             ]),
             new Document([
                 '$id' => 'bigint_signed',
                 'key' => 'bigint_signed',
-                'type' => Database::VAR_BIGINT,
+                'type' => ColumnType::BigInteger->value,
                 'array' => false,
                 'signed' => true,
             ]),
         ];
 
         $this->validator = new Filter(
-            $attributes,
-            ColumnType::Integer->value
+            attributes: $attributes,
+            idAttributeType: ColumnType::Integer->value,
+            supportUnsignedBigInt: true,
         );
     }
 
@@ -72,10 +73,10 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::isNull('string')));
         $this->assertTrue($this->validator->isValid(Query::startsWith('string', 'super')));
         $this->assertTrue($this->validator->isValid(Query::endsWith('string', 'man')));
-        $this->assertTrue($this->validator->isValid(Query::contains('string_array', ['super'])));
-        $this->assertTrue($this->validator->isValid(Query::contains('integer_array', [100, 10, -1])));
-        $this->assertTrue($this->validator->isValid(Query::contains('string_array', ['1', '10', '-1'])));
-        $this->assertTrue($this->validator->isValid(Query::contains('string', ['super'])));
+        $this->assertTrue($this->validator->isValid(Query::containsAny('string_array', ['super'])));
+        $this->assertTrue($this->validator->isValid(Query::containsAny('integer_array', [100, 10, -1])));
+        $this->assertTrue($this->validator->isValid(Query::containsAny('string_array', ['1', '10', '-1'])));
+        $this->assertTrue($this->validator->isValid(Query::containsString('string', ['super'])));
         $this->assertTrue($this->validator->isValid(Query::equal('bigint_unsigned', ['18446744073709551615'])));
         $this->assertTrue($this->validator->isValid(Query::equal('bigint_signed', ['-9223372036854775808'])));
     }
@@ -100,9 +101,9 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(Query::orderDesc('string')));
         $this->assertFalse($this->validator->isValid(new Query(Method::CursorAfter, values: ['asdf'])));
         $this->assertFalse($this->validator->isValid(new Query(Method::CursorBefore, values: ['asdf'])));
-        $this->assertFalse($this->validator->isValid(Query::contains('integer', ['super'])));
+        $this->assertFalse($this->validator->isValid(Query::containsString('integer', ['super'])));
         $this->assertFalse($this->validator->isValid(Query::equal('integer_array', [100, -1])));
-        $this->assertFalse($this->validator->isValid(Query::contains('integer_array', [10.6])));
+        $this->assertFalse($this->validator->isValid(Query::containsAny('integer_array', [10.6])));
     }
 
     public function test_type_mismatch(): void
@@ -116,7 +117,7 @@ class FilterTest extends TestCase
 
     public function test_empty_values(): void
     {
-        $this->assertFalse($this->validator->isValid(Query::contains('string', [])));
+        $this->assertFalse($this->validator->isValid(Query::containsString('string', [])));
         $this->assertEquals('Contains queries require at least one value.', $this->validator->getDescription());
 
         $this->assertFalse($this->validator->isValid(Query::equal('string', [])));

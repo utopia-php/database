@@ -119,27 +119,41 @@ trait Documents
      *
      * @throws DatabaseException
      */
-    protected function refetchDocuments(Document $collection, array $documents): array
+    protected function refetchDocuments(Document $collection, array $documents, array $selections = []): array
     {
         if (empty($documents)) {
             return $documents;
         }
 
-        $docIds = array_map(fn ($doc) => $doc->getId(), $documents);
+        $sequences = \array_map(function (Document $document): string {
+            $sequence = $document->getSequence();
+            if ($sequence === null) {
+                throw new DatabaseException('Cannot refetch document without a $sequence: '.$document->getId());
+            }
 
-        // Fetch fresh copies with computed operator values
-        $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-            fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
-        ));
+            return $sequence;
+        }, $documents);
 
         $refetchedMap = [];
-        foreach ($refetched as $doc) {
-            $refetchedMap[$doc->getId()] = $doc;
+        foreach (\array_chunk($sequences, \max(1, $this->maxQueryValues)) as $chunk) {
+            $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
+                fn () => $this->find(
+                    $collection->getId(),
+                    \array_merge([
+                        Query::equal('$sequence', $chunk),
+                        Query::limit(\count($chunk)),
+                    ], $selections)
+                )
+            ));
+
+            foreach ($refetched as $document) {
+                $refetchedMap[$document->getSequence()] = $document;
+            }
         }
 
         $result = [];
-        foreach ($documents as $doc) {
-            $result[] = $refetchedMap[$doc->getId()] ?? $doc;
+        foreach ($documents as $index => $document) {
+            $result[$index] = $refetchedMap[$sequences[$index]] ?? $document;
         }
 
         return $result;
@@ -214,16 +228,23 @@ trait Documents
             $selections
         );
 
-        try {
-            $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
-            $cached = null;
+        $cached = null;
+        if (! $forUpdate) {
+            try {
+                $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
+            }
+        }
+
+        if (\is_array($cached) && isset($cached[self::CACHE_EMPTY_MARKER])) {
+            return $this->createDocumentInstance($collection->getId(), []);
         }
 
         if ($cached) {
             /** @var array<string, mixed> $cached */
             $document = $this->createDocumentInstance($collection->getId(), $cached);
+            $document = $this->casting($collection, $document);
 
             if ($collection->getId() !== self::METADATA) {
 
@@ -246,6 +267,15 @@ trait Documents
             return $document;
         }
 
+        $generation = '0';
+        if (! $forUpdate) {
+            try {
+                $generation = $this->cache->getGeneration($documentKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get cache generation: '.$e->getMessage());
+            }
+        }
+
         $skipAuth = $collection->getId() !== self::METADATA
             && $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
 
@@ -259,6 +289,17 @@ trait Documents
         $document = $skipAuth ? $this->authorization->skip($getDocument) : $getDocument();
 
         if ($document->isEmpty()) {
+            if (! $forUpdate && empty($relationships)) {
+                try {
+                    $marker = [self::CACHE_EMPTY_MARKER => true];
+                    if ($this->cache->saveWithLease($documentKey, $marker, $hashKey, $generation) !== false) {
+                        $this->cache->save($collectionKey, 'empty', $documentKey);
+                    }
+                } catch (Exception $e) {
+                    Console::warning('Failed to save empty document to cache: '.$e->getMessage());
+                }
+            }
+
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
@@ -300,11 +341,13 @@ trait Documents
             fn (Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        // Don't save to cache if it's part of a relationship
-        if (empty($relationships)) {
+        // Locking reads happen inside a transaction and must never cache the
+        // pre-commit row. Register the key only after the leased save succeeds.
+        if (! $forUpdate && empty($relationships)) {
             try {
-                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
-                $this->cache->save($collectionKey, 'empty', $documentKey);
+                if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {
+                    $this->cache->save($collectionKey, 'empty', $documentKey);
+                }
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: '.$e->getMessage());
             }
@@ -501,6 +544,11 @@ trait Documents
             return $this->adapter->createDocument($collection, $document);
         });
 
+        $this->withDocumentTenant(
+            $document,
+            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+        );
+
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $fetchDepth = $hook->getWriteStackCount();
@@ -660,6 +708,11 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsCreate, $collection, $batch);
 
             foreach ($batch as $document) {
+                $this->withDocumentTenant(
+                    $document,
+                    fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                );
+
                 try {
                     $onNext && $onNext($document);
                 } catch (Throwable $e) {
@@ -700,7 +753,8 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+        $hasOperators = false;
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -923,7 +977,6 @@ trait Documents
             }
 
             // If operators were used, refetch document to get computed values
-            $hasOperators = false;
             foreach ($document->getArrayCopy() as $value) {
                 if (Operator::isOperator($value)) {
                     $hasOperators = true;
@@ -943,13 +996,17 @@ trait Documents
             return $document;
         }
 
+        $this->purgeCachedDocumentInternal($collection->getId(), $id);
+
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $hook->getFetchDepth()));
             $document = $documents[0];
         }
 
-        $document = $this->decode($collection, $document);
+        if (! $hasOperators) {
+            $document = $this->decode($collection, $document);
+        }
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
@@ -1169,7 +1226,7 @@ trait Documents
             }
 
             if ($hasOperators) {
-                $batch = $this->refetchDocuments($collection, $batch);
+                $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
             }
 
             /** @var array<Document> $batch */
@@ -1519,7 +1576,7 @@ trait Documents
                 $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
             }
 
-            $seenIds[] = $document->getId();
+            $seenIds[] = $this->getDocumentIdentity($document);
             $old = $this->adapter->castingBefore($collection, $old);
             $document = $this->adapter->castingBefore($collection, $document);
 
@@ -1584,13 +1641,7 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpsert, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
+                $this->withDocumentTenant($doc, fn () => $this->purgeCachedDocument($collection->getId(), $doc->getId()));
 
                 $old = $chunk[$index]->getOld();
 
@@ -1876,6 +1927,7 @@ trait Documents
         });
 
         if ($deleted) {
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->trigger(Event::DocumentDelete, $document);
         }
 
@@ -2019,13 +2071,7 @@ trait Documents
             });
 
             foreach ($batch as $index => $document) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
-                }
+                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocument($collection->getId(), $document->getId()));
                 try {
                     $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
@@ -2122,6 +2168,31 @@ trait Documents
     }
 
     /**
+     * Run a cache operation under the document's tenant when tenant-per-document is enabled.
+     *
+     * @param  callable(): mixed  $callback
+     */
+    private function withDocumentTenant(Document $document, callable $callback): void
+    {
+        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            $this->withTenant($document->getTenant(), $callback);
+
+            return;
+        }
+
+        $callback();
+    }
+
+    private function getDocumentIdentity(Document $document): string
+    {
+        if (! $this->adapter->getTenantPerDocument()) {
+            return $document->getId();
+        }
+
+        return ($document->getTenant() ?? '').'\0'.$document->getId();
+    }
+
+    /**
      * Cleans a specific document from cache and triggers Event::DocumentPurge.
      *
      * Note: Do not retry this method as it triggers events. Use purgeCachedDocumentInternal() with retry instead.
@@ -2144,6 +2215,225 @@ trait Documents
         }
 
         return $result;
+    }
+
+    /**
+     * Purge all cached query entries for a collection namespace.
+     */
+    public function purgeCachedQueries(string $collection, ?string $namespace = null): bool
+    {
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+        $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
+
+        return $this->cache->purge($this->getQueryCacheKey($collection, $namespace));
+    }
+
+    /**
+     * Execute a callback behind a generation-protected cache-aside lookup.
+     *
+     * @template T
+     * @param  callable(): T  $callback
+     * @return T
+     *
+     * @throws AuthorizationException
+     */
+    public function withCache(
+        string $key,
+        callable $callback,
+        ?string $hash = '',
+    ): mixed {
+        if ($hash === null) {
+            return $callback();
+        }
+
+        $shouldRefreshCache = false;
+
+        try {
+            $cached = $this->cache->load($key, self::TTL, $hash);
+        } catch (Throwable $error) {
+            Console::warning('Warning: Failed to load cache value: '.$error->getMessage());
+            $cached = false;
+        }
+
+        if ($cached !== false && $cached !== null) {
+            $cachedValue = \is_array($cached) && \array_key_exists('value', $cached)
+                ? $cached['value']
+                : false;
+
+            if ($cachedValue !== false) {
+                $decoded = $cachedValue;
+                $collectionId = $cached['collection'] ?? null;
+
+                if (\is_string($collectionId) && $collectionId !== '') {
+                    $collection = $this->silent(fn () => $this->getCollection($collectionId));
+
+                    if ($collection->isEmpty()) {
+                        $decoded = false;
+                    } else {
+                        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+
+                        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
+
+                        $type = $cached['type'] ?? null;
+                        $payload = $type === 'document' ? [$cachedValue] : $cachedValue;
+
+                        if (! \is_array($payload)) {
+                            $decoded = false;
+                        } else {
+                            $documents = [];
+
+                            foreach ($payload as $item) {
+                                if (! \is_array($item)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                /** @var array<string, mixed> $item */
+                                $document = $this->createDocumentInstance($collection->getId(), $item);
+                                $document = $this->casting($collection, $document);
+
+                                if ($this->isTtlExpired($collection, $document)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                if (! $skipAuth && $documentSecurity && $collection->getId() !== self::METADATA) {
+                                    if (! $this->authorization->isValid(new Input(PermissionType::Read, $document->getRead()))) {
+                                        if ($type === 'document') {
+                                            $decoded = false;
+                                            break;
+                                        }
+
+                                        continue;
+                                    }
+                                }
+
+                                $documents[] = $document;
+                            }
+
+                            if ($decoded !== false) {
+                                $decoded = $type === 'document' ? ($documents[0] ?? false) : $documents;
+                            }
+                        }
+                    }
+                }
+
+                if ($decoded !== false) {
+                    return $decoded;
+                }
+            }
+
+            $shouldRefreshCache = true;
+        }
+
+        if ($shouldRefreshCache) {
+            try {
+                $this->cache->purge($key, $hash);
+            } catch (Throwable $error) {
+                Console::warning('Warning: Failed to purge rejected cache value: '.$error->getMessage());
+            }
+        }
+
+        $generation = '0';
+        try {
+            $generation = $this->cache->getGeneration($key);
+        } catch (Throwable $error) {
+            Console::warning('Warning: Failed to get cache generation: '.$error->getMessage());
+        }
+
+        $callbackValue = $callback();
+
+        if ($callbackValue !== false) {
+            try {
+                $encoded = $this->encodeCacheValue($callbackValue);
+
+                if ($encoded !== false) {
+                    $this->cache->saveWithLease($key, $encoded, $hash, $generation);
+                }
+            } catch (Throwable $error) {
+                Console::warning('Warning: Failed to save cache value: '.$error->getMessage());
+            }
+        }
+
+        /** @var T $callbackValue */
+        return $callbackValue;
+    }
+
+    /**
+     * @return array<string, mixed>|false
+     */
+    private function encodeCacheValue(mixed $value): array|false
+    {
+        if ($value instanceof Document) {
+            $collection = $value->getCollection();
+
+            return $collection === '' ? false : [
+                'collection' => $collection,
+                'type' => 'document',
+                'value' => $value->getArrayCopy(),
+            ];
+        }
+
+        if (! \is_array($value)) {
+            return ['value' => $value];
+        }
+
+        $collection = null;
+        $documents = [];
+        $hasDocuments = false;
+        $hasNonDocuments = false;
+
+        foreach ($value as $item) {
+            if (! $item instanceof Document) {
+                if ($hasDocuments || $this->containsDocument($item)) {
+                    return false;
+                }
+
+                $hasNonDocuments = true;
+                continue;
+            }
+
+            if ($hasNonDocuments) {
+                return false;
+            }
+
+            $documentCollection = $item->getCollection();
+            if ($documentCollection === '' || ($collection !== null && $collection !== $documentCollection)) {
+                return false;
+            }
+
+            $collection = $documentCollection;
+            $hasDocuments = true;
+            $documents[] = $item->getArrayCopy();
+        }
+
+        return $hasDocuments ? [
+            'collection' => $collection,
+            'type' => 'documents',
+            'value' => $documents,
+        ] : ['value' => $value];
+    }
+
+    private function containsDocument(mixed $value): bool
+    {
+        if ($value instanceof Document) {
+            return true;
+        }
+
+        if (! \is_array($value)) {
+            return false;
+        }
+
+        foreach ($value as $item) {
+            if ($this->containsDocument($item)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -2254,8 +2544,29 @@ trait Documents
                 }
             }
 
-            if ($uniqueOrderBy === false) {
-                $orderAttributes[] = '$sequence';
+            $vectorSearch = false;
+            foreach ($filters as $filter) {
+                if (\in_array($filter->getMethod(), [
+                    Method::VectorDot,
+                    Method::VectorCosine,
+                    Method::VectorEuclidean,
+                ], true)) {
+                    $vectorSearch = true;
+                    break;
+                }
+            }
+
+            if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
+                $leadingAttribute = $orderAttributes[0] ?? null;
+                $leadingOrderType = $orderTypes[0] ?? \Utopia\Query\OrderDirection::Asc;
+
+                if (\in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)) {
+                    \array_splice($orderAttributes, 1, 0, ['$sequence']);
+                    \array_splice($orderTypes, 1, 0, [$leadingOrderType]);
+                } else {
+                    $orderAttributes[] = '$sequence';
+                    $orderTypes[] = \Utopia\Query\OrderDirection::Asc;
+                }
             }
         }
 
@@ -2327,17 +2638,34 @@ trait Documents
             $queries = $convertedQueries;
 
             $cacheKey = null;
-            if ($this->queryCache !== null && $this->queryCache->isEnabled($collection->getId())) {
-                $cacheKey = $this->queryCache->buildQueryKey(
-                    $collection->getId(),
-                    $queries,
-                    $this->adapter->getNamespace(),
-                    $this->adapter->getTenant(),
-                );
-                $cached = $this->queryCache->get($cacheKey);
-                if ($cached !== null) {
-                    $results = $cached;
-                    $cacheKey = null;
+            $cacheGeneration = '0';
+            if (
+                $this->queryCache !== null
+                && $this->adapter->supports(Capability::Caching)
+                && $this->queryCache->isEnabled($collection->getId())
+            ) {
+                $cacheContext = $skipAuth
+                    ? $this->authorization->skip(fn () => $this->getQueryCacheField($collection, $queries, forPermission: $forPermission))
+                    : $this->getQueryCacheField($collection, $queries, forPermission: $forPermission);
+
+                if ($cacheContext !== null) {
+                    $cacheContext .= ':'.($this->adapter->supports(Capability::Hostname) ? $this->adapter->getHostname() : '');
+                }
+
+                if ($cacheContext !== null) {
+                    $cacheKey = $this->queryCache->buildQueryKey(
+                        $collection->getId(),
+                        $queries,
+                        $this->adapter->getNamespace(),
+                        $this->adapter->getTenant(),
+                        $cacheContext,
+                    );
+                    $cacheGeneration = $this->queryCache->getGeneration($cacheKey);
+                    $cached = $this->queryCache->get($cacheKey);
+                    if ($cached !== null) {
+                        $results = $cached;
+                        $cacheKey = null;
+                    }
                 }
             }
 
@@ -2380,7 +2708,7 @@ trait Documents
                 }
 
                 if ($cacheKey !== null && $this->queryCache !== null) {
-                    $this->queryCache->set($cacheKey, $results);
+                    $this->queryCache->set($cacheKey, $results, $cacheGeneration);
                 }
             }
         }
@@ -2731,7 +3059,10 @@ trait Documents
         foreach ($queries as $query) {
             if ($query->getMethod() == Method::Select) {
                 foreach ($query->getValues() as $value) {
-                    /** @var string $strVal */
+                    if (! \is_string($value)) {
+                        throw new QueryException('Select queries must contain only string attributes.');
+                    }
+
                     $strVal = $value;
                     if (\str_contains($strVal, '.')) {
                         $relationshipSelections[] = $strVal;

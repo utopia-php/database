@@ -65,8 +65,11 @@ class QueryCacheTest extends TestCase
     public function testBuildQueryKeyIncludesNamespaceAndTenant(): void
     {
         $key = $this->queryCache->buildQueryKey('users', [], 'myns', 42);
-        $this->assertStringContainsString('myns', $key);
-        $this->assertStringContainsString('42', $key);
+        $differentNamespace = $this->queryCache->buildQueryKey('users', [], 'other', 42);
+        $differentTenant = $this->queryCache->buildQueryKey('users', [], 'myns', 43);
+
+        $this->assertNotSame($key, $differentNamespace);
+        $this->assertNotSame($key, $differentTenant);
     }
 
     public function testBuildQueryKeyDifferentQueriesProduceDifferentKeys(): void
@@ -100,8 +103,11 @@ class QueryCacheTest extends TestCase
     public function testGetReturnsDocumentArrayForCacheHit(): void
     {
         $this->cache->method('load')->willReturn([
-            ['$id' => 'doc1', 'name' => 'Alice'],
-            ['$id' => 'doc2', 'name' => 'Bob'],
+            'version' => 1,
+            'documents' => [
+                ['$id' => 'doc1', 'name' => 'Alice'],
+                ['$id' => 'doc2', 'name' => 'Bob'],
+            ],
         ]);
 
         $result = $this->queryCache->get('some-key');
@@ -115,7 +121,10 @@ class QueryCacheTest extends TestCase
     public function testGetHandlesDocumentObjectsInCache(): void
     {
         $doc = new Document(['$id' => 'doc1', 'name' => 'Alice']);
-        $this->cache->method('load')->willReturn([$doc]);
+        $this->cache->method('load')->willReturn([
+            'version' => 1,
+            'documents' => [$doc],
+        ]);
 
         $result = $this->queryCache->get('some-key');
 
@@ -131,6 +140,37 @@ class QueryCacheTest extends TestCase
         $this->assertNull($result);
     }
 
+    public function testGetUsesCollectionRegionTtlAndQueryHash(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+        $queryCache->setRegion('users', new CacheRegion(ttl: 120));
+        $key = $queryCache->buildQueryKey('users', [Query::limit(10)], 'ns', null);
+        [, $hash] = \explode('#', $key, 2);
+
+        $cache->expects($this->once())
+            ->method('load')
+            ->with('default:qcache:users', 120, $hash)
+            ->willReturn(false);
+
+        $this->assertNull($queryCache->get($key));
+    }
+
+    public function testGetPurgesMalformedPayload(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+        $key = $queryCache->buildQueryKey('users', [], 'ns', null);
+        [, $hash] = \explode('#', $key, 2);
+
+        $cache->method('load')->willReturn(['version' => 1, 'documents' => ['invalid']]);
+        $cache->expects($this->once())
+            ->method('purge')
+            ->with('default:qcache:users', $hash);
+
+        $this->assertNull($queryCache->get($key));
+    }
+
     public function testSetSerializesDocuments(): void
     {
         $cache = $this->createMock(Cache::class);
@@ -141,12 +181,16 @@ class QueryCacheTest extends TestCase
         ];
 
         $cache->expects($this->once())
-            ->method('save')
+            ->method('saveWithLease')
             ->with(
                 'cache-key',
                 $this->callback(function (array $data) {
-                    return \is_array($data[0]) && $data[0]['$id'] === 'doc1';
-                })
+                    return $data['version'] === 1
+                        && \is_array($data['documents'][0])
+                        && $data['documents'][0]['$id'] === 'doc1';
+                }),
+                '',
+                '0',
             );
 
         $queryCache->set('cache-key', $docs);
@@ -159,7 +203,7 @@ class QueryCacheTest extends TestCase
 
         $cache->expects($this->once())
             ->method('purge')
-            ->with($this->stringContains('users'));
+            ->with('default:qcache:users');
 
         $queryCache->invalidateCollection('users');
     }

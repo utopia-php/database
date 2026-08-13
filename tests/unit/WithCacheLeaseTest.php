@@ -7,10 +7,12 @@ use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Query\Schema\ColumnType;
 
 class WithCacheLeaseTest extends TestCase
 {
@@ -30,7 +32,7 @@ class WithCacheLeaseTest extends TestCase
 
         $this->database->create();
         $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $this->database->createAttribute('projects', new Attribute(key: 'name', type: ColumnType::String, size: 255));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [

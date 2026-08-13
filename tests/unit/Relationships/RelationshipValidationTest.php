@@ -85,12 +85,19 @@ class RelationshipValidationTest extends TestCase
      */
     private function buildDatabase(array $collections, array $documents = [], bool $withRelationshipHook = false): Database
     {
+        $sequence = 1;
+        foreach ($documents as $document) {
+            if ($document->getSequence() === null) {
+                $document->setAttribute('$sequence', $sequence++);
+            }
+        }
+
         $adapter = self::createStub(RelationshipsAdapter::class);
         $adapter->method('getSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getTenantPerDocument')->willReturn(false);
         $adapter->method('getNamespace')->willReturn('');
-        $adapter->method('getIdAttributeType')->willReturn('string');
+        $adapter->method('getIdAttributeType')->willReturn(ColumnType::Integer->value);
         $adapter->method('getMaxUIDLength')->willReturn(36);
         $adapter->method('getMinDateTime')->willReturn(new DateTime('0000-01-01'));
         $adapter->method('getMaxDateTime')->willReturn(new DateTime('9999-12-31'));

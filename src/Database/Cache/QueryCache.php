@@ -7,6 +7,8 @@ use Utopia\Database\Document;
 
 class QueryCache
 {
+    private const int VERSION = 1;
+
     /** @var array<string, CacheRegion> */
     private array $regions = [];
 
@@ -33,11 +35,21 @@ class QueryCache
     /**
      * @param  array<\Utopia\Database\Query>  $queries
      */
-    public function buildQueryKey(string $collection, array $queries, string $namespace, ?int $tenant): string
-    {
-        $queriesHash = \md5(\serialize($queries));
+    public function buildQueryKey(
+        string $collection,
+        array $queries,
+        string $namespace,
+        ?int $tenant,
+        string $context = '',
+    ): string {
+        $queriesHash = \md5(\serialize([
+            'namespace' => $namespace,
+            'tenant' => $tenant,
+            'queries' => $queries,
+            'context' => $context,
+        ]));
 
-        return "{$this->cacheName}:qcache:{$namespace}:{$tenant}:{$collection}:{$queriesHash}";
+        return "{$this->cacheName}:qcache:{$collection}#{$queriesHash}";
     }
 
     /**
@@ -45,37 +57,75 @@ class QueryCache
      */
     public function get(string $key): ?array
     {
-        /** @var mixed $data */
-        $data = $this->cache->load($key, 0, 0);
+        [$cacheKey, $hash] = $this->splitKey($key);
+        $collection = $this->getCollectionFromKey($cacheKey);
 
-        if ($data === false || $data === null || ! \is_array($data)) {
+        /** @var mixed $data */
+        $data = $this->cache->load($cacheKey, $this->getRegion($collection)->ttl, $hash);
+
+        if ($data === false || $data === null) {
             return null;
         }
 
-        return \array_map(function (mixed $item): Document {
+        if (
+            ! \is_array($data)
+            || ($data['version'] ?? null) !== self::VERSION
+            || ! \is_array($data['documents'] ?? null)
+        ) {
+            $this->cache->purge($cacheKey, $hash);
+
+            return null;
+        }
+
+        $documents = [];
+        foreach ($data['documents'] as $item) {
             if ($item instanceof Document) {
-                return $item;
-            }
-            if (\is_array($item)) {
-                return new Document($item);
+                $documents[] = $item;
+                continue;
             }
 
-            return new Document();
-        }, $data);
+            if (! \is_array($item)) {
+                $this->cache->purge($cacheKey, $hash);
+
+                return null;
+            }
+
+            $documents[] = new Document($item);
+        }
+
+        return $documents;
+    }
+
+    public function getGeneration(string $key): string
+    {
+        [$cacheKey] = $this->splitKey($key);
+
+        return $this->cache->getGeneration($cacheKey);
     }
 
     /**
      * @param  array<Document>  $results
      */
-    public function set(string $key, array $results): void
+    public function set(string $key, array $results, string $generation = '0'): bool
     {
+        foreach ($results as $result) {
+            if (! $result instanceof Document) {
+                return false;
+            }
+        }
+
+        [$cacheKey, $hash] = $this->splitKey($key);
         $data = \array_map(fn (Document $doc) => $doc->getArrayCopy(), $results);
-        $this->cache->save($key, $data);
+
+        return $this->cache->saveWithLease($cacheKey, [
+            'version' => self::VERSION,
+            'documents' => $data,
+        ], $hash, $generation) !== false;
     }
 
     public function invalidateCollection(string $collection): void
     {
-        $this->cache->purge("{$this->cacheName}:qcache:*:{$collection}:*");
+        $this->cache->purge($this->getCollectionKey($collection));
     }
 
     public function isEnabled(string $collection): bool
@@ -88,5 +138,25 @@ class QueryCache
     public function flush(): void
     {
         $this->cache->flush();
+    }
+
+    private function getCollectionKey(string $collection): string
+    {
+        return "{$this->cacheName}:qcache:{$collection}";
+    }
+
+    private function getCollectionFromKey(string $key): string
+    {
+        $prefix = "{$this->cacheName}:qcache:";
+
+        return \str_starts_with($key, $prefix) ? \substr($key, \strlen($prefix)) : '';
+    }
+
+    /** @return array{string, string} */
+    private function splitKey(string $key): array
+    {
+        $parts = \explode('#', $key, 2);
+
+        return [$parts[0], $parts[1] ?? ''];
     }
 }

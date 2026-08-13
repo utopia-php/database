@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -10,8 +11,12 @@ use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Hook\Relationships;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Query\Schema\ColumnType;
 
+#[AllowMockObjectsWithoutExpectations]
 class CacheKeyTest extends TestCase
 {
     /**
@@ -144,7 +149,9 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheKeyUsesQueryCacheShape(): void
     {
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('supports')->willReturnCallback(
+            fn (Capability $capability): bool => $capability === Capability::Hostname
+        );
         $adapter->method('getHostname')->willReturn('mysql-console');
         $adapter->method('getNamespace')->willReturn('_39');
         $adapter->method('getTenant')->willReturn(null);
@@ -160,7 +167,9 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheKeyCanOverrideNamespaceSegment(): void
     {
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('supports')->willReturnCallback(
+            fn (Capability $capability): bool => $capability === Capability::Hostname
+        );
         $adapter->method('getHostname')->willReturn('mysql-console');
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('getTenant')->willReturn(null);
@@ -179,8 +188,8 @@ class CacheKeyTest extends TestCase
         $collection = new Document([
             '$id' => 'wafRules',
             'attributes' => [
-                new Document(['$id' => 'projectId', 'type' => Database::VAR_STRING]),
-                new Document(['$id' => 'enabled', 'type' => Database::VAR_BOOLEAN]),
+                new Document(['$id' => 'projectId', 'type' => ColumnType::String->value]),
+                new Document(['$id' => 'enabled', 'type' => ColumnType::Boolean->value]),
             ],
             'indexes' => [
                 new Document(['$id' => 'project_enabled', 'attributes' => ['projectId', 'enabled']]),
@@ -211,7 +220,7 @@ class CacheKeyTest extends TestCase
 
         $field = $db->getQueryCacheField(
             new Document([
-                'attributes' => [new Document(['$id' => 'name', 'type' => Database::VAR_STRING])],
+                'attributes' => [new Document(['$id' => 'name', 'type' => ColumnType::String->value])],
                 'indexes' => [],
             ]),
             [Query::limit(10)],
@@ -221,7 +230,7 @@ class CacheKeyTest extends TestCase
             $field,
             $db->getQueryCacheField(
                 new Document([
-                    'attributes' => [new Document(['$id' => 'status', 'type' => Database::VAR_STRING])],
+                    'attributes' => [new Document(['$id' => 'status', 'type' => ColumnType::String->value])],
                     'indexes' => [],
                 ]),
                 [Query::limit(10)],
@@ -254,7 +263,7 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        $this->assertNull($db->getQueryCacheField(forPermission: Database::PERMISSION_UPDATE));
+        $this->assertNull($db->getQueryCacheField(forPermission: PermissionType::Update));
     }
 
     public function testQueryCacheFieldIncludesCursorDocumentPayload(): void
@@ -282,6 +291,7 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheFieldIncludesAmbientState(): void
     {
         $db = $this->createDatabase();
+        $db->addHook(new Relationships($db));
 
         $field = $db->getQueryCacheField(null, [Query::limit(10)]);
 

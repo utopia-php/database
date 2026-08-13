@@ -1886,11 +1886,11 @@ class MariaDB extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
-            $message = $e->getMessage();
-            if (\str_contains($message, '_index1')) {
+            $key = $this->getViolatedKey($e->getMessage());
+            if ($key === '_index1') {
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
-            if (!\str_contains($message, '_uid')) {
+            if ($key !== null && $key !== '_uid' && $key !== 'PRIMARY') {
                 return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -1935,6 +1935,20 @@ class MariaDB extends SQL
         }
 
         return $e;
+    }
+
+    /**
+     * Extract the index name from a duplicate entry error, e.g.
+     * "Duplicate entry 'x' for key 'movies._uid'" resolves to "_uid".
+     * Returns null when the message cannot be parsed.
+     */
+    protected function getViolatedKey(string $message): ?string
+    {
+        if (\preg_match("/for key '(?:[^'.]*\.)?([^']+)'/", $message, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return null;
     }
 
     protected function quote(string $string): string

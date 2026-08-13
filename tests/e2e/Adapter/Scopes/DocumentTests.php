@@ -5857,6 +5857,30 @@ trait DocumentTests
             $this->assertStringContainsString('Unique index violation', $e->getMessage());
         }
 
+        // Test 3: A conflicting value containing "_uid" must not be mistaken
+        // for a document identifier conflict
+        $database->createDocument('duplicateMessages', new Document([
+            '$id' => 'dup_msg_3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'email' => 'prefix_uid_suffix@example.com',
+        ]));
+
+        try {
+            $database->createDocument('duplicateMessages', new Document([
+                '$id' => 'dup_msg_4',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'email' => 'prefix_uid_suffix@example.com',
+            ]));
+            $this->fail('Expected DuplicateException for unique index violation');
+        } catch (DuplicateException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('Unique index violation', $e->getMessage());
+        }
+
         $database->deleteCollection('duplicateMessages');
     }
 

@@ -1892,7 +1892,8 @@ class SQLite extends MariaDB
                 stripos($message, 'unique') !== false ||
                 stripos($message, 'duplicate') !== false
             ) {
-                if (!\str_contains($message, '_uid')) {
+                $columns = $this->getViolatedColumns($message);
+                if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
                     return new UniqueException('Unique index violation', $e->getCode(), $e);
                 }
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -1905,6 +1906,33 @@ class SQLite extends MariaDB
         }
 
         return $e;
+    }
+
+    /**
+     * Extract the violated columns from a constraint error, e.g.
+     * "UNIQUE constraint failed: movies._tenant, movies._uid" resolves to
+     * ['_tenant', '_uid']. Returns null when the message cannot be parsed.
+     *
+     * @return array<string>|null
+     */
+    protected function getViolatedColumns(string $message): ?array
+    {
+        if (\preg_match('/UNIQUE constraint failed:\s*(.+)/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        $columns = \array_map(function (string $column): string {
+            $separator = \strrpos($column, '.');
+            if ($separator !== false) {
+                $column = \substr($column, $separator + 1);
+            }
+
+            return \trim($column, " \t`\"");
+        }, \explode(',', $matches[1]));
+
+        \sort($columns);
+
+        return $columns;
     }
 
     public function getSupportForSpatialIndexOrder(): bool

@@ -4011,8 +4011,8 @@ class Mongo extends Adapter
 
         // Duplicate key error
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
-            $message = $e->getMessage();
-            if (!\str_contains($message, '_uid')) {
+            $index = $this->getViolatedIndex($e->getMessage());
+            if ($index !== null && $index !== '_uid' && $index !== '_id_') {
                 return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -4050,6 +4050,20 @@ class Mongo extends Adapter
         }
 
         return $e;
+    }
+
+    /**
+     * Extract the index name from a duplicate key error, e.g.
+     * "E11000 duplicate key error collection: db.movies index: _uid dup key: { _uid: \"movie\" }"
+     * resolves to "_uid". Returns null when the message cannot be parsed.
+     */
+    protected function getViolatedIndex(string $message): ?string
+    {
+        if (\preg_match('/index:\s*(\S+)\s+dup key/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
     }
 
     protected function quote(string $string): string

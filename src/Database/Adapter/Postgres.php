@@ -2160,8 +2160,8 @@ class Postgres extends SQL
 
         // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            $message = $e->getMessage();
-            if (!\str_contains($message, '_uid')) {
+            $columns = $this->getViolatedColumns($e->getMessage());
+            if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
                 return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -2199,6 +2199,29 @@ class Postgres extends SQL
         }
 
         return $e;
+    }
+
+    /**
+     * Extract the violated columns from a unique violation error, e.g.
+     * "DETAIL:  Key (_uid, _tenant)=(movie, 1) already exists." resolves to
+     * ['_tenant', '_uid']. Returns null when the message cannot be parsed.
+     *
+     * @return array<string>|null
+     */
+    protected function getViolatedColumns(string $message): ?array
+    {
+        if (\preg_match('/Key \(([^)]+)\)=/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        $columns = \array_map(
+            fn (string $column) => \trim($column, " \t\"'"),
+            \explode(',', $matches[1])
+        );
+
+        \sort($columns);
+
+        return $columns;
     }
 
     /**

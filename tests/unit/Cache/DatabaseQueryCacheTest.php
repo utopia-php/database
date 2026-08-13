@@ -364,6 +364,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $database->setQueryCache(new QueryCache(new Cache($cache)));
         $database->createCollection('users', permissions: $this->permissions());
         $database->find('users');
+        $cache->seedEpoch('users');
         $cache->failPurges();
 
         $this->expectException(\RuntimeException::class);
@@ -591,6 +592,7 @@ final class DatabaseQueryCacheTest extends TestCase
             $this->names($database->find('users', [Query::orderAsc('$id')])),
         );
 
+        $cache->seedEpoch('users');
         $cache->failPurges();
         try {
             $mutation($database);
@@ -1079,6 +1081,11 @@ final class FailingMemory extends MemoryCache
     public function failPurges(): void
     {
         $this->failing = true;
+    }
+
+    public function seedEpoch(string $collection): void
+    {
+        $this->save('default:qcache:'.$collection.'#epoch', 'active:seed');
     }
 
     #[\Override]

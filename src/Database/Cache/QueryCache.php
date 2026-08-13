@@ -10,6 +10,8 @@ class QueryCache
 {
     private const string ACTIVE_PREFIX = 'active:';
 
+    private const string INITIAL_EPOCH = self::ACTIVE_PREFIX.'initial';
+
     private const string BLOCKED_GENERATION = 'blocked';
 
     private const string BLOCKED_PREFIX = 'blocked:';
@@ -85,6 +87,10 @@ class QueryCache
             return null;
         }
 
+        if ($this->getEpoch($cacheKey, $collection) !== $epoch) {
+            return null;
+        }
+
         if (
             ! \is_array($data)
             || ($data['version'] ?? null) !== self::VERSION
@@ -150,14 +156,14 @@ class QueryCache
 
         [$cacheKey, $hash] = $this->splitKey($key);
         $collection = $this->getCollectionFromKey($cacheKey);
-        if (! $this->isEnabled($collection)) {
-            return false;
-        }
         $decoded = $this->decodeGeneration($generation, $cacheKey, $hash, $collection);
         if ($decoded === null) {
             return false;
         }
         [$epoch, $lease] = $decoded;
+        if ($this->getEpoch($cacheKey, $collection) !== $epoch) {
+            return false;
+        }
         $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 
         return $this->cache->saveWithLease($physicalKey, [
@@ -179,6 +185,16 @@ class QueryCache
     public function blockCollection(string $collection, string $token): void
     {
         $cacheKey = $this->getCollectionKey($collection);
+        $ownerKey = $this->getOwnerKey($cacheKey, $token);
+        if ($this->cache->save($ownerKey, $token) === false) {
+            throw new RuntimeException("Failed to register query cache owner for collection '{$collection}'");
+        }
+
+        $startedKey = $this->getStartedKey($cacheKey);
+        $started = $this->cache->getGeneration($startedKey);
+        $this->cache->purge($startedKey);
+        $advanced = $this->cache->getGeneration($startedKey) !== $started;
+
         $epochKey = $this->getEpochKey($cacheKey);
         $existing = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
 
@@ -191,6 +207,10 @@ class QueryCache
         if (! $purged) {
             throw new RuntimeException("Failed to purge query cache epoch for collection '{$collection}'");
         }
+
+        if (! $advanced) {
+            return;
+        }
     }
 
     /**
@@ -198,21 +218,31 @@ class QueryCache
      */
     public function activateCollection(string $collection, string $token): void
     {
-        $epochKey = $this->getEpochKey($this->getCollectionKey($collection));
-        $blocked = self::BLOCKED_PREFIX.$token;
-        $current = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
-
-        if ($current !== $blocked) {
-            if (\is_string($current) && \str_starts_with($current, self::BLOCKED_PREFIX)) {
-                return;
-            }
-
-            $this->blockCollection($collection, $token);
+        $cacheKey = $this->getCollectionKey($collection);
+        $ownerKey = $this->getOwnerKey($cacheKey, $token);
+        if ($this->cache->load($ownerKey, $this->getRegion($collection)->ttl) !== $token) {
+            throw new RuntimeException("Invalid query cache owner for collection '{$collection}'");
+        }
+        if (! $this->cache->purge($ownerKey)) {
+            throw new RuntimeException("Failed to release query cache owner for collection '{$collection}'");
         }
 
+        $startedKey = $this->getStartedKey($cacheKey);
+        $finishedKey = $this->getFinishedKey($cacheKey);
+        if ($this->cache->getGeneration($startedKey) === $this->cache->getGeneration($finishedKey)) {
+            return;
+        }
+
+        $epochKey = $this->getEpochKey($cacheKey);
         $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
         if ($this->cache->save($epochKey, $epoch) === false) {
             throw new RuntimeException("Failed to activate query cache for collection '{$collection}'");
+        }
+
+        $finished = $this->cache->getGeneration($finishedKey);
+        $this->cache->purge($finishedKey);
+        if ($this->cache->getGeneration($finishedKey) === $finished) {
+            throw new RuntimeException("Failed to finish query cache invalidation for collection '{$collection}'");
         }
     }
 
@@ -224,12 +254,7 @@ class QueryCache
             return false;
         }
 
-        $epoch = $this->cache->load(
-            $this->getEpochKey($this->getCollectionKey($collection)),
-            $region->ttl,
-        );
-
-        return ! \is_string($epoch) || ! \str_starts_with($epoch, self::BLOCKED_PREFIX);
+        return $this->getEpoch($this->getCollectionKey($collection), $collection) !== null;
     }
 
     public function flush(): void
@@ -261,29 +286,35 @@ class QueryCache
 
     private function getEpoch(string $cacheKey, string $collection, bool $initialize = false): ?string
     {
+        $startedKey = $this->getStartedKey($cacheKey);
+        $finishedKey = $this->getFinishedKey($cacheKey);
+        $started = $this->cache->getGeneration($startedKey);
+        $finished = $this->cache->getGeneration($finishedKey);
+        if ($started !== $finished) {
+            return null;
+        }
+
         $epoch = $this->cache->load(
             $this->getEpochKey($cacheKey),
             $this->getRegion($collection)->ttl,
         );
 
         if ($epoch === false || $epoch === null) {
-            if (! $initialize) {
-                return null;
-            }
-
-            $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
-            if ($this->cache->save($this->getEpochKey($cacheKey), $epoch) === false) {
-                throw new RuntimeException("Failed to initialize query cache epoch for collection '{$collection}'");
-            }
-
-            return $epoch;
+            $epoch = self::INITIAL_EPOCH;
         }
 
         if (! \is_string($epoch) || $epoch === '') {
             throw new RuntimeException("Invalid query cache epoch for collection '{$collection}'");
         }
 
-        if (\str_starts_with($epoch, self::BLOCKED_PREFIX)) {
+        $nextStarted = $this->cache->getGeneration($startedKey);
+        $nextFinished = $this->cache->getGeneration($finishedKey);
+        if (
+            $started !== $nextStarted
+            || $finished !== $nextFinished
+            || $nextStarted !== $nextFinished
+            || ! \str_starts_with($epoch, self::ACTIVE_PREFIX)
+        ) {
             return null;
         }
 
@@ -293,6 +324,21 @@ class QueryCache
     private function getEpochKey(string $cacheKey): string
     {
         return $cacheKey.'#epoch';
+    }
+
+    private function getFinishedKey(string $cacheKey): string
+    {
+        return $cacheKey.'#finished';
+    }
+
+    private function getOwnerKey(string $cacheKey, string $token): string
+    {
+        return $cacheKey.'#owner:'.$token;
+    }
+
+    private function getStartedKey(string $cacheKey): string
+    {
+        return $cacheKey.'#started';
     }
 
     private function getPhysicalKey(string $cacheKey, string $hash, string $epoch): string

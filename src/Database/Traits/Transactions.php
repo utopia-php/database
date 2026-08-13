@@ -43,10 +43,18 @@ trait Transactions
         return $this->withInvalidationScope(fn () => $this->adapter->withTransaction(function () use ($event, $data, $callback) {
             $tokens = $this->getInvalidationTokens($event, $data);
             $context = $this->getEventContext();
+            $pending = [];
             foreach ($tokens as $collection => $token) {
+                if (isset($this->queryCacheMutations[$context][$collection])) {
+                    continue;
+                }
+
+                $pending[$collection] = $token;
+            }
+            $this->blockInvalidation($pending);
+            foreach ($pending as $collection => $token) {
                 $this->queryCacheMutations[$context][$collection] = $token;
             }
-            $this->blockInvalidation($tokens);
 
             return $callback();
         }));

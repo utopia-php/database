@@ -116,12 +116,16 @@ class Permissions extends Interceptor
         }
 
         $permissionsMap = $this->readCurrentPermissionsBatch($collection, $eligible, $context);
+        $updatesByType = [];
+        foreach (self::PERM_TYPES as $type) {
+            $updatesByType[$type->value] = $updates->getPermissionsByType($type);
+        }
 
         foreach ($eligible as $document) {
             $permissions = $permissionsMap[$document->getId()] ?? $this->emptyPermissions();
 
             foreach (self::PERM_TYPES as $type) {
-                $diff = \array_diff($permissions[$type->value], $updates->getPermissionsByType($type));
+                $diff = \array_diff($permissions[$type->value], $updatesByType[$type->value]);
                 if (! empty($diff)) {
                     $removeConditions[] = Query::and([
                         Query::equal('_document', [$document->getId()]),
@@ -133,7 +137,7 @@ class Permissions extends Interceptor
 
             $metadata = $this->documentMetadata($document);
             foreach (self::PERM_TYPES as $type) {
-                $diff = \array_diff($updates->getPermissionsByType($type), $permissions[$type->value]);
+                $diff = \array_diff($updatesByType[$type->value], $permissions[$type->value]);
                 if (! empty($diff)) {
                     foreach ($diff as $permission) {
                         $row = ($context->decorateRow)([

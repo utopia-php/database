@@ -148,7 +148,7 @@ function setupTestEnvironment(Database $database, string $name, int $seed): void
     }
     $database->create();
 
-    $authorization->addRole(Role::any()->toString());
+    $database->getAuthorization()->addRole(Role::any()->toString());
 
     // Create test collection
     $database->createCollection('operators_test', permissions: [

@@ -14,6 +14,7 @@ include 'tasks/index.php';
 include 'tasks/query.php';
 include 'tasks/relationships.php';
 include 'tasks/operators.php';
+include 'tasks/migrate.php';
 
 $cli
     ->error()

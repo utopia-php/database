@@ -6,7 +6,7 @@ parameters:
     paths:
         - src
         - tests
-    ignoreErrors:
-        -
-          message: '#(PDOStatementProxy|DetectsLostConnections)#'
-          reportUnmatched: false
+    stubFiles:
+        - stubs/Swoole/Database/DetectsLostConnections.stub.php
+        - stubs/Swoole/Database/PDOProxy.stub.php
+        - stubs/Swoole/Database/PDOStatementProxy.stub.php

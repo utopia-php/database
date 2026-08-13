@@ -131,7 +131,6 @@ abstract class SQL extends Adapter
         }
     }
 
-
     /**
      * Accepts Utopia\Database\PDO or any PDO-compatible proxy (e.g. Swoole\Database\PDOProxy).
      */
@@ -1652,7 +1651,7 @@ abstract class SQL extends Adapter
     public function rawQuery(string $query, array $bindings = []): array
     {
         try {
-            $stmt = $this->getPDO()->prepare($query);
+            $stmt = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
                 $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
             }
@@ -3207,7 +3206,7 @@ abstract class SQL extends Adapter
     public function rawMutation(string $query, array $bindings = []): int
     {
         try {
-            $stmt = $this->getPDO()->prepare($query);
+            $stmt = $this->prepareStatement($query);
             foreach ($bindings as $i => $value) {
                 $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
             }
@@ -3339,9 +3338,9 @@ abstract class SQL extends Adapter
     /**
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
      */
-    protected function getStatementEvent(mixed $stmt): ?Event
+    protected function getStatementEvent(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt): ?Event
     {
-        if (! \is_object($stmt) || $this->statementEvents === null) {
+        if ($this->statementEvents === null) {
             return null;
         }
 

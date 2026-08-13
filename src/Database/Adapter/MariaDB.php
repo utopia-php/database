@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -822,16 +823,20 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         // application leaked stale timeouts across pool checkouts under paratest;
         // mirrors the MySQL adapter's eager-apply fix for the same shape of bug.
         $seconds = $milliseconds / 1000.0;
-        $this->getPDO()->exec('SET max_statement_time = ' . $seconds);
-        $this->appliedMaxStatementTime = $seconds;
+        if ($seconds !== $this->appliedMaxStatementTime) {
+            $this->getPDO()->exec('SET max_statement_time = '.\sprintf('%.6F', $seconds));
+            $this->appliedMaxStatementTime = $seconds;
+        }
 
         parent::setTimeout($milliseconds, $event);
     }
 
     public function clearTimeout(Event $event = Event::All): void
     {
-        $this->getPDO()->exec('SET max_statement_time = 0');
-        $this->appliedMaxStatementTime = 0.0;
+        if ($this->appliedMaxStatementTime !== 0.0) {
+            $this->getPDO()->exec('SET max_statement_time = 0.000000');
+            $this->appliedMaxStatementTime = 0.0;
+        }
 
         parent::clearTimeout($event);
     }
@@ -857,7 +862,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         if ($this->timeout > 0 || $this->appliedMaxStatementTime !== 0.0) {
             $seconds = $this->timeout > 0 ? $this->timeout / 1000.0 : 0.0;
             if ($seconds !== $this->appliedMaxStatementTime) {
-                $this->getPDO()->exec('SET max_statement_time = ' . $seconds);
+                $this->getPDO()->exec('SET max_statement_time = '.\sprintf('%.6F', $seconds));
                 $this->appliedMaxStatementTime = $seconds;
             }
         }
@@ -1111,18 +1116,35 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                 return "{$quotedColumn} = MOD(COALESCE({$quotedColumn}, 0), :$bindKey)";
 
             case OperatorType::Power:
+                $exponent = $values[0] ?? 1;
+                if (! \is_int($exponent) && ! \is_float($exponent)) {
+                    throw new OperatorException('Power exponent must be numeric');
+                }
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
 
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LOG(COALESCE({$quotedColumn}, 1)) > LOG(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
-                    END";
+                    $columnValue = "COALESCE({$quotedColumn}, 0)";
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+                    $guards = [];
+
+                    if ($exponent < 0) {
+                        $guards[] = "WHEN {$columnValue} = 0 THEN {$columnValue}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $guards[] = "WHEN {$columnValue} < 0 THEN {$columnValue}";
+                    }
+                    if ($exponent == 0) {
+                        $guards[] = "WHEN LOG(:$maxKey) < 0 THEN {$columnValue}";
+                    } elseif ($oddInteger) {
+                        $guards[] = "WHEN {$columnValue} > 0 AND :$bindKey * LOG({$columnValue}) > LOG(:$maxKey) THEN {$columnValue}";
+                    } else {
+                        $guards[] = "WHEN {$columnValue} <> 0 AND :$bindKey * LOG(ABS({$columnValue})) > LOG(:$maxKey) THEN {$columnValue}";
+                    }
+
+                    return "{$quotedColumn} = CASE ".\implode(' ', $guards)." ELSE POWER({$columnValue}, :$bindKey) END";
                 }
 
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";
@@ -1351,12 +1373,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
 
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
-            $message = $e->getMessage();
-            if (\str_contains($message, '_index1')) {
+            $key = $this->getViolatedKey($e->getMessage());
+            if ($key === '_index1') {
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
-            if (! \str_contains($message, '_uid')) {
-                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            if ($key !== null && $key !== '_uid' && $key !== 'PRIMARY') {
+                return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
 
             return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -1401,5 +1423,14 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         }
 
         return $e;
+    }
+
+    protected function getViolatedKey(string $message): ?string
+    {
+        if (\preg_match("/for key '(?:[^'.]*\.)?([^']+)'/", $message, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
     }
 }

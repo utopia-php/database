@@ -17,7 +17,6 @@ class PDOTest extends TestCase
         // Use Reflection to replace the internal PDO instance with a mock
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setAccessible(true);
 
         // Create a mock for the internal \PDO object.
         $pdoMock = $this->getMockBuilder(\PDO::class)
@@ -66,7 +65,6 @@ class PDOTest extends TestCase
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setAccessible(true);
         $pdoProperty->setValue($pdoWrapper, $pdoMock);
 
         $pdoWrapper->expects($this->once())
@@ -87,7 +85,6 @@ class PDOTest extends TestCase
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setAccessible(true);
 
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
@@ -113,7 +110,6 @@ class PDOTest extends TestCase
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setAccessible(true);
 
         $oldPDO = $pdoProperty->getValue($pdoWrapper);
         $pdoWrapper->reconnect();
@@ -129,7 +125,6 @@ class PDOTest extends TestCase
 
         $reflection = new ReflectionClass($pdoWrapper);
         $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setAccessible(true);
 
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
@@ -148,5 +143,62 @@ class PDOTest extends TestCase
 
         $this->assertInstanceOf(PDOStatement::class, $result);
         $this->assertSame($pdoStatementStub, $result->getStatement());
+    }
+
+    public function testPrepareNativeReconnectsOutsideTransaction(): void
+    {
+        $pdoWrapper = $this->getMockBuilder(PDO::class)
+            ->setConstructorArgs(['sqlite::memory:', null, null, []])
+            ->onlyMethods(['reconnect'])
+            ->getMock();
+
+        $pdoMock = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $statement = self::createStub(\PDOStatement::class);
+
+        $pdoMock->method('inTransaction')->willReturn(false);
+        $calls = 0;
+        $pdoMock->expects($this->exactly(2))
+            ->method('prepare')
+            ->with('SELECT 1', [])
+            ->willReturnCallback(function () use (&$calls, $statement): \PDOStatement {
+                $calls++;
+                if ($calls === 1) {
+                    throw new \PDOException('server has gone away');
+                }
+
+                return $statement;
+            });
+
+        $reflection = new ReflectionClass($pdoWrapper);
+        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+
+        $pdoWrapper->expects($this->once())->method('reconnect');
+
+        $this->assertSame($statement, $pdoWrapper->prepareNative('SELECT 1'));
+    }
+
+    public function testPrepareNativeThrowsWhenNativePrepareReturnsFalse(): void
+    {
+        $pdoWrapper = new PDO('sqlite::memory:', null, null);
+
+        $pdoMock = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdoMock->expects($this->once())
+            ->method('prepare')
+            ->with('INVALID', [])
+            ->willReturn(false);
+
+        $reflection = new ReflectionClass($pdoWrapper);
+        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+
+        $this->expectException(\PDOException::class);
+        $this->expectExceptionMessage('Failed to prepare statement: INVALID');
+
+        $pdoWrapper->prepareNative('INVALID');
     }
 }

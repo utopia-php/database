@@ -45,7 +45,7 @@ class PDOStatement implements \IteratorAggregate
     private array $columns = [];
 
     /**
-     * @var array<int|string, mixed>
+     * @var array<int, mixed>
      */
     private array $attributes = [];
 
@@ -142,7 +142,7 @@ class PDOStatement implements \IteratorAggregate
     public function setFetchMode(int $mode, mixed ...$args): bool
     {
         $this->fetchMode = $mode;
-        $this->fetchModeArguments = $args;
+        $this->fetchModeArguments = \array_values($args);
 
         return $this->statement->setFetchMode($mode, ...$args);
     }

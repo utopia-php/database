@@ -22,6 +22,7 @@ use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
@@ -408,6 +409,9 @@ class SQLite extends SQL
 		";
 
         $stmt = $this->getPDO()->prepare($sql);
+        if ($stmt === false) {
+            throw new DatabaseException('Failed to prepare collection existence query');
+        }
 
         $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
 
@@ -1756,8 +1760,9 @@ class SQLite extends SQL
                 stripos($message, 'unique') !== false ||
                 stripos($message, 'duplicate') !== false
             ) {
-                if (! \str_contains($message, '_uid')) {
-                    return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+                $columns = $this->getViolatedColumns($message);
+                if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
+                    return new UniqueException('Unique index violation', $e->getCode(), $e);
                 }
 
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -1770,6 +1775,29 @@ class SQLite extends SQL
         }
 
         return $e;
+    }
+
+    /**
+     * @return list<string>|null
+     */
+    protected function getViolatedColumns(string $message): ?array
+    {
+        if (\preg_match('/UNIQUE constraint failed:\s*(.+)/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        $columns = \array_map(function (string $column): string {
+            $separator = \strrpos($column, '.');
+            if ($separator !== false) {
+                $column = \substr($column, $separator + 1);
+            }
+
+            return \trim($column, " \t`\"");
+        }, \explode(',', $matches[1]));
+
+        \sort($columns);
+
+        return $columns;
     }
 
     /**
@@ -1900,7 +1928,7 @@ class SQLite extends SQL
                     $bindIndex++;
 
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) + :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
@@ -1916,7 +1944,7 @@ class SQLite extends SQL
                     $bindIndex++;
 
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) - :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
@@ -1932,7 +1960,8 @@ class SQLite extends SQL
                     $bindIndex++;
 
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) * :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
+                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
@@ -1969,6 +1998,10 @@ class SQLite extends SQL
                     );
                 }
 
+                $exponent = $values[0] ?? 1;
+                if (! \is_int($exponent) && ! \is_float($exponent)) {
+                    throw new OperatorException('Power exponent must be numeric');
+                }
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -1976,12 +2009,25 @@ class SQLite extends SQL
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
 
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) <= 1 THEN COALESCE({$quotedColumn}, 0)
-                        WHEN :$bindKey * LN(COALESCE({$quotedColumn}, 1)) > LN(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$quotedColumn}, 0), :$bindKey)
-                    END";
+                    $columnValue = "COALESCE({$quotedColumn}, 0)";
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+                    $guards = [];
+
+                    if ($exponent < 0) {
+                        $guards[] = "WHEN {$columnValue} = 0 THEN {$columnValue}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $guards[] = "WHEN {$columnValue} < 0 THEN {$columnValue}";
+                    }
+                    if ($exponent == 0) {
+                        $guards[] = "WHEN LN(:$maxKey) < 0 THEN {$columnValue}";
+                    } elseif ($oddInteger) {
+                        $guards[] = "WHEN {$columnValue} > 0 AND :$bindKey * LN({$columnValue}) > LN(:$maxKey) THEN {$columnValue}";
+                    } else {
+                        $guards[] = "WHEN {$columnValue} <> 0 AND :$bindKey * LN(ABS({$columnValue})) > LN(:$maxKey) THEN {$columnValue}";
+                    }
+
+                    return "{$quotedColumn} = CASE ".\implode(' ', $guards)." ELSE POWER({$columnValue}, :$bindKey) END";
                 }
 
                 return "{$quotedColumn} = POWER(COALESCE({$quotedColumn}, 0), :$bindKey)";

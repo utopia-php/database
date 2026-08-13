@@ -21,13 +21,17 @@ use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
@@ -299,7 +303,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                 );
             }
 
-            $table->text('_permissions')->nullable()->default(null);
+            $table->json('_permissions')->nullable()->default(null);
             $table->integer('_version')->nullable()->default(1);
         });
 
@@ -311,17 +315,21 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $createdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_created");
             $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
             $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
+            $permissionsIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permissions");
             $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, ['_uid', '_tenant'], unique: true, collations: ['_uid' => 'utf8_ci_ai'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, ['_tenant', '_createdAt'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, ['_tenant', '_updatedAt'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $tenantIdIndex, ['_tenant', '_id'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, ['_permissions'], method: 'gin')->query;
         } else {
             $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
             $createdIndex = $this->getShortKey("{$namespace}_{$id}_created");
             $updatedIndex = $this->getShortKey("{$namespace}_{$id}_updated");
+            $permissionsIndex = $this->getShortKey("{$namespace}_{$id}_permissions");
             $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, ['_uid'], unique: true, collations: ['_uid' => 'utf8_ci_ai'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, ['_createdAt'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, ['_updatedAt'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, ['_permissions'], method: 'gin')->query;
         }
 
         $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
@@ -878,7 +886,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
             $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = json_encode($document->getPermissions());
+            $attributes['_permissions'] = \json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
@@ -1493,6 +1501,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      */
     protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
     {
+        if (\in_array($query->getMethod(), [Method::IsNull, Method::IsNotNull], true)) {
+            return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
+        }
+
         $spatialGeomRaw = $query->getValues()[0];
         $binds[":{$placeholder}_0"] = $this->convertArrayToWKT(\is_array($spatialGeomRaw) ? $spatialGeomRaw : []);
         $geom = $this->getSpatialGeomFromText(":{$placeholder}_0");
@@ -1835,6 +1847,63 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         return ['expression' => $expression, 'bindings' => [$vector]];
     }
 
+    #[\Override]
+    protected function getSQLReadableDistance(string $distance): string
+    {
+        return "{$distance}::text";
+    }
+
+    /**
+     * Match read permissions against the JSONB copy stored on each row. This
+     * keeps PostgreSQL free to combine the GIN permission index with ordering
+     * indexes instead of resolving a permissions-table semi-join first.
+     *
+     * @param  array<string>  $roles
+     */
+    #[\Override]
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = '_uid'): PermissionFilter
+    {
+        return new class (\array_values($roles), $type, $documentColumn) extends PermissionFilter {
+            /**
+             * @param  list<string>  $roles
+             */
+            public function __construct(array $roles, string $type, string $documentColumn)
+            {
+                parent::__construct(
+                    roles: $roles,
+                    permissionsTable: static fn (string $table): string => $table,
+                    type: $type,
+                    documentColumn: $documentColumn,
+                    quoteChar: '"',
+                );
+            }
+
+            #[\Override]
+            public function filter(string $table): Condition
+            {
+                if (empty($this->roles)) {
+                    return new Condition('1 = 0');
+                }
+
+                $parts = \explode('.', $this->documentColumn);
+                $parts[\array_key_last($parts)] = '_permissions';
+                $column = \implode('.', \array_map(
+                    static fn (string $part): string => '"'.\str_replace('"', '""', $part).'"',
+                    $parts
+                ));
+
+                $conditions = [];
+                $bindings = [];
+                foreach ($this->roles as $role) {
+                    $conditions[] = "{$column} @> ?::jsonb";
+                    $bindings[] = \json_encode(["{$this->type}(\"{$role}\")"]) ?: '[]';
+                }
+
+                return new Condition('('.\implode(' OR ', $conditions).')', $bindings);
+            }
+        };
+    }
+
     /**
      * Size of POINT spatial type
      */
@@ -1882,9 +1951,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
         // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-            $message = $e->getMessage();
-            if (! \str_contains($message, '_uid')) {
-                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            $columns = $this->getViolatedColumns($e->getMessage());
+            if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
+                return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
 
             return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -1916,6 +1985,27 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         }
 
         return $e;
+    }
+
+    /**
+     * Extract the columns named by a PostgreSQL unique-violation DETAIL line.
+     *
+     * @return list<string>|null
+     */
+    protected function getViolatedColumns(string $message): ?array
+    {
+        if (\preg_match('/Key \(([^)]+)\)=/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        $columns = \array_map(
+            static fn (string $column): string => \trim($column, " \t\"'"),
+            \explode(',', $matches[1])
+        );
+
+        \sort($columns);
+
+        return $columns;
     }
 
     protected function quote(string $string): string
@@ -2032,18 +2122,35 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                 return "{$quotedColumn} = MOD(COALESCE({$columnRef}::numeric, 0), :$bindKey::numeric)";
 
             case OperatorType::Power:
+                $exponent = $values[0] ?? 1;
+                if (! \is_int($exponent) && ! \is_float($exponent)) {
+                    throw new OperatorException('Power exponent must be numeric');
+                }
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $bindIndex++;
 
-                    return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$columnRef}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$columnRef}, 0) <= 1 THEN COALESCE({$columnRef}, 0)
-                        WHEN :$bindKey * LN(COALESCE({$columnRef}, 1)) > LN(:$maxKey) THEN :$maxKey
-                        ELSE POWER(COALESCE({$columnRef}, 0), :$bindKey)
-                    END";
+                    $columnValue = "COALESCE({$columnRef}, 0)";
+                    $oddInteger = \floor($exponent) == $exponent && ((int) $exponent) % 2 !== 0;
+                    $guards = [];
+
+                    if ($exponent < 0) {
+                        $guards[] = "WHEN {$columnValue} = 0 THEN {$columnValue}";
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $guards[] = "WHEN {$columnValue} < 0 THEN {$columnValue}";
+                    }
+                    if ($exponent == 0) {
+                        $guards[] = "WHEN LN(:$maxKey) < 0 THEN {$columnValue}";
+                    } elseif ($oddInteger) {
+                        $guards[] = "WHEN {$columnValue} > 0 AND :$bindKey * LN({$columnValue}) > LN(:$maxKey) THEN {$columnValue}";
+                    } else {
+                        $guards[] = "WHEN {$columnValue} <> 0 AND :$bindKey * LN(ABS({$columnValue})) > LN(:$maxKey) THEN {$columnValue}";
+                    }
+
+                    return "{$quotedColumn} = CASE ".\implode(' ', $guards)." ELSE POWER({$columnValue}, :$bindKey) END";
                 }
 
                 return "{$quotedColumn} = POWER(COALESCE({$columnRef}, 0), :$bindKey)";

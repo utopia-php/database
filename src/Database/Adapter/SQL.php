@@ -58,7 +58,7 @@ abstract class SQL extends Adapter
 {
     protected object $pdo;
 
-    private const COLUMN_RENAME_MAP = [
+    private const array COLUMN_RENAME_MAP = [
         '_uid' => '$id',
         '_id' => '$sequence',
         '_tenant' => '$tenant',
@@ -66,6 +66,10 @@ abstract class SQL extends Adapter
         '_updatedAt' => '$updatedAt',
         '_version' => '$version',
     ];
+
+    private const string VECTOR_DISTANCE_ATTRIBUTE = '$distance';
+
+    private const string VECTOR_DISTANCE_COLUMN = '_distance';
 
     /**
      * Controls how many fractional digits are used when binding float parameters.
@@ -620,19 +624,36 @@ abstract class SQL extends Adapter
             $aliasQuoted = $this->quote($alias);
             $uidQuoted = $this->quote('_uid');
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = :_uid";
+            foreach ($this->queryTransforms as $transform) {
+                $sql = $transform->transform(Event::DocumentRead, $sql);
+            }
+
+            $stmt = null;
+            $row = false;
+            $exception = null;
 
             try {
                 /** @var \PDOStatement|PDOStatementProxy $stmt */
                 $stmt = $this->getPDO()->prepare($sql);
                 $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
                 $this->execute($stmt);
+                /** @var array<string, mixed>|false $row */
+                $row = $stmt->fetch();
             } catch (PDOException $e) {
-                throw $this->processException($e);
+                $exception = $e;
+            } finally {
+                if ($stmt !== null) {
+                    try {
+                        $stmt->closeCursor();
+                    } catch (PDOException $e) {
+                        $exception ??= $e;
+                    }
+                }
             }
 
-            /** @var array<string, mixed>|false $row */
-            $row = $stmt->fetch();
-            $stmt->closeCursor();
+            if ($exception !== null) {
+                throw $this->processException($exception);
+            }
 
             if (! is_array($row) || empty($row)) {
                 return new Document([]);
@@ -657,16 +678,30 @@ abstract class SQL extends Adapter
 
         $result = $builder->build();
 
+        $stmt = null;
+        $rows = [];
+        $exception = null;
+
         try {
-            $stmt = $this->executeResult($result);
+            $stmt = $this->executeResult($result, Event::DocumentRead);
             $this->execute($stmt);
+            /** @var array<int, array<string, mixed>> $rows */
+            $rows = $stmt->fetchAll();
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            $exception = $e;
+        } finally {
+            if ($stmt !== null) {
+                try {
+                    $stmt->closeCursor();
+                } catch (PDOException $e) {
+                    $exception ??= $e;
+                }
+            }
         }
 
-        /** @var array<int, array<string, mixed>> $rows */
-        $rows = $stmt->fetchAll();
-        $stmt->closeCursor();
+        if ($exception !== null) {
+            throw $this->processException($exception);
+        }
 
         if (empty($rows)) {
             return new Document([]);
@@ -1235,10 +1270,12 @@ abstract class SQL extends Adapter
 
         $builder = $this->newBuilder($name, $alias);
 
+        $hasSelectionProjection = false;
         if (! $hasAggregation) {
             $selections = $this->getAttributeSelections($queries);
             if (! empty($selections) && ! \in_array('*', $selections)) {
                 $builder->select($this->mapSelectionsToColumns($selections));
+                $hasSelectionProjection = true;
             }
         }
 
@@ -1425,11 +1462,23 @@ abstract class SQL extends Adapter
         }
 
         // Vector ordering (comes first for similarity search)
+        $vectorDistance = null;
         foreach ($vectorQueries as $query) {
             $vectorRaw = $this->getVectorOrderRaw($query, $alias);
             if ($vectorRaw !== null) {
                 $builder->orderByRaw($vectorRaw['expression'], $vectorRaw['bindings']);
+                $vectorDistance ??= $vectorRaw;
             }
+        }
+
+        if ($vectorDistance !== null && ! $hasAggregation) {
+            if (! $hasSelectionProjection) {
+                $builder->select(['*']);
+            }
+            $builder->selectRaw(
+                $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(self::VECTOR_DISTANCE_COLUMN),
+                $vectorDistance['bindings']
+            );
         }
 
         // Full-text search relevance scoring.
@@ -3540,6 +3589,11 @@ abstract class SQL extends Adapter
             $row['$permissions'] = \json_decode(\is_string($row['_permissions']) ? $row['_permissions'] : '[]', true);
             unset($row['_permissions']);
         }
+        if (\array_key_exists(self::VECTOR_DISTANCE_COLUMN, $row)) {
+            $distance = $row[self::VECTOR_DISTANCE_COLUMN];
+            $row[self::VECTOR_DISTANCE_ATTRIBUTE] = \is_numeric($distance) ? (float) $distance : null;
+            unset($row[self::VECTOR_DISTANCE_COLUMN]);
+        }
     }
 
     /**
@@ -4384,6 +4438,14 @@ abstract class SQL extends Adapter
     protected function getVectorOrderRaw(Query $query, string $alias): ?array
     {
         return null;
+    }
+
+    /**
+     * Render a vector distance expression in a form safe to hydrate as a PHP float.
+     */
+    protected function getSQLReadableDistance(string $distance): string
+    {
+        return $distance;
     }
 
     /**

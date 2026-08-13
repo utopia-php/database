@@ -1232,6 +1232,7 @@ trait CollectionTests
 
         $database->createDocument('docs', new Document([
             '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any())],
             'name' => 'value1',
         ]));
 

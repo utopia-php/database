@@ -1601,7 +1601,6 @@ trait DocumentTests
 
     public function testFindContains(): void
     {
-        $this->initMoviesFixture();
         /** @var Database $database */
         $database = $this->getDatabase();
 
@@ -1610,6 +1609,8 @@ trait DocumentTests
 
             return;
         }
+
+        $this->initMoviesFixture();
 
         $documents = $database->find($this->getMoviesCollection(), [
             Query::contains('genres', ['comics']),

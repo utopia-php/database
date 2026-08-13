@@ -2011,7 +2011,9 @@ abstract class SQL extends Adapter
             }
 
             $attrSize = (int) (is_scalar($attribute['size'] ?? 0) ? ($attribute['size'] ?? 0) : 0);
-            $attrType = (string) (is_scalar($attribute['type'] ?? '') ? ($attribute['type'] ?? '') : '');
+            $rawType = (string) (\is_scalar($attribute['type'] ?? '') ? ($attribute['type'] ?? '') : '');
+            $normalizedType = Attribute::tryNormalizeType($rawType);
+            $attrType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
 
             switch ($attrType) {
                 case ColumnType::Id->value:
@@ -2051,6 +2053,11 @@ abstract class SQL extends Adapter
                     } else {
                         $total += 4; // INT 4 bytes
                     }
+                    break;
+
+                case ColumnType::BigInteger->value:
+                case ColumnType::BigSerial->value:
+                    $total += 8;
                     break;
 
                 case ColumnType::Float->value:
@@ -2729,7 +2736,7 @@ abstract class SQL extends Adapter
      */
     public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
-        $columnType = ColumnType::tryFrom($type);
+        $columnType = Attribute::tryNormalizeType($type);
         if ($columnType === null) {
             throw new DatabaseException('Unknown column type: '.$type);
         }
@@ -2771,10 +2778,10 @@ abstract class SQL extends Adapter
             return "VARCHAR({$size})";
         }
 
-        if ($type === ColumnType::Integer) {
+        if (\in_array($type, [ColumnType::Integer, ColumnType::BigInteger, ColumnType::BigSerial], true)) {
             $suffix = $signed ? '' : ' UNSIGNED';
 
-            return ($size >= 8 ? 'BIGINT' : 'INT') . $suffix;
+            return ($type === ColumnType::Integer && $size < 8 ? 'INT' : 'BIGINT') . $suffix;
         }
 
         if ($type === ColumnType::Float || $type === ColumnType::Double) {
@@ -3626,6 +3633,8 @@ abstract class SQL extends Adapter
             ColumnType::Integer => $size >= 8
                 ? $table->bigInteger($filteredId)
                 : $table->integer($filteredId),
+            ColumnType::BigInteger => $table->bigInteger($filteredId),
+            ColumnType::BigSerial => $table->bigSerial($filteredId),
             ColumnType::Float, ColumnType::Double => $table->float($filteredId),
             ColumnType::Boolean => $table->boolean($filteredId),
             ColumnType::Datetime => $table->datetime($filteredId, 3),
@@ -3641,7 +3650,7 @@ abstract class SQL extends Adapter
         };
 
         // Apply unsigned for types that support it
-        if (! $signed && \in_array($type, [ColumnType::Integer, ColumnType::Float, ColumnType::Double])) {
+        if (! $signed && \in_array($type, [ColumnType::Integer, ColumnType::BigInteger, ColumnType::BigSerial, ColumnType::Float, ColumnType::Double], true)) {
             $col->unsigned();
         }
 

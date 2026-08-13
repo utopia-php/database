@@ -57,6 +57,13 @@ class FilterTest extends TestCase
                 'array' => false,
                 'signed' => true,
             ]),
+            new Document([
+                '$id' => 'bigint_legacy',
+                'key' => 'bigint_legacy',
+                'type' => 'bigint',
+                'array' => false,
+                'signed' => true,
+            ]),
         ];
 
         $this->validator = new Filter(
@@ -79,6 +86,7 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::containsString('string', ['super'])));
         $this->assertTrue($this->validator->isValid(Query::equal('bigint_unsigned', ['18446744073709551615'])));
         $this->assertTrue($this->validator->isValid(Query::equal('bigint_signed', ['-9223372036854775808'])));
+        $this->assertTrue($this->validator->isValid(Query::equal('bigint_legacy', ['9223372036854775807'])));
     }
 
     public function test_failure(): void

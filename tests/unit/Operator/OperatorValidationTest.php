@@ -1519,4 +1519,63 @@ class OperatorValidationTest extends TestCase
         $opWithoutCap = $this->makeOperator(OperatorType::Increment, 'value', [100]);
         $this->assertFalse($validator->isValid($opWithoutCap));
     }
+
+    public function testNumericOperatorsAcceptEveryNumericColumnType(): void
+    {
+        foreach ([
+            ColumnType::Integer,
+            ColumnType::Float,
+            ColumnType::Double,
+            ColumnType::BigInteger,
+            ColumnType::BigSerial,
+        ] as $type) {
+            $validator = $this->makeValidator([
+                new Attribute(key: 'value', type: $type),
+            ]);
+            $operator = $this->makeOperator(OperatorType::Increment, 'value', [1]);
+
+            $this->assertTrue($validator->isValid($operator), $type->value);
+        }
+    }
+
+    public function testNumericOperatorAcceptsLegacyBigIntegerMetadata(): void
+    {
+        $collection = $this->makeCollection([]);
+        $collection->setAttribute('attributes', [new Document([
+            '$id' => 'value',
+            'key' => 'value',
+            'type' => Attribute::LEGACY_BIG_INTEGER,
+            'signed' => true,
+            'array' => false,
+        ])]);
+        $validator = new OperatorValidator($collection, new Document(['value' => PHP_INT_MAX - 1]));
+
+        $this->assertTrue($validator->isValid(
+            $this->makeOperator(OperatorType::Increment, 'value', [1])
+        ));
+    }
+
+    public function testBigIntegerOperatorRejectsOverflow(): void
+    {
+        $validator = $this->makeValidator([
+            new Attribute(key: 'value', type: ColumnType::BigInteger),
+        ], new Document(['value' => PHP_INT_MAX]));
+
+        $this->assertFalse($validator->isValid(
+            $this->makeOperator(OperatorType::Increment, 'value', [1])
+        ));
+        $this->assertStringContainsString('would overflow', $validator->getDescription());
+    }
+
+    public function testUnsignedBigIntegerOperatorRejectsUnderflow(): void
+    {
+        $validator = $this->makeValidator([
+            new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false),
+        ], new Document(['value' => 0]));
+
+        $this->assertFalse($validator->isValid(
+            $this->makeOperator(OperatorType::Decrement, 'value', [1])
+        ));
+        $this->assertStringContainsString('would underflow', $validator->getDescription());
+    }
 }

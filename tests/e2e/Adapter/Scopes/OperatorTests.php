@@ -3490,8 +3490,8 @@ trait OperatorTests
 
         $collectionId = 'test_extreme_integers';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'bigint_max', type: ColumnType::Integer, size: 8, required: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'bigint_min', type: ColumnType::Integer, size: 8, required: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'bigint_max', type: ColumnType::BigInteger, required: true));
+        $database->createAttribute($collectionId, new Attribute(key: 'bigint_min', type: ColumnType::BigInteger, required: true));
 
         $maxValue = PHP_INT_MAX - 1000; // Near max but with room
         $minValue = PHP_INT_MIN + 1000; // Near min but with room

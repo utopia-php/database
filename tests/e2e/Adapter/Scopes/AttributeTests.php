@@ -117,7 +117,7 @@ trait AttributeTests
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string3', type: ColumnType::String, size: 65535 + 1, required: true)));
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string4', type: ColumnType::String, size: 16777215 + 1, required: true)));
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'integer', type: ColumnType::Integer, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'bigint', type: ColumnType::Integer, size: 8, required: true)));
+        $this->assertTrue($database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'bigint', type: ColumnType::BigInteger, required: true)));
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'float', type: ColumnType::Double, size: 0, required: true)));
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true)));
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'id', type: ColumnType::Id, size: 0, required: true)));
@@ -1862,7 +1862,7 @@ trait AttributeTests
         $this->assertSame('foo', $attribute->getId());
         $this->assertSame(0, $attribute->getAttribute('size'));
 
-        $database->updateAttribute($collectionName, 'foo', size: 1);
+        $database->updateAttribute($collectionName, 'foo', type: ColumnType::BigInteger, size: 1);
         $collection = $database->getCollection($collectionName);
         $attrs = $collection->getAttribute('attributes');
         $this->assertIsArray($attrs);

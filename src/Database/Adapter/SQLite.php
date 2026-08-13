@@ -1564,13 +1564,13 @@ class SQLite extends SQL
             return "VARCHAR({$size})";
         }
 
-        if ($type === ColumnType::Integer) {
+        if (\in_array($type, [ColumnType::Integer, ColumnType::BigInteger, ColumnType::BigSerial], true)) {
             $suffix = $signed ? '' : ' UNSIGNED';
 
-            return ($size >= 8 ? 'BIGINT' : 'INT').$suffix;
+            return ($type === ColumnType::Integer && $size < 8 ? 'INT' : 'BIGINT').$suffix;
         }
 
-        if ($type === ColumnType::Double) {
+        if ($type === ColumnType::Float || $type === ColumnType::Double) {
             return 'DOUBLE'.($signed ? '' : ' UNSIGNED');
         }
 

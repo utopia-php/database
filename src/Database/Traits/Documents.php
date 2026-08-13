@@ -44,7 +44,6 @@ use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 /**
@@ -52,6 +51,49 @@ use Utopia\Query\Schema\IndexType;
  */
 trait Documents
 {
+    private function getNumericResult(Attribute $attribute, mixed $current, int|float $value, bool $increase): int|float
+    {
+        if (! \is_numeric($current)) {
+            throw new TypeException('Attribute value must be numeric.');
+        }
+
+        $current = $current + 0;
+        $bounds = Attribute::getNumericBounds($attribute->type, $attribute->signed);
+
+        if ($bounds === null || (\is_float($current) && ! \is_finite($current))) {
+            throw new TypeException('Attribute value must be a finite numeric value.');
+        }
+
+        if ($current > $bounds['max']) {
+            throw new LimitException('Attribute value exceeds maximum limit: '.$bounds['max']);
+        }
+
+        if ($current < $bounds['min']) {
+            throw new LimitException('Attribute value exceeds minimum limit: '.$bounds['min']);
+        }
+
+        $overflows = $increase
+            ? ($value > 0 && $current > $bounds['max'] - $value)
+            : ($value < 0 && $current > $bounds['max'] + $value);
+        if ($overflows) {
+            throw new LimitException('Attribute value exceeds maximum limit: '.$bounds['max']);
+        }
+
+        $underflows = $increase
+            ? ($value < 0 && $current < $bounds['min'] - $value)
+            : ($value > 0 && $current < $bounds['min'] + $value);
+        if ($underflows) {
+            throw new LimitException('Attribute value exceeds minimum limit: '.$bounds['min']);
+        }
+
+        $result = $increase ? $current + $value : $current - $value;
+        if (\is_float($result) && ! \is_finite($result)) {
+            throw new TypeException('Attribute value must be a finite numeric value.');
+        }
+
+        return $result;
+    }
+
     /**
      * Cached validator instances keyed by context, collection epoch, and a
      * stable schema/authorization fingerprint.
@@ -1711,6 +1753,7 @@ trait Documents
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
+        $numericAttribute = null;
         if ($this->adapter->supports(Capability::DefinedAttributes)) {
             /** @var array<Document> $allAttrs */
             $allAttrs = $collection->getAttribute('attributes', []);
@@ -1725,12 +1768,13 @@ trait Documents
 
             /** @var Attribute $matchedAttr */
             $matchedAttr = \end($matchedAttrs);
-            if (! \in_array($matchedAttr->type, [ColumnType::Integer, ColumnType::Double], true) || $matchedAttr->array) {
+            if (! Attribute::isNumericType($matchedAttr->type) || $matchedAttr->array) {
                 throw new TypeException('Attribute must be an integer or float and can not be an array.');
             }
+            $numericAttribute = $matchedAttr;
         }
 
-        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $max) {
+        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -1749,16 +1793,23 @@ trait Documents
                 }
             }
 
-            /** @var int|float $currentVal */
             $currentVal = $document->getAttribute($attribute);
-            if (! \is_null($max) && ($currentVal + $value > $max)) {
+            if ($numericAttribute instanceof Attribute) {
+                $result = $this->getNumericResult($numericAttribute, $currentVal, $value, true);
+            } else {
+                if (! \is_int($currentVal) && ! \is_float($currentVal)) {
+                    throw new TypeException('Attribute value must be numeric.');
+                }
+                $result = $currentVal + $value;
+            }
+            if (! \is_null($max) && ($result > $max)) {
                 throw new LimitException('Attribute value exceeds maximum limit: '.$max);
             }
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
-            $max = $max ? $max - $value : null;
+            $max = $max !== null ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
                 $collection->getId(),
@@ -1769,13 +1820,7 @@ trait Documents
                 max: $max
             );
 
-            /** @var int|float $currentAttrVal */
-            $currentAttrVal = $document->getAttribute($attribute);
-
-            return $document->setAttribute(
-                $attribute,
-                $currentAttrVal + $value
-            );
+            return $document->setAttribute($attribute, $result);
         });
 
         $this->purgeCachedDocument($collection->getId(), $id);
@@ -1811,6 +1856,7 @@ trait Documents
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
+        $numericAttribute = null;
         if ($this->adapter->supports(Capability::DefinedAttributes)) {
             /** @var array<Document> $decAllAttrs */
             $decAllAttrs = $collection->getAttribute('attributes', []);
@@ -1825,12 +1871,13 @@ trait Documents
 
             /** @var Attribute $matchedDecAttr */
             $matchedDecAttr = \end($matchedDecAttrs);
-            if (! \in_array($matchedDecAttr->type, [ColumnType::Integer, ColumnType::Double], true) || $matchedDecAttr->array) {
+            if (! Attribute::isNumericType($matchedDecAttr->type) || $matchedDecAttr->array) {
                 throw new TypeException('Attribute must be an integer or float and can not be an array.');
             }
+            $numericAttribute = $matchedDecAttr;
         }
 
-        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $min) {
+        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -1849,16 +1896,23 @@ trait Documents
                 }
             }
 
-            /** @var int|float $currentDecVal */
             $currentDecVal = $document->getAttribute($attribute);
-            if (! \is_null($min) && ($currentDecVal - $value < $min)) {
+            if ($numericAttribute instanceof Attribute) {
+                $result = $this->getNumericResult($numericAttribute, $currentDecVal, $value, false);
+            } else {
+                if (! \is_int($currentDecVal) && ! \is_float($currentDecVal)) {
+                    throw new TypeException('Attribute value must be numeric.');
+                }
+                $result = $currentDecVal - $value;
+            }
+            if (! \is_null($min) && ($result < $min)) {
                 throw new LimitException('Attribute value exceeds minimum limit: '.$min);
             }
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
-            $min = $min ? $min + $value : null;
+            $min = $min !== null ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(
                 $collection->getId(),
@@ -1869,13 +1923,7 @@ trait Documents
                 min: $min
             );
 
-            /** @var int|float $currentDecVal2 */
-            $currentDecVal2 = $document->getAttribute($attribute);
-
-            return $document->setAttribute(
-                $attribute,
-                $currentDecVal2 - $value
-            );
+            return $document->setAttribute($attribute, $result);
         });
 
         $this->purgeCachedDocument($collection->getId(), $id);

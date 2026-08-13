@@ -4,7 +4,6 @@ namespace Utopia\Database\Validator;
 
 use Throwable;
 use Utopia\Database\Attribute as AttributeVO;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator as DatabaseOperator;
 use Utopia\Database\OperatorType;
@@ -93,6 +92,100 @@ class Operator extends Validator
     }
 
     /**
+     * @return array{min: int|float, max: int|float}|null
+     */
+    private function getNumericBounds(AttributeVO $attribute): ?array
+    {
+        return AttributeVO::getNumericBounds($attribute->type, $attribute->signed);
+    }
+
+    private function isNumericValueInBounds(mixed $value, AttributeVO $attribute): bool
+    {
+        $numeric = $this->getNumericValue($value);
+        if ($numeric === null) {
+            return false;
+        }
+
+        if (\is_float($numeric) && ! \is_finite($numeric)) {
+            return false;
+        }
+
+        $bounds = $this->getNumericBounds($attribute);
+        if ($bounds === null) {
+            return false;
+        }
+
+        return $numeric >= $bounds['min'] && $numeric <= $bounds['max'];
+    }
+
+    private function getNumericValue(mixed $value): int|float|null
+    {
+        if (\is_int($value) || \is_float($value)) {
+            return $value;
+        }
+
+        if (! \is_string($value) || ! \is_numeric($value)) {
+            return null;
+        }
+
+        return BigInt::fitsPhpInt($value) ? (int) $value : (float) $value;
+    }
+
+    private function setNumericRangeMessage(OperatorType $method, AttributeVO $attribute, int|float $result): bool
+    {
+        $bounds = $this->getNumericBounds($attribute);
+        if ($bounds === null) {
+            return false;
+        }
+
+        if ($result > $bounds['max']) {
+            $this->message = "Cannot apply {$method->value} operator: would overflow maximum value of {$bounds['max']}";
+
+            return false;
+        }
+
+        if ($result < $bounds['min']) {
+            $this->message = "Cannot apply {$method->value} operator: would underflow minimum value of {$bounds['min']}";
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private function isNumericChangeInBounds(
+        OperatorType $method,
+        AttributeVO $attribute,
+        int|float $current,
+        int|float $value
+    ): bool {
+        $bounds = $this->getNumericBounds($attribute);
+        if ($bounds === null) {
+            return false;
+        }
+
+        $overflows = $method === OperatorType::Increment
+            ? ($value > 0 && $current > $bounds['max'] - $value)
+            : ($value < 0 && $current > $bounds['max'] + $value);
+        if ($overflows) {
+            $this->message = "Cannot apply {$method->value} operator: would overflow maximum value of {$bounds['max']}";
+
+            return false;
+        }
+
+        $underflows = $method === OperatorType::Increment
+            ? ($value < 0 && $current < $bounds['min'] - $value)
+            : ($value > 0 && $current < $bounds['min'] + $value);
+        if ($underflows) {
+            $this->message = "Cannot apply {$method->value} operator: would underflow minimum value of {$bounds['min']}";
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * Get Description
      *
      * Returns validator description
@@ -178,58 +271,69 @@ class Operator extends Validator
             case OperatorType::Modulo:
             case OperatorType::Power:
                 // Numeric operations only work on numeric types
-                if (! \in_array($type, [ColumnType::Integer, ColumnType::Double])) {
+                if (! AttributeVO::isNumericType($type)) {
                     $this->message = "Cannot apply {$methodName} operator to non-numeric field '{$operator->getAttribute()}'";
 
                     return false;
                 }
 
                 // Validate the numeric value and optional max/min
-                if (! isset($values[0]) || ! \is_numeric($values[0])) {
+                if (! isset($values[0]) || ! $this->isNumericValueInBounds($values[0], $attribute)) {
                     $this->message = "Cannot apply {$methodName} operator: value must be numeric, got ".gettype($operator->getValue());
 
                     return false;
                 }
 
                 // Special validation for divide/modulo by zero
-                if (($method === OperatorType::Divide || $method === OperatorType::Modulo) && (float) $values[0] === 0.0) {
+                $operatorValue = $this->getNumericValue($values[0]);
+                if ($operatorValue === null) {
+                    return false;
+                }
+
+                if (($method === OperatorType::Divide || $method === OperatorType::Modulo) && ($operatorValue === 0 || $operatorValue === 0.0)) {
                     $this->message = "Cannot apply {$methodName} operator: ".($method === OperatorType::Divide ? 'division' : 'modulo').' by zero';
 
                     return false;
                 }
 
                 // Validate max/min if provided
-                if (\count($values) > 1 && $values[1] !== null && ! \is_numeric($values[1])) {
+                if (\count($values) > 1 && $values[1] !== null && ! $this->isNumericValueInBounds($values[1], $attribute)) {
                     $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($values[1]);
 
                     return false;
                 }
 
-                if ($this->currentDocument !== null && $type === ColumnType::Integer && ! isset($values[1])) {
-                    /** @var int|float $currentValue */
-                    $currentValue = $this->currentDocument->getAttribute($operator->getAttribute()) ?? 0;
-                    /** @var int|float $operatorValue */
-                    $operatorValue = $values[0];
+                if ($this->currentDocument !== null && AttributeVO::isIntegerType($type) && ! isset($values[1])) {
+                    $currentValue = $this->getNumericValue($this->currentDocument->getAttribute($operator->getAttribute()) ?? 0);
 
-                    // Compute predicted result
-                    $predictedResult = match ($method) {
-                        OperatorType::Increment => $currentValue + $operatorValue,
-                        OperatorType::Decrement => $currentValue - $operatorValue,
-                        OperatorType::Multiply => $currentValue * $operatorValue,
-                        OperatorType::Divide => $currentValue / $operatorValue,
-                        OperatorType::Modulo => (int) $currentValue % (int) $operatorValue,
-                        OperatorType::Power => $currentValue ** $operatorValue,
-                    };
-
-                    if ($predictedResult > Database::MAX_INT) {
-                        $this->message = "Cannot apply {$methodName} operator: would overflow maximum value of ".Database::MAX_INT;
+                    if ($currentValue === null || ! $this->isNumericValueInBounds($currentValue, $attribute)) {
+                        $this->message = "Cannot apply {$methodName} operator: current value is outside the attribute range";
 
                         return false;
                     }
 
-                    if ($predictedResult < Database::MIN_INT) {
-                        $this->message = "Cannot apply {$methodName} operator: would underflow minimum value of ".Database::MIN_INT;
+                    if (\in_array($method, [OperatorType::Increment, OperatorType::Decrement], true)
+                        && ! $this->isNumericChangeInBounds($method, $attribute, $currentValue, $operatorValue)) {
+                        return false;
+                    }
 
+                    try {
+                        $predictedResult = match ($method) {
+                            OperatorType::Increment => $currentValue + $operatorValue,
+                            OperatorType::Decrement => $currentValue - $operatorValue,
+                            OperatorType::Multiply => $currentValue * $operatorValue,
+                            OperatorType::Divide => $currentValue / $operatorValue,
+                            OperatorType::Modulo => (int) $currentValue % (int) $operatorValue,
+                            OperatorType::Power => $currentValue ** $operatorValue,
+                        };
+                    } catch (\ArithmeticError) {
+                        $this->message = "Cannot apply {$methodName} operator: result is outside the attribute range";
+
+                        return false;
+                    }
+
+                    if ((\is_float($predictedResult) && ! \is_finite($predictedResult))
+                        || ! $this->setNumericRangeMessage($method, $attribute, $predictedResult)) {
                         return false;
                     }
                 }
@@ -257,11 +361,15 @@ class Operator extends Validator
                     return false;
                 }
 
-                if (! empty($values) && $type === ColumnType::Integer) {
+                if (! empty($values) && AttributeVO::isIntegerType($type)) {
                     $newItems = \is_array($values[0]) ? $values[0] : $values;
                     foreach ($newItems as $item) {
-                        if (\is_numeric($item) && ($item > Database::MAX_INT || $item < Database::MIN_INT)) {
-                            $this->message = "Cannot apply {$methodName} operator: array items must be between ".Database::MIN_INT.' and '.Database::MAX_INT;
+                        if (\is_numeric($item) && ! $this->isNumericValueInBounds($item, $attribute)) {
+                            $bounds = $this->getNumericBounds($attribute);
+                            if ($bounds === null) {
+                                return false;
+                            }
+                            $this->message = "Cannot apply {$methodName} operator: array items must be between {$bounds['min']} and {$bounds['max']}";
 
                             return false;
                         }
@@ -319,9 +427,13 @@ class Operator extends Validator
                     }
                 }
 
-                if ($type === ColumnType::Integer && \is_numeric($insertValue)) {
-                    if ($insertValue > Database::MAX_INT || $insertValue < Database::MIN_INT) {
-                        $this->message = "Cannot apply {$methodName} operator: array items must be between ".Database::MIN_INT.' and '.Database::MAX_INT;
+                if (AttributeVO::isIntegerType($type) && \is_numeric($insertValue)) {
+                    if (! $this->isNumericValueInBounds($insertValue, $attribute)) {
+                        $bounds = $this->getNumericBounds($attribute);
+                        if ($bounds === null) {
+                            return false;
+                        }
+                        $this->message = "Cannot apply {$methodName} operator: array items must be between {$bounds['min']} and {$bounds['max']}";
 
                         return false;
                     }

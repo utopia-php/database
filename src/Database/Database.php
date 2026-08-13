@@ -25,6 +25,7 @@ use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Method;
@@ -1802,6 +1803,9 @@ class Database
         $idType = ColumnType::Id->value;
         $boolType = ColumnType::Boolean->value;
         $intType = ColumnType::Integer->value;
+        $bigIntType = ColumnType::BigInteger->value;
+        $bigSerialType = ColumnType::BigSerial->value;
+        $floatType = ColumnType::Float->value;
         $doubleType = ColumnType::Double->value;
 
         foreach ($attributes as $attribute) {
@@ -1812,14 +1816,20 @@ class Database
             }
 
             $type = $attribute['type'] ?? '';
-            $signed = $attribute['signed'] ?? true;
+            $signed = (bool) ($attribute['signed'] ?? true);
             $array = $attribute['array'] ?? false;
-            $typeKey = $type instanceof ColumnType ? $type->value : (\is_string($type) ? $type : '');
+            $normalizedType = $type instanceof ColumnType || \is_string($type)
+                ? Attribute::tryNormalizeType($type)
+                : null;
+            $typeKey = $normalizedType instanceof ColumnType ? $normalizedType->value : '';
 
             $needsCast = $array
                 || $typeKey === $idType
                 || $typeKey === $boolType
                 || $typeKey === $intType
+                || $typeKey === $bigIntType
+                || $typeKey === $bigSerialType
+                || $typeKey === $floatType
                 || $typeKey === $doubleType;
             if (! $needsCast) {
                 // String/datetime/JSON/etc — already in their canonical
@@ -1843,10 +1853,13 @@ class Database
 
             /** @var array<int|string, scalar|null> $value */
             foreach ($value as $index => $node) {
-                $node = match ($type) {
+                $node = match ($typeKey) {
                     ColumnType::Id->value => (string) $node,
                     ColumnType::Boolean->value => (bool) $node,
                     ColumnType::Integer->value => (int) $node,
+                    ColumnType::BigInteger->value,
+                    ColumnType::BigSerial->value => $this->castBigInteger($node, $signed),
+                    ColumnType::Float->value,
                     ColumnType::Double->value => (float) $node,
                     default => $node,
                 };
@@ -1858,6 +1871,15 @@ class Database
         }
 
         return $document;
+    }
+
+    private function castBigInteger(mixed $value, bool $signed): mixed
+    {
+        if (\is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
+            return (int) $value;
+        }
+
+        return $value;
     }
 
     /**
@@ -2061,8 +2083,10 @@ class Database
         if ($attribute !== null) {
             /** @var bool $isArray */
             $isArray = $attribute->getAttribute('array', false);
-            /** @var string $attrType */
-            $attrType = $attribute->getAttribute('type');
+            $rawAttrType = $attribute->getAttribute('type');
+            $attrType = $rawAttrType instanceof ColumnType || \is_string($rawAttrType)
+                ? Attribute::normalizeType($rawAttrType)->value
+                : '';
             $query->setOnArray($isArray);
             $query->setAttributeType($attrType);
 

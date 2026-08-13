@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator\Query;
 
 use DateTime;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
@@ -46,7 +47,7 @@ class Filter extends Base
             // Unknown strings are preserved as-is so the downstream switch can
             // emit a recoverable "Unknown Data type" error instead of throwing.
             if (isset($copy['type']) && \is_string($copy['type'])) {
-                $copy['type'] = ColumnType::tryFrom($copy['type']) ?? $copy['type'];
+                $copy['type'] = Attribute::tryNormalizeType($copy['type']) ?? $copy['type'];
             }
             $this->schema[$attrKey] = $copy;
         }

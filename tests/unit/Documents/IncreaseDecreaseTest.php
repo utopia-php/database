@@ -137,6 +137,20 @@ class IncreaseDecreaseTest extends TestCase
         ]);
     }
 
+    private function numericAttribute(string $key, ColumnType|string $type, bool $signed = true): Document
+    {
+        return new Document([
+            '$id' => $key,
+            'key' => $key,
+            'type' => $type instanceof ColumnType ? $type->value : $type,
+            'size' => 0,
+            'required' => false,
+            'array' => false,
+            'signed' => $signed,
+            'filters' => [],
+        ]);
+    }
+
     public function testIncreaseDocumentAttribute(): void
     {
         $doc = new Document([
@@ -165,6 +179,68 @@ class IncreaseDecreaseTest extends TestCase
 
         $result = $this->database->increaseDocumentAttribute('testCol', 'doc1', 'score', 2.5);
         $this->assertSame(12.5, $result->getAttribute('score'));
+    }
+
+    public function testIncreaseAcceptsFloatBigIntegerBigSerialAndLegacyMetadata(): void
+    {
+        $types = [
+            'float' => ColumnType::Float,
+            'biginteger' => ColumnType::BigInteger,
+            'bigserial' => ColumnType::BigSerial,
+            'legacy' => 'bigint',
+        ];
+        $doc = new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'float' => 5,
+            'biginteger' => 5,
+            'bigserial' => 5,
+            'legacy' => 5,
+        ]);
+        $attributes = [];
+        foreach ($types as $key => $type) {
+            $attributes[] = $this->numericAttribute($key, $type);
+        }
+        $this->setupCollectionWithDocument('testCol', $doc, $attributes);
+
+        foreach (\array_keys($types) as $key) {
+            $result = $this->database->increaseDocumentAttribute('testCol', 'doc1', $key);
+
+            $this->assertSame(6, $result->getAttribute($key), $key);
+        }
+    }
+
+    public function testIncreaseRejectsBigIntegerOverflow(): void
+    {
+        $doc = new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => PHP_INT_MAX,
+        ]);
+        $this->setupCollectionWithDocument('testCol', $doc, [
+            $this->numericAttribute('value', ColumnType::BigInteger),
+        ]);
+
+        $this->expectException(LimitException::class);
+        $this->database->increaseDocumentAttribute('testCol', 'doc1', 'value');
+    }
+
+    public function testDecreaseRejectsUnsignedBigIntegerUnderflow(): void
+    {
+        $doc = new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => 0,
+        ]);
+        $this->setupCollectionWithDocument('testCol', $doc, [
+            $this->numericAttribute('value', ColumnType::BigInteger, false),
+        ]);
+
+        $this->expectException(LimitException::class);
+        $this->database->decreaseDocumentAttribute('testCol', 'doc1', 'value');
     }
 
     public function testIncreaseDocumentAttributeWithMax(): void

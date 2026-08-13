@@ -5,6 +5,7 @@ namespace Utopia\Database\Validator;
 use Closure;
 use DateTime;
 use Exception;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -360,7 +361,7 @@ class Structure extends Validator
                 continue;
             }
 
-            $columnType = ColumnType::tryFrom($type);
+            $columnType = Attribute::tryNormalizeType($type);
 
             if ($columnType === ColumnType::Relationship) {
                 continue;
@@ -369,7 +370,7 @@ class Structure extends Validator
             // BIGINT accepts both PHP int and numeric strings.
             // If the numeric string is within PHP's int range, normalize it to an int
             // so downstream code gets a numeric value without precision loss.
-            if ($columnType === ColumnType::BigInteger && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
+            if (\in_array($columnType, [ColumnType::BigInteger, ColumnType::BigSerial], true) && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
                 $normalized = (int)$value;
                 $document->setAttribute($key, $normalized);
                 $value = $normalized;
@@ -468,7 +469,7 @@ class Structure extends Validator
 
             if ($format) {
                 // Format encoded as json string containing format name and relevant format options
-                $formatDef = self::getFormat($format, ColumnType::from($type));
+                $formatDef = self::getFormat($format, Attribute::normalizeType($type));
                 /** @var Validator $formatValidator */
                 $formatValidator = $formatDef['callback']($attribute);
                 $validators[] = $formatValidator;

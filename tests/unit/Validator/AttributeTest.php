@@ -15,6 +15,104 @@ use Utopia\Query\Schema\ColumnType;
 
 class AttributeTest extends TestCase
 {
+    public function testLegacyBigIntegerMetadataNormalizesToCanonicalType(): void
+    {
+        $attribute = AttributeVO::fromDocument(new Document([
+            '$id' => 'total',
+            'type' => AttributeVO::LEGACY_BIG_INTEGER,
+            'size' => 8,
+        ]));
+
+        $this->assertSame(ColumnType::BigInteger, $attribute->type);
+        $this->assertSame(0, $attribute->size);
+        $this->assertSame(ColumnType::BigInteger->value, $attribute->toDocument()->getAttribute('type'));
+
+        $arrayAttribute = AttributeVO::fromArray([
+            '$id' => 'arrayTotal',
+            'type' => AttributeVO::LEGACY_BIG_INTEGER,
+            'size' => 64,
+        ]);
+
+        $this->assertSame(ColumnType::BigInteger, $arrayAttribute->type);
+        $this->assertSame(0, $arrayAttribute->size);
+    }
+
+    public function testBigIntegerDefaultsSupportNativeAndStringBoundaries(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxIntLength: 100,
+            maxBigIntLength: 100,
+            supportUnsignedBigInt: true,
+        );
+
+        $this->assertTrue($validator->isValid(new AttributeVO(
+            key: 'signed',
+            type: ColumnType::BigInteger,
+            size: PHP_INT_MAX,
+            default: PHP_INT_MAX,
+        )));
+        $this->assertTrue($validator->isValid(new AttributeVO(
+            key: 'signedMinimum',
+            type: ColumnType::BigInteger,
+            default: '-9223372036854775808',
+        )));
+        $this->assertTrue($validator->isValid(new AttributeVO(
+            key: 'unsigned',
+            type: ColumnType::BigInteger,
+            default: '18446744073709551615',
+            signed: false,
+        )));
+        $this->assertTrue($validator->isValid(new AttributeVO(
+            key: 'values',
+            type: ColumnType::BigInteger,
+            default: ['-9223372036854775808', PHP_INT_MAX],
+            array: true,
+        )));
+    }
+
+    public function testBigIntegerDefaultRejectsValuesOutsideSignedRange(): void
+    {
+        $validator = new Attribute(attributes: []);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('does not match given type biginteger');
+        $validator->isValid(new AttributeVO(
+            key: 'total',
+            type: ColumnType::BigInteger,
+            default: '9223372036854775808',
+        ));
+    }
+
+    public function testBigIntegerArrayDefaultValidatesEveryValue(): void
+    {
+        $validator = new Attribute(attributes: [], supportUnsignedBigInt: true);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('does not match given type biginteger');
+        $validator->isValid(new AttributeVO(
+            key: 'totals',
+            type: ColumnType::BigInteger,
+            default: ['1', '18446744073709551616'],
+            signed: false,
+            array: true,
+        ));
+    }
+
+    public function testBigSerialUsesBigIntegerValidation(): void
+    {
+        $validator = new Attribute(attributes: []);
+        $attribute = new AttributeVO(
+            key: 'sequence',
+            type: ColumnType::BigSerial,
+            size: 999,
+            default: PHP_INT_MAX,
+        );
+
+        $this->assertTrue($validator->isValid($attribute));
+        $this->assertSame(0, $attribute->size);
+    }
+
     public function test_duplicate_attribute_id(): void
     {
         $validator = new Attribute(

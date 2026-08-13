@@ -1211,4 +1211,48 @@ class StructureTest extends TestCase
 
         $this->assertEquals('Invalid document structure: Attribute "varchar_array[\'0\']" has invalid type. Value must be a valid string and no longer than 128 chars', $validator->getDescription());
     }
+
+    public function testLegacyBigIntegerMetadataUsesBigIntegerValidation(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'signed',
+                    'type' => 'bigint',
+                    'format' => '',
+                    'size' => 9999,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+                [
+                    '$id' => 'unsigned',
+                    'type' => ColumnType::BigInteger->value,
+                    'format' => '',
+                    'size' => 0,
+                    'required' => false,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+        $validator = new Structure($collection, ColumnType::Integer->value);
+        $document = new Document([
+            '$collection' => ID::custom('posts'),
+            'signed' => '-9223372036854775808',
+            'unsigned' => '18446744073709551615',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ]);
+
+        $this->assertTrue($validator->isValid($document));
+        $this->assertSame(PHP_INT_MIN, $document->getAttribute('signed'));
+        $this->assertSame('18446744073709551615', $document->getAttribute('unsigned'));
+    }
 }

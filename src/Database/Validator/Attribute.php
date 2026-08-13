@@ -326,6 +326,8 @@ class Attribute extends Validator
                 break;
 
             case ColumnType::Integer:
+            case ColumnType::Serial:
+            case ColumnType::SmallSerial:
                 $limit = ($signed) ? $this->maxIntLength / 2 : $this->maxIntLength;
                 if ($size > $limit) {
                     $this->message = 'Max size allowed for int is: '.number_format($limit);
@@ -333,10 +335,13 @@ class Attribute extends Validator
                 }
                 break;
 
+            case ColumnType::BigInteger:
+            case ColumnType::BigSerial:
             case ColumnType::Float:
             case ColumnType::Double:
             case ColumnType::Boolean:
             case ColumnType::Datetime:
+            case ColumnType::Timestamp:
             case ColumnType::Relationship:
                 break;
 
@@ -417,6 +422,7 @@ class Attribute extends Validator
                     ColumnType::MediumText->value,
                     ColumnType::LongText->value,
                     ColumnType::Integer->value,
+                    ColumnType::BigInteger->value,
                     ColumnType::Float->value,
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,
@@ -517,12 +523,16 @@ class Attribute extends Validator
                     throw new DatabaseException($this->message);
                 }
                 break;
+            case ColumnType::Serial:
+            case ColumnType::SmallSerial:
+                if ($defaultType !== 'integer') {
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    throw new DatabaseException($this->message);
+                }
+                break;
             case ColumnType::BigInteger:
             case ColumnType::BigSerial:
-                if (
-                    ! \is_int($default)
-                    && (! \is_string($default) || ! BigInt::isIntegerString($default, $signed))
-                ) {
+                if (! (new BigInt($signed, $this->supportUnsignedBigInt))->isValid($default)) {
                     $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
                 }
@@ -535,6 +545,7 @@ class Attribute extends Validator
                 }
                 break;
             case ColumnType::Datetime:
+            case ColumnType::Timestamp:
                 if ($defaultType !== 'string') {
                     $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
@@ -555,6 +566,7 @@ class Attribute extends Validator
                     ColumnType::MediumText->value,
                     ColumnType::LongText->value,
                     ColumnType::Integer->value,
+                    ColumnType::BigInteger->value,
                     ColumnType::Float->value,
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,

@@ -1138,7 +1138,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
             $partialFilter = [];
             foreach ($attributes as $i => $attr) {
-                $attrType = ColumnType::tryFrom($indexAttributeTypes[$i] ?? '') ?? ColumnType::String;
+                $attrType = Attribute::tryNormalizeType($indexAttributeTypes[$i] ?? '') ?? ColumnType::String;
                 $attrType = $this->getMongoTypeCode($attrType);
                 $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
             }
@@ -2967,7 +2967,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $rawCbType = $attribute['type'] ?? null;
             $type = $rawCbType instanceof ColumnType
                 ? $rawCbType
-                : (\is_string($rawCbType) ? ColumnType::tryFrom($rawCbType) : null);
+                : (\is_string($rawCbType) ? Attribute::tryNormalizeType($rawCbType) : null);
             $array = (bool) ($attribute['array'] ?? false);
 
             $value = $document->getAttribute($key);
@@ -3079,7 +3079,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $rawType = $attribute['type'] ?? null;
             $type = $rawType instanceof ColumnType
                 ? $rawType
-                : (\is_string($rawType) ? ColumnType::tryFrom($rawType) : null);
+                : (\is_string($rawType) ? Attribute::tryNormalizeType($rawType) : null);
             $array = (bool) ($attribute['array'] ?? false);
             $value = $document->getAttribute($key);
             if (is_null($value)) {
@@ -3121,6 +3121,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     case ColumnType::Id:
                         $node = \is_string($node) ? $node : (\is_scalar($node) ? (string) $node : $node);
                         break;
+                    case ColumnType::Float:
                     case ColumnType::Double:
                         $node = \is_float($node) ? $node : (\is_numeric($node) ? (float) $node : 0.0);
                         break;
@@ -4045,6 +4046,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             ColumnType::BigInteger,
             ColumnType::BigSerial => 'long',
             ColumnType::Integer => 'int',
+            ColumnType::Float,
             ColumnType::Double => 'double',
             ColumnType::Boolean => 'bool',
             ColumnType::Datetime => 'date',

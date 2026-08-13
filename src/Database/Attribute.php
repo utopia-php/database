@@ -10,6 +10,8 @@ use Utopia\Query\Schema\ColumnType;
  */
 class Attribute
 {
+    public const string LEGACY_BIG_INTEGER = 'bigint';
+
     /**
      * @param  array<string, mixed>  $formatOptions
      * @param  array<string>  $filters
@@ -29,6 +31,77 @@ class Attribute
         public ?string $status = null,
         public ?array $options = null,
     ) {
+        if (\in_array($this->type, [ColumnType::BigInteger, ColumnType::BigSerial], true)) {
+            $this->size = 0;
+        }
+    }
+
+    public static function normalizeType(ColumnType|string $type): ColumnType
+    {
+        if ($type instanceof ColumnType) {
+            return $type;
+        }
+
+        return ColumnType::from($type === self::LEGACY_BIG_INTEGER ? ColumnType::BigInteger->value : $type);
+    }
+
+    public static function tryNormalizeType(ColumnType|string $type): ?ColumnType
+    {
+        if ($type instanceof ColumnType) {
+            return $type;
+        }
+
+        return ColumnType::tryFrom($type === self::LEGACY_BIG_INTEGER ? ColumnType::BigInteger->value : $type);
+    }
+
+    public static function isNumericType(ColumnType|string $type): bool
+    {
+        $type = self::tryNormalizeType($type);
+
+        return \in_array($type, [
+            ColumnType::Integer,
+            ColumnType::BigInteger,
+            ColumnType::Float,
+            ColumnType::Double,
+            ColumnType::BigSerial,
+        ], true);
+    }
+
+    public static function isIntegerType(ColumnType|string $type): bool
+    {
+        $type = self::tryNormalizeType($type);
+
+        return \in_array($type, [
+            ColumnType::Integer,
+            ColumnType::BigInteger,
+            ColumnType::BigSerial,
+        ], true);
+    }
+
+    /**
+     * @return array{min: int|float, max: int|float}|null
+     */
+    public static function getNumericBounds(ColumnType|string $type, bool $signed = true): ?array
+    {
+        $type = self::tryNormalizeType($type);
+
+        return match ($type) {
+            ColumnType::Integer => [
+                'min' => $signed ? Database::MIN_INT : 0,
+                'max' => Database::MAX_INT,
+            ],
+            ColumnType::BigInteger,
+            ColumnType::BigSerial => [
+                'min' => $signed ? \PHP_INT_MIN : 0,
+                'max' => Database::MAX_BIG_INT,
+            ],
+            ColumnType::Float,
+            ColumnType::Double => [
+                'min' => $signed ? -Database::MAX_DOUBLE : 0,
+                'max' => Database::MAX_DOUBLE,
+            ],
+            default => null,
+        };
     }
 
     /**
@@ -96,7 +169,7 @@ class Attribute
 
         return new self(
             key: $key,
-            type: $type instanceof ColumnType ? $type : ColumnType::from($type),
+            type: self::normalizeType($type),
             size: $size,
             required: $required,
             default: $document->getAttribute('default'),
@@ -158,7 +231,7 @@ class Attribute
 
         return new self(
             key: $key,
-            type: $type instanceof ColumnType ? $type : ColumnType::from((string) $type),
+            type: self::normalizeType($type),
             size: $size,
             required: $required,
             default: $data['default'] ?? null,

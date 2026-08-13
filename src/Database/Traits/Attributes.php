@@ -22,6 +22,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\SetType;
 use Utopia\Database\Validator\Attribute as AttributeValidator;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\Structure;
@@ -370,6 +371,11 @@ trait Attributes
         array $filters,
         ?array $schemaAttributes = null
     ): Document {
+        $type = Attribute::normalizeType($type)->value;
+        if ($type === ColumnType::BigInteger->value || $type === ColumnType::BigSerial->value) {
+            $size = 0;
+        }
+
         $attribute = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -444,8 +450,9 @@ trait Attributes
      *
      * @throws DatabaseException
      */
-    protected function validateDefaultTypes(string $type, mixed $default): void
+    protected function validateDefaultTypes(string $type, mixed $default, bool $signed = true): void
     {
+        $type = Attribute::normalizeType($type);
         $defaultType = \gettype($default);
 
         if ($defaultType === 'NULL') {
@@ -455,11 +462,11 @@ trait Attributes
 
         if ($defaultType === 'array') {
             // Spatial types require the array itself
-            if (! in_array($type, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]) && $type != ColumnType::Object->value) {
+            if (! \in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Object], true)) {
                 /** @var array<mixed> $defaultArr */
                 $defaultArr = $default;
                 foreach ($defaultArr as $value) {
-                    $this->validateDefaultTypes($type, $value);
+                    $this->validateDefaultTypes($type->value, $value, $signed);
                 }
             }
 
@@ -469,28 +476,40 @@ trait Attributes
         $defaultStr = \is_scalar($default) ? (string) $default : '[non-scalar]';
 
         switch ($type) {
-            case ColumnType::String->value:
-            case ColumnType::Varchar->value:
-            case ColumnType::Text->value:
-            case ColumnType::MediumText->value:
-            case ColumnType::LongText->value:
+            case ColumnType::String:
+            case ColumnType::Varchar:
+            case ColumnType::Text:
+            case ColumnType::MediumText:
+            case ColumnType::LongText:
                 if ($defaultType !== 'string') {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
                 }
                 break;
-            case ColumnType::Integer->value:
-            case ColumnType::Double->value:
-            case ColumnType::Boolean->value:
-                if ($type !== $defaultType) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type);
+            case ColumnType::Integer:
+            case ColumnType::Boolean:
+                if ($type->value !== $defaultType) {
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
                 }
                 break;
-            case ColumnType::Datetime->value:
+            case ColumnType::BigInteger:
+            case ColumnType::BigSerial:
+                if (! (new BigInt($signed, $this->adapter->supports(Capability::UnsignedBigInt)))->isValid($default)) {
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                }
+                break;
+            case ColumnType::Float:
+            case ColumnType::Double:
+                if ($defaultType !== 'double') {
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                }
+                break;
+            case ColumnType::Datetime:
+            case ColumnType::Timestamp:
                 if ($defaultType !== ColumnType::String->value) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
                 }
                 break;
-            case ColumnType::Vector->value:
+            case ColumnType::Vector:
                 // When validating individual vector components (from recursion), they should be numeric
                 if ($defaultType !== 'double' && $defaultType !== 'integer') {
                     throw new DatabaseException('Vector components must be numeric values (float or integer)');
@@ -504,6 +523,8 @@ trait Attributes
                     ColumnType::MediumText->value,
                     ColumnType::LongText->value,
                     ColumnType::Integer->value,
+                    ColumnType::BigInteger->value,
+                    ColumnType::Float->value,
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,
                     ColumnType::Datetime->value,
@@ -515,7 +536,7 @@ trait Attributes
                 if ($this->adapter instanceof Feature\Spatial) {
                     \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
                 }
-                throw new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes));
+                throw new DatabaseException('Unknown attribute type: '.$type->value.'. Must be one of '.implode(', ', $supportedTypes));
         }
     }
 
@@ -602,7 +623,7 @@ trait Attributes
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             $rawType = $attribute->getAttribute('type');
-            $attrType = $rawType instanceof ColumnType ? $rawType : ColumnType::from((string) $rawType);
+            $attrType = Attribute::normalizeType($rawType instanceof ColumnType ? $rawType : (string) $rawType);
             if (! Structure::hasFormat($format, $attrType)) {
                 throw new DatabaseException('Format "'.$format.'" not available for attribute type "'.$attrType->value.'"');
             }
@@ -663,7 +684,11 @@ trait Attributes
             }
 
             $rawAttrType = $attribute->getAttribute('type');
-            $this->validateDefaultTypes(\is_string($rawAttrType) ? $rawAttrType : '', $default);
+            $this->validateDefaultTypes(
+                $rawAttrType instanceof ColumnType || \is_string($rawAttrType) ? Attribute::normalizeType($rawAttrType)->value : '',
+                $default,
+                (bool) $attribute->getAttribute('signed', true),
+            );
 
             $attribute->setAttribute('default', $default);
         });
@@ -690,9 +715,7 @@ trait Attributes
      */
     public function updateAttribute(string $collection, string $id, ColumnType|string|null $type = null, ?int $size = null, ?bool $required = null, mixed $default = null, ?bool $signed = null, ?bool $array = null, ?string $format = null, ?array $formatOptions = null, ?array $filters = null, ?string $newKey = null): Document
     {
-        if ($type instanceof ColumnType) {
-            $type = $type->value;
-        }
+        $type = $type === null ? null : Attribute::normalizeType($type)->value;
         $collectionDoc = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collectionDoc->getId() === self::METADATA) {
@@ -710,8 +733,11 @@ trait Attributes
         /** @var Document $attribute */
         $attribute = $attributes[$attributeIndex];
 
-        /** @var string $originalType */
-        $originalType = $attribute->getAttribute('type');
+        $rawOriginalType = $attribute->getAttribute('type');
+        if (! $rawOriginalType instanceof ColumnType && ! \is_string($rawOriginalType)) {
+            throw new DatabaseException('Unknown attribute type');
+        }
+        $originalType = Attribute::normalizeType($rawOriginalType)->value;
         /** @var int $originalSize */
         $originalSize = $attribute->getAttribute('size');
         $originalSigned = (bool) $attribute->getAttribute('signed');
@@ -733,8 +759,11 @@ trait Attributes
             || ! \is_null($array)
             || ! \is_null($newKey);
         if ($type === null) {
-            /** @var string $type */
-            $type = $attribute->getAttribute('type');
+            $rawType = $attribute->getAttribute('type');
+            if (! $rawType instanceof ColumnType && ! \is_string($rawType)) {
+                throw new DatabaseException('Unknown attribute type');
+            }
+            $type = Attribute::normalizeType($rawType)->value;
         }
         if ($size === null) {
             /** @var int $size */
@@ -757,6 +786,10 @@ trait Attributes
             $rawFilters = $attribute->getAttribute('filters');
             /** @var array<string>|null $filters */
             $filters = \is_array($rawFilters) ? $rawFilters : null;
+        }
+
+        if ($type === ColumnType::BigInteger->value || $type === ColumnType::BigSerial->value) {
+            $size = 0;
         }
 
         if ($required === true && ! \is_null($default)) {
@@ -801,6 +834,10 @@ trait Attributes
                     throw new DatabaseException('Max size allowed for int is: '.number_format($limit));
                 }
                 break;
+            case ColumnType::BigInteger->value:
+            case ColumnType::BigSerial->value:
+                break;
+            case ColumnType::Float->value:
             case ColumnType::Double->value:
             case ColumnType::Boolean->value:
             case ColumnType::Datetime->value:
@@ -867,6 +904,8 @@ trait Attributes
                     ColumnType::MediumText->value,
                     ColumnType::LongText->value,
                     ColumnType::Integer->value,
+                    ColumnType::BigInteger->value,
+                    ColumnType::Float->value,
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,
                     ColumnType::Datetime->value,
@@ -888,7 +927,7 @@ trait Attributes
         }
 
         if ($format) {
-            if (! Structure::hasFormat($format, ColumnType::from($type))) {
+            if (! Structure::hasFormat($format, Attribute::normalizeType($type))) {
                 throw new DatabaseException('Format ("'.$format.'") not available for this attribute type ("'.$type.'")');
             }
         }
@@ -898,7 +937,7 @@ trait Attributes
                 throw new DatabaseException('Cannot set a default value on a required attribute');
             }
 
-            $this->validateDefaultTypes($type, $default);
+            $this->validateDefaultTypes($type, $default, $signed);
         }
 
         $attribute
@@ -1023,7 +1062,7 @@ trait Attributes
 
             $updateAttrModel = new Attribute(
                 key: $id,
-                type: ColumnType::from($type),
+                type: Attribute::normalizeType($type),
                 size: $size,
                 required: $required,
                 default: $default,
@@ -1044,7 +1083,7 @@ trait Attributes
 
         $rollbackAttrModel = new Attribute(
             key: $newKey ?? $id,
-            type: ColumnType::from($originalType),
+            type: Attribute::normalizeType($originalType),
             size: $originalSize,
             required: $originalRequired,
             signed: $originalSigned,
@@ -1197,7 +1236,7 @@ trait Attributes
         $rollbackAttrSize = \is_int($rawAttrSizeForRollback) ? $rawAttrSizeForRollback : 0;
         $rollbackAttr = new Attribute(
             key: $id,
-            type: ColumnType::from($rollbackAttrType),
+            type: Attribute::normalizeType($rollbackAttrType),
             size: $rollbackAttrSize,
             required: (bool) ($attribute->getAttribute('required') ?? false),
             signed: (bool) ($attribute->getAttribute('signed') ?? true),

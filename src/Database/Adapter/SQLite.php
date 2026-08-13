@@ -1839,7 +1839,7 @@ class SQLite extends SQL
      * Bind operator parameters to statement
      * Override to handle SQLite-specific operator bindings
      */
-    protected function bindOperatorParams(PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
 

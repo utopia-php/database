@@ -1240,16 +1240,20 @@ trait CollectionTests
         $hook = new class () implements Transform {
             public function transform(Event $event, string $query): string
             {
-                return 'SELECT 1';
+                return $query.' AND 1 = 0';
             }
         };
         $database->addHook($hook);
 
-        $result = $database->getDocument('docs', 'doc1');
+        try {
+            $result = $database->getDocument('docs', 'doc1');
 
-        $this->assertTrue($result->isEmpty());
+            $this->assertTrue($result->isEmpty());
+        } finally {
+            $database->removeTransform($hook::class);
+        }
 
-        $database->removeTransform($hook::class);
+        $this->assertFalse($database->getDocument('docs', 'doc1')->isEmpty());
     }
 
     public function testSetGlobalCollection(): void

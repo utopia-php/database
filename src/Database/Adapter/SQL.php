@@ -3808,7 +3808,7 @@ abstract class SQL extends Adapter
     /**
      * Bind operator parameters to prepared statement
      */
-    protected function bindOperatorParams(PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();

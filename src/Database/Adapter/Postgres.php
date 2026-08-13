@@ -2239,7 +2239,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      * Bind operator parameters to statement
      * Override to handle PostgreSQL-specific JSON binding
      */
-    protected function bindOperatorParams(PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function bindOperatorParams(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();

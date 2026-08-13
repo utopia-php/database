@@ -44,16 +44,23 @@ class Attribute extends Validator
         protected int $maxStringLength = 0,
         protected int $maxVarcharLength = 0,
         protected int $maxIntLength = 0,
+        protected int $maxBigIntLength = 0,
         protected bool $supportForSchemaAttributes = false,
         protected bool $supportForVectors = false,
         protected bool $supportForSpatialAttributes = false,
         protected bool $supportForObject = false,
+        protected bool $supportUnsignedBigInt = false,
         protected mixed $attributeCountCallback = null,
         protected mixed $attributeWidthCallback = null,
         protected mixed $filterCallback = null,
         protected bool $isMigrating = false,
         protected bool $sharedTables = false,
     ) {
+        // Keep backwards compatibility for existing validator construction sites.
+        if ($this->maxBigIntLength === 0) {
+            $this->maxBigIntLength = $this->maxIntLength;
+        }
+
         foreach ($attributes as $attribute) {
             $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
             $this->attributes[\strtolower($typed->key)] = $typed;
@@ -441,6 +448,7 @@ class Attribute extends Validator
     {
         $default = $attribute->default;
         $type = $attribute->type;
+        $signed = $attribute->signed;
 
         if (\is_null($default)) {
             return true;
@@ -457,7 +465,7 @@ class Attribute extends Validator
             throw new DatabaseException($this->message);
         }
 
-        $this->validateDefaultTypes($type, $default);
+        $this->validateDefaultTypes($type, $default, $signed);
 
         return true;
     }
@@ -470,7 +478,7 @@ class Attribute extends Validator
      *
      * @throws DatabaseException
      */
-    protected function validateDefaultTypes(ColumnType $type, mixed $default): void
+    protected function validateDefaultTypes(ColumnType $type, mixed $default, bool $signed = true): void
     {
         $defaultType = \gettype($default);
 
@@ -484,7 +492,7 @@ class Attribute extends Validator
             if (! in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon]) && $type !== ColumnType::Object) {
                 /** @var array<mixed> $default */
                 foreach ($default as $value) {
-                    $this->validateDefaultTypes($type, $value);
+                    $this->validateDefaultTypes($type, $value, $signed);
                 }
             }
 
@@ -505,6 +513,16 @@ class Attribute extends Validator
             case ColumnType::Integer:
             case ColumnType::Boolean:
                 if ($type->value !== $defaultType) {
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    throw new DatabaseException($this->message);
+                }
+                break;
+            case ColumnType::BigInteger:
+            case ColumnType::BigSerial:
+                if (
+                    ! \is_int($default)
+                    && (! \is_string($default) || ! BigInt::isIntegerString($default, $signed))
+                ) {
                     $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
                 }

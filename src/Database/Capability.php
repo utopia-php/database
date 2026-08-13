@@ -15,6 +15,7 @@ enum Capability
     case BatchCreateAttributes;
     case BatchOperations;
     case BoundaryInclusive;
+    case Caching;
     case CacheSkipOnFailure;
     case CastIndexArray;
     case Casting;
@@ -52,6 +53,7 @@ enum Capability
     case UpdateLock;
     case Upserts;
     case UpsertOnUniqueIndex;
+    case UnsignedBigInt;
     case Vectors;
     case Joins;
     case Aggregations;

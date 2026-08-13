@@ -29,6 +29,10 @@ class ObjectValidator extends Validator
             return json_last_error() === JSON_ERROR_NONE;
         }
 
+        if ($value instanceof \stdClass) {
+            return true;
+        }
+
         // Allow empty or associative arrays (non-list)
         return empty($value) || (is_array($value) && ! array_is_list($value));
     }

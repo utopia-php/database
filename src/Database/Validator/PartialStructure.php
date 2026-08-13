@@ -61,7 +61,7 @@ class PartialStructure extends Structure
             return false;
         }
 
-        if (! $this->checkForInvalidAttributeValues($structure, $keys)) {
+        if (! $this->checkForInvalidAttributeValues($document, $structure, $keys)) {
             return false;
         }
 

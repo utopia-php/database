@@ -53,15 +53,6 @@ use Utopia\Query\Schema\IndexType;
  */
 class SQLite extends SQL
 {
-    /**
-     * MariaDB byte ceilings for TEXT-family types, mirrored so PRAGMA-based
-     * introspection produces the same characterMaximumLength values that
-     * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
-     */
-    private const MARIADB_TEXT_BYTES = '65535';
-    private const MARIADB_MEDIUMTEXT_BYTES = '16777215';
-    private const MARIADB_LONGTEXT_BYTES = '4294967295';
-
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const FTS_TABLE_SUFFIX = '_fts';
 
@@ -1896,11 +1887,11 @@ class SQLite extends SQL
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
+        $values = $operator->getValues();
 
         switch ($method) {
             // Numeric operators
             case OperatorType::Increment:
-                $values = $operator->getValues();
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -1909,8 +1900,7 @@ class SQLite extends SQL
                     $bindIndex++;
 
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN COALESCE({$quotedColumn}, 0) > :$maxKey - :$bindKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) + :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) + :$bindKey
                     END";
                 }
@@ -1918,7 +1908,6 @@ class SQLite extends SQL
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) + :$bindKey";
 
             case OperatorType::Decrement:
-                $values = $operator->getValues();
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -1927,8 +1916,7 @@ class SQLite extends SQL
                     $bindIndex++;
 
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) <= :$minKey THEN :$minKey
-                        WHEN COALESCE({$quotedColumn}, 0) < :$minKey + :$bindKey THEN :$minKey
+                        WHEN COALESCE({$quotedColumn}, 0) - :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) - :$bindKey
                     END";
                 }
@@ -1936,7 +1924,6 @@ class SQLite extends SQL
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) - :$bindKey";
 
             case OperatorType::Multiply:
-                $values = $operator->getValues();
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -1945,9 +1932,7 @@ class SQLite extends SQL
                     $bindIndex++;
 
                     return "{$quotedColumn} = CASE
-                        WHEN COALESCE({$quotedColumn}, 0) >= :$maxKey THEN :$maxKey
-                        WHEN :$bindKey > 0 AND COALESCE({$quotedColumn}, 0) > :$maxKey / :$bindKey THEN :$maxKey
-                        WHEN :$bindKey < 0 AND COALESCE({$quotedColumn}, 0) < :$maxKey / :$bindKey THEN :$maxKey
+                        WHEN COALESCE({$quotedColumn}, 0) * :$bindKey > :$maxKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) * :$bindKey
                     END";
                 }
@@ -1955,7 +1940,6 @@ class SQLite extends SQL
                 return "{$quotedColumn} = COALESCE({$quotedColumn}, 0) * :$bindKey";
 
             case OperatorType::Divide:
-                $values = $operator->getValues();
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -1964,7 +1948,7 @@ class SQLite extends SQL
                     $bindIndex++;
 
                     return "{$quotedColumn} = CASE
-                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey <= :$minKey THEN :$minKey
+                        WHEN :$bindKey != 0 AND COALESCE({$quotedColumn}, 0) / :$bindKey < :$minKey THEN COALESCE({$quotedColumn}, 0)
                         ELSE COALESCE({$quotedColumn}, 0) / :$bindKey
                     END";
                 }
@@ -1985,7 +1969,6 @@ class SQLite extends SQL
                     );
                 }
 
-                $values = $operator->getValues();
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
 
@@ -2392,7 +2375,7 @@ class SQLite extends SQL
         };
 
         $updateColumns = [];
-        $opIndex = 0;
+        $bindIndex = 0;
 
         if (! empty($attribute)) {
             $updateColumns = [
@@ -2405,7 +2388,7 @@ class SQLite extends SQL
                 $filteredAttr = $this->filter($attr);
 
                 if (isset($operators[$attr])) {
-                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $opIndex);
+                    $operatorSQL = $this->getOperatorSQL($filteredAttr, $operators[$attr], $bindIndex);
                     if ($operatorSQL !== null) {
                         $updateColumns[] = $operatorSQL;
                     }
@@ -2778,14 +2761,15 @@ class SQLite extends SQL
      * Schema-index entries for FTS5 fulltext tables on `$collection`.
      * Maps each back to a metadata index id when possible.
      *
-     * @return array<array{
-     *     '$id': string,
-     *     indexName: string,
-     *     indexType: string,
-     *     nonUnique: int,
-     *     columns: array<string>,
-     *     lengths: array<null>,
-     * }>
+     * Each entry has keys:
+     * - `$id`: string
+     * - `indexName`: string
+     * - `indexType`: string
+     * - `nonUnique`: int
+     * - `columns`: array<string>
+     * - `lengths`: array<null>
+     *
+     * @return array<array<string, mixed>>
      */
     protected function getFulltextSchemaIndexes(string $collection): array
     {
@@ -2948,19 +2932,25 @@ class SQLite extends SQL
                 break;
         }
 
+        /**
+         * MariaDB byte ceilings for TEXT-family types, mirrored so PRAGMA-based
+         * introspection produces the same characterMaximumLength values that
+         * INFORMATION_SCHEMA.COLUMNS would on MariaDB.
+         */
+
         if ($this->emulateMySQL) {
             switch ($dataType) {
                 case 'text':
-                    $result['characterMaximumLength'] = self::MARIADB_TEXT_BYTES;
+                    $result['characterMaximumLength'] = '' .  Database::MAX_TEXT_BYTES;
                     break;
 
                 case 'mediumtext':
-                    $result['characterMaximumLength'] = self::MARIADB_MEDIUMTEXT_BYTES;
+                    $result['characterMaximumLength'] = '' . Database::MAX_MEDIUMTEXT_BYTES;
                     break;
 
                 case 'longtext':
                 case 'json':
-                    $result['characterMaximumLength'] = self::MARIADB_LONGTEXT_BYTES;
+                    $result['characterMaximumLength'] = '' .  Database::MAX_LONGTEXT_BYTES;
                     break;
 
                 case 'tinyint':

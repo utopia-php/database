@@ -1423,6 +1423,11 @@ class Redis extends Adapter implements
         return 4294967295;
     }
 
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
+    }
+
     public function getLimitForAttributes(): int
     {
         return 1017;

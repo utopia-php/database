@@ -64,6 +64,7 @@ class ObjectTest extends TestCase
         $validator = new ObjectValidator();
 
         $this->assertTrue($validator->isValid([]));
+        $this->assertTrue($validator->isValid(new \stdClass()));
 
         $this->assertFalse($validator->isValid('sldfjsdlfj'));
     }

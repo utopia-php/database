@@ -647,6 +647,16 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     /**
      * {@inheritDoc}
      */
+    public function getLimitForBigInt(): int
+    {
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForAttributes(): int
     {
         /** @var int $result */

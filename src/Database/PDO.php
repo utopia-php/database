@@ -5,7 +5,7 @@ namespace Utopia\Database;
 use Exception;
 use InvalidArgumentException;
 use PDO as PhpPDO;
-use PDOStatement;
+use PDOStatement as PhpPDOStatement;
 use Throwable;
 use Utopia\Console;
 
@@ -14,7 +14,6 @@ use Utopia\Console;
  *
  * @mixin PhpPDO
  *
- * @method PDOStatement prepare(string $query, array<int, mixed> $options = [])
  * @method int|false exec(string $statement)
  * @method bool beginTransaction()
  * @method bool commit()
@@ -43,6 +42,8 @@ class PDO
         protected ?string $password,
         protected array $config = []
     ) {
+        $this->config[PhpPDO::ATTR_ERRMODE] ??= PhpPDO::ERRMODE_EXCEPTION;
+
         $this->pdo = new PhpPDO(
             $this->dsn,
             $this->username,
@@ -52,8 +53,51 @@ class PDO
     }
 
     /**
-     * @param  array<mixed>  $args
+     * Prepare a statement that can re-prepare itself after connection recovery.
      *
+     * @param  array<mixed>  $options
+     * @throws Throwable
+     */
+    public function prepare(string $query, array $options = []): PDOStatement
+    {
+        return new PDOStatement($this, $this->prepareNative($query, $options), $query, $options);
+    }
+
+    /**
+     * Prepare a raw \PDOStatement on the underlying connection, reconnecting
+     * once if a stale connection surfaces during prepare. Used by
+     * {@see PDOStatement} to re-prepare after a reconnect without re-wrapping.
+     *
+     * Under emulated prepares this never reaches the server (so the loss
+     * surfaces at execution time instead and is recovered by {@see PDOStatement});
+     * with native prepares the server is contacted here, so a lost connection
+     * outside a transaction is reconnected and retried, matching __call().
+     *
+     * @param  array<mixed>  $options
+     * @throws Throwable
+     */
+    public function prepareNative(string $query, array $options = []): PhpPDOStatement
+    {
+        try {
+            $statement = $this->pdo->prepare($query, $options);
+        } catch (Throwable $e) {
+            if (!Connection::hasError($e) || $this->pdo->inTransaction()) {
+                throw $e;
+            }
+
+            $this->reconnect();
+            $statement = $this->pdo->prepare($query, $options);
+        }
+
+        if ($statement === false) {
+            throw new \PDOException("Failed to prepare statement: {$query}");
+        }
+
+        return $statement;
+    }
+
+    /**
+     * @param  array<mixed>  $args
      * @throws Throwable
      */
     public function __call(string $method, array $args): mixed
@@ -92,6 +136,11 @@ class PDO
             $this->password,
             $this->config
         );
+    }
+
+    public function inTransaction(): bool
+    {
+        return $this->pdo->inTransaction();
     }
 
     /**

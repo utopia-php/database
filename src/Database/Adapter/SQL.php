@@ -58,12 +58,6 @@ abstract class SQL extends Adapter
 {
     protected object $pdo;
 
-    /**
-     * Maximum array size for array operations to prevent memory exhaustion.
-     * Large arrays in JSON_TABLE operations can cause significant memory usage.
-     */
-    protected const MAX_ARRAY_OPERATOR_SIZE = 10000;
-
     private const COLUMN_RENAME_MAP = [
         '_uid' => '$id',
         '_id' => '$sequence',
@@ -145,6 +139,7 @@ abstract class SQL extends Adapter
         return array_merge(parent::capabilities(), [
             Capability::Schemas,
             Capability::BoundaryInclusive,
+            Capability::Caching,
             Capability::Fulltext,
             Capability::MultipleFulltextIndexes,
             Capability::Regex,
@@ -313,11 +308,18 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()->rollBack();
-                } else {
-                    // If no active transaction, this has no effect.
-                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                try {
+                    if ($this->getPDO()->inTransaction()) {
+                        $this->getPDO()->rollBack();
+                    } else {
+                        // If no active transaction, this has no effect.
+                        $this->getPDO()->prepare('ROLLBACK')->execute();
+                    }
+                } catch (PDOException) {
+                    // A pooled connection can report a transaction it no longer
+                    // holds after a reconnect (e.g. Swoole PDOProxy keeps its own
+                    // counter), making this cleanup rollback throw. It is best
+                    // effort; swallow it and begin a fresh transaction below.
                 }
 
                 $this->getPDO()->beginTransaction();
@@ -1509,6 +1511,10 @@ abstract class SQL extends Adapter
         $results = $stmt->fetchAll();
         $stmt->closeCursor();
 
+        if (! \is_array($results)) {
+            throw new DatabaseException('Failed to fetch query results');
+        }
+
         $documents = [];
 
         if ($hasAggregation) {
@@ -1779,6 +1785,14 @@ abstract class SQL extends Adapter
     public function getLimitForInt(): int
     {
         return 4294967295;
+    }
+
+    /**
+     * Get max BIGINT limit
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
     }
 
     /**
@@ -3728,8 +3742,8 @@ abstract class SQL extends Adapter
             case OperatorType::ArrayAppend:
             case OperatorType::ArrayPrepend:
                 // PERFORMANCE: Validate array size to prevent memory exhaustion
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.self::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.Operator::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
                 }
 
                 // Bind JSON array
@@ -3768,8 +3782,8 @@ abstract class SQL extends Adapter
             case OperatorType::ArrayIntersect:
             case OperatorType::ArrayDiff:
                 // PERFORMANCE: Validate array size to prevent memory exhaustion
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.self::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
+                if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
+                    throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.Operator::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
                 }
 
                 $arrayValue = json_encode($values);

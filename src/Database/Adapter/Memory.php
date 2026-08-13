@@ -12,6 +12,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -134,6 +135,7 @@ class Memory extends Adapter
             Capability::PCRE,
             Capability::Regex,
             Capability::BoundaryInclusive,
+            Capability::Caching,
         ]);
     }
 
@@ -1537,11 +1539,11 @@ class Memory extends Adapter
                         }
                     }
                     if (! $existingIsSelf) {
-                        throw new DuplicateException('Document with the requested unique attributes already exists');
+                        throw new UniqueException('Unique index violation');
                     }
                 }
                 if (isset($pendingByIndex[$indexId][$hash]) && $pendingByIndex[$indexId][$hash] !== $docKey) {
-                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                    throw new UniqueException('Unique index violation');
                 }
                 $pendingByIndex[$indexId][$hash] = $docKey;
             }
@@ -2043,6 +2045,11 @@ class Memory extends Adapter
         return false;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        return true;
+    }
+
     public function getSupportForReconnection(): bool
     {
         return false;
@@ -2225,6 +2232,16 @@ class Memory extends Adapter
     public function castingAfter(Document $collection, Document $document): Document
     {
         return $document;
+    }
+
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
     }
 
     public function getSupportForInternalCasting(): bool
@@ -2531,7 +2548,7 @@ class Memory extends Adapter
     {
         if ($newHash !== null && isset($this->uniqueIndexHashes[$key][$indexId][$newHash])
             && $this->uniqueIndexHashes[$key][$indexId][$newHash] !== $docKey) {
-            throw new DuplicateException('Document with the requested unique attributes already exists');
+            throw new UniqueException('Unique index violation');
         }
 
         $previousValueAtNew = $newHash !== null ? ($this->uniqueIndexHashes[$key][$indexId][$newHash] ?? null) : null;
@@ -3553,7 +3570,7 @@ class Memory extends Adapter
         foreach ($newSignatures as $indexId => $hash) {
             $existing = $this->uniqueIndexHashes[$key][$indexId][$hash] ?? null;
             if ($existing !== null && $existing !== $docKey) {
-                throw new DuplicateException('Document with the requested unique attributes already exists');
+                throw new UniqueException('Unique index violation');
             }
         }
     }

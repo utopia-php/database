@@ -134,6 +134,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::TTLIndexes,
             Capability::Regex,
             Capability::BatchCreateAttributes,
+            Capability::Caching,
             Capability::Hostname,
             Capability::PCRE,
             Capability::Upserts,
@@ -1481,6 +1482,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             unset($record['_id']); // Don't update _id
 
             $options = $this->getTransactionOptions();
+
             $updateQuery = [
                 '$set' => $record,
             ];
@@ -2009,6 +2011,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
          * https://www.mongodb.com/docs/manual/reference/command/count/#response
          **/
         $options = $this->getTransactionOptions();
+
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
+
         $pipeline = [];
 
         // Add match stage if filters are provided
@@ -2063,6 +2070,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             return 0;
         } catch (MongoException $e) {
+            $processed = $this->processException($e);
+            if ($processed instanceof TimeoutException) {
+                throw $processed;
+            }
+
             return 0;
         }
     }
@@ -2271,6 +2283,16 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         // Mongo does not handle integers directly, so using MariaDB limit for now
         return 4294967295;
+    }
+
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
     }
 
     /**
@@ -2526,6 +2548,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return ['$in' => $values];
+    }
+
+    public function getSupportForCaching(): bool
+    {
+        return true;
     }
 
     /**

@@ -92,7 +92,8 @@ trait Documents
             $this->adapter->getMaxUIDLength(),
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
-            $this->adapter->supports(Capability::DefinedAttributes)
+            $this->adapter->supports(Capability::DefinedAttributes),
+            $this->adapter->supports(Capability::UnsignedBigInt)
         );
 
         return $this->documentsValidatorCache[$key] = $validator;
@@ -477,11 +478,12 @@ trait Documents
 
         if ($this->validate) {
             $structure = new Structure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes)
+                collection: $collection,
+                idAttributeType: $this->adapter->getIdAttributeType(),
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
+                supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt)
             );
             if (! $structure->isValid($document)) {
                 throw new StructureException($structure->getDescription());
@@ -577,11 +579,12 @@ trait Documents
         // memo) per-document `array_merge` of the attribute list.
         $validator = $this->validate
             ? new Structure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes)
+                collection: $collection,
+                idAttributeType: $this->adapter->getIdAttributeType(),
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
+                supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt)
             )
             : null;
 
@@ -842,7 +845,7 @@ trait Documents
                     $oldValue = $old->getAttribute($key);
 
                     // If values are not equal we need to update document.
-                    if ($value !== $oldValue) {
+                    if (! self::valuesEqual($value, $oldValue)) {
                         $shouldUpdate = true;
                         break;
                     }
@@ -890,12 +893,13 @@ trait Documents
 
             if ($this->validate) {
                 $structureValidator = new Structure(
-                    $collection,
-                    $this->adapter->getIdAttributeType(),
-                    $this->adapter->getMinDateTime(),
-                    $this->adapter->getMaxDateTime(),
-                    $this->adapter->supports(Capability::DefinedAttributes),
-                    $old
+                    collection: $collection,
+                    idAttributeType: $this->adapter->getIdAttributeType(),
+                    minAllowedDate: $this->adapter->getMinDateTime(),
+                    maxAllowedDate: $this->adapter->getMaxDateTime(),
+                    supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
+                    supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+                    currentDocument: $old
                 );
                 if (! $structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
@@ -1053,12 +1057,13 @@ trait Documents
 
         if ($this->validate) {
             $validator = new PartialStructure(
-                $collection,
-                $this->adapter->getIdAttributeType(),
-                $this->adapter->getMinDateTime(),
-                $this->adapter->getMaxDateTime(),
-                $this->adapter->supports(Capability::DefinedAttributes),
-                null // No old document available in bulk updates
+                collection: $collection,
+                idAttributeType: $this->adapter->getIdAttributeType(),
+                minAllowedDate: $this->adapter->getMinDateTime(),
+                maxAllowedDate: $this->adapter->getMaxDateTime(),
+                supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
+                supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+                currentDocument: null
             );
 
             if (! $validator->isValid($updates)) {
@@ -1482,12 +1487,13 @@ trait Documents
 
             if ($this->validate) {
                 $validator = new Structure(
-                    $collection,
-                    $this->adapter->getIdAttributeType(),
-                    $this->adapter->getMinDateTime(),
-                    $this->adapter->getMaxDateTime(),
-                    $this->adapter->supports(Capability::DefinedAttributes),
-                    $old->isEmpty() ? null : $old
+                    collection: $collection,
+                    idAttributeType: $this->adapter->getIdAttributeType(),
+                    minAllowedDate: $this->adapter->getMinDateTime(),
+                    maxAllowedDate: $this->adapter->getMaxDateTime(),
+                    supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
+                    supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+                    currentDocument: $old->isEmpty() ? null : $old
                 );
 
                 if (! $validator->isValid($document)) {

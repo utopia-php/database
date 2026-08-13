@@ -56,6 +56,11 @@ class Database
 
     public const MAX_UID_DEFAULT_LENGTH = 36;
 
+    // Maximum byte capacity for TEXT
+    public const MAX_TEXT_BYTES = 65535;
+    public const MAX_MEDIUMTEXT_BYTES = 16777215;
+    public const MAX_LONGTEXT_BYTES = 4294967295;
+
     // Min limits
     public const MIN_INT = -2147483648;
 
@@ -592,9 +597,9 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                $decoded = json_decode($value, true);
+                $decoded = self::decodeObject($value);
 
-                return is_array($decoded) ? $decoded : $value;
+                return is_array($decoded) || $decoded instanceof \stdClass ? $decoded : $value;
             }
         );
 
@@ -626,6 +631,53 @@ class Database
                 return is_array($decoded) ? $decoded : $value;
             }
         );
+    }
+
+    private static function decodeObject(string $value): mixed
+    {
+        if (preg_match('/\{\s*\}/', $value) === 0) {
+            return json_decode($value, true);
+        }
+
+        return self::toAssociative(json_decode($value));
+    }
+
+    private static function toAssociative(mixed $value): mixed
+    {
+        if ($value instanceof \stdClass) {
+            $properties = (array)$value;
+
+            return $properties === [] ? $value : array_map(self::toAssociative(...), $properties);
+        }
+
+        if (is_array($value)) {
+            return array_map(self::toAssociative(...), $value);
+        }
+
+        return $value;
+    }
+
+    private static function valuesEqual(mixed $value, mixed $old): bool
+    {
+        if ($value instanceof \stdClass && $old instanceof \stdClass) {
+            return self::valuesEqual((array)$value, (array)$old);
+        }
+
+        if (is_array($value) && is_array($old)) {
+            if (array_keys($value) !== array_keys($old)) {
+                return false;
+            }
+
+            foreach ($value as $key => $item) {
+                if (!self::valuesEqual($item, $old[$key])) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return $value === $old;
     }
 
     /**
@@ -1726,6 +1778,7 @@ class Database
             }
 
             $type = $attribute['type'] ?? '';
+            $signed = $attribute['signed'] ?? true;
             $array = $attribute['array'] ?? false;
             $typeKey = $type instanceof ColumnType ? $type->value : (\is_string($type) ? $type : '');
 

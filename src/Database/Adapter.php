@@ -603,17 +603,12 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
                 return $result;
             } catch (Throwable $action) {
+                $rollback = null;
                 try {
                     $this->rollbackTransaction();
-                } catch (Throwable $rollback) {
-                    if ($attempts < $retries) {
-                        \usleep($sleep * ($attempts + 1));
-
-                        continue;
-                    }
-
+                } catch (Throwable $rollbackError) {
+                    $rollback = $rollbackError;
                     $this->inTransaction = 0;
-                    throw $rollback;
                 }
 
                 if (
@@ -622,7 +617,8 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
                     $action instanceof AuthorizationException ||
                     $action instanceof RelationshipException ||
                     $action instanceof ConflictException ||
-                    $action instanceof LimitException
+                    $action instanceof LimitException ||
+                    $action instanceof TimeoutException
                 ) {
                     throw $action;
                 }
@@ -633,7 +629,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
                     continue;
                 }
 
-                throw $action;
+                throw $rollback ?? $action;
             }
         }
 
@@ -888,6 +884,13 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * Get max INT limit
      */
     abstract public function getLimitForInt(): int;
+
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    abstract public function getLimitForBigInt(): int;
 
     /**
      * Get maximum attributes limit.

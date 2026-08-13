@@ -256,6 +256,7 @@ class MySQL extends MariaDB
     {
         $quotedColumn = $this->quote($column);
         $method = $operator->getMethod();
+        $values = $operator->getValues();
 
         switch ($method) {
             case OperatorType::ArrayAppend:

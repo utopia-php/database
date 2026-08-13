@@ -133,6 +133,7 @@ class Structure extends Validator
         private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
         private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
+        private readonly bool $supportUnsignedBigInt = true,
         private readonly ?Document $currentDocument = null
     ) {
     }
@@ -259,7 +260,7 @@ class Structure extends Validator
             return false;
         }
 
-        if (! $this->checkForInvalidAttributeValues($structure, $keys)) {
+        if (! $this->checkForInvalidAttributeValues($document, $structure, $keys)) {
             return false;
         }
 
@@ -325,7 +326,7 @@ class Structure extends Validator
      * @param  array<string, mixed>  $structure
      * @param  array<string, mixed>  $keys
      */
-    protected function checkForInvalidAttributeValues(array $structure, array $keys): bool
+    protected function checkForInvalidAttributeValues(Document $document, array $structure, array $keys): bool
     {
         foreach ($structure as $key => $value) {
             if (Operator::isOperator($value)) {
@@ -353,7 +354,7 @@ class Structure extends Validator
             $required = $attribute['required'] ?? false;
             /** @var int $size */
             $size = $attribute['size'] ?? 0;
-            $signed = $attribute['signed'] ?? true;
+            $signed = (bool) ($attribute['signed'] ?? true);
 
             if ($required === false && is_null($value)) { // Allow null value to optional params
                 continue;
@@ -365,6 +366,15 @@ class Structure extends Validator
                 continue;
             }
 
+            // BIGINT accepts both PHP int and numeric strings.
+            // If the numeric string is within PHP's int range, normalize it to an int
+            // so downstream code gets a numeric value without precision loss.
+            if ($columnType === ColumnType::BigInteger && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
+                $normalized = (int)$value;
+                $document->setAttribute($key, $normalized);
+                $value = $normalized;
+            }
+
             $validators = [];
 
             switch ($columnType) {
@@ -372,24 +382,42 @@ class Structure extends Validator
                     $validators[] = new Sequence($this->idAttributeType, ($attribute['$id'] ?? '') === '$sequence');
                     break;
 
-                case ColumnType::Varchar:
                 case ColumnType::Text:
+                    $validators[] = new ByteLength($size);
+                    $validators[] = new ByteLength(Database::MAX_TEXT_BYTES);
+                    break;
+
                 case ColumnType::MediumText:
+                    $validators[] = new ByteLength($size);
+                    $validators[] = new ByteLength(Database::MAX_MEDIUMTEXT_BYTES);
+                    break;
+
                 case ColumnType::LongText:
+                    $validators[] = new ByteLength($size);
+                    $validators[] = new ByteLength(Database::MAX_LONGTEXT_BYTES);
+                    break;
+
+                case ColumnType::Varchar:
                 case ColumnType::String:
                     $validators[] = new Text($size, min: 0);
                     break;
 
                 case ColumnType::Integer:
                     // Determine bit size based on attribute size in bytes
-                    $bits = $size >= 8 ? 64 : 32;
+                    // BIGINT is always 64-bit in SQL adapters; VAR_INTEGER uses size to decide.
+                    $bits =  $size >= 8 ? 64 : 32;
                     // For 64-bit unsigned, use signed since PHP doesn't support true 64-bit unsigned
                     // The Range validator will restrict to positive values only
                     $unsigned = ! $signed && $bits < 64;
                     $validators[] = new Integer(false, $bits, $unsigned);
-                    $max = $size >= 8 ? Database::MAX_BIG_INT : Database::MAX_INT;
+                    $max = $bits === 64 ? Database::MAX_BIG_INT : Database::MAX_INT;
                     $min = $signed ? -$max : 0;
                     $validators[] = new Range($min, $max, ColumnType::Integer->value);
+                    break;
+
+                case ColumnType::BigInteger:
+                case ColumnType::BigSerial:
+                    $validators[] = new BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 
                 case ColumnType::Float:

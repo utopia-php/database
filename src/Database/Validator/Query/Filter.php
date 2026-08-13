@@ -35,7 +35,8 @@ class Filter extends Base
         private readonly int $maxValuesCount = 5000,
         private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
         private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
-        private bool $supportForAttributes = true
+        private bool $supportForAttributes = true,
+        private readonly bool $supportUnsignedBigInt = false
     ) {
         foreach ($attributes as $attribute) {
             /** @var string $attrKey */
@@ -185,7 +186,9 @@ class Filter extends Base
 
                 case ColumnType::BigInteger:
                 case ColumnType::BigSerial:
-                    $validator = new Integer(false, 64, false);
+                    /** @var bool $signed */
+                    $signed = $attributeSchema['signed'] ?? true;
+                    $validator = new \Utopia\Database\Validator\BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 
                 case ColumnType::Float:

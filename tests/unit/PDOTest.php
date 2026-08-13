@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use Utopia\Database\PDO;
+use Utopia\Database\PDOStatement;
 
 class PDOTest extends TestCase
 {
@@ -145,6 +146,7 @@ class PDOTest extends TestCase
 
         $result = $pdoWrapper->prepare('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY]);
 
-        $this->assertSame($pdoStatementStub, $result);
+        $this->assertInstanceOf(PDOStatement::class, $result);
+        $this->assertSame($pdoStatementStub, $result->getStatement());
     }
 }

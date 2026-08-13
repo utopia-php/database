@@ -681,6 +681,252 @@ trait DocumentTests
         }
     }
 
+    public function testCacheEmptyDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'cacheEmpty';
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+        // A read of a missing id records a negative ("not found") marker so
+        // repeated lookups don't keep hitting the adapter.
+        $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+
+        [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'ghost');
+        $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached); // Database::CACHE_EMPTY_MARKER
+
+        // Creating the id must invalidate that marker so the row is visible.
+        $database->createDocument($collection, new Document([
+            '$id' => 'ghost',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'real',
+        ]));
+
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $hashKey));
+
+        $document = $database->getDocument($collection, 'ghost');
+        $this->assertFalse($document->isEmpty());
+        $this->assertEquals('real', $document->getAttribute('name'));
+
+        // Same guarantee through the batch create path.
+        $this->assertTrue($database->getDocument($collection, 'batch')->isEmpty());
+        [, $batchKey, $batchHash] = $database->getCacheKeys($collection, 'batch');
+        $cached = $cache->load($batchKey, Database::TTL, $batchHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+
+        $database->createDocuments($collection, [
+            new Document([
+                '$id' => 'batch',
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'batched',
+            ]),
+        ]);
+
+        $this->assertFalse($cache->load($batchKey, Database::TTL, $batchHash));
+        $this->assertEquals('batched', $database->getDocument($collection, 'batch')->getAttribute('name'));
+
+        // A locking read must never publish anything to the cache.
+        $this->assertTrue($database->getDocument($collection, 'phantom', forUpdate: true)->isEmpty());
+        [, $phantomKey, $phantomHash] = $database->getCacheKeys($collection, 'phantom');
+        $this->assertFalse($cache->load($phantomKey, Database::TTL, $phantomHash));
+    }
+
+    public function testCacheEmptyDocumentSelect(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'cacheEmptySelect';
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+
+        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+        // The document key is select-independent, but the hashKey is not: a
+        // projection is folded into it. So a projected read and a plain read of
+        // the same missing id are cached under different slots of the same key.
+        [, $documentKey, $plainHash] = $database->getCacheKeys($collection, 'ghost');
+
+        // validateSelections() appends the internal attributes to the user
+        // selection before it forms the key; mirror that set to address the
+        // projected slot (getCacheKeys sorts, so order does not matter).
+        $selects = ['name', '$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'];
+        [, , $selectHash] = $database->getCacheKeys($collection, 'ghost', $selects);
+        $this->assertNotEquals($plainHash, $selectHash);
+
+        // Projected read caches its marker under the projected slot only.
+        $this->assertTrue($database->getDocument($collection, 'ghost', [Query::select(['name'])])->isEmpty());
+        $cached = $cache->load($documentKey, Database::TTL, $selectHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+        $this->assertFalse(
+            $cache->load($documentKey, Database::TTL, $plainHash),
+            'A projected read must not populate the no-projection cache slot'
+        );
+
+        // Plain read fills the plain slot with its own marker. Both slots of the
+        // document key now hold an "empty" marker.
+        $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+        $cached = $cache->load($documentKey, Database::TTL, $plainHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+
+        // Inserting the id purges the whole document key, so BOTH slots clear.
+        $database->createDocument($collection, new Document([
+            '$id' => 'ghost',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'real',
+        ]));
+
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $plainHash));
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $selectHash));
+    }
+
+    public function testCacheEmptyGetCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'cacheEmptyCollection';
+
+        // getCollection() reads getDocument(METADATA, id) under the hood, so a
+        // lookup of a non-existent collection negatively caches its absence
+        // under the metadata key.
+        $this->assertTrue($database->getCollection($collectionId)->isEmpty());
+
+        [, $metaKey, $metaHash] = $database->getCacheKeys(Database::METADATA, $collectionId);
+        $cached = $cache->load($metaKey, Database::TTL, $metaHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+
+        // createCollection() writes the metadata row via createDocument(METADATA),
+        // which must purge that marker — otherwise the collection would keep
+        // reading back as "not found".
+        $collection = $database->createCollection($collectionId, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+        $this->assertFalse($collection->isEmpty());
+
+        $this->assertFalse($cache->load($metaKey, Database::TTL, $metaHash));
+
+        $fetched = $database->getCollection($collectionId);
+        $this->assertFalse($fetched->isEmpty());
+        $this->assertEquals($collectionId, $fetched->getId());
+
+        // Recreating it must now be rejected as a duplicate. This proves the
+        // marker was genuinely invalidated: a lingering "not found" would make
+        // createCollection's own existence check pass and wrongly proceed.
+        try {
+            $database->createCollection($collectionId);
+            $this->fail('Expected DuplicateException when recreating an existing collection');
+        } catch (DuplicateException) {
+            // expected
+        }
+    }
+
+    public function testCacheEmptyDocumentSecurity(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $auth = $database->getAuthorization();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'cacheEmptyDocSecurity';
+
+        // Document-level security with no collection-wide read: access is
+        // decided per document.
+        $auth->skip(function () use ($database, $collection) {
+            $database->createCollection($collection, permissions: [], documentSecurity: true);
+            $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+            $database->createDocument($collection, new Document([
+                '$id' => 'secret',
+                '$permissions' => [
+                    Permission::read(Role::user('userA')),
+                ],
+                'name' => 'classified',
+            ]));
+        });
+
+        try {
+            // userB cannot read 'secret'. The row exists, so this denial must
+            // NOT record a negative marker under the shared (user-independent)
+            // cache key — doing so would hide the row from userA.
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('userB')->toString());
+
+            $this->assertTrue($database->getDocument($collection, 'secret')->isEmpty());
+
+            [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'secret');
+            $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+            $this->assertFalse(
+                \is_array($cached) && isset($cached['$empty']),
+                'A permission-denied read of an existing document must not populate the negative cache'
+            );
+
+            // userA has read permission and must still see the document,
+            // proving userB's forbidden read did not poison the cache.
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('userA')->toString());
+
+            $document = $database->getDocument($collection, 'secret');
+            $this->assertFalse($document->isEmpty());
+            $this->assertEquals('classified', $document->getAttribute('name'));
+
+            // A genuinely missing id is user-independent, so it is still safe to
+            // cache as empty even under document security.
+            $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+            [, $ghostKey, $ghostHash] = $database->getCacheKeys($collection, 'ghost');
+            $ghostCached = $cache->load($ghostKey, Database::TTL, $ghostHash);
+            $this->assertIsArray($ghostCached);
+            $this->assertArrayHasKey('$empty', $ghostCached);
+        } finally {
+            $auth->cleanRoles();
+            $auth->addRole(Role::any()->toString());
+        }
+    }
+
     public function testCreateDocumentsWithAutoIncrement(): void
     {
         /** @var Database $database */
@@ -918,6 +1164,125 @@ trait DocumentTests
             $this->assertEquals(10, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
+        }
+    }
+
+    public function testTextByteTruncationCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        // Byte-capacity validation relies on attribute metadata, which
+        // schemaless adapters don't store, so there is nothing to enforce.
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+
+        // A `text` attribute at its maximum allowed size. On MySQL/MariaDB this
+        // maps to a TEXT column, which is limited to 65,535 *bytes*.
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        // The Structure validator caps a TEXT column at its 65,535-byte capacity,
+        // measuring the value's actual byte length. A 20,000-char emoji value is
+        // 80,000 bytes (4 bytes per char in utf8mb4), so it exceeds the column's
+        // byte capacity and must be rejected up front with a clean
+        // StructureException, rather than letting the database raise error 1406
+        // (data truncation).
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => $value,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        try {
+            $database->createDocument(__FUNCTION__, $document);
+            $this->fail('Expected StructureException for over-capacity text value');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
+        }
+    }
+
+    public function testTextByteTruncationValid(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        // A value that fills the column's full byte capacity is stored and
+        // round-trips intact. 65,535 ASCII chars are exactly 65,535 bytes, so
+        // byte-based validation accepts the whole column, where the previous
+        // char-based cap would have rejected anything over 16,383 chars.
+        $okValue = \str_repeat('a', 65535);
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => $okValue,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $created = $database->createDocument(__FUNCTION__, $document);
+        $fetched = $database->getDocument(__FUNCTION__, $created->getId());
+        $this->assertEquals($okValue, $fetched->getAttribute('text'));
+    }
+
+    public function testTextByteTruncationUpdate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => \str_repeat('a', 16383),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $created = $database->createDocument(__FUNCTION__, $document);
+
+        // An oversized value is rejected on update, the same as on create.
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
+
+        try {
+            $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('text', $value));
+            $this->fail('Expected StructureException for over-capacity text value on update');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
         }
     }
 

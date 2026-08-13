@@ -60,6 +60,16 @@ class Select extends Base
             return false;
         }
 
+        // Before the duplicate check: array_unique() stringifies every array element
+        // to "Array", so two nested values collapse into one and report a misleading
+        // duplicate instead of the type error that is actually there.
+        foreach ($value->getValues() as $attribute) {
+            if (!\is_string($attribute)) {
+                $this->message = 'Attribute selection must be a string, got ' . \get_debug_type($attribute);
+                return false;
+            }
+        }
+
         if (\count($value->getValues()) !== \count(\array_unique($value->getValues()))) {
             $this->message = 'Duplicate attributes selected';
 

@@ -312,11 +312,11 @@ class Operator
     /**
      * Helper method to create increment operator
      *
-     * @param int|float $value The amount to increment by
-     * @param  int|float|null  $max  Maximum value (won't increment beyond this)
+     * @param int|float|string $value The amount to increment by
+     * @param  int|float|string|null  $max  Maximum value (won't increment beyond this)
      * @return self
      */
-    public static function increment(int|float $value = 1, int|float|null $max = null): self
+    public static function increment(int|float|string $value = 1, int|float|string|null $max = null): self
     {
         $values = [$value];
         if ($max !== null) {
@@ -329,11 +329,11 @@ class Operator
     /**
      * Helper method to create decrement operator
      *
-     * @param int|float $value The amount to decrement by
-     * @param  int|float|null  $min  Minimum value (won't decrement below this)
+     * @param int|float|string $value The amount to decrement by
+     * @param  int|float|string|null  $min  Minimum value (won't decrement below this)
      * @return self
      */
-    public static function decrement(int|float $value = 1, int|float|null $min = null): self
+    public static function decrement(int|float|string $value = 1, int|float|string|null $min = null): self
     {
         $values = [$value];
         if ($min !== null) {
@@ -414,11 +414,11 @@ class Operator
     /**
      * Helper method to create multiply operator
      *
-     * @param int|float $factor The factor to multiply by
-     * @param  int|float|null  $max  Maximum value (won't multiply beyond this)
+     * @param int|float|string $factor The factor to multiply by
+     * @param  int|float|string|null  $max  Maximum value (won't multiply beyond this)
      * @return self
      */
-    public static function multiply(int|float $factor, int|float|null $max = null): self
+    public static function multiply(int|float|string $factor, int|float|string|null $max = null): self
     {
         $values = [$factor];
         if ($max !== null) {
@@ -431,12 +431,12 @@ class Operator
     /**
      * Helper method to create divide operator
      *
-     * @param int|float $divisor The divisor
-     * @param  int|float|null  $min  Minimum value (won't divide below this)
+     * @param int|float|string $divisor The divisor
+     * @param  int|float|string|null  $min  Minimum value (won't divide below this)
      * @return self
      * @throws OperatorException if divisor is zero
      */
-    public static function divide(int|float $divisor, int|float|null $min = null): self
+    public static function divide(int|float|string $divisor, int|float|string|null $min = null): self
     {
         if ($divisor == 0) {
             throw new OperatorException('Division by zero is not allowed');
@@ -494,11 +494,11 @@ class Operator
     /**
      * Helper method to create modulo operator
      *
-     * @param  int|float  $divisor  The divisor for modulo operation
+     * @param  int|float|string  $divisor  The divisor for modulo operation
      * @return self
      * @throws OperatorException if divisor is zero
      */
-    public static function modulo(int|float $divisor): self
+    public static function modulo(int|float|string $divisor): self
     {
         if ($divisor == 0) {
             throw new OperatorException('Modulo by zero is not allowed');
@@ -510,11 +510,11 @@ class Operator
     /**
      * Helper method to create power operator
      *
-     * @param  int|float  $exponent  The exponent to raise to
-     * @param  int|float|null  $max  Maximum value (won't exceed this)
+     * @param  int|float|string  $exponent  The exponent to raise to
+     * @param  int|float|string|null  $max  Maximum value (won't exceed this)
      * @return self
      */
-    public static function power(int|float $exponent, int|float|null $max = null): self
+    public static function power(int|float|string $exponent, int|float|string|null $max = null): self
     {
         $values = [$exponent];
         if ($max !== null) {

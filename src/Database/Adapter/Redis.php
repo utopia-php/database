@@ -26,6 +26,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
@@ -1381,7 +1382,7 @@ class Redis extends Adapter implements
         });
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
         $collection = $this->filter($collection);
         $docKey = $this->docKey($collection, $id);
@@ -1394,16 +1395,31 @@ class Redis extends Adapter implements
 
             $document = $this->decode($payload);
             $current = $document->getAttribute($attribute);
-            $current = \is_numeric($current) ? $current + 0 : 0;
-
-            if (! \is_null($min) && $current < $min) {
-                return true;
+            $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
+                && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
+            if ($exact) {
+                $current = BigInt::toNative($current);
+                $value = BigInt::toNative($value);
+                if (! \is_null($min) && BigInt::compare($current, $min) < 0) {
+                    return true;
+                }
+                if (! \is_null($max) && BigInt::compare($current, $max) > 0) {
+                    return true;
+                }
+                $result = BigInt::add($current, $value);
+            } else {
+                $current = $this->numericOr($current, 0);
+                $value = $this->numericOr($value, 0);
+                if (! \is_null($min) && $current < $min) {
+                    return true;
+                }
+                if (! \is_null($max) && $current > $max) {
+                    return true;
+                }
+                $result = $current + $value;
             }
-            if (! \is_null($max) && $current > $max) {
-                return true;
-            }
 
-            $document->setAttribute($attribute, $current + $value);
+            $document->setAttribute($attribute, $result);
             $document->setAttribute('$updatedAt', $updatedAt);
 
             $redis->set($docKey, $this->encode($document));
@@ -3309,6 +3325,19 @@ class Redis extends Adapter implements
     {
         $values = $operator->getValues();
         $method = $operator->getMethod();
+        $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
+        if ($exact !== null) {
+            $bound = $values[1] ?? null;
+            if (BigInt::isIntegerValue($bound)) {
+                $upper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
+                if (($upper && BigInt::compare($exact, $bound) > 0)
+                    || (! $upper && $method !== OperatorType::Modulo && BigInt::compare($exact, $bound) < 0)) {
+                    return BigInt::toNative($current ?? 0);
+                }
+            }
+
+            return $exact;
+        }
 
         switch ($method) {
             case OperatorType::Increment:

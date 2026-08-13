@@ -8,17 +8,37 @@ use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Operator;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Schema\ColumnType;
 
 final class BigIntegerTest extends TestCase
 {
+    public function testUnsignedBoundsAndArithmeticStayExact(): void
+    {
+        $bounds = Attribute::getNumericBounds(ColumnType::BigInteger, false);
+
+        $this->assertNotNull($bounds);
+        $this->assertSame('18446744073709551615', $bounds['max']);
+        $this->assertSame('9223372036854775808', BigInt::add(PHP_INT_MAX, 1));
+        $this->assertSame(PHP_INT_MAX, BigInt::subtract('9223372036854775808', 1));
+        $this->assertSame('18446744073709551615', BigInt::add('18446744073709551614', 1));
+        $this->assertSame('18446744073709551616', BigInt::add(BigInt::UNSIGNED_MAX, 1));
+        $this->assertSame('18446744073709551614', BigInt::subtract(BigInt::UNSIGNED_MAX, 1));
+        $this->assertSame('18446744073709551614', BigInt::multiply('9223372036854775807', 2));
+        $this->assertSame(1, BigInt::modulo(BigInt::UNSIGNED_MAX, 2));
+    }
+
     public function testSqlColumnTypesMapBigIntegerAndLegacyMetadata(): void
     {
         $mariaDB = new MariaDB(new \stdClass());
@@ -96,5 +116,55 @@ final class BigIntegerTest extends TestCase
         $stored = $adapter->getDocument($collection, 'maximum')->getAttribute('value');
         $this->assertTrue(\is_int($stored) || \is_string($stored));
         $this->assertSame((string) PHP_INT_MAX, (string) $stored);
+    }
+
+    public function testMemoryOperatorPreservesUnsignedIntegerStrings(): void
+    {
+        $adapter = new class () extends Memory {
+            public function apply(mixed $current, Operator $operator): mixed
+            {
+                return $this->applyOperator($current, $operator);
+            }
+        };
+
+        $this->assertSame(
+            '9223372036854775808',
+            $adapter->apply(PHP_INT_MAX, Operator::increment(1)),
+        );
+        $this->assertSame(
+            '18446744073709551615',
+            $adapter->apply('18446744073709551614', Operator::increment(1)),
+        );
+        $this->assertSame(
+            PHP_INT_MAX,
+            $adapter->apply('9223372036854775808', Operator::decrement(1)),
+        );
+    }
+
+    public function testSqlBuilderPreservesUnsignedIntegerBindings(): void
+    {
+        $adapter = new class (new \stdClass()) extends MariaDB {
+            /**
+             * @return array{expression: string, bindings: list<mixed>}
+             */
+            public function expression(Operator $operator): array
+            {
+                return $this->getOperatorBuilderExpression('value', $operator);
+            }
+        };
+
+        $result = $adapter->expression(Operator::increment(1, BigInt::UNSIGNED_MAX));
+
+        $this->assertStringContainsString('CASE', $result['expression']);
+        $this->assertSame([BigInt::UNSIGNED_MAX, 1, 1], $result['bindings']);
+    }
+
+    public function testMongoRejectsUnsignedArithmeticBeforeBsonCoercion(): void
+    {
+        $adapter = (new \ReflectionClass(Mongo::class))->newInstanceWithoutConstructor();
+
+        $this->expectException(TypeException::class);
+        $this->expectExceptionMessage('outside the signed 64-bit integer range');
+        $adapter->increaseDocumentAttribute('collection', 'document', 'value', BigInt::UNSIGNED_MAX, '2026-01-01T00:00:00.000+00:00');
     }
 }

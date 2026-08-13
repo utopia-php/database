@@ -125,20 +125,20 @@ interface Documents
      * @param string $collection The collection identifier.
      * @param string $id The document identifier.
      * @param string $attribute The numeric attribute to modify.
-     * @param int|float $value The value to add (negative to decrease).
+     * @param int|float|string $value The value to add (negative to decrease).
      * @param string $updatedAt The timestamp to set as the updated time.
-     * @param int|float|null $min Optional minimum bound for the resulting value.
-     * @param int|float|null $max Optional maximum bound for the resulting value.
+     * @param int|float|string|null $min Optional minimum bound for the resulting value.
+     * @param int|float|string|null $max Optional maximum bound for the resulting value.
      * @return bool True on success.
      */
     public function increaseDocumentAttribute(
         string $collection,
         string $id,
         string $attribute,
-        int|float $value,
+        int|float|string $value,
         string $updatedAt,
-        int|float|null $min = null,
-        int|float|null $max = null
+        int|float|string|null $min = null,
+        int|float|string|null $max = null
     ): bool;
 
     /**

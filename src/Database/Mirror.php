@@ -1218,7 +1218,7 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $max = null): Document
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $max = null): Document
     {
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -1228,7 +1228,7 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value = 1, int|float|null $min = null): Document
+    public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $min = null): Document
     {
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

@@ -37,6 +37,7 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization\Input;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
@@ -44,6 +45,7 @@ use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 /**
@@ -51,39 +53,72 @@ use Utopia\Query\Schema\IndexType;
  */
 trait Documents
 {
-    private function getNumericResult(Attribute $attribute, mixed $current, int|float $value, bool $increase): int|float
+    private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
     {
+        if (Attribute::isIntegerType($attribute->type)) {
+            if (! $attribute->signed
+                && \in_array($attribute->type, [ColumnType::BigInteger, ColumnType::BigSerial], true)
+                && ! $this->adapter->supports(Capability::UnsignedBigInt)) {
+                throw new TypeException('Unsigned 64-bit arithmetic is not supported by this adapter.');
+            }
+            if ((! \is_int($current) && ! \is_string($current)) || ! BigInt::isIntegerString((string) $current)) {
+                throw new TypeException('Attribute value must be an integer.');
+            }
+            if ((! \is_int($value) && ! \is_string($value)) || ! BigInt::isIntegerString((string) $value)) {
+                throw new TypeException('Change value must be an integer.');
+            }
+
+            $result = $increase
+                ? BigInt::add($current, $value)
+                : BigInt::subtract($current, $value);
+            $bounds = Attribute::getNumericBounds($attribute->type, $attribute->signed);
+            if ($bounds === null) {
+                throw new TypeException('Attribute value must be numeric.');
+            }
+            if (BigInt::compare($result, $bounds['max']) > 0) {
+                throw new LimitException('Attribute value exceeds maximum limit: '.$bounds['max']);
+            }
+            if (BigInt::compare($result, $bounds['min']) < 0) {
+                throw new LimitException('Attribute value exceeds minimum limit: '.$bounds['min']);
+            }
+
+            return $result;
+        }
+
         if (! \is_numeric($current)) {
             throw new TypeException('Attribute value must be numeric.');
         }
 
-        $current = $current + 0;
+        $current = $this->getNativeNumber($current);
+        $value = $this->getNativeNumber($value);
         $bounds = Attribute::getNumericBounds($attribute->type, $attribute->signed);
 
         if ($bounds === null || (\is_float($current) && ! \is_finite($current))) {
             throw new TypeException('Attribute value must be a finite numeric value.');
         }
+        $maximum = $this->getNativeNumber($bounds['max']);
+        $minimum = $this->getNativeNumber($bounds['min']);
 
-        if ($current > $bounds['max']) {
-            throw new LimitException('Attribute value exceeds maximum limit: '.$bounds['max']);
+        if ($current > $maximum) {
+            throw new LimitException('Attribute value exceeds maximum limit: '.$maximum);
         }
 
-        if ($current < $bounds['min']) {
-            throw new LimitException('Attribute value exceeds minimum limit: '.$bounds['min']);
+        if ($current < $minimum) {
+            throw new LimitException('Attribute value exceeds minimum limit: '.$minimum);
         }
 
         $overflows = $increase
-            ? ($value > 0 && $current > $bounds['max'] - $value)
-            : ($value < 0 && $current > $bounds['max'] + $value);
+            ? ($value > 0 && $current > $maximum - $value)
+            : ($value < 0 && $current > $maximum + $value);
         if ($overflows) {
-            throw new LimitException('Attribute value exceeds maximum limit: '.$bounds['max']);
+            throw new LimitException('Attribute value exceeds maximum limit: '.$maximum);
         }
 
         $underflows = $increase
-            ? ($value < 0 && $current < $bounds['min'] - $value)
-            : ($value > 0 && $current < $bounds['min'] + $value);
+            ? ($value < 0 && $current < $minimum - $value)
+            : ($value > 0 && $current < $minimum + $value);
         if ($underflows) {
-            throw new LimitException('Attribute value exceeds minimum limit: '.$bounds['min']);
+            throw new LimitException('Attribute value exceeds minimum limit: '.$minimum);
         }
 
         $result = $increase ? $current + $value : $current - $value;
@@ -92,6 +127,20 @@ trait Documents
         }
 
         return $result;
+    }
+
+    private function getNativeNumber(int|float|string $value): int|float
+    {
+        if (\is_int($value) || \is_float($value)) {
+            return $value;
+        }
+        if (! \is_numeric($value)) {
+            throw new TypeException('Value must be numeric.');
+        }
+
+        return \str_contains(\strtolower($value), '.') || \str_contains(\strtolower($value), 'e')
+            ? (float) $value
+            : (int) $value;
     }
 
     /**
@@ -1735,8 +1784,8 @@ trait Documents
      * @param  string  $collection  The collection ID
      * @param  string  $id  The document ID
      * @param  string  $attribute  The attribute to increase
-     * @param  int|float  $value  The value to increase the attribute by, can be a float
-     * @param  int|float|null  $max  The maximum value the attribute can reach after the increase, null means no limit
+     * @param  int|float|string  $value  The value to increase the attribute by, can be a float
+     * @param  int|float|string|null  $max  The maximum value the attribute can reach after the increase, null means no limit
      *
      * @throws AuthorizationException
      * @throws DatabaseException
@@ -1749,10 +1798,12 @@ trait Documents
         string $collection,
         string $id,
         string $attribute,
-        int|float $value = 1,
-        int|float|null $max = null
+        int|float|string $value = 1,
+        int|float|string|null $max = null
     ): Document {
-        if ($value <= 0) { // Can be a float
+        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
+            ? BigInt::compare($value, 0) <= 0
+            : (float) $value <= 0)) {
             throw new InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
@@ -1804,22 +1855,33 @@ trait Documents
                 if (! \is_int($currentVal) && ! \is_float($currentVal)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
-                $result = $currentVal + $value;
+                $result = $currentVal + $this->getNativeNumber($value);
             }
-            if (! \is_null($max) && ($result > $max)) {
+            $exceedsMaximum = ! \is_null($max) && (
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::compare($result, $max) > 0
+                    : $result > $max
+            );
+            if ($exceedsMaximum) {
                 throw new LimitException('Attribute value exceeds maximum limit: '.$max);
             }
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
-            $max = $max !== null ? $max - $value : null;
+            if ($max !== null) {
+                $max = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::subtract($max, $value)
+                    : $this->getNativeNumber($max) - $this->getNativeNumber($value);
+            }
 
             $this->adapter->increaseDocumentAttribute(
                 $collection->getId(),
                 $id,
                 $attribute,
-                $value,
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::toNative($value)
+                    : $this->getNativeNumber($value),
                 $updatedAt,
                 max: $max
             );
@@ -1840,8 +1902,8 @@ trait Documents
      * @param  string  $collection  The collection identifier
      * @param  string  $id  The document identifier
      * @param  string  $attribute  The attribute to decrease
-     * @param  int|float  $value  The value to decrease the attribute by, must be positive
-     * @param  int|float|null  $min  The minimum value the attribute can reach, null means no limit
+     * @param  int|float|string  $value  The value to decrease the attribute by, must be positive
+     * @param  int|float|string|null  $min  The minimum value the attribute can reach, null means no limit
      * @return Document The updated document
      *
      * @throws AuthorizationException
@@ -1851,10 +1913,12 @@ trait Documents
         string $collection,
         string $id,
         string $attribute,
-        int|float $value = 1,
-        int|float|null $min = null
+        int|float|string $value = 1,
+        int|float|string|null $min = null
     ): Document {
-        if ($value <= 0) { // Can be a float
+        if (! \is_numeric($value) || (\is_string($value) && BigInt::isIntegerString($value)
+            ? BigInt::compare($value, 0) <= 0
+            : (float) $value <= 0)) {
             throw new InvalidArgumentException('Value must be numeric and greater than 0');
         }
 
@@ -1907,22 +1971,33 @@ trait Documents
                 if (! \is_int($currentDecVal) && ! \is_float($currentDecVal)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
-                $result = $currentDecVal - $value;
+                $result = $currentDecVal - $this->getNativeNumber($value);
             }
-            if (! \is_null($min) && ($result < $min)) {
+            $belowMinimum = ! \is_null($min) && (
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::compare($result, $min) < 0
+                    : $result < $min
+            );
+            if ($belowMinimum) {
                 throw new LimitException('Attribute value exceeds minimum limit: '.$min);
             }
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
-            $min = $min !== null ? $min + $value : null;
+            if ($min !== null) {
+                $min = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::add($min, $value)
+                    : $this->getNativeNumber($min) + $this->getNativeNumber($value);
+            }
 
             $this->adapter->increaseDocumentAttribute(
                 $collection->getId(),
                 $id,
                 $attribute,
-                $value * -1,
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::negate($value)
+                    : $this->getNativeNumber($value) * -1,
                 $updatedAt,
                 min: $min
             );

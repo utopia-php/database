@@ -53,6 +53,7 @@ class IncreaseDecreaseTest extends TestCase
                 Capability::IndexArray,
                 Capability::UniqueIndex,
                 Capability::DefinedAttributes,
+                Capability::UnsignedBigInt,
             ]);
         });
         $this->adapter->method('castingBefore')->willReturnArgument(1);
@@ -241,6 +242,64 @@ class IncreaseDecreaseTest extends TestCase
 
         $this->expectException(LimitException::class);
         $this->database->decreaseDocumentAttribute('testCol', 'doc1', 'value');
+    }
+
+    public function testUnsignedBigIntegerCrossesPhpIntegerBoundaryExactly(): void
+    {
+        $doc = new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => PHP_INT_MAX,
+        ]);
+        $this->setupCollectionWithDocument('testCol', $doc, [
+            $this->numericAttribute('value', ColumnType::BigInteger, false),
+        ]);
+
+        $increased = $this->database->increaseDocumentAttribute('testCol', 'doc1', 'value');
+        $this->assertSame('9223372036854775808', $increased->getAttribute('value'));
+
+        $decreased = $this->database->decreaseDocumentAttribute('testCol', 'doc1', 'value');
+        $this->assertSame(PHP_INT_MAX, $decreased->getAttribute('value'));
+    }
+
+    public function testUnsignedBigIntegerReachesExactMaximum(): void
+    {
+        $doc = new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => '18446744073709551614',
+        ]);
+        $this->setupCollectionWithDocument('testCol', $doc, [
+            $this->numericAttribute('value', ColumnType::BigInteger, false),
+        ]);
+
+        $result = $this->database->increaseDocumentAttribute(
+            'testCol',
+            'doc1',
+            'value',
+            1,
+            '18446744073709551615',
+        );
+
+        $this->assertSame('18446744073709551615', $result->getAttribute('value'));
+    }
+
+    public function testUnsignedBigIntegerRejectsOverflowAboveExactMaximum(): void
+    {
+        $doc = new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'value' => '18446744073709551615',
+        ]);
+        $this->setupCollectionWithDocument('testCol', $doc, [
+            $this->numericAttribute('value', ColumnType::BigInteger, false),
+        ]);
+
+        $this->expectException(LimitException::class);
+        $this->database->increaseDocumentAttribute('testCol', 'doc1', 'value');
     }
 
     public function testIncreaseDocumentAttributeWithMax(): void

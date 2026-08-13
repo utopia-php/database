@@ -851,10 +851,10 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         string $collection,
         string $id,
         string $attribute,
-        int|float $value,
+        int|float|string $value,
         string $updatedAt,
-        int|float|null $min = null,
-        int|float|null $max = null
+        int|float|string|null $min = null,
+        int|float|string|null $max = null
     ): bool;
 
     /**

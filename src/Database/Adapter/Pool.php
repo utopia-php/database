@@ -815,7 +815,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     /**
      * {@inheritDoc}
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int $value, string $updatedAt, float|int|null $min = null, float|int|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int|string $value, string $updatedAt, float|int|string|null $min = null, float|int|string|null $max = null): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

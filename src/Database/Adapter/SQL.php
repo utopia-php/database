@@ -37,6 +37,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
 use Utopia\Query\CursorDirection;
@@ -1094,10 +1095,10 @@ abstract class SQL extends Adapter
         string $collection,
         string $id,
         string $attribute,
-        int|float $value,
+        int|float|string $value,
         string $updatedAt,
-        int|float|null $min = null,
-        int|float|null $max = null
+        int|float|string|null $min = null,
+        int|float|string|null $max = null
     ): bool {
         $name = $this->filter($collection);
         $attribute = $this->filter($attribute);
@@ -4161,6 +4162,19 @@ abstract class SQL extends Adapter
     {
         $method = $operator->getMethod();
         $values = $operator->getValues();
+        $exact = BigInt::calculateOutsideNative($method, $value ?? 0, $values[0] ?? 1);
+        if ($exact !== null) {
+            $bound = $values[1] ?? null;
+            if (BigInt::isIntegerValue($bound)) {
+                $upper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
+                if (($upper && BigInt::compare($exact, $bound) > 0)
+                    || (! $upper && $method !== OperatorType::Modulo && BigInt::compare($exact, $bound) < 0)) {
+                    return BigInt::toNative($value ?? 0);
+                }
+            }
+
+            return $exact;
+        }
 
         $numVal = is_numeric($value) ? $value + 0 : 0;
         $firstValue = count($values) > 0 ? $values[0] : null;

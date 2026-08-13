@@ -1578,4 +1578,60 @@ class OperatorValidationTest extends TestCase
         ));
         $this->assertStringContainsString('would underflow', $validator->getDescription());
     }
+
+    public function testUnsignedBigIntegerOperatorCrossesPhpIntegerBoundary(): void
+    {
+        $validator = $this->makeValidator([
+            new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false),
+        ], new Document(['value' => PHP_INT_MAX]));
+
+        $this->assertTrue($validator->isValid(
+            $this->makeOperator(OperatorType::Increment, 'value', [1])
+        ));
+    }
+
+    public function testUnsignedBigIntegerOperatorAcceptsAndProtectsExactMaximum(): void
+    {
+        $attribute = new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false);
+        $atBoundary = $this->makeValidator([$attribute], new Document(['value' => '18446744073709551614']));
+        $overflow = $this->makeValidator([$attribute], new Document(['value' => '18446744073709551615']));
+
+        $this->assertTrue($atBoundary->isValid(
+            $this->makeOperator(OperatorType::Increment, 'value', [1])
+        ));
+        $this->assertFalse($overflow->isValid(
+            $this->makeOperator(OperatorType::Increment, 'value', [1])
+        ));
+        $this->assertStringContainsString('18446744073709551615', $overflow->getDescription());
+    }
+
+    public function testUnsignedBigIntegerOperatorRejectsUnsupportedAdapter(): void
+    {
+        $validator = new OperatorValidator(
+            $this->makeCollection([
+                new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false),
+            ]),
+            new Document(['value' => 1]),
+            false,
+        );
+
+        $this->assertFalse($validator->isValid(
+            $this->makeOperator(OperatorType::Increment, 'value', [1])
+        ));
+        $this->assertStringContainsString('not supported', $validator->getDescription());
+    }
+
+    public function testUnsignedBigIntegerArrayOperatorUsesExactBounds(): void
+    {
+        $validator = $this->makeValidator([
+            new Attribute(key: 'values', type: ColumnType::BigInteger, signed: false, array: true),
+        ]);
+
+        $this->assertTrue($validator->isValid(
+            $this->makeOperator(OperatorType::ArrayAppend, 'values', [['18446744073709551615']])
+        ));
+        $this->assertFalse($validator->isValid(
+            $this->makeOperator(OperatorType::ArrayAppend, 'values', [['18446744073709551616']])
+        ));
+    }
 }

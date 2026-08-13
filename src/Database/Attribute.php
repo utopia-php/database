@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Schema\ColumnType;
 
 /**
@@ -79,7 +80,7 @@ class Attribute
     }
 
     /**
-     * @return array{min: int|float, max: int|float}|null
+     * @return array{min: int|float|string, max: int|float|string}|null
      */
     public static function getNumericBounds(ColumnType|string $type, bool $signed = true): ?array
     {
@@ -93,7 +94,7 @@ class Attribute
             ColumnType::BigInteger,
             ColumnType::BigSerial => [
                 'min' => $signed ? \PHP_INT_MIN : 0,
-                'max' => Database::MAX_BIG_INT,
+                'max' => $signed ? Database::MAX_BIG_INT : BigInt::UNSIGNED_MAX,
             ],
             ColumnType::Float,
             ColumnType::Double => [

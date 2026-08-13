@@ -41,6 +41,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
 use Utopia\Query\CursorDirection;
@@ -2083,8 +2084,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @throws MongoException
      * @throws Exception
      */
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float $value, string $updatedAt, int|float|null $min = null, int|float|null $max = null): bool
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value, string $updatedAt, int|float|string|null $min = null, int|float|string|null $max = null): bool
     {
+        $value = $this->normalizeAtomicNumber($value, 'value');
+        $min = $min === null ? null : $this->normalizeAtomicNumber($min, 'minimum');
+        $max = $max === null ? null : $this->normalizeAtomicNumber($max, 'maximum');
+
         $attribute = $this->filter($attribute);
         $filters = ['_uid' => $id];
 
@@ -2119,6 +2124,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return true;
+    }
+
+    private function normalizeAtomicNumber(int|float|string $value, string $name): int|float
+    {
+        if (! \is_string($value)) {
+            return $value;
+        }
+        if (! BigInt::fitsPhpInt($value)) {
+            throw new TypeException("MongoDB cannot safely apply {$name} outside the signed 64-bit integer range.");
+        }
+
+        return (int) $value;
     }
 
     /**
@@ -2976,6 +2993,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             if (Operator::isOperator($value)) {
+                if (Attribute::isIntegerType($type ?? ColumnType::String)) {
+                    /** @var Operator $value */
+                    $values = $value->getValues();
+                    foreach ($values as $index => $operand) {
+                        if (! \is_string($operand) || ! BigInt::isIntegerString($operand)) {
+                            continue;
+                        }
+                        if (! BigInt::fitsPhpInt($operand)) {
+                            throw new TypeException('MongoDB cannot safely apply an integer operator outside the signed 64-bit range.');
+                        }
+                        $values[$index] = (int) $operand;
+                    }
+                    $value->setValues($values);
+                }
                 continue;
             }
 

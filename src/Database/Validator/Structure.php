@@ -335,7 +335,11 @@ class Structure extends Validator
                 /** @var Operator $value */
                 $value->setAttribute($key);
 
-                $operatorValidator = new OperatorValidator($this->collection, $this->currentDocument);
+                $operatorValidator = new OperatorValidator(
+                    $this->collection,
+                    $this->currentDocument,
+                    $this->supportUnsignedBigInt,
+                );
                 if (! $operatorValidator->isValid($value)) {
                     $this->message = $operatorValidator->getDescription();
 

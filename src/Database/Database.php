@@ -319,37 +319,8 @@ class Database
      */
     protected array $decorators = [];
 
-    /**
-     * When true, lifecycle hooks are not fired.
-     */
-    protected bool $eventsSilenced = false;
-
-    /**
-     * Per-instance memoisation of getCollection() results. Avoids the
-     * METADATA SELECT that would otherwise repeat for every find/getDocument
-     * call when the user-provided cache is the No-op adapter.
-     *
-     * Keyed by "{database}::{namespace}::{tenant}::{id}" so multi-tenant /
-     * multi-database/multi-namespace contexts cannot leak across each other.
-     * Entries are invalidated by purgeCachedCollection() and by any code path
-     * that reads or writes the METADATA collection itself (createCollection,
-     * createAttribute, createIndex, deleteAttribute, deleteIndex, etc.) so
-     * the cached metadata never goes stale relative to actual schema.
-     *
-     * @var array<string, Document>
-     */
-    protected array $collectionMetadataCache = [];
-
-    /**
-     * Per-context epochs used to reject collection metadata and validator
-     * publications that began before a purge.
-     *
-     * @var array<string, int>
-     */
-    protected array $collectionMetadataGenerations = [];
-
-    /** Soft cap to prevent unbounded growth in long-lived workers. */
-    protected const COLLECTION_METADATA_CACHE_LIMIT = 256;
+    /** @var array<int, int> Lifecycle silence depth by coroutine id. */
+    protected array $silencedEvents = [];
 
     protected ?NativeDateTime $timestamp = null;
 
@@ -827,7 +798,6 @@ class Database
 
         if ($queryCache !== null) {
             $this->queryCacheInvalidator = new CacheInvalidator($queryCache);
-            $this->lifecycleHooks[] = $this->queryCacheInvalidator;
         }
 
         return $this;
@@ -1367,9 +1337,9 @@ class Database
                     static fn (Lifecycle $registered): bool => ! $registered instanceof CacheInvalidator,
                 ));
                 $this->queryCacheInvalidator = $hook;
+            } else {
+                $this->lifecycleHooks[] = $hook;
             }
-
-            $this->lifecycleHooks[] = $hook;
         }
 
         if ($hook instanceof Hook\Decorator) {
@@ -1396,7 +1366,7 @@ class Database
      */
     protected function decorateDocument(Event $event, Document $collection, Document $document): Document
     {
-        if ($this->eventsSilenced) {
+        if ($this->areEventsSilenced()) {
             return $document;
         }
 
@@ -1447,14 +1417,31 @@ class Database
      */
     public function silent(callable $callback): mixed
     {
-        $previous = $this->eventsSilenced;
-        $this->eventsSilenced = true;
+        $context = $this->getEventContext();
+        $this->silencedEvents[$context] = ($this->silencedEvents[$context] ?? 0) + 1;
 
         try {
             return $callback();
         } finally {
-            $this->eventsSilenced = $previous;
+            $depth = $this->silencedEvents[$context] - 1;
+            if ($depth === 0) {
+                unset($this->silencedEvents[$context]);
+            } else {
+                $this->silencedEvents[$context] = $depth;
+            }
         }
+    }
+
+    protected function areEventsSilenced(): bool
+    {
+        return ($this->silencedEvents[$this->getEventContext()] ?? 0) > 0;
+    }
+
+    private function getEventContext(): int
+    {
+        $context = Coroutine::getCid();
+
+        return \is_int($context) ? $context : -1;
     }
 
     /**
@@ -2425,42 +2412,6 @@ class Database
             .'::'.$tenantKey.'::'.$collection;
     }
 
-    protected function getCollectionMetadataGeneration(string $key): int
-    {
-        return $this->collectionMetadataGenerations[$key] ??= 0;
-    }
-
-    protected function invalidateCollectionMetadata(string $collection): void
-    {
-        $currentKey = $this->getCollectionMetadataCacheKey($collection);
-        $suffix = '::'.$collection;
-        $keys = [$currentKey => true];
-
-        foreach (\array_keys($this->collectionMetadataCache) as $key) {
-            if (\str_ends_with($key, $suffix)) {
-                $keys[$key] = true;
-            }
-        }
-
-        foreach (\array_keys($this->collectionMetadataGenerations) as $key) {
-            if (\str_ends_with($key, $suffix)) {
-                $keys[$key] = true;
-            }
-        }
-
-        foreach (\array_keys($keys) as $key) {
-            $this->collectionMetadataGenerations[$key] = ($this->collectionMetadataGenerations[$key] ?? 0) + 1;
-            unset($this->collectionMetadataCache[$key]);
-
-            $validatorPrefix = $key.'::';
-            foreach (\array_keys($this->documentsValidatorCache) as $validatorKey) {
-                if (\str_starts_with($validatorKey, $validatorPrefix)) {
-                    unset($this->documentsValidatorCache[$validatorKey]);
-                }
-            }
-        }
-    }
-
     /**
      * @return array<string, string>
      */
@@ -2493,12 +2444,14 @@ class Database
     }
 
     /**
-     * Fire an event to all registered lifecycle hooks.
-     * Exceptions from hooks are silently caught.
+     * Fire an event to mandatory cache invalidation and registered lifecycle hooks.
+     * Mandatory invalidation is never silenced and failures are propagated.
      */
     protected function trigger(Event $event, mixed $data = null): void
     {
-        if ($this->eventsSilenced) {
+        $this->queryCacheInvalidator?->handle($event, $data);
+
+        if ($this->areEventsSilenced()) {
             return;
         }
 

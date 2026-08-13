@@ -88,11 +88,9 @@ class Mirror extends Database
 
     /**
      * Delegate metadata reads to the source database. Mirror's schema mutator
-     * overrides forward writes to source/destination directly without going
-     * through Mirror's own Database traits, so Mirror's per-instance
-     * `collectionMetadataCache` never gets invalidated. Routing reads through
-     * the source — whose cache is correctly invalidated on every mutation —
-     * keeps Mirror's view of attributes and relationships in lockstep.
+     * overrides forward writes to source and destination directly, so routing
+     * reads through the source keeps its view of attributes and relationships
+     * in lockstep with the authoritative database.
      */
     public function getCollection(string $id): Document
     {

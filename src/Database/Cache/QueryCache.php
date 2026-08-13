@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Cache;
 
+use RuntimeException;
 use Utopia\Cache\Cache;
 use Utopia\Database\Document;
 
@@ -65,9 +66,14 @@ class QueryCache
     {
         [$cacheKey, $hash] = $this->splitKey($key);
         $collection = $this->getCollectionFromKey($cacheKey);
+        $epoch = $this->getEpoch($cacheKey, $collection);
+        if ($epoch === null) {
+            return null;
+        }
+        $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 
         /** @var mixed $data */
-        $data = $this->cache->load($cacheKey, $this->getRegion($collection)->ttl, $hash);
+        $data = $this->cache->load($physicalKey, $this->getRegion($collection)->ttl);
 
         if ($data === false || $data === null) {
             return null;
@@ -78,7 +84,7 @@ class QueryCache
             || ($data['version'] ?? null) !== self::VERSION
             || ! \is_array($data['documents'] ?? null)
         ) {
-            $this->cache->purge($cacheKey, $hash);
+            $this->purgeLoadedKey($physicalKey);
 
             return null;
         }
@@ -91,7 +97,7 @@ class QueryCache
             }
 
             if (! \is_array($item)) {
-                $this->cache->purge($cacheKey, $hash);
+                $this->purgeLoadedKey($physicalKey);
 
                 return null;
             }
@@ -104,9 +110,18 @@ class QueryCache
 
     public function getGeneration(string $key): string
     {
-        [$cacheKey] = $this->splitKey($key);
+        [$cacheKey, $hash] = $this->splitKey($key);
+        $collection = $this->getCollectionFromKey($cacheKey);
+        $epoch = $this->getEpoch($cacheKey, $collection, true);
+        if ($epoch === null) {
+            throw new RuntimeException("Failed to initialize query cache epoch for collection '{$collection}'");
+        }
+        $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 
-        return $this->cache->getGeneration($cacheKey);
+        return \base64_encode(\json_encode([
+            'epoch' => $epoch,
+            'lease' => $this->cache->getGeneration($physicalKey),
+        ], JSON_THROW_ON_ERROR));
     }
 
     /**
@@ -124,16 +139,30 @@ class QueryCache
         }
 
         [$cacheKey, $hash] = $this->splitKey($key);
+        $collection = $this->getCollectionFromKey($cacheKey);
+        [$epoch, $lease] = $this->decodeGeneration($generation, $cacheKey, $hash, $collection);
+        $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 
-        return $this->cache->saveWithLease($cacheKey, [
+        return $this->cache->saveWithLease($physicalKey, [
             'version' => self::VERSION,
             'documents' => $data,
-        ], $hash, $generation) !== false;
+        ], '', $lease) !== false;
     }
 
     public function invalidateCollection(string $collection): void
     {
-        $this->cache->purge($this->getCollectionKey($collection));
+        $cacheKey = $this->getCollectionKey($collection);
+        $epochKey = $this->getEpochKey($cacheKey);
+        $existing = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
+
+        if ($existing !== false && $existing !== null && ! $this->cache->purge($epochKey)) {
+            throw new RuntimeException("Failed to purge query cache epoch for collection '{$collection}'");
+        }
+
+        $epoch = \bin2hex(\random_bytes(16));
+        if ($this->cache->save($epochKey, $epoch) === false) {
+            throw new RuntimeException("Failed to advance query cache epoch for collection '{$collection}'");
+        }
     }
 
     public function isEnabled(string $collection): bool
@@ -145,7 +174,9 @@ class QueryCache
 
     public function flush(): void
     {
-        $this->cache->flush();
+        if (! $this->cache->flush()) {
+            throw new RuntimeException('Failed to flush query cache');
+        }
     }
 
     private function getCollectionKey(string $collection): string
@@ -166,5 +197,78 @@ class QueryCache
         $parts = \explode('#', $key, 2);
 
         return [$parts[0], $parts[1] ?? ''];
+    }
+
+    private function getEpoch(string $cacheKey, string $collection, bool $initialize = false): ?string
+    {
+        $epoch = $this->cache->load(
+            $this->getEpochKey($cacheKey),
+            $this->getRegion($collection)->ttl,
+        );
+
+        if ($epoch === false || $epoch === null) {
+            if (! $initialize) {
+                return null;
+            }
+
+            $epoch = \bin2hex(\random_bytes(16));
+            if ($this->cache->save($this->getEpochKey($cacheKey), $epoch) === false) {
+                throw new RuntimeException("Failed to initialize query cache epoch for collection '{$collection}'");
+            }
+
+            return $epoch;
+        }
+
+        if (! \is_string($epoch) || $epoch === '') {
+            throw new RuntimeException("Invalid query cache epoch for collection '{$collection}'");
+        }
+
+        return $epoch;
+    }
+
+    private function getEpochKey(string $cacheKey): string
+    {
+        return $cacheKey.'#epoch';
+    }
+
+    private function getPhysicalKey(string $cacheKey, string $hash, string $epoch): string
+    {
+        return $cacheKey.'#'.$epoch.':'.$hash;
+    }
+
+    private function purgeLoadedKey(string $physicalKey): void
+    {
+        if (! $this->cache->purge($physicalKey)) {
+            throw new RuntimeException("Failed to purge invalid query cache entry '{$physicalKey}'");
+        }
+    }
+
+    /** @return array{string, string} */
+    private function decodeGeneration(
+        string $generation,
+        string $cacheKey,
+        string $hash,
+        string $collection,
+    ): array {
+        if ($generation === '0') {
+            $epoch = $this->getEpoch($cacheKey, $collection, true);
+            if ($epoch === null) {
+                throw new RuntimeException("Failed to initialize query cache epoch for collection '{$collection}'");
+            }
+            $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
+
+            return [$epoch, $this->cache->getGeneration($physicalKey)];
+        }
+
+        $encoded = \base64_decode($generation, true);
+        $decoded = $encoded === false ? null : \json_decode($encoded, true);
+        $epoch = \is_array($decoded) ? ($decoded['epoch'] ?? null) : null;
+        $lease = \is_array($decoded) ? ($decoded['lease'] ?? null) : null;
+
+        if (! \is_string($epoch) || $epoch === '' || ! \is_string($lease)) {
+            throw new RuntimeException('Invalid query cache generation');
+        }
+
+        return [$epoch, $lease];
     }
 }

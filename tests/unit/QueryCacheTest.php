@@ -194,7 +194,7 @@ class QueryCacheTest extends TestCase
         $this->assertSame(['value' => 'first'], $cachedFirst);
         $this->assertSame(1, $firstCalls);
         $this->assertSame(1, $secondCalls);
-        $this->assertSame(['first-field', 'second-field'], $cache->list('key'));
+        $this->assertSame(3, $cache->getSize());
     }
 
     public function testWithCacheDoesNotCacheFalseValues(): void
@@ -656,7 +656,7 @@ class QueryCacheTest extends TestCase
         $key = $database->getQueryCacheKey($collection->getId(), '_39');
         $hash = $database->getQueryCacheField($collection);
         $this->assertNotNull($hash);
-        $database->getCache()->save($key, [
+        $this->storeCacheValue($cache, $key, $hash, [
             'collection' => $collection->getId(),
             'type' => 'documents',
             'value' => [
@@ -667,7 +667,7 @@ class QueryCacheTest extends TestCase
                     ],
                 ],
             ],
-        ], $hash);
+        ]);
 
         $callbackCalls = 0;
         $documents = $database->withCache(
@@ -702,8 +702,10 @@ class QueryCacheTest extends TestCase
         $collection = $database->getCollection('parents');
         $hash = $database->getQueryCacheField($collection, $queries);
         $this->assertNotNull($hash);
-        $cache->save(
+        $this->storeCacheValue(
+            $cache,
             $database->getQueryCacheKey($collection->getId(), '_39'),
+            $hash,
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
@@ -718,7 +720,6 @@ class QueryCacheTest extends TestCase
                     ],
                 ],
             ],
-            $hash,
         );
 
         $parents = $this->findWithCache($database, 'parents', $queries, '_39');
@@ -754,14 +755,15 @@ class QueryCacheTest extends TestCase
         $collection = $database->getCollection('wafRules');
         $hash = $database->getQueryCacheField($collection, $queries);
         $this->assertNotNull($hash);
-        $cache->save(
+        $this->storeCacheValue(
+            $cache,
             $database->getQueryCacheKey($collection->getId(), '_39'),
+            $hash,
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
                 'value' => 'invalid',
             ],
-            $hash,
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
@@ -799,8 +801,10 @@ class QueryCacheTest extends TestCase
         $collection = $database->getCollection('wafRules');
         $hash = $database->getQueryCacheField($collection, $queries);
         $this->assertNotNull($hash);
-        $cache->save(
+        $this->storeCacheValue(
+            $cache,
             $database->getQueryCacheKey($collection->getId(), '_39'),
+            $hash,
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
@@ -812,7 +816,6 @@ class QueryCacheTest extends TestCase
                     'invalid',
                 ],
             ],
-            $hash,
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
@@ -821,6 +824,14 @@ class QueryCacheTest extends TestCase
             static fn (Document $document): string => $document->getId(),
             $rules,
         ));
+    }
+
+    /** @param array<string, mixed> $value */
+    private function storeCacheValue(HashMemoryCache $cache, string $key, string $hash, array $value): void
+    {
+        $epoch = 'test-epoch';
+        $cache->save(\strtolower($key.'#epoch'), $epoch);
+        $cache->save(\strtolower($key.'#'.$epoch.':'.$hash), $value);
     }
 }
 

@@ -223,6 +223,11 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         return $result;
     }
 
+    public function inTransaction(): bool
+    {
+        return $this->pinnedAdapter?->inTransaction() ?? parent::inTransaction();
+    }
+
     public function getHostname(): string
     {
         /** @var string $result */

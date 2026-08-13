@@ -54,17 +54,21 @@ class WithCacheLeaseTest extends TestCase
         // concurrent writer purges the query key after the read started but
         // before the result is cached. Without a lease the stale list below
         // would land in the cache after the purge.
-        $result = $this->database->withCache($this->key, function () use ($hash, $document) {
-            $this->cacheAdapter->purge($this->key, $hash);
+        $result = $this->database->withCache($this->key, function () use ($document) {
+            $this->database->purgeCachedQueries('projects');
 
             return [$document];
         }, $hash);
 
         $this->assertCount(1, $result);
-        $this->assertFalse(
-            $this->cacheAdapter->load($this->key, Database::TTL, $hash),
-            'A list read whose query key was purged mid-flight must not be re-cached.'
-        );
+        $callbackCalls = 0;
+        $fresh = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
+            $callbackCalls++;
+
+            return [];
+        }, $hash);
+        $this->assertSame([], $fresh);
+        $this->assertSame(1, $callbackCalls);
     }
 
     public function testListWriteLandsWhenNoConcurrentPurge(): void
@@ -76,10 +80,14 @@ class WithCacheLeaseTest extends TestCase
         $result = $this->database->withCache($this->key, fn () => [$document], $hash);
 
         $this->assertCount(1, $result);
-        $this->assertNotFalse(
-            $this->cacheAdapter->load($this->key, Database::TTL, $hash),
-            'A list read with no concurrent purge must populate the cache.'
-        );
+        $callbackCalls = 0;
+        $cached = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
+            $callbackCalls++;
+
+            return [];
+        }, $hash);
+        $this->assertCount(1, $cached);
+        $this->assertSame(0, $callbackCalls);
     }
 }
 

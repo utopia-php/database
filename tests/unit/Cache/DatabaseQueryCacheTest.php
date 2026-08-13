@@ -5,20 +5,26 @@ namespace Tests\Unit\Cache;
 use Closure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter as CacheAdapter;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -93,12 +99,12 @@ final class DatabaseQueryCacheTest extends TestCase
 
         $queryAdapter->resetPurges();
         $database->createDocument('users', new Document(['$id' => 'a']));
-        $this->assertSame(1, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertSame(1, $queryAdapter->getWrites('default:qcache:users#epoch'));
 
         $database->setQueryCache(null);
         $queryAdapter->resetPurges();
         $database->createDocument('users', new Document(['$id' => 'b']));
-        $this->assertSame(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertSame(0, $queryAdapter->getWrites('default:qcache:users#epoch'));
     }
 
     public function testSchemaAndCollectionMutationsInvalidateQueries(): void
@@ -108,31 +114,31 @@ final class DatabaseQueryCacheTest extends TestCase
 
         $queryAdapter->resetPurges();
         $database->updateCollection('users', $this->permissions(), false);
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
         $database->createAttribute('users', new Attribute('name', ColumnType::String, 255));
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
         $database->updateAttribute('users', 'name', size: 128);
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
         $database->createIndex('users', new Index('name', IndexType::Key, ['name']));
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
         $database->renameIndex('users', 'name', 'renamed');
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
         $database->deleteIndex('users', 'renamed');
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
         $database->deleteAttribute('users', 'name');
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
     }
 
     public function testDeleteAndRecreateCannotReuseOldCollectionResults(): void
@@ -198,11 +204,208 @@ final class DatabaseQueryCacheTest extends TestCase
         ], permissions: $this->permissions());
         $database->getCollection('users');
 
-        $adapter->observeValidators(fn () => $database->purgeCachedCollection('users'));
+        $adapter->observeValidators(
+            fn () => $database->createAttribute('users', new Attribute('age', ColumnType::Integer)),
+        );
         $database->find('users', [Query::equal('name', ['first'])]);
         $database->find('users', [Query::equal('name', ['second'])]);
 
         $this->assertSame(2, $adapter->getObservedValidators());
+    }
+
+    public function testMemoryCacheSeparatesRolesAndExecutionShapes(): void
+    {
+        [$database] = $this->createDatabase(queryCache: false);
+        $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createCollection('private', permissions: [
+                Permission::create(Role::any()),
+            ], documentSecurity: true);
+
+            foreach ([
+                ['a', 'user-1'],
+                ['b', 'user-2'],
+                ['c', 'user-1'],
+            ] as [$id, $user]) {
+                $database->createDocument('private', new Document([
+                    '$id' => $id,
+                    '$permissions' => [Permission::read(Role::user($user))],
+                ]));
+            }
+        });
+
+        $authorization = $database->getAuthorization();
+        $authorization->addRole(Role::user('user-1')->toString());
+        $this->assertSame(['a'], $this->ids($database->find('private', [
+            Query::orderAsc('$id'),
+            Query::limit(1),
+        ])));
+        $this->assertSame(['c'], $this->ids($database->find('private', [
+            Query::orderDesc('$id'),
+            Query::limit(1),
+        ])));
+        $this->assertSame(['a', 'c'], $this->ids($database->find('private', [
+            Query::orderAsc('$id'),
+            Query::limit(2),
+        ])));
+
+        $authorization->removeRole(Role::user('user-1')->toString());
+        $authorization->addRole(Role::user('user-2')->toString());
+        $this->assertSame(['b'], $this->ids($database->find('private', [
+            Query::orderAsc('$id'),
+            Query::limit(2),
+        ])));
+    }
+
+    public function testMemoryCacheSeparatesPointSelectionVariants(): void
+    {
+        [$database] = $this->createDatabase(queryCache: false, dataAdapter: new MemoryCache());
+        $database->createCollection('users', [
+            new Attribute('name', ColumnType::String, 255),
+            new Attribute('email', ColumnType::String, 255),
+        ], permissions: $this->permissions());
+        $database->createDocument('users', new Document([
+            '$id' => 'user',
+            'name' => 'Alice',
+            'email' => 'alice@example.com',
+        ]));
+
+        $name = $database->getDocument('users', 'user', [Query::select(['name'])]);
+        $email = $database->getDocument('users', 'user', [Query::select(['email'])]);
+
+        $this->assertSame('Alice', $name->getAttribute('name'));
+        $this->assertNull($name->getAttribute('email'));
+        $this->assertSame('alice@example.com', $email->getAttribute('email'));
+        $this->assertNull($email->getAttribute('name'));
+    }
+
+    public function testPermissionRevocationIsFreshAcrossDatabaseInstances(): void
+    {
+        $adapter = new DatabaseMemory();
+        $authorization = new Authorization();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::user('user-1')->toString());
+        $writer = new Database($adapter, new Cache(new None()));
+        $reader = new Database($adapter, new Cache(new None()));
+
+        foreach ([$writer, $reader] as $database) {
+            $database
+                ->setAuthorization($authorization)
+                ->setDatabase('cache-tests')
+                ->setNamespace('shared_metadata');
+        }
+
+        $writer->create();
+        $writer->createCollection('users', permissions: [
+            Permission::read(Role::user('user-1')),
+            Permission::create(Role::user('user-1')),
+            Permission::update(Role::user('user-1')),
+        ]);
+        $reader->getCollection('users');
+
+        $writer->updateCollection('users', [
+            Permission::create(Role::user('user-1')),
+            Permission::update(Role::user('user-1')),
+        ], false);
+
+        $this->expectException(AuthorizationException::class);
+        $reader->find('users');
+    }
+
+    public function testSilentPermissionRevocationStillInvalidatesQueryCache(): void
+    {
+        [$database] = $this->createDatabase(queryCache: false);
+        $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createCollection('private', permissions: [
+                Permission::create(Role::any()),
+            ], documentSecurity: true);
+            $database->createDocument('private', new Document([
+                '$id' => 'secret',
+                '$permissions' => [
+                    Permission::read(Role::user('user-1')),
+                    Permission::update(Role::user('user-1')),
+                ],
+            ]));
+        });
+
+        $database->getAuthorization()->addRole(Role::user('user-1')->toString());
+        $this->assertSame(['secret'], $this->ids($database->find('private')));
+
+        $database->getAuthorization()->skip(fn () => $database->silent(
+            fn () => $database->updateDocument('private', 'secret', new Document([
+                '$permissions' => [Permission::read(Role::user('user-2'))],
+            ])),
+        ));
+
+        $this->assertSame([], $database->find('private'));
+    }
+
+    public function testJoinQueriesAlwaysBypassCacheAfterRelatedMutation(): void
+    {
+        $adapter = new JoinMemory();
+        [$database] = $this->createDatabase($adapter);
+        $database->createCollection('parents', permissions: $this->permissions());
+        $database->createCollection('children', permissions: $this->permissions());
+
+        $queries = [Query::join('children', '$id', '$id')];
+        $database->find('parents', $queries);
+        $database->createDocument('children', new Document(['$id' => 'child']));
+        $database->find('parents', $queries);
+
+        $this->assertSame(2, $adapter->getJoinFinds());
+    }
+
+    public function testMandatoryInvalidationFailureEscapesSilentScope(): void
+    {
+        $cache = new FailingMemory();
+        [$database] = $this->createDatabase(queryCache: false);
+        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $database->createCollection('users', permissions: $this->permissions());
+        $database->find('users');
+        $cache->failPurges();
+
+        $this->expectException(\RuntimeException::class);
+        $database->silent(fn () => $database->createDocument('users', new Document(['$id' => 'user'])));
+    }
+
+    public function testPooledRollbackCannotPoisonPointOrQueryCaches(): void
+    {
+        $child = new DatabaseMemory();
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($child),
+        );
+        $database = new Database(new Pool($connections), new Cache(new LeasableHashCache()));
+        $database
+            ->setDatabase('cache-tests')
+            ->setNamespace('pooled_'.\uniqid())
+            ->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $database->create();
+        $database->createCollection('users', [
+            new Attribute('name', ColumnType::String, 255),
+        ], permissions: $this->permissions());
+        $database->createDocument('users', new Document([
+            '$id' => 'user',
+            'name' => 'committed',
+        ]));
+        $this->assertSame('committed', $database->getDocument('users', 'user')->getAttribute('name'));
+        $this->assertSame('committed', $database->find('users')[0]->getAttribute('name'));
+
+        try {
+            $database->withTransaction(function () use ($database): void {
+                $database->updateDocument('users', 'user', new Document(['name' => 'rolled-back']));
+                $this->assertTrue($database->getAdapter()->inTransaction());
+                $this->assertSame('rolled-back', $database->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('rolled-back', $database->find('users')[0]->getAttribute('name'));
+
+                throw new Conflict('rollback');
+            });
+        } catch (Conflict) {
+        }
+
+        $this->assertSame('committed', $database->getDocument('users', 'user')->getAttribute('name'));
+        $this->assertSame('committed', $database->find('users')[0]->getAttribute('name'));
     }
 
     /**
@@ -271,6 +474,9 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     /** @var array<string, int> */
     private array $purges = [];
 
+    /** @var array<string, int> */
+    private array $writes = [];
+
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $hash = $hash === '' ? $key : $hash;
@@ -286,6 +492,7 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         }
 
         $hash = $hash === '' ? $key : $hash;
+        $this->writes[$key] = ($this->writes[$key] ?? 0) + 1;
         $this->store[$key][$hash] = ['time' => \time(), 'data' => $data];
 
         return $data;
@@ -363,11 +570,17 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     public function resetPurges(): void
     {
         $this->purges = [];
+        $this->writes = [];
     }
 
     public function getPurges(string $key): int
     {
         return $this->purges[$key] ?? 0;
+    }
+
+    public function getWrites(string $key): int
+    {
+        return $this->writes[$key] ?? 0;
     }
 }
 
@@ -478,5 +691,80 @@ final class ObservedMemory extends DatabaseMemory
             $cursorDirection,
             $forPermission,
         );
+    }
+}
+
+final class JoinMemory extends DatabaseMemory
+{
+    private int $finds = 0;
+
+    #[\Override]
+    public function capabilities(): array
+    {
+        return [...parent::capabilities(), Capability::Joins];
+    }
+
+    #[\Override]
+    public function find(
+        Document $collection,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+        array $cursor = [],
+        CursorDirection $cursorDirection = CursorDirection::After,
+        PermissionType $forPermission = PermissionType::Read,
+    ): array {
+        if ($collection->getId() === 'parents') {
+            $this->finds++;
+        }
+
+        $queries = \array_values(\array_filter(
+            $queries,
+            static fn (Query $query): bool => ! \in_array($query->getMethod(), [
+                \Utopia\Query\Method::Join,
+                \Utopia\Query\Method::LeftJoin,
+                \Utopia\Query\Method::RightJoin,
+                \Utopia\Query\Method::CrossJoin,
+            ], true),
+        ));
+
+        return parent::find(
+            $collection,
+            $queries,
+            $limit,
+            $offset,
+            $orderAttributes,
+            $orderTypes,
+            $cursor,
+            $cursorDirection,
+            $forPermission,
+        );
+    }
+
+    public function getJoinFinds(): int
+    {
+        return $this->finds;
+    }
+}
+
+final class FailingMemory extends MemoryCache
+{
+    private bool $failing = false;
+
+    public function failPurges(): void
+    {
+        $this->failing = true;
+    }
+
+    #[\Override]
+    public function purge(string $key, string $hash = ''): bool
+    {
+        if ($this->failing && \str_ends_with($key, '#epoch')) {
+            return false;
+        }
+
+        return parent::purge($key, $hash);
     }
 }

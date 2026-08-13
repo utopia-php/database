@@ -2,7 +2,9 @@
 
 namespace Tests\Unit\Cache;
 
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\Memory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Cache\CacheInvalidator;
 use Utopia\Database\Cache\CacheRegion;
@@ -111,13 +113,16 @@ class QueryCacheTest extends TestCase
 
     public function testGetReturnsDocumentArrayForCacheHit(): void
     {
-        $this->cache->method('load')->willReturn([
-            'version' => 1,
-            'documents' => [
-                ['$id' => 'doc1', 'name' => 'Alice'],
-                ['$id' => 'doc2', 'name' => 'Bob'],
+        $this->cache->method('load')->willReturn(
+            'epoch',
+            [
+                'version' => 1,
+                'documents' => [
+                    ['$id' => 'doc1', 'name' => 'Alice'],
+                    ['$id' => 'doc2', 'name' => 'Bob'],
+                ],
             ],
-        ]);
+        );
 
         $result = $this->queryCache->get('some-key');
 
@@ -130,10 +135,13 @@ class QueryCacheTest extends TestCase
     public function testGetHandlesDocumentObjectsInCache(): void
     {
         $doc = new Document(['$id' => 'doc1', 'name' => 'Alice']);
-        $this->cache->method('load')->willReturn([
-            'version' => 1,
-            'documents' => [$doc],
-        ]);
+        $this->cache->method('load')->willReturn(
+            'epoch',
+            [
+                'version' => 1,
+                'documents' => [$doc],
+            ],
+        );
 
         $result = $this->queryCache->get('some-key');
 
@@ -142,11 +150,12 @@ class QueryCacheTest extends TestCase
         $this->assertSame($doc, $result[0]);
     }
 
-    public function testGetReturnsNullForNonArrayData(): void
+    public function testGetPropagatesMalformedPayloadPurgeFailure(): void
     {
-        $this->cache->method('load')->willReturn('not-an-array');
-        $result = $this->queryCache->get('some-key');
-        $this->assertNull($result);
+        $this->cache->method('load')->willReturn('epoch', 'not-an-array');
+
+        $this->expectException(\RuntimeException::class);
+        $this->queryCache->get('some-key');
     }
 
     public function testGetUsesCollectionRegionTtlAndQueryHash(): void
@@ -157,10 +166,17 @@ class QueryCacheTest extends TestCase
         $key = $queryCache->buildQueryKey('users', [Query::limit(10)], 'ns', null);
         [, $hash] = \explode('#', $key, 2);
 
-        $cache->expects($this->once())
+        $cache->expects($this->exactly(2))
             ->method('load')
-            ->with('default:qcache:users', 120, $hash)
-            ->willReturn(false);
+            ->willReturnCallback(function (string $cacheKey, int $ttl) use ($hash): string|false {
+                $this->assertSame(120, $ttl);
+
+                return match ($cacheKey) {
+                    'default:qcache:users#epoch' => 'epoch',
+                    'default:qcache:users#epoch:'.$hash => false,
+                    default => throw new \LogicException("Unexpected cache key '{$cacheKey}'"),
+                };
+            });
 
         $this->assertNull($queryCache->get($key));
     }
@@ -172,10 +188,14 @@ class QueryCacheTest extends TestCase
         $key = $queryCache->buildQueryKey('users', [], 'ns', null);
         [, $hash] = \explode('#', $key, 2);
 
-        $cache->method('load')->willReturn(['version' => 1, 'documents' => ['invalid']]);
+        $cache->method('load')->willReturnOnConsecutiveCalls(
+            'epoch',
+            ['version' => 1, 'documents' => ['invalid']],
+        );
         $cache->expects($this->once())
             ->method('purge')
-            ->with('default:qcache:users', $hash);
+            ->with('default:qcache:users#epoch:'.$hash)
+            ->willReturn(true);
 
         $this->assertNull($queryCache->get($key));
     }
@@ -184,6 +204,8 @@ class QueryCacheTest extends TestCase
     {
         $cache = $this->createMock(Cache::class);
         $queryCache = new QueryCache($cache);
+        $cache->method('load')->willReturn('epoch');
+        $cache->method('getGeneration')->willReturn('0');
 
         $docs = [
             new Document(['$id' => 'doc1', 'name' => 'Alice']),
@@ -192,7 +214,7 @@ class QueryCacheTest extends TestCase
         $cache->expects($this->once())
             ->method('saveWithLease')
             ->with(
-                'cache-key',
+                'cache-key#epoch:',
                 $this->callback(function (array $data): bool {
                     $documents = $data['documents'] ?? null;
 
@@ -212,10 +234,16 @@ class QueryCacheTest extends TestCase
     {
         $cache = $this->createMock(Cache::class);
         $queryCache = new QueryCache($cache);
+        $cache->method('load')->willReturn('epoch');
 
         $cache->expects($this->once())
             ->method('purge')
-            ->with('default:qcache:users');
+            ->with('default:qcache:users#epoch')
+            ->willReturn(true);
+        $cache->expects($this->once())
+            ->method('save')
+            ->with('default:qcache:users#epoch', $this->isType('string'))
+            ->willReturnArgument(1);
 
         $queryCache->invalidateCollection('users');
     }
@@ -237,7 +265,8 @@ class QueryCacheTest extends TestCase
         $queryCache = new QueryCache($cache);
 
         $cache->expects($this->once())
-            ->method('flush');
+            ->method('flush')
+            ->willReturn(true);
 
         $queryCache->flush();
     }
@@ -259,36 +288,39 @@ class QueryCacheTest extends TestCase
     public function testCacheInvalidatorInvalidatesOnDocumentCreate(): void
     {
         $cache = $this->createMock(Cache::class);
+        $this->configureInvalidationCache($cache);
         $queryCache = new QueryCache($cache);
         $invalidator = new CacheInvalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'users']);
 
-        $cache->expects($this->once())->method('purge');
+        $cache->expects($this->once())->method('purge')->willReturn(true);
         $invalidator->handle(Event::DocumentCreate, $doc);
     }
 
     public function testCacheInvalidatorInvalidatesOnDocumentUpdate(): void
     {
         $cache = $this->createMock(Cache::class);
+        $this->configureInvalidationCache($cache);
         $queryCache = new QueryCache($cache);
         $invalidator = new CacheInvalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'posts']);
 
-        $cache->expects($this->once())->method('purge');
+        $cache->expects($this->once())->method('purge')->willReturn(true);
         $invalidator->handle(Event::DocumentUpdate, $doc);
     }
 
     public function testCacheInvalidatorInvalidatesOnDocumentDelete(): void
     {
         $cache = $this->createMock(Cache::class);
+        $this->configureInvalidationCache($cache);
         $queryCache = new QueryCache($cache);
         $invalidator = new CacheInvalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'users']);
 
-        $cache->expects($this->once())->method('purge');
+        $cache->expects($this->once())->method('purge')->willReturn(true);
         $invalidator->handle(Event::DocumentDelete, $doc);
     }
 
@@ -307,12 +339,14 @@ class QueryCacheTest extends TestCase
     public function testCacheInvalidatorExtractsCollectionFromDocument(): void
     {
         $cache = $this->createMock(Cache::class);
+        $this->configureInvalidationCache($cache);
         $queryCache = new QueryCache($cache);
         $invalidator = new CacheInvalidator($queryCache);
 
         $cache->expects($this->once())
             ->method('purge')
-            ->with($this->stringContains('orders'));
+            ->with($this->stringContains('orders'))
+            ->willReturn(true);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'orders']);
         $invalidator->handle(Event::DocumentCreate, $doc);
@@ -321,12 +355,14 @@ class QueryCacheTest extends TestCase
     public function testCacheInvalidatorHandlesStringData(): void
     {
         $cache = $this->createMock(Cache::class);
+        $this->configureInvalidationCache($cache);
         $queryCache = new QueryCache($cache);
         $invalidator = new CacheInvalidator($queryCache);
 
         $cache->expects($this->once())
             ->method('purge')
-            ->with($this->stringContains('products'));
+            ->with($this->stringContains('products'))
+            ->willReturn(true);
 
         $invalidator->handle(Event::DocumentCreate, 'products');
     }
@@ -346,6 +382,7 @@ class QueryCacheTest extends TestCase
     public function testCacheInvalidatorInvalidatesBothRelationshipCollections(): void
     {
         $cache = $this->createMock(Cache::class);
+        $this->configureInvalidationCache($cache);
         $queryCache = new QueryCache($cache);
         $invalidator = new CacheInvalidator($queryCache);
 
@@ -366,24 +403,66 @@ class QueryCacheTest extends TestCase
         ]));
 
         $this->assertSame([
-            'default:qcache:posts',
-            'default:qcache:authors',
+            'default:qcache:posts#epoch',
+            'default:qcache:authors#epoch',
         ], $purged);
     }
 
     public function testCacheInvalidatorUsesCollectionIdentityForCollectionMutations(): void
     {
         $cache = $this->createMock(Cache::class);
+        $this->configureInvalidationCache($cache);
         $queryCache = new QueryCache($cache);
         $invalidator = new CacheInvalidator($queryCache);
 
         $cache->expects($this->once())
             ->method('purge')
-            ->with('default:qcache:users');
+            ->with('default:qcache:users#epoch')
+            ->willReturn(true);
 
         $invalidator->handle(Event::CollectionUpdate, new Document([
             '$id' => 'users',
             '$collection' => Database::METADATA,
         ]));
+    }
+
+    public function testMemoryAdapterKeepsPhysicalVariantsIsolated(): void
+    {
+        $queryCache = new QueryCache(new Cache(new Memory()));
+        $firstKey = $queryCache->buildQueryKey('users', [['limit' => 1]], 'ns', null, 'role:user-a');
+        $secondKey = $queryCache->buildQueryKey('users', [['limit' => 2]], 'ns', null, 'role:user-b');
+
+        $firstGeneration = $queryCache->getGeneration($firstKey);
+        $secondGeneration = $queryCache->getGeneration($secondKey);
+
+        $this->assertTrue($queryCache->set($firstKey, [new Document(['$id' => 'private-a'])], $firstGeneration));
+        $this->assertTrue($queryCache->set($secondKey, [new Document(['$id' => 'private-b'])], $secondGeneration));
+        $first = $queryCache->get($firstKey);
+        $second = $queryCache->get($secondKey);
+        $this->assertNotNull($first);
+        $this->assertNotNull($second);
+        $this->assertSame('private-a', $first[0]->getId());
+        $this->assertSame('private-b', $second[0]->getId());
+    }
+
+    public function testInvalidationPropagatesPurgeFailure(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $cache->method('load')->willReturn('epoch');
+        $cache->expects($this->once())
+            ->method('purge')
+            ->with('default:qcache:users#epoch')
+            ->willReturn(false);
+
+        $this->expectException(\RuntimeException::class);
+        (new QueryCache($cache))->invalidateCollection('users');
+    }
+
+    private function configureInvalidationCache(Cache&MockObject $cache): void
+    {
+        $cache->method('load')->willReturn('epoch');
+        $cache->method('save')->willReturnCallback(
+            static fn (string $key, array|string $data): array|string => $data,
+        );
     }
 }

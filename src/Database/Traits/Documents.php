@@ -95,19 +95,21 @@ trait Documents
     }
 
     /**
-     * Cached validator instances keyed by context, collection epoch, and a
+     * Cached validator instances keyed by context and a
      * stable schema/authorization fingerprint.
      *
      * Building DocumentsValidator deep-copies every collection attribute via
      * Attribute::getArrayCopy(), which is expensive on the find/count/sum
      * hot path. The composite key keeps the cache coherent when the same
      * Database instance is reused across namespaces, tenants, or with a
-     * different max-query-values cap. Cached entries are invalidated through
-     * purgeCachedCollection.
+     * different max-query-values cap. Fresh collection metadata contributes
+     * a stable schema and authorization fingerprint to each key.
      *
      * @var array<string, DocumentsValidator>
      */
     private array $documentsValidatorCache = [];
+
+    private const int DOCUMENTS_VALIDATOR_CACHE_LIMIT = 256;
 
     /**
      * Return a DocumentsValidator for the given collection, building it on
@@ -117,8 +119,7 @@ trait Documents
     protected function getDocumentsValidator(Document $collection): DocumentsValidator
     {
         $context = $this->getCollectionMetadataCacheKey($collection->getId());
-        $generation = $this->getCollectionMetadataGeneration($context);
-        $key = $this->documentsValidatorCacheKey($collection, $context, $generation);
+        $key = $this->documentsValidatorCacheKey($collection, $context);
 
         if (isset($this->documentsValidatorCache[$key])) {
             return $this->documentsValidatorCache[$key];
@@ -141,9 +142,10 @@ trait Documents
             $this->adapter->supports(Capability::UnsignedBigInt)
         );
 
-        if ($this->getCollectionMetadataGeneration($context) === $generation) {
-            $this->documentsValidatorCache[$key] = $validator;
+        if (\count($this->documentsValidatorCache) >= self::DOCUMENTS_VALIDATOR_CACHE_LIMIT) {
+            $this->documentsValidatorCache = [];
         }
+        $this->documentsValidatorCache[$key] = $validator;
 
         return $validator;
     }
@@ -154,7 +156,7 @@ trait Documents
      * share an id (different tenant schemas, different namespace prefixes,
      * or different per-request limits) from aliasing onto the same validator.
      */
-    private function documentsValidatorCacheKey(Document $collection, string $context, int $generation): string
+    private function documentsValidatorCacheKey(Document $collection, string $context): string
     {
         $fingerprint = \hash('sha256', \serialize([
             'attributes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('attributes', [])),
@@ -163,7 +165,7 @@ trait Documents
             'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
         ]));
 
-        return $context.'::'.$generation.'::'.$this->maxQueryValues.'::'.$fingerprint;
+        return $context.'::'.$this->maxQueryValues.'::'.$fingerprint;
     }
 
     /**
@@ -244,13 +246,7 @@ trait Documents
             return new Document();
         }
 
-        $previousSilenced = $this->eventsSilenced;
-        $this->eventsSilenced = true;
-        try {
-            $collection = $this->getCollection($collection);
-        } finally {
-            $this->eventsSilenced = $previousSilenced;
-        }
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -281,16 +277,28 @@ trait Documents
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        [$collectionKey, $documentKey, $hashKey] = $this->getCacheKeys(
+        [$collectionKey, , $hashKey] = $this->getCacheKeys(
             $collection->getId(),
             $id,
             $selections
         );
 
+        $cacheable = ! $forUpdate
+            && ! $this->adapter->inTransaction()
+            && $collection->getId() !== self::METADATA;
+        $physicalKey = '';
+        if ($cacheable) {
+            $epoch = $this->getDocumentCacheEpoch($collectionKey);
+            if ($epoch === null) {
+                $cacheable = false;
+            } else {
+                $physicalKey = $hashKey.'#'.$epoch;
+            }
+        }
         $cached = null;
-        if (! $forUpdate) {
+        if ($cacheable) {
             try {
-                $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
+                $cached = $this->cache->load($physicalKey, self::TTL);
             } catch (Exception $e) {
                 Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
             }
@@ -327,9 +335,9 @@ trait Documents
         }
 
         $generation = '0';
-        if (! $forUpdate) {
+        if ($cacheable) {
             try {
-                $generation = $this->cache->getGeneration($documentKey);
+                $generation = $this->cache->getGeneration($physicalKey);
             } catch (Exception $e) {
                 Console::warning('Warning: Failed to get cache generation: '.$e->getMessage());
             }
@@ -348,12 +356,10 @@ trait Documents
         $document = $skipAuth ? $this->authorization->skip($getDocument) : $getDocument();
 
         if ($document->isEmpty()) {
-            if (! $forUpdate && empty($relationships)) {
+            if ($cacheable && empty($relationships)) {
                 try {
                     $marker = [self::CACHE_EMPTY_MARKER => true];
-                    if ($this->cache->saveWithLease($documentKey, $marker, $hashKey, $generation) !== false) {
-                        $this->cache->save($collectionKey, 'empty', $documentKey);
-                    }
+                    $this->cache->saveWithLease($physicalKey, $marker, '', $generation);
                 } catch (Exception $e) {
                     Console::warning('Failed to save empty document to cache: '.$e->getMessage());
                 }
@@ -402,11 +408,9 @@ trait Documents
 
         // Locking reads happen inside a transaction and must never cache the
         // pre-commit row. Register the key only after the leased save succeeds.
-        if (! $forUpdate && empty($relationships)) {
+        if ($cacheable && empty($relationships)) {
             try {
-                if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {
-                    $this->cache->save($collectionKey, 'empty', $documentKey);
-                }
+                $this->cache->saveWithLease($physicalKey, $document->getArrayCopy(), '', $generation);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: '.$e->getMessage());
             }
@@ -2172,16 +2176,7 @@ trait Documents
     {
         [$collectionKey] = $this->getCacheKeys($collectionId);
 
-        $documentKeys = $this->cache->list($collectionKey);
-        foreach ($documentKeys as $documentKey) {
-            $this->cache->purge($documentKey);
-        }
-
-        $this->cache->purge($collectionKey);
-
-        $this->invalidateCollectionMetadata($collectionId);
-
-        return true;
+        return $this->advanceDocumentCacheEpoch($collectionKey);
     }
 
     /**
@@ -2196,17 +2191,42 @@ trait Documents
             return true;
         }
 
-        [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
+        [$collectionKey] = $this->getCacheKeys($collectionId, $id);
 
-        $this->cache->purge($collectionKey, $documentKey);
-        $this->cache->purge($documentKey);
+        return $this->advanceDocumentCacheEpoch($collectionKey);
+    }
 
-        // When the underlying document is a collection definition (i.e. it
-        // lives in the METADATA collection), drop the in-process metadata
-        // memo for that collection too — its schema may have shifted.
-        if ($collectionId === self::METADATA) {
-            $this->invalidateCollectionMetadata($id);
+    private function getDocumentCacheEpoch(string $collectionKey): ?string
+    {
+        $epochKey = $collectionKey.'#epoch';
+
+        try {
+            $epoch = $this->cache->load($epochKey, self::TTL);
+            if ($epoch === false || $epoch === null) {
+                $epoch = \bin2hex(\random_bytes(16));
+                if ($this->cache->save($epochKey, $epoch) === false) {
+                    return null;
+                }
+            }
+
+            return \is_string($epoch) && $epoch !== '' ? $epoch : null;
+        } catch (Throwable $error) {
+            Console::warning('Warning: Failed to load document cache epoch: '.$error->getMessage());
+
+            return null;
         }
+    }
+
+    private function advanceDocumentCacheEpoch(string $collectionKey): bool
+    {
+        $epochKey = $collectionKey.'#epoch';
+        $existing = $this->cache->load($epochKey, self::TTL);
+
+        if ($existing !== false && $existing !== null && ! $this->cache->purge($epochKey)) {
+            throw new DatabaseException("Failed to purge document cache epoch '{$epochKey}'");
+        }
+
+        $this->cache->save($epochKey, \bin2hex(\random_bytes(16)));
 
         return true;
     }
@@ -2268,8 +2288,14 @@ trait Documents
     {
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
         $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
+        $epochKey = $this->getQueryCacheKey($collection, $namespace).'#epoch';
+        $existing = $this->cache->load($epochKey, self::TTL);
 
-        return $this->cache->purge($this->getQueryCacheKey($collection, $namespace));
+        if ($existing !== false && $existing !== null && ! $this->cache->purge($epochKey)) {
+            return false;
+        }
+
+        return $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
     }
 
     /**
@@ -2290,10 +2316,30 @@ trait Documents
             return $callback();
         }
 
+        $epochKey = $key.'#epoch';
+        try {
+            $epoch = $this->cache->load($epochKey, self::TTL);
+            if ($epoch === false || $epoch === null) {
+                $epoch = \bin2hex(\random_bytes(16));
+                if ($this->cache->save($epochKey, $epoch) === false) {
+                    return $callback();
+                }
+            }
+            if (! \is_string($epoch) || $epoch === '') {
+                return $callback();
+            }
+        } catch (Throwable $error) {
+            Console::warning('Warning: Failed to load cache epoch: '.$error->getMessage());
+
+            return $callback();
+        }
+
+        $physicalKey = $key.'#'.$epoch.':'.$hash;
+
         $shouldRefreshCache = false;
 
         try {
-            $cached = $this->cache->load($key, self::TTL, $hash);
+            $cached = $this->cache->load($physicalKey, self::TTL);
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to load cache value: '.$error->getMessage());
             $cached = false;
@@ -2375,7 +2421,7 @@ trait Documents
 
         if ($shouldRefreshCache) {
             try {
-                $this->cache->purge($key, $hash);
+                $this->cache->purge($physicalKey);
             } catch (Throwable $error) {
                 Console::warning('Warning: Failed to purge rejected cache value: '.$error->getMessage());
             }
@@ -2383,7 +2429,7 @@ trait Documents
 
         $generation = '0';
         try {
-            $generation = $this->cache->getGeneration($key);
+            $generation = $this->cache->getGeneration($physicalKey);
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to get cache generation: '.$error->getMessage());
         }
@@ -2395,7 +2441,7 @@ trait Documents
                 $encoded = $this->encodeCacheValue($callbackValue);
 
                 if ($encoded !== false) {
-                    $this->cache->saveWithLease($key, $encoded, $hash, $generation);
+                    $this->cache->saveWithLease($physicalKey, $encoded, '', $generation);
                 }
             } catch (Throwable $error) {
                 Console::warning('Warning: Failed to save cache value: '.$error->getMessage());
@@ -2500,15 +2546,7 @@ trait Documents
     {
         $queryCacheQueries = $queries;
 
-        // Inline silent() to avoid the per-find closure allocation; only the
-        // CollectionRead event needs to be suppressed for this lookup.
-        $previousSilenced = $this->eventsSilenced;
-        $this->eventsSilenced = true;
-        try {
-            $collection = $this->getCollection($collection);
-        } finally {
-            $this->eventsSilenced = $previousSilenced;
-        }
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -2677,6 +2715,7 @@ trait Documents
                 $this->queryCache !== null
                 && $this->adapter->supports(Capability::Caching)
                 && ! $this->adapter->inTransaction()
+                && empty($joins)
                 && $this->queryCache->isEnabled($collection->getId())
             ) {
                 $cacheContext = $skipAuth

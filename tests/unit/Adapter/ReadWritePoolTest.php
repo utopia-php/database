@@ -58,6 +58,8 @@ class ReadWritePoolTest extends TestCase
             'sum',
             'exists',
             'list',
+            'getSchemaAttributes',
+            'getSchemaIndexes',
             'getSizeOfCollection',
             'getSizeOfCollectionOnDisk',
             'ping',
@@ -66,15 +68,22 @@ class ReadWritePoolTest extends TestCase
             'getAttributeWidth',
             'getCountOfAttributes',
             'getCountOfIndexes',
+            'getCountOfDefaultAttributes',
+            'getCountOfDefaultIndexes',
             'getLimitForString',
             'getLimitForInt',
+            'getLimitForBigInt',
             'getLimitForAttributes',
             'getLimitForIndexes',
             'getMaxIndexLength',
             'getMaxVarcharLength',
             'getMaxUIDLength',
+            'getMinDateTime',
             'getIdAttributeType',
+            'getKeywords',
+            'getInternalIndexesKeys',
             'supports',
+            'capabilities',
         ];
 
         foreach ($readMethods as $method) {
@@ -229,6 +238,17 @@ class ReadWritePoolTest extends TestCase
         $this->assertTrue($result);
     }
 
+    public function testReadAdapterClearsStaleTimeout(): void
+    {
+        $this->readAdapter->expects($this->once())
+            ->method('clearTimeout');
+        $this->readAdapter->expects($this->once())
+            ->method('ping')
+            ->willReturn(true);
+
+        $this->assertTrue($this->pool->delegate('ping', []));
+    }
+
     public function testNonReadNonStandardMethodGoesToWritePool(): void
     {
         $this->writeAdapter->expects($this->once())
@@ -268,12 +288,15 @@ class ReadWritePoolTest extends TestCase
             'getDocument' => new Document(),
             'count', 'sum', 'getSizeOfCollection', 'getSizeOfCollectionOnDisk',
             'getDocumentSizeLimit', 'getAttributeWidth', 'getCountOfAttributes',
-            'getCountOfIndexes', 'getLimitForString', 'getLimitForInt',
+            'getCountOfIndexes', 'getCountOfDefaultAttributes', 'getCountOfDefaultIndexes',
+            'getLimitForString', 'getLimitForInt', 'getLimitForBigInt',
             'getLimitForAttributes', 'getLimitForIndexes', 'getMaxIndexLength',
             'getMaxVarcharLength', 'getMaxUIDLength' => 0,
             'exists', 'ping', 'supports' => true,
             'getConnectionId', 'getIdAttributeType' => 'string',
-            'getSchemaAttributes' => [],
+            'getMinDateTime' => new \DateTime(),
+            'getSchemaAttributes', 'getSchemaIndexes', 'getKeywords',
+            'getInternalIndexesKeys', 'capabilities' => [],
             default => null,
         };
     }
@@ -297,13 +320,14 @@ class ReadWritePoolTest extends TestCase
             'getAttributeWidth' => [new Document()],
             'getCountOfAttributes' => [new Document()],
             'getCountOfIndexes' => [new Document()],
-            'getLimitForString', 'getLimitForInt',
+            'getLimitForString', 'getLimitForInt', 'getLimitForBigInt',
             'getLimitForAttributes', 'getLimitForIndexes',
             'getMaxIndexLength', 'getMaxVarcharLength',
             'getMaxUIDLength' => [],
+            'getMinDateTime' => [],
             'getIdAttributeType' => [],
             'supports' => [\Utopia\Database\Capability::Index],
-            'getSchemaAttributes' => ['collection'],
+            'getSchemaAttributes', 'getSchemaIndexes' => ['collection'],
             default => [],
         };
     }

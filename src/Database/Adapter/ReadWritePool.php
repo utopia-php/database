@@ -15,6 +15,7 @@ class ReadWritePool extends Pool
         'exists',
         'list',
         'getSchemaAttributes',
+        'getSchemaIndexes',
         'getSizeOfCollection',
         'getSizeOfCollectionOnDisk',
         'ping',
@@ -27,11 +28,13 @@ class ReadWritePool extends Pool
         'getCountOfDefaultIndexes',
         'getLimitForString',
         'getLimitForInt',
+        'getLimitForBigInt',
         'getLimitForAttributes',
         'getLimitForIndexes',
         'getMaxIndexLength',
         'getMaxVarcharLength',
         'getMaxUIDLength',
+        'getMinDateTime',
         'getIdAttributeType',
         'getKeywords',
         'getInternalIndexesKeys',
@@ -77,6 +80,12 @@ class ReadWritePool extends Pool
     public function delegate(string $method, array $args): mixed
     {
         if ($this->pinnedAdapter !== null) {
+            if ($this->skipDuplicates) {
+                return $this->pinnedAdapter->skipDuplicates(
+                    fn () => $this->pinnedAdapter->{$method}(...$args)
+                );
+            }
+
             return $this->pinnedAdapter->{$method}(...$args);
         }
 
@@ -122,6 +131,8 @@ class ReadWritePool extends Pool
 
         if ($this->getTimeout() > 0) {
             $adapter->setTimeout($this->getTimeout());
+        } else {
+            $adapter->clearTimeout();
         }
 
         $adapter->resetDebug();

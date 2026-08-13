@@ -19,15 +19,23 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Hook\MongoPermissionFilter;
 use Utopia\Database\Hook\MongoTenantFilter;
 use Utopia\Database\Hook\Read;
 use Utopia\Database\Hook\Tenant;
 use Utopia\Database\Index;
+use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
@@ -137,6 +145,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::Caching,
             Capability::Hostname,
             Capability::PCRE,
+            Capability::Operators,
+            Capability::TransactionRetries,
             Capability::Upserts,
         ]);
     }
@@ -433,36 +443,56 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return $callback();
         }
 
-        try {
-            $this->startTransaction();
-            $result = $callback();
-            $this->commitTransaction();
+        $sleep = 50_000;
+        $retries = 2;
 
-            return $result;
-        } catch (Throwable $action) {
+        for ($attempts = 0; $attempts <= $retries; $attempts++) {
             try {
-                $this->rollbackTransaction();
-            } catch (Throwable) {
-                // Throw the original exception, not the rollback one
-                // Since if it's a duplicate key error, the rollback will fail,
-                // and we want to throw the original exception.
-            } finally {
-                // Ensure state is cleaned up even if rollback fails
-                if ($this->session) {
-                    try {
-                        /** @var array<string, mixed> $session */
-                        $session = $this->session;
-                        $this->client->endSessions([$session]);
-                    } catch (Throwable $endSessionError) {
-                        // Ignore errors when ending session during error cleanup
-                    }
-                }
-                $this->inTransaction = 0;
-                $this->session = null;
-            }
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
 
-            throw $action;
+                return $result;
+            } catch (Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (Throwable) {
+                    // Preserve the operation failure if cleanup fails.
+                } finally {
+                    if ($this->session !== null) {
+                        try {
+                            $this->client->endSessions([$this->session]);
+                        } catch (Throwable) {
+                            // Cleanup is best-effort; preserve the operation failure.
+                        }
+                    }
+                    $this->inTransaction = 0;
+                    $this->session = null;
+                }
+
+                if (
+                    $action instanceof AuthorizationException
+                    || $action instanceof ConflictException
+                    || $action instanceof DuplicateException
+                    || $action instanceof LimitException
+                    || $action instanceof RelationshipException
+                    || $action instanceof RestrictedException
+                    || $action instanceof TimeoutException
+                ) {
+                    throw $action;
+                }
+
+                if ($attempts < $retries) {
+                    \usleep($sleep * ($attempts + 1));
+
+                    continue;
+                }
+
+                throw $action;
+            }
         }
+
+        throw new TransactionException('Transaction retry loop exited unexpectedly');
     }
 
     /**
@@ -1483,10 +1513,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             $options = $this->getTransactionOptions();
 
-            $updateQuery = [
-                '$set' => $record,
-            ];
-            $this->client->update($name, $filters, $updateQuery, $options);
+            $pipeline = $this->buildOperatorPipeline($record);
+            if ($pipeline !== null) {
+                $this->updateWithPipeline($name, $filters, $pipeline, $options);
+            } else {
+                $updateQuery = [
+                    '$set' => $record,
+                ];
+                $this->client->update($name, $filters, $updateQuery, $options);
+            }
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -1522,12 +1557,21 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $record = $this->replaceChars('$', '_', $record);
         unset($record['_version']);
 
-        $updateQuery = [
-            '$set' => $record,
-            '$inc' => ['_version' => 1],
-        ];
-
         try {
+            $pipeline = $this->buildOperatorPipeline($record);
+            if ($pipeline !== null) {
+                $pipeline[0]['$set']['_version'] = [
+                    '$add' => [['$ifNull' => ['$_version', 0]], 1],
+                ];
+
+                return $this->updateWithPipeline($name, $filters, $pipeline, $options, multi: true);
+            }
+
+            $updateQuery = [
+                '$set' => $record,
+                '$inc' => ['_version' => 1],
+            ];
+
             return $this->client->update(
                 $name,
                 $filters,
@@ -1538,6 +1582,318 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * Build an aggregation pipeline update from a record containing operators.
+     *
+     * @param  array<string, mixed>  $record
+     * @return array{0: array{'$set': array<string, mixed>}}|null
+     *
+     * @throws DatabaseException
+     */
+    private function buildOperatorPipeline(array $record): ?array
+    {
+        $hasOperators = false;
+        foreach ($record as $value) {
+            if ($value instanceof Operator) {
+                $hasOperators = true;
+
+                break;
+            }
+        }
+
+        if (! $hasOperators) {
+            return null;
+        }
+
+        $set = [];
+        foreach ($record as $key => $value) {
+            $set[$key] = $value instanceof Operator
+                ? $this->getOperatorExpression($value, $key)
+                : ['$literal' => $value];
+        }
+
+        return [['$set' => $set]];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @param  array<int, array<string, mixed>>  $pipeline
+     * @param  array<string, mixed>  $options
+     *
+     * @throws MongoException
+     */
+    private function updateWithPipeline(
+        string $collection,
+        array $filters,
+        array $pipeline,
+        array $options = [],
+        bool $multi = false,
+    ): int {
+        $command = [
+            'update' => $collection,
+            'updates' => [[
+                'q' => $this->client->toObject($filters),
+                'u' => $pipeline,
+                'multi' => $multi,
+                'upsert' => false,
+            ]],
+        ];
+
+        if (isset($options['session'])) {
+            $command['session'] = $options['session'];
+        }
+
+        $result = $this->client->query($command);
+
+        return \is_int($result) ? $result : 0;
+    }
+
+    /**
+     * @param  array<int, array{filter: array<string, mixed>, update: array<mixed>}>  $operations
+     * @param  array<string, mixed>  $options
+     *
+     * @throws MongoException
+     */
+    private function executeUpsert(string $collection, array $operations, array $options = []): int
+    {
+        $updates = [];
+        foreach ($operations as $operation) {
+            $updates[] = [
+                'q' => $this->client->toObject($operation['filter']),
+                'u' => $operation['update'],
+                'upsert' => true,
+                'multi' => false,
+            ];
+        }
+
+        $result = $this->client->query(\array_merge([
+            'update' => $collection,
+            'updates' => $updates,
+        ], $options));
+
+        return \is_int($result) ? $result : 0;
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private function getOperatorExpression(Operator $operator, string $field): mixed
+    {
+        $reference = '$'.$field;
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            case OperatorType::Increment:
+                $expression = ['$add' => [['$ifNull' => [$reference, 0]], $values[0] ?? 1]];
+                if (isset($values[1])) {
+                    $expression = ['$cond' => [['$lte' => [$expression, $values[1]]], $expression, ['$ifNull' => [$reference, 0]]]];
+                }
+
+                return $expression;
+
+            case OperatorType::Decrement:
+                $expression = ['$subtract' => [['$ifNull' => [$reference, 0]], $values[0] ?? 1]];
+                if (isset($values[1])) {
+                    $expression = ['$cond' => [['$gte' => [$expression, $values[1]]], $expression, ['$ifNull' => [$reference, 0]]]];
+                }
+
+                return $expression;
+
+            case OperatorType::Multiply:
+                $expression = ['$multiply' => [['$ifNull' => [$reference, 0]], $values[0] ?? 1]];
+                if (isset($values[1])) {
+                    $expression = ['$cond' => [['$lte' => [$expression, $values[1]]], $expression, ['$ifNull' => [$reference, 0]]]];
+                }
+
+                return $expression;
+
+            case OperatorType::Divide:
+                $expression = ['$divide' => [['$ifNull' => [$reference, 0]], $values[0]]];
+                if (isset($values[1])) {
+                    $expression = ['$cond' => [['$gte' => [$expression, $values[1]]], $expression, ['$ifNull' => [$reference, 0]]]];
+                }
+
+                return $expression;
+
+            case OperatorType::Modulo:
+                return ['$mod' => [['$ifNull' => [$reference, 0]], $values[0]]];
+
+            case OperatorType::Power:
+                $base = ['$ifNull' => [$reference, 0]];
+                $exponent = $this->getNumericOperand($values, 0, 1, $method);
+                $expression = ['$pow' => [$base, $exponent]];
+                if (isset($values[1])) {
+                    $expression = ['$cond' => [['$lte' => [$expression, $values[1]]], $expression, $base]];
+                    $guards = [];
+                    if ($exponent < 0) {
+                        $guards[] = ['$eq' => [$base, 0]];
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $guards[] = ['$lt' => [$base, 0]];
+                    }
+                    if (! empty($guards)) {
+                        $undefined = \count($guards) === 1 ? $guards[0] : ['$or' => $guards];
+                        $expression = ['$cond' => [$undefined, $base, $expression]];
+                    }
+                }
+
+                return $expression;
+
+            case OperatorType::StringConcat:
+                return ['$concat' => [['$ifNull' => [$reference, '']], ['$literal' => $values[0] ?? '']]];
+
+            case OperatorType::StringReplace:
+                if (($values[0] ?? '') === '') {
+                    return ['$ifNull' => [$reference, '']];
+                }
+
+                return ['$replaceAll' => [
+                    'input' => ['$ifNull' => [$reference, '']],
+                    'find' => ['$literal' => $values[0]],
+                    'replacement' => ['$literal' => $values[1] ?? ''],
+                ]];
+
+            case OperatorType::Toggle:
+                return ['$not' => [['$ifNull' => [$reference, false]]]];
+
+            case OperatorType::ArrayAppend:
+                return ['$concatArrays' => [['$ifNull' => [$reference, []]], ['$literal' => \array_values($values)]]];
+
+            case OperatorType::ArrayPrepend:
+                return ['$concatArrays' => [['$literal' => \array_values($values)], ['$ifNull' => [$reference, []]]]];
+
+            case OperatorType::ArrayInsert:
+                $index = $this->getIntegerOperand($values, 0, 0, $method);
+                $value = $values[1] ?? null;
+                $size = ['$size' => '$$array'];
+                $before = ['$cond' => [['$lte' => [$index, 0]], [], ['$slice' => ['$$array', $index]]]];
+                $after = ['$cond' => [['$gte' => [$index, $size]], [], ['$slice' => ['$$array', ['$subtract' => [$index, $size]]]]]];
+
+                return ['$let' => [
+                    'vars' => ['array' => ['$ifNull' => [$reference, []]]],
+                    'in' => ['$concatArrays' => [$before, ['$literal' => [$value]], $after]],
+                ]];
+
+            case OperatorType::ArrayRemove:
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$reference, []]],
+                    'cond' => ['$ne' => ['$$this', ['$literal' => $values[0] ?? null]]],
+                ]];
+
+            case OperatorType::ArrayUnique:
+                return ['$reduce' => [
+                    'input' => ['$ifNull' => [$reference, []]],
+                    'initialValue' => [],
+                    'in' => ['$cond' => [
+                        ['$in' => ['$$this', '$$value']],
+                        '$$value',
+                        ['$concatArrays' => ['$$value', ['$$this']]],
+                    ]],
+                ]];
+
+            case OperatorType::ArrayIntersect:
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$reference, []]],
+                    'cond' => ['$in' => ['$$this', ['$literal' => \array_values($values)]]],
+                ]];
+
+            case OperatorType::ArrayDiff:
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$reference, []]],
+                    'cond' => ['$not' => [['$in' => ['$$this', ['$literal' => \array_values($values)]]]]],
+                ]];
+
+            case OperatorType::ArrayFilter:
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$reference, []]],
+                    'cond' => $this->getArrayFilterCondition($this->getStringOperand($values, 0, '', $method), $values[1] ?? null),
+                ]];
+
+            case OperatorType::DateAddDays:
+                return ['$dateAdd' => [
+                    'startDate' => ['$ifNull' => [$reference, '$$NOW']],
+                    'unit' => 'day',
+                    'amount' => $this->getIntegerOperand($values, 0, 0, $method),
+                ]];
+
+            case OperatorType::DateSubDays:
+                return ['$dateSubtract' => [
+                    'startDate' => ['$ifNull' => [$reference, '$$NOW']],
+                    'unit' => 'day',
+                    'amount' => $this->getIntegerOperand($values, 0, 0, $method),
+                ]];
+
+            case OperatorType::DateSetNow:
+                return '$$NOW';
+        }
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     *
+     * @throws DatabaseException
+     */
+    private function getNumericOperand(array $values, int $offset, int|float $default, OperatorType $method): int|float
+    {
+        $value = $values[$offset] ?? $default;
+        if (! \is_int($value) && ! \is_float($value)) {
+            throw new DatabaseException('Invalid numeric operand for operator '.$method->value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     *
+     * @throws DatabaseException
+     */
+    private function getIntegerOperand(array $values, int $offset, int $default, OperatorType $method): int
+    {
+        $value = $values[$offset] ?? $default;
+        if (! \is_int($value)) {
+            throw new DatabaseException('Invalid integer operand for operator '.$method->value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     *
+     * @throws DatabaseException
+     */
+    private function getStringOperand(array $values, int $offset, string $default, OperatorType $method): string
+    {
+        $value = $values[$offset] ?? $default;
+        if (! \is_string($value)) {
+            throw new DatabaseException('Invalid string operand for operator '.$method->value);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function getArrayFilterCondition(string $condition, mixed $compare): array
+    {
+        $value = ['$literal' => $compare];
+
+        return match ($condition) {
+            'equal' => ['$eq' => ['$$this', $value]],
+            'notEqual' => ['$ne' => ['$$this', $value]],
+            'greaterThan' => ['$gt' => ['$$this', $value]],
+            'greaterThanEqual' => ['$gte' => ['$$this', $value]],
+            'lessThan' => ['$lt' => ['$$this', $value]],
+            'lessThanEqual' => ['$lte' => ['$$this', $value]],
+            'isNull' => ['$eq' => ['$$this', null]],
+            'isNotNull' => ['$ne' => ['$$this', null]],
+            default => ['$literal' => true],
+        };
     }
 
     /**
@@ -1560,6 +1916,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $attribute = $this->filter($attribute);
 
             $operations = [];
+            $hasPipeline = false;
             foreach ($changes as $change) {
                 $document = $change->getNew();
                 $oldDocument = $change->getOld();
@@ -1607,20 +1964,32 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                         $update['$unset'] = $unsetFields;
                     }
                 } else {
-                    // Update all fields
-                    $update = [
-                        '$set' => $record,
-                    ];
+                    $pipeline = $this->buildOperatorPipeline($record);
+                    if ($pipeline !== null) {
+                        $set = $pipeline[0]['$set'];
+                        if (empty($document->getSequence())) {
+                            $set['_id'] = ['$ifNull' => ['$_id', $this->client->createUuid()]];
+                        }
 
-                    if (! empty($unsetFields)) {
-                        $update['$unset'] = $unsetFields;
-                    }
-
-                    // Add UUID7 _id for new documents in upsert operations
-                    if (empty($document->getSequence())) {
-                        $update['$setOnInsert'] = [
-                            '_id' => $this->client->createUuid(),
+                        $update = [['$set' => $set]];
+                        if (! empty($unsetFields)) {
+                            $update[] = ['$unset' => \array_keys($unsetFields)];
+                        }
+                        $hasPipeline = true;
+                    } else {
+                        $update = [
+                            '$set' => $record,
                         ];
+
+                        if (! empty($unsetFields)) {
+                            $update['$unset'] = $unsetFields;
+                        }
+
+                        if (empty($document->getSequence())) {
+                            $update['$setOnInsert'] = [
+                                '_id' => $this->client->createUuid(),
+                            ];
+                        }
                     }
                 }
 
@@ -1632,11 +2001,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             $options = $this->getTransactionOptions();
 
-            $this->client->upsert(
-                $name,
-                $operations,
-                options: $options
-            );
+            if ($hasPipeline) {
+                $this->executeUpsert($name, $operations, $options);
+            } else {
+                $this->client->upsert(
+                    $name,
+                    $operations,
+                    options: $options
+                );
+            }
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -2122,25 +2495,34 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $options = $this->getTransactionOptions();
 
-        $sumResult = $this->client->aggregate($name, $pipeline, $options);
-        /** @var \stdClass $sumCursor */
-        $sumCursor = $sumResult->cursor;
-        /** @var array<mixed> $sumFirstBatch */
-        $sumFirstBatch = $sumCursor->firstBatch;
-        if (empty($sumFirstBatch)) {
-            return 0;
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
         }
-        /** @var \stdClass $sumFirstResult */
-        $sumFirstResult = $sumFirstBatch[0];
-        if (!isset($sumFirstResult->total)) {
-            return 0;
+
+        try {
+            $sumResult = $this->client->aggregate($name, $pipeline, $options);
+            /** @var \stdClass $sumCursor */
+            $sumCursor = $sumResult->cursor;
+            /** @var array<mixed> $sumFirstBatch */
+            $sumFirstBatch = $sumCursor->firstBatch;
+            if (empty($sumFirstBatch)) {
+                return 0;
+            }
+            /** @var \stdClass $sumFirstResult */
+            $sumFirstResult = $sumFirstBatch[0];
+            if (! isset($sumFirstResult->total)) {
+                return 0;
+            }
+            /** @var mixed $sumTotal */
+            $sumTotal = $sumFirstResult->total;
+            if (\is_int($sumTotal) || \is_float($sumTotal)) {
+                return $sumTotal;
+            }
+
+            return \is_numeric($sumTotal) ? (int) $sumTotal : 0;
+        } catch (MongoException $e) {
+            throw $this->processException($e);
         }
-        /** @var mixed $sumTotal */
-        $sumTotal = $sumFirstResult->total;
-        if (\is_int($sumTotal) || \is_float($sumTotal)) {
-            return $sumTotal;
-        }
-        return \is_numeric($sumTotal) ? (int) $sumTotal : 0;
     }
 
     /**
@@ -2593,6 +2975,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 continue;
             }
 
+            if (Operator::isOperator($value)) {
+                continue;
+            }
+
             if ($array) {
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
@@ -2700,6 +3086,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 continue;
             }
 
+            if (Operator::isOperator($value)) {
+                continue;
+            }
+
             if ($array) {
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
@@ -2718,6 +3108,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             /** @var array<mixed> $value */
             foreach ($value as &$node) {
                 switch ($type) {
+                    case ColumnType::BigInteger:
+                    case ColumnType::BigSerial:
                     case ColumnType::Integer:
                         $node = \is_int($node)
                             ? $node
@@ -3382,9 +3774,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         // Duplicate key error
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
-            $message = $e->getMessage();
-            if (! \str_contains($message, '_uid')) {
-                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            $index = $this->getViolatedIndex($e->getMessage());
+            if ($index !== null && $index !== '_uid' && $index !== '_id_') {
+                return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
 
             return new DuplicateException('Document already exists', $e->getCode(), $e);
@@ -3415,7 +3807,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return new TypeException('Invalid operation', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === 28764) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
         return $e;
+    }
+
+    protected function getViolatedIndex(string $message): ?string
+    {
+        if (\preg_match('/index:\s*(\S+)\s+dup key/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
     }
 
     protected function quote(string $string): string
@@ -3637,6 +4042,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             ColumnType::LongText,
             ColumnType::Id,
             ColumnType::Uuid7 => 'string',
+            ColumnType::BigInteger,
+            ColumnType::BigSerial => 'long',
             ColumnType::Integer => 'int',
             ColumnType::Double => 'double',
             ColumnType::Boolean => 'bool',
@@ -3775,7 +4182,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private function convertStdClassToArray(mixed $value): mixed
     {
         if (is_object($value) && get_class($value) === stdClass::class) {
-            return array_map($this->convertStdClassToArray(...), get_object_vars($value));
+            $properties = get_object_vars($value);
+
+            return $properties === [] ? $value : array_map($this->convertStdClassToArray(...), $properties);
         }
 
         if (is_array($value)) {

@@ -1004,7 +1004,7 @@ trait ObjectAttributeTests
         // A BSON wrapper serialises as {"$numberLong":"..."}, which is what
         // would reach an API client. Key order is not asserted because jsonb
         // does not preserve it.
-        $this->assertStringNotContainsString('$numberLong', json_encode($meta));
+        $this->assertStringNotContainsString('$numberLong', json_encode($meta, JSON_THROW_ON_ERROR));
 
         $database->deleteCollection($collectionId);
     }

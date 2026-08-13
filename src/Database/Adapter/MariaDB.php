@@ -235,9 +235,9 @@ class MariaDB extends SQL
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollectionOnDisk(Document $collection): int
     {
-        $collection = $this->filter($collection);
+        $collection = $this->filter($collection->getId());
         $collection = $this->getNamespace() . '_' . $collection;
         $database = $this->getDatabase();
         $name = $database . '/' . $collection;

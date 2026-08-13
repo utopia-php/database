@@ -1766,9 +1766,9 @@ class Memory extends Adapter
         return \strlen(\serialize($this->data[$key]));
     }
 
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollectionOnDisk(Document $collection): int
     {
-        return $this->getSizeOfCollection($collection);
+        return $this->getSizeOfCollection($collection->getId());
     }
 
     public function getLimitForString(): int

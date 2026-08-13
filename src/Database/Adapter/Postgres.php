@@ -335,9 +335,9 @@ class Postgres extends SQL
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollectionOnDisk(Document $collection): int
     {
-        $collection = $this->filter($collection);
+        $collection = $this->filter($collection->getId());
         $name = $this->getSQLTable($collection);
         $permissions = $this->getSQLTable($collection . '_perms');
 

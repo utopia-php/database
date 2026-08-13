@@ -17,6 +17,7 @@ services:
       - ./dev/xdebug.ini:/usr/local/etc/php/conf.d/xdebug.ini
       - /var/run/docker.sock:/var/run/docker.sock
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
+      - mysql-data:/var/lib/mysql:ro
     environment:
       PHP_IDE_CONFIG: serverName=tests
     depends_on:
@@ -180,6 +181,8 @@ services:
       - database
     ports:
       - "8706:3307"
+    volumes:
+      - mysql-data:/var/lib/mysql
     environment:
       MYSQL_ROOT_PASSWORD: password
       MYSQL_DATABASE: default
@@ -247,6 +250,7 @@ services:
 
 volumes:
   mongo-data:
+  mysql-data:
 
 networks:
   database:

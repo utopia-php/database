@@ -509,9 +509,9 @@ class SQLite extends MariaDB
      * @return int
      * @throws DatabaseException
      */
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollectionOnDisk(Document $collection): int
     {
-        return $this->getSizeOfCollection($collection);
+        return $this->getSizeOfCollection($collection->getId());
     }
 
     /**

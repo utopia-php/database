@@ -338,7 +338,7 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollectionOnDisk(Document $collection): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

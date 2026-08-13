@@ -503,6 +503,95 @@ trait CollectionTests
         $size3 = $database->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
+
+
+        $this->assertEquals('shmuel','fogel');
+
+    }
+
+    /**
+     * The fulltext index's own bytes, read straight from the data directory.
+     *
+     * InnoDB keeps a fulltext index in separate `fts_<table id>_*.ibd` tablespaces, so its
+     * size appears neither in the collection's own tablespace nor in
+     * INFORMATION_SCHEMA.TABLES. Mapping such a file back to its table needs the table id,
+     * which only INNODB_TABLES or ibd2sdi carry — so rather than ask for it, this snapshots
+     * the schema directory around createIndex() and keeps the files that appear.
+     */
+    public function testFullTextIndexSizeFromDataDirectory(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $directory = '/var/lib/mysql/' . $database->getAdapter()->getDatabase();
+
+        if (!\is_readable($directory)) {
+            // Only the MySQL container shares its data directory with the tests.
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('fullTextDiskSize');
+        $this->assertEquals(true, $database->createAttribute('fullTextDiskSize', 'text', Database::VAR_STRING, 8192, true));
+
+        $documents = [];
+        for ($i = 0; $i < 200; $i++) {
+            $documents[] = new Document([
+                'text' => 'lorem ipsum dolor sit amet ' . \str_repeat('token' . $i . ' ', 100),
+                '$permissions' => [Permission::read(Role::any())],
+            ]);
+        }
+
+        $this->assertEquals(200, $database->createDocuments('fullTextDiskSize', $documents));
+
+        $before = $this->fulltextTablespaces($directory);
+        $sizeBefore = $database->getSizeOfCollectionOnDisk('fullTextDiskSize');
+
+        $database->createIndex('fullTextDiskSize', 'fulltext_index', Database::INDEX_FULLTEXT, ['text']);
+
+        $created = \array_diff($this->fulltextTablespaces($directory), $before);
+
+        // Six index tables per fulltext index, plus the five common ones.
+        $this->assertGreaterThanOrEqual(6, \count($created));
+
+        $fulltextBytes = 0;
+        foreach ($created as $file) {
+            $stat = \stat($file);
+            $this->assertNotFalse($stat);
+            $fulltextBytes += (int) $stat['blocks'] * 512;
+        }
+
+        $this->assertGreaterThan(0, $fulltextBytes);
+
+        // Those bytes belong to this collection, yet its reported size does not carry them:
+        // the base tablespace only gained the hidden FTS_DOC_ID_INDEX.
+        $sizeAfter = $database->getSizeOfCollectionOnDisk('fullTextDiskSize');
+        $this->assertLessThan($fulltextBytes, $sizeAfter - $sizeBefore);
+    }
+
+    /**
+     * Every fulltext auxiliary tablespace in a schema directory, read from disk — no
+     * INNODB_TABLESPACES, no INNODB_TABLES. Matched case-insensitively: MySQL 8 writes
+     * these lowercase, 5.7 wrote them uppercase.
+     *
+     * @return array<string> absolute paths
+     */
+    private function fulltextTablespaces(string $directory): array
+    {
+        $files = [];
+
+        foreach (\scandir($directory) ?: [] as $name) {
+            if (\preg_match('#^fts_[0-9a-f]+_.*\.ibd$#i', $name) === 1) {
+                $files[] = $directory . '/' . $name;
+            }
+        }
+
+        return $files;
     }
 
     public function testPurgeCollectionCache(): void

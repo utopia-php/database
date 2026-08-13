@@ -888,11 +888,15 @@ abstract class Adapter
     /**
      * Get Collection Size on the disk
      *
-     * @param string $collection
+     * Takes the collection document rather than its id: an engine that keeps part of a
+     * collection outside its own storage — MySQL puts a fulltext index in tablespaces of
+     * its own — needs the index metadata to know what else to measure.
+     *
+     * @param Document $collection
      * @return int
      * @throws DatabaseException
      */
-    abstract public function getSizeOfCollectionOnDisk(string $collection): int;
+    abstract public function getSizeOfCollectionOnDisk(Document $collection): int;
 
     /**
      * Get max STRING limit

@@ -1470,10 +1470,10 @@ class Redis extends Adapter
 
     public function getSizeOfCollection(string $collection): int
     {
-        return $this->computeCollectionSize($collection);
+        return $this->computeCollectionSize($collection->getId());
     }
 
-    public function getSizeOfCollectionOnDisk(string $collection): int
+    public function getSizeOfCollectionOnDisk(Document $collection): int
     {
         // Redis stores the working set in memory; on-disk size mirrors
         // logical size for the purposes of the size-tracking tests.

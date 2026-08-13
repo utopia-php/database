@@ -2050,7 +2050,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        return $this->adapter->getSizeOfCollectionOnDisk($collection->getId());
+        return $this->adapter->getSizeOfCollectionOnDisk($collection);
     }
 
     /**

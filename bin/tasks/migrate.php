@@ -6,19 +6,21 @@
 global $cli;
 
 use Utopia\CLI\CLI;
-use Utopia\CLI\Console;
+use Utopia\Console;
+use Utopia\Database\Database;
 use Utopia\Database\Migration\Migration;
 use Utopia\Database\Migration\MigrationGenerator;
 use Utopia\Database\Migration\MigrationRunner;
+use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
 
 /**
  * @Example
- * docker compose exec tests bin/cli migrate --path=migrations
- * docker compose exec tests bin/cli migrate:rollback --path=migrations --steps=1
- * docker compose exec tests bin/cli migrate:status --path=migrations
- * docker compose exec tests bin/cli migrate:fresh --path=migrations
+ * docker compose exec tests bin/cli migrate --adapter=mysql --name=testing --path=migrations
+ * docker compose exec tests bin/cli migrate:rollback --adapter=mysql --name=testing --path=migrations --steps=1
+ * docker compose exec tests bin/cli migrate:status --adapter=mysql --name=testing --path=migrations
+ * docker compose exec tests bin/cli migrate:fresh --adapter=mysql --name=testing --path=migrations
  * docker compose exec tests bin/cli migrate:generate --name=add_users_table
  */
 
@@ -26,7 +28,12 @@ $cli
     ->task('migrate')
     ->desc('Run pending database migrations')
     ->param('path', 'migrations', new Text(0), 'Path to migration files', true)
-    ->action(function (string $path) {
+    ->param('adapter', '', new Text(0), 'Database adapter')
+    ->param('name', '', new Text(0), 'Database name')
+    ->param('namespace', '_ns', new Text(0), 'Database namespace', true)
+    ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
+    ->inject('database')
+    ->action(function (string $path, string $adapter, string $name, string $namespace, bool $sharedTables, callable $database) {
         $migrations = loadMigrations($path);
 
         if ($migrations === []) {
@@ -37,7 +44,10 @@ $cli
 
         Console::info('Running migrations...');
 
-        $db = getDatabase();
+        $db = $database($adapter, $name, $namespace, $sharedTables);
+        if (! $db instanceof Database) {
+            throw new \RuntimeException('The database resource must return a Database instance.');
+        }
         $runner = new MigrationRunner($db);
         $count = $runner->migrate($migrations);
 
@@ -49,9 +59,17 @@ $cli
     ->desc('Rollback the last batch of migrations')
     ->param('path', 'migrations', new Text(0), 'Path to migration files', true)
     ->param('steps', 1, new Integer(true), 'Number of batches to rollback', true)
-    ->action(function (string $path, int $steps) {
+    ->param('adapter', '', new Text(0), 'Database adapter')
+    ->param('name', '', new Text(0), 'Database name')
+    ->param('namespace', '_ns', new Text(0), 'Database namespace', true)
+    ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
+    ->inject('database')
+    ->action(function (string $path, int $steps, string $adapter, string $name, string $namespace, bool $sharedTables, callable $database) {
         $migrations = loadMigrations($path);
-        $db = getDatabase();
+        $db = $database($adapter, $name, $namespace, $sharedTables);
+        if (! $db instanceof Database) {
+            throw new \RuntimeException('The database resource must return a Database instance.');
+        }
         $runner = new MigrationRunner($db);
         $count = $runner->rollback($migrations, $steps);
 
@@ -62,9 +80,17 @@ $cli
     ->task('migrate:status')
     ->desc('Show the status of all migrations')
     ->param('path', 'migrations', new Text(0), 'Path to migration files', true)
-    ->action(function (string $path) {
+    ->param('adapter', '', new Text(0), 'Database adapter')
+    ->param('name', '', new Text(0), 'Database name')
+    ->param('namespace', '_ns', new Text(0), 'Database namespace', true)
+    ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
+    ->inject('database')
+    ->action(function (string $path, string $adapter, string $name, string $namespace, bool $sharedTables, callable $database) {
         $migrations = loadMigrations($path);
-        $db = getDatabase();
+        $db = $database($adapter, $name, $namespace, $sharedTables);
+        if (! $db instanceof Database) {
+            throw new \RuntimeException('The database resource must return a Database instance.');
+        }
         $runner = new MigrationRunner($db);
         $status = $runner->status($migrations);
 
@@ -81,9 +107,17 @@ $cli
     ->task('migrate:fresh')
     ->desc('Drop all collections and re-run all migrations')
     ->param('path', 'migrations', new Text(0), 'Path to migration files', true)
-    ->action(function (string $path) {
+    ->param('adapter', '', new Text(0), 'Database adapter')
+    ->param('name', '', new Text(0), 'Database name')
+    ->param('namespace', '_ns', new Text(0), 'Database namespace', true)
+    ->param('sharedTables', false, new Boolean(true), 'Whether to use shared tables', true)
+    ->inject('database')
+    ->action(function (string $path, string $adapter, string $name, string $namespace, bool $sharedTables, callable $database) {
         $migrations = loadMigrations($path);
-        $db = getDatabase();
+        $db = $database($adapter, $name, $namespace, $sharedTables);
+        if (! $db instanceof Database) {
+            throw new \RuntimeException('The database resource must return a Database instance.');
+        }
         $runner = new MigrationRunner($db);
 
         Console::warning('Dropping all collections and re-migrating...');
@@ -140,12 +174,4 @@ function loadMigrations(string $path): array
     }
 
     return $migrations;
-}
-
-/**
- * Placeholder — in a real setup, this would be provided by the application container.
- */
-function getDatabase(): \Utopia\Database\Database
-{
-    throw new \RuntimeException('getDatabase() must be implemented by the application. Override this function to return your Database instance.');
 }

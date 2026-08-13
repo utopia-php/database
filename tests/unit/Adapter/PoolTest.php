@@ -6,13 +6,47 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
 final class PoolTest extends TestCase
 {
+    public function testDelegateReplacesStatefulWriteHookOnReusedAdapter(): void
+    {
+        $adapter = new Memory();
+        $adapter->addWriteHook(new Tenancy('old'));
+        $pool = $this->createPool($adapter);
+
+        $hook = new Tenancy('new');
+        $pool->addWriteHook($hook);
+
+        $this->assertTrue($pool->ping());
+        $this->assertSame([$hook], $adapter->getWriteHooks());
+        $this->assertSame(['_tenant' => 'new'], $adapter->getTenantHook()?->decorateRow([]));
+    }
+
+    public function testTransactionReplacesStatefulWriteHookOnReusedAdapter(): void
+    {
+        $adapter = new Memory();
+        $adapter->addWriteHook(new Permissions());
+        $adapter->addWriteHook(new Tenancy('old'));
+        $pool = $this->createPool($adapter);
+
+        $hook = new Tenancy('new');
+        $pool->addWriteHook($hook);
+
+        $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+        $this->assertSame([Permissions::class, Tenancy::class], \array_map(
+            static fn ($childHook): string => $childHook::class,
+            $adapter->getWriteHooks(),
+        ));
+        $this->assertSame($hook, $adapter->getTenantHook());
+    }
+
     public function testTransactionPropagatesWriteHooksToPinnedAdapter(): void
     {
         /** @var Adapter&MockObject $adapter */
@@ -39,5 +73,19 @@ final class PoolTest extends TestCase
         $pool->addWriteHook($hook);
 
         $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+    }
+
+    private function createPool(Adapter $adapter): Pool
+    {
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($adapter),
+        );
+
+        $pool = new Pool($connections);
+        $pool->setAuthorization(new Authorization());
+
+        return $pool;
     }
 }

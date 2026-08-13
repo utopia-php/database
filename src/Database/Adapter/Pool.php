@@ -90,11 +90,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             foreach ($this->queryTransforms as $tName => $tTransform) {
                 $adapter->addTransform($tName, $tTransform);
             }
-            foreach ($this->writeHooks as $hook) {
-                if (empty(\array_filter($adapter->getWriteHooks(), fn ($h) => $h::class === $hook::class))) {
-                    $adapter->addWriteHook($hook);
-                }
-            }
+            $this->syncWriteHooks($adapter);
 
             if ($this->skipDuplicates) {
                 return $adapter->skipDuplicates(
@@ -277,11 +273,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             foreach ($this->queryTransforms as $tName => $tTransform) {
                 $adapter->addTransform($tName, $tTransform);
             }
-            foreach ($this->writeHooks as $hook) {
-                if (empty(\array_filter($adapter->getWriteHooks(), fn ($childHook) => $childHook::class === $hook::class))) {
-                    $adapter->addWriteHook($hook);
-                }
-            }
+            $this->syncWriteHooks($adapter);
 
             $this->pinnedAdapter = $adapter;
             try {
@@ -321,6 +313,25 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         $adapter->clearTimeout();
         foreach ($this->timeouts as $event => $milliseconds) {
             $adapter->setTimeout($milliseconds, Event::from($event));
+        }
+    }
+
+    private function syncWriteHooks(Adapter $adapter): void
+    {
+        foreach ($this->writeHooks as $hook) {
+            $matches = \array_values(\array_filter(
+                $adapter->getWriteHooks(),
+                fn ($childHook) => $childHook::class === $hook::class,
+            ));
+
+            if (\count($matches) === 1 && $matches[0] === $hook) {
+                continue;
+            }
+
+            if ($matches !== []) {
+                $adapter->removeWriteHook($hook::class);
+            }
+            $adapter->addWriteHook($hook);
         }
     }
 

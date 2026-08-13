@@ -11,6 +11,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -1443,11 +1444,11 @@ class Memory extends Adapter
                         }
                     }
                     if (! $existingIsSelf) {
-                        throw new DuplicateException('Document with the requested unique attributes already exists');
+                        throw new UniqueException('Unique index violation');
                     }
                 }
                 if (isset($pendingByIndex[$indexId][$hash]) && $pendingByIndex[$indexId][$hash] !== $docKey) {
-                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                    throw new UniqueException('Unique index violation');
                 }
                 $pendingByIndex[$indexId][$hash] = $docKey;
             }
@@ -2439,7 +2440,7 @@ class Memory extends Adapter
     {
         if ($newHash !== null && isset($this->uniqueIndexHashes[$key][$indexId][$newHash])
             && $this->uniqueIndexHashes[$key][$indexId][$newHash] !== $docKey) {
-            throw new DuplicateException('Document with the requested unique attributes already exists');
+            throw new UniqueException('Unique index violation');
         }
 
         $previousValueAtNew = $newHash !== null ? ($this->uniqueIndexHashes[$key][$indexId][$newHash] ?? null) : null;
@@ -3424,7 +3425,7 @@ class Memory extends Adapter
         foreach ($newSignatures as $indexId => $hash) {
             $existing = $this->uniqueIndexHashes[$key][$indexId][$hash] ?? null;
             if ($existing !== null && $existing !== $docKey) {
-                throw new DuplicateException('Document with the requested unique attributes already exists');
+                throw new UniqueException('Unique index violation');
             }
         }
     }

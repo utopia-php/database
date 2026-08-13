@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
@@ -1891,8 +1892,9 @@ class SQLite extends MariaDB
                 stripos($message, 'unique') !== false ||
                 stripos($message, 'duplicate') !== false
             ) {
-                if (!\str_contains($message, '_uid')) {
-                    return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+                $columns = $this->getViolatedColumns($message);
+                if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
+                    return new UniqueException('Unique index violation', $e->getCode(), $e);
                 }
                 return new DuplicateException('Document already exists', $e->getCode(), $e);
             }
@@ -1904,6 +1906,33 @@ class SQLite extends MariaDB
         }
 
         return $e;
+    }
+
+    /**
+     * Extract the violated columns from a constraint error, e.g.
+     * "UNIQUE constraint failed: movies._tenant, movies._uid" resolves to
+     * ['_tenant', '_uid']. Returns null when the message cannot be parsed.
+     *
+     * @return array<string>|null
+     */
+    protected function getViolatedColumns(string $message): ?array
+    {
+        if (\preg_match('/UNIQUE constraint failed:\s*(.+)/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        $columns = \array_map(function (string $column): string {
+            $separator = \strrpos($column, '.');
+            if ($separator !== false) {
+                $column = \substr($column, $separator + 1);
+            }
+
+            return \trim($column, " \t`\"");
+        }, \explode(',', $matches[1]));
+
+        \sort($columns);
+
+        return $columns;
     }
 
     public function getSupportForSpatialIndexOrder(): bool

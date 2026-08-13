@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -5795,11 +5796,12 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 
     /**
-     * Test that DuplicateException messages differentiate between
+     * Test that duplicate exceptions differentiate between
      * document ID duplicates and unique index violations.
      */
     public function testDuplicateExceptionMessages(): void
@@ -5836,10 +5838,11 @@ trait DocumentTests
             ]));
             $this->fail('Expected DuplicateException for duplicate document ID');
         } catch (DuplicateException $e) {
+            $this->assertNotInstanceOf(UniqueException::class, $e);
             $this->assertStringContainsString('Document already exists', $e->getMessage());
         }
 
-        // Test 2: Unique index violation should mention "unique attributes"
+        // Test 2: Unique index violation should use UniqueException
         try {
             $database->createDocument('duplicateMessages', new Document([
                 '$id' => 'dup_msg_2',
@@ -5850,11 +5853,37 @@ trait DocumentTests
             ]));
             $this->fail('Expected DuplicateException for unique index violation');
         } catch (DuplicateException $e) {
-            $this->assertStringContainsString('unique attributes', $e->getMessage());
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('Unique index violation', $e->getMessage());
+        }
+
+        // Test 3: A conflicting value containing "_uid" must not be mistaken
+        // for a document identifier conflict
+        $database->createDocument('duplicateMessages', new Document([
+            '$id' => 'dup_msg_3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'email' => 'prefix_uid_suffix@example.com',
+        ]));
+
+        try {
+            $database->createDocument('duplicateMessages', new Document([
+                '$id' => 'dup_msg_4',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'email' => 'prefix_uid_suffix@example.com',
+            ]));
+            $this->fail('Expected DuplicateException for unique index violation');
+        } catch (DuplicateException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('Unique index violation', $e->getMessage());
         }
 
         $database->deleteCollection('duplicateMessages');
     }
+
     /**
      * @depends testUniqueIndexDuplicate
      */
@@ -5895,6 +5924,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 

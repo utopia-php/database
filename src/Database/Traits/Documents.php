@@ -647,19 +647,21 @@ trait Documents
 
         $document = $this->adapter->castingBefore($collection, $document);
 
-        $document = $this->withTransaction(function () use ($collection, $document) {
+        $cacheTarget = $collection->getId() === self::METADATA ? $document : $collection->getId();
+        $document = $this->withMutation(Event::DocumentCreate, $cacheTarget, function () use ($collection, $document) {
             $hook = $this->relationshipHook;
             if ($hook?->isEnabled()) {
                 $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
             }
 
-            return $this->adapter->createDocument($collection, $document);
-        });
+            $document = $this->adapter->createDocument($collection, $document);
+            $this->withDocumentTenant(
+                $document,
+                fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+            );
 
-        $this->withDocumentTenant(
-            $document,
-            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
-        );
+            return $document;
+        });
 
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
@@ -679,7 +681,7 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentCreate, $collection, $document);
 
-        $this->trigger(Event::DocumentCreate, $document);
+        $this->triggerHooks(Event::DocumentCreate, $document);
 
         return $document;
     }
@@ -792,7 +794,23 @@ trait Documents
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $insert = fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk));
+            $cacheTarget = $collection->getId() === self::METADATA ? $chunk : $collection->getId();
+            $insert = fn () => $this->withMutation(
+                Event::DocumentsCreate,
+                $cacheTarget,
+                function () use ($collection, $chunk): array {
+                    $batch = $this->adapter->createDocuments($collection, $chunk);
+
+                    foreach ($batch as $document) {
+                        $this->withDocumentTenant(
+                            $document,
+                            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                        );
+                    }
+
+                    return $batch;
+                }
+            );
             $batch = $this->skipDuplicates
                 ? $this->adapter->skipDuplicates($insert)
                 : $insert();
@@ -820,11 +838,6 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsCreate, $collection, $batch);
 
             foreach ($batch as $document) {
-                $this->withDocumentTenant(
-                    $document,
-                    fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
-                );
-
                 try {
                     $onNext && $onNext($document);
                 } catch (Throwable $e) {
@@ -835,7 +848,7 @@ trait Documents
             }
         }
 
-        $this->trigger(Event::DocumentsCreate, new Document([
+        $this->triggerHooks(Event::DocumentsCreate, new Document([
             '$collection' => $collection->getId(),
             'modified' => $modified,
         ]));
@@ -866,7 +879,10 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
+        $cacheTarget = $collection->getId() === self::METADATA
+            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            : $collection->getId();
+        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -1082,10 +1098,10 @@ trait Documents
 
             $document = $this->adapter->castingAfter($collection, $document);
 
-            $this->purgeCachedDocument($collection->getId(), $id);
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
             if ($document->getId() !== $id) {
-                $this->purgeCachedDocument($collection->getId(), $document->getId());
+                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
             }
 
             // If operators were used, refetch document to get computed values
@@ -1127,7 +1143,7 @@ trait Documents
 
         $document = $this->decorateDocument(Event::DocumentUpdate, $collection, $document);
 
-        $this->trigger(Event::DocumentUpdate, $document);
+        $this->triggerHooks(Event::DocumentUpdate, $document);
 
         return $document;
     }
@@ -1273,7 +1289,8 @@ trait Documents
             $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+            $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -1325,6 +1342,13 @@ trait Documents
                     $updates,
                     $batch
                 );
+
+                foreach ($batch as $document) {
+                    $this->withDocumentTenant(
+                        $document,
+                        fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                    );
+                }
             });
 
             $updates = $this->adapter->castingBefore($collection, $updates);
@@ -1355,7 +1379,6 @@ trait Documents
 
             foreach ($batch as $index => $doc) {
                 $doc->removeAttribute('$skipPermissionsUpdate');
-                $this->purgeCachedDocument($collection->getId(), $doc->getId());
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {
@@ -1374,7 +1397,7 @@ trait Documents
             $last = \end($batch);
         }
 
-        $this->trigger(Event::DocumentsUpdate, new Document([
+        $this->triggerHooks(Event::DocumentsUpdate, new Document([
             '$collection' => $collection->getId(),
             'modified' => $modified,
         ]));
@@ -1707,11 +1730,29 @@ trait Documents
             /**
              * @var array<Change> $chunk
              */
-            $batch = $this->withTransaction(fn () => $this->authorization->skip(fn () => $this->adapter->upsertDocuments(
-                $collection,
-                $attribute,
-                $chunk
-            )));
+            $cacheTarget = $collection->getId() === self::METADATA
+                ? \array_map(static fn (Change $change): Document => $change->getNew(), $chunk)
+                : $collection->getId();
+            $batch = $this->withMutation(
+                Event::DocumentsUpsert,
+                $cacheTarget,
+                function () use ($collection, $attribute, $chunk): array {
+                    $batch = $this->authorization->skip(fn () => $this->adapter->upsertDocuments(
+                        $collection,
+                        $attribute,
+                        $chunk
+                    ));
+
+                    foreach ($batch as $document) {
+                        $this->withDocumentTenant(
+                            $document,
+                            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                        );
+                    }
+
+                    return $batch;
+                }
+            );
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
@@ -1753,8 +1794,6 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpsert, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                $this->withDocumentTenant($doc, fn () => $this->purgeCachedDocument($collection->getId(), $doc->getId()));
-
                 $old = $chunk[$index]->getOld();
 
                 if (! $old->isEmpty()) {
@@ -1769,7 +1808,7 @@ trait Documents
             }
         }
 
-        $this->trigger(Event::DocumentsUpsert, new Document([
+        $this->triggerHooks(Event::DocumentsUpsert, new Document([
             '$collection' => $collection->getId(),
             'created' => $created,
             'updated' => $updated,
@@ -1829,7 +1868,10 @@ trait Documents
             $numericAttribute = $matchedAttr;
         }
 
-        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
+        $cacheTarget = $collection->getId() === self::METADATA
+            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            : $collection->getId();
+        $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -1886,12 +1928,12 @@ trait Documents
                 max: $max
             );
 
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
+
             return $document->setAttribute($attribute, $result);
         });
 
-        $this->purgeCachedDocument($collection->getId(), $id);
-
-        $this->trigger(Event::DocumentIncrease, $document);
+        $this->triggerHooks(Event::DocumentIncrease, $document);
 
         return $document;
     }
@@ -1945,7 +1987,10 @@ trait Documents
             $numericAttribute = $matchedDecAttr;
         }
 
-        $document = $this->withTransaction(function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
+        $cacheTarget = $collection->getId() === self::METADATA
+            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            : $collection->getId();
+        $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
             /** @var Document $document */
             $document = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument($collection->getId(), $id, forUpdate: true))); // Skip ensures user does not need read permission for this
 
@@ -2002,12 +2047,12 @@ trait Documents
                 min: $min
             );
 
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
+
             return $document->setAttribute($attribute, $result);
         });
 
-        $this->purgeCachedDocument($collection->getId(), $id);
-
-        $this->trigger(Event::DocumentDecrease, $document);
+        $this->triggerHooks(Event::DocumentDecrease, $document);
 
         return $document;
     }
@@ -2028,7 +2073,10 @@ trait Documents
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
+        $cacheTarget = $collection->getId() === self::METADATA
+            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            : $collection->getId();
+        $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, &$document) {
             $document = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
@@ -2065,14 +2113,13 @@ trait Documents
 
             $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection->getId(), $id));
 
-            $this->purgeCachedDocument($collection->getId(), $id);
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
             return $result;
         });
 
         if ($deleted) {
-            $this->purgeCachedDocumentInternal($collection->getId(), $id);
-            $this->trigger(Event::DocumentDelete, $document);
+            $this->triggerHooks(Event::DocumentDelete, $document);
         }
 
         return $deleted;
@@ -2178,7 +2225,8 @@ trait Documents
             $sequences = [];
             $permissionIds = [];
 
-            $this->withTransaction(function () use ($collection, $sequences, $permissionIds, $batch) {
+            $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
+            $this->withMutation(Event::DocumentsDelete, $cacheTarget, function () use ($collection, $sequences, $permissionIds, $batch) {
                 foreach ($batch as $document) {
                     $seq = $document->getSequence();
                     if ($seq !== null) {
@@ -2212,10 +2260,16 @@ trait Documents
                     $sequences,
                     $permissionIds
                 );
+
+                foreach ($batch as $document) {
+                    $this->withDocumentTenant(
+                        $document,
+                        fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                    );
+                }
             });
 
             foreach ($batch as $index => $document) {
-                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocument($collection->getId(), $document->getId()));
                 try {
                     $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
@@ -2233,7 +2287,7 @@ trait Documents
             $last = \end($batch);
         }
 
-        $this->trigger(Event::DocumentsDelete, new Document([
+        $this->triggerHooks(Event::DocumentsDelete, new Document([
             '$collection' => $collection->getId(),
             'modified' => $modified,
         ]));

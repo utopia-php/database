@@ -174,12 +174,12 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
-        $this->trigger(Event::DocumentPurge, new Document([
+        $this->triggerHooks(Event::DocumentPurge, new Document([
             '$id' => $collection->getId(),
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::AttributeCreate,
             (clone $attributeDoc)->setAttribute('$collection', $collection->getId()),
         );
@@ -334,12 +334,12 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
-        $this->trigger(Event::DocumentPurge, new Document([
+        $this->triggerHooks(Event::DocumentPurge, new Document([
             '$id' => $collection->getId(),
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(Event::AttributesCreate, \array_map(
+        $this->triggerHooks(Event::AttributesCreate, \array_map(
             static fn (Document $attribute): Document => (clone $attribute)
                 ->setAttribute('$collection', $collection->getId()),
             $attributeDocuments,
@@ -584,7 +584,7 @@ trait Attributes
         // see the updated required/format/options/filters/default state.
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::AttributeUpdate,
             (clone $attributeDoc)->setAttribute('$collection', $collection->getId()),
         );
@@ -1106,12 +1106,12 @@ trait Attributes
         }
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
 
-        $this->trigger(Event::DocumentPurge, new Document([
+        $this->triggerHooks(Event::DocumentPurge, new Document([
             '$id' => $collection,
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::AttributeUpdate,
             (clone $attribute)->setAttribute('$collection', $collection),
         );
@@ -1256,12 +1256,12 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
-        $this->trigger(Event::DocumentPurge, new Document([
+        $this->triggerHooks(Event::DocumentPurge, new Document([
             '$id' => $collection->getId(),
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::AttributeDelete,
             (clone $attribute)->setAttribute('$collection', $collection->getId()),
         );
@@ -1382,7 +1382,7 @@ trait Attributes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::AttributeUpdate,
             (clone $attribute)->setAttribute('$collection', $collection->getId()),
         );

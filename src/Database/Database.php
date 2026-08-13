@@ -2449,7 +2449,23 @@ class Database
      */
     protected function trigger(Event $event, mixed $data = null): void
     {
+        $this->invalidate($event, $data);
+        $this->triggerHooks($event, $data);
+    }
+
+    /**
+     * Run mandatory cache invalidation for a lifecycle event.
+     */
+    protected function invalidate(Event $event, mixed $data = null): void
+    {
         $this->queryCacheInvalidator?->handle($event, $data);
+    }
+
+    /**
+     * Fire suppressible user lifecycle hooks after mandatory invalidation succeeds.
+     */
+    protected function triggerHooks(Event $event, mixed $data = null): void
+    {
 
         if ($this->areEventsSilenced()) {
             return;

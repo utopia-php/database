@@ -11,6 +11,7 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
@@ -369,6 +370,55 @@ final class DatabaseQueryCacheTest extends TestCase
         $database->silent(fn () => $database->createDocument('users', new Document(['$id' => 'user'])));
     }
 
+    public function testCreateRollsBackWhenMandatoryInvalidationFails(): void
+    {
+        $this->assertMutationRollsBackOnInvalidationFailure(
+            static fn (Database $database) => $database->createDocument('users', new Document([
+                '$id' => 'created',
+                'name' => 'created',
+            ])),
+        );
+    }
+
+    public function testBatchCreateRollsBackWhenMandatoryInvalidationFails(): void
+    {
+        $this->assertMutationRollsBackOnInvalidationFailure(
+            static fn (Database $database) => $database->createDocuments('users', [
+                new Document(['$id' => 'first', 'name' => 'first']),
+                new Document(['$id' => 'second', 'name' => 'second']),
+            ]),
+        );
+    }
+
+    public function testUpsertRollsBackWhenMandatoryInvalidationFails(): void
+    {
+        $this->assertMutationRollsBackOnInvalidationFailure(
+            static fn (Database $database) => $database->upsertDocument('users', new Document([
+                '$id' => 'existing',
+                'name' => 'updated',
+            ])),
+            sqlite: true,
+        );
+    }
+
+    public function testUpdateRollsBackWhenMandatoryInvalidationFails(): void
+    {
+        $this->assertMutationRollsBackOnInvalidationFailure(
+            static fn (Database $database) => $database->updateDocument(
+                'users',
+                'existing',
+                new Document(['name' => 'updated']),
+            ),
+        );
+    }
+
+    public function testDeleteRollsBackWhenMandatoryInvalidationFails(): void
+    {
+        $this->assertMutationRollsBackOnInvalidationFailure(
+            static fn (Database $database) => $database->deleteDocument('users', 'existing'),
+        );
+    }
+
     public function testPooledRollbackCannotPoisonPointOrQueryCaches(): void
     {
         $child = new DatabaseMemory();
@@ -439,6 +489,50 @@ final class DatabaseQueryCacheTest extends TestCase
         }
     }
 
+    /**
+     * @param  callable(Database): mixed  $mutation
+     */
+    private function assertMutationRollsBackOnInvalidationFailure(callable $mutation, bool $sqlite = false): void
+    {
+        $adapter = $sqlite
+            ? new ObservedSQLite(new \PDO('sqlite::memory:'))
+            : new ObservedMemory();
+        $database = new Database($adapter, new Cache(new LeasableHashCache()));
+        $database
+            ->setDatabase('cache-tests')
+            ->setNamespace('cache_'.\uniqid());
+        $database->create();
+        $database->createCollection('users', [
+            new Attribute('name', ColumnType::String, 255, required: true),
+        ], permissions: $this->permissions());
+        $database->createDocument('users', new Document([
+            '$id' => 'existing',
+            'name' => 'original',
+        ]));
+
+        $cache = new FailingMemory();
+        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $this->assertSame(
+            ['existing' => 'original'],
+            $this->names($database->find('users', [Query::orderAsc('$id')])),
+        );
+
+        $cache->failPurges();
+        try {
+            $mutation($database);
+            $this->fail('Mandatory invalidation failure was not propagated');
+        } catch (\RuntimeException $exception) {
+            $this->assertStringContainsString('query cache epoch', $exception->getMessage());
+        }
+
+        $adapter->observeFinds('users');
+        $this->assertSame(
+            ['existing' => 'original'],
+            $this->names($database->find('users', [Query::orderAsc('$id')])),
+        );
+        $this->assertSame(1, $adapter->getObservedFinds(), 'The stale cached query result must stay blocked');
+    }
+
     /** @return array<string> */
     private function permissions(): array
     {
@@ -460,6 +554,24 @@ final class DatabaseQueryCacheTest extends TestCase
             static fn (Document $document): string => $document->getId(),
             $documents,
         );
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return array<string, string>
+     */
+    private function names(array $documents): array
+    {
+        $names = [];
+        foreach ($documents as $document) {
+            $name = $document->getAttribute('name');
+            if (! \is_string($name)) {
+                throw new \UnexpectedValueException('Expected document name to be a string');
+            }
+            $names[$document->getId()] = $name;
+        }
+
+        return $names;
     }
 }
 
@@ -662,6 +774,53 @@ final class ObservedMemory extends DatabaseMemory
         }
 
         return parent::getIdAttributeType();
+    }
+
+    #[\Override]
+    public function find(
+        Document $collection,
+        array $queries = [],
+        ?int $limit = 25,
+        ?int $offset = null,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+        array $cursor = [],
+        CursorDirection $cursorDirection = CursorDirection::After,
+        PermissionType $forPermission = PermissionType::Read,
+    ): array {
+        if ($collection->getId() === $this->findCollection) {
+            $this->finds++;
+        }
+
+        return parent::find(
+            $collection,
+            $queries,
+            $limit,
+            $offset,
+            $orderAttributes,
+            $orderTypes,
+            $cursor,
+            $cursorDirection,
+            $forPermission,
+        );
+    }
+}
+
+final class ObservedSQLite extends SQLite
+{
+    private ?string $findCollection = null;
+
+    private int $finds = 0;
+
+    public function observeFinds(string $collection): void
+    {
+        $this->findCollection = $collection;
+        $this->finds = 0;
+    }
+
+    public function getObservedFinds(): int
+    {
+        return $this->finds;
     }
 
     #[\Override]

@@ -215,7 +215,7 @@ trait Collections
             throw new DatabaseException("Failed to create collection metadata for '{$id}': ".$e->getMessage(), previous: $e);
         }
 
-        $this->trigger(Event::CollectionCreate, $createdCollection);
+        $this->triggerHooks(Event::CollectionCreate, $createdCollection);
 
         return $createdCollection;
     }
@@ -259,7 +259,7 @@ trait Collections
 
         $collection = $this->skipValidation(fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection)));
 
-        $this->trigger(Event::CollectionUpdate, $collection);
+        $this->triggerHooks(Event::CollectionUpdate, $collection);
 
         return $collection;
     }
@@ -442,7 +442,7 @@ trait Collections
         }
 
         if ($deleted) {
-            $this->trigger(Event::CollectionDelete, $collection);
+            $this->triggerHooks(Event::CollectionDelete, $collection);
         }
 
         $this->purgeCachedCollection($id);

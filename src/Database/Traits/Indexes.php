@@ -181,7 +181,7 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::IndexCreate,
             (clone $indexDoc)->setAttribute('$collection', $collection->getId()),
         );
@@ -270,7 +270,7 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::IndexRename,
             (clone $indexNew)->setAttribute('$collection', $collection->getId()),
         );
@@ -365,7 +365,7 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::IndexDelete,
             (clone $indexDeleted)->setAttribute('$collection', $collection->getId()),
         );

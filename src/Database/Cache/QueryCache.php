@@ -13,6 +13,9 @@ class QueryCache
     /** @var array<string, CacheRegion> */
     private array $regions = [];
 
+    /** @var array<string, true> */
+    private array $blocked = [];
+
     private Cache $cache;
 
     private string $cacheName;
@@ -151,25 +154,30 @@ class QueryCache
 
     public function invalidateCollection(string $collection): void
     {
+        $this->blocked[$collection] = true;
         $cacheKey = $this->getCollectionKey($collection);
         $epochKey = $this->getEpochKey($cacheKey);
         $existing = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
 
-        if ($existing !== false && $existing !== null && ! $this->cache->purge($epochKey)) {
-            throw new RuntimeException("Failed to purge query cache epoch for collection '{$collection}'");
-        }
+        $purged = $existing === false || $existing === null || $this->cache->purge($epochKey);
 
         $epoch = \bin2hex(\random_bytes(16));
         if ($this->cache->save($epochKey, $epoch) === false) {
             throw new RuntimeException("Failed to advance query cache epoch for collection '{$collection}'");
         }
+
+        if (! $purged) {
+            throw new RuntimeException("Failed to purge query cache epoch for collection '{$collection}'");
+        }
+
+        unset($this->blocked[$collection]);
     }
 
     public function isEnabled(string $collection): bool
     {
         $region = $this->getRegion($collection);
 
-        return $region->enabled;
+        return $region->enabled && ! isset($this->blocked[$collection]);
     }
 
     public function flush(): void

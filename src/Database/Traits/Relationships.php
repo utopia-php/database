@@ -414,7 +414,7 @@ trait Relationships
             }
         });
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::AttributeCreate,
             (clone $relationship)->setAttribute('$collection', $collection->getId()),
         );
@@ -980,7 +980,7 @@ trait Relationships
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
 
-        $this->trigger(
+        $this->triggerHooks(
             Event::AttributeDelete,
             (clone $relationship)->setAttribute('$collection', $collection->getId()),
         );

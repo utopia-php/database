@@ -648,7 +648,7 @@ $database->updateRelationship(
 $database->updateRelationship(
     collection: 'movies', 
     id: 'users', 
-    onDelete: ForeignKeyAction::Cascade->value, 
+    onDelete: ForeignKeyAction::Cascade->value,
     newKey: 'movies_id', 
     newTwoWayKey: 'users_id', 
     twoWay: true

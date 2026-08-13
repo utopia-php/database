@@ -19,7 +19,6 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
@@ -107,69 +106,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $col = $stmt->fetchColumn();
 
         return \is_scalar($col) ? (string) $col : '';
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function startTransaction(): bool
-    {
-        try {
-            if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()->rollBack();
-                } else {
-                    // If no active transaction, this has no effect.
-                    $this->getPDO()->prepare('ROLLBACK')->execute();
-                }
-
-                $result = $this->getPDO()->beginTransaction();
-            } else {
-                $this->getPDO()->exec('SAVEPOINT transaction'.$this->inTransaction);
-                $result = true;
-            }
-        } catch (PDOException $e) {
-            throw new TransactionException('Failed to start transaction: '.$e->getMessage(), $e->getCode(), $e);
-        }
-
-        if (! $result) {
-            throw new TransactionException('Failed to start transaction');
-        }
-
-        $this->inTransaction++;
-
-        return $result;
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    public function rollbackTransaction(): bool
-    {
-        if ($this->inTransaction === 0) {
-            return false;
-        }
-
-        try {
-            if ($this->inTransaction > 1) {
-                $this->getPDO()->exec('ROLLBACK TO transaction'.($this->inTransaction - 1));
-                $this->inTransaction--;
-
-                return true;
-            }
-
-            $result = $this->getPDO()->rollBack();
-            $this->inTransaction = 0;
-        } catch (PDOException $e) {
-            $this->inTransaction = 0;
-            throw new DatabaseException('Failed to rollback transaction: '.$e->getMessage(), $e->getCode(), $e);
-        }
-
-        if (! $result) {
-            throw new TransactionException('Failed to rollback transaction');
-        }
-
-        return $result;
     }
 
     /**

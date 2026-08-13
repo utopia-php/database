@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -27,6 +28,8 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PDO as DatabasePDO;
+use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
@@ -115,14 +118,40 @@ class SQLite extends SQL
      * can resolve `prepare`, `execute`, `bindValue` etc. on every SQLite
      * call site without relying on object-typed property access.
      *
-     * @return \PDO|\Utopia\Database\PDO
+     * @return PDO|DatabasePDO|PDOProxy
      */
     protected function getPDO(): object
     {
-        /** @var \PDO|\Utopia\Database\PDO $pdo */
-        $pdo = $this->pdo;
+        if (
+            ! $this->pdo instanceof PDO
+            && ! $this->pdo instanceof DatabasePDO
+            && ! $this->pdo instanceof PDOProxy
+        ) {
+            throw new DatabaseException('SQLite requires a PDO-compatible driver');
+        }
 
-        return $pdo;
+        return $this->pdo;
+    }
+
+    /**
+     * Prepare a statement and reject drivers that return false or another
+     * non-statement value before a method is called on it.
+     */
+    private function prepare(string $query, string $message = 'Failed to prepare SQLite statement'): PDOStatement|DatabasePDOStatement|PDOStatementProxy
+    {
+        $pdo = $this->getPDO();
+        $statement = $pdo instanceof PDOProxy
+            ? $pdo->__call('prepare', [$query])
+            : $pdo->prepare($query);
+        if (
+            $statement instanceof PDOStatement
+            || $statement instanceof DatabasePDOStatement
+            || $statement instanceof PDOStatementProxy
+        ) {
+            return $statement;
+        }
+
+        throw new DatabaseException($message);
     }
 
     /**
@@ -253,7 +282,12 @@ class SQLite extends SQL
         };
 
         try {
-            $this->getPDO()->sqliteCreateFunction('REGEXP', $pcre, 2);
+            $pdo = $this->getPDO();
+            if ($pdo instanceof PDO) {
+                $pdo->sqliteCreateFunction('REGEXP', $pcre, 2);
+            } else {
+                $pdo->__call('sqliteCreateFunction', ['REGEXP', $pcre, 2]);
+            }
             $this->pcreRegistered = true;
             // Capability::PCRE is conditional on UDF registration — invalidate cache.
             $this->capabilitySet = null;
@@ -283,16 +317,16 @@ class SQLite extends SQL
         try {
             if ($this->inTransaction === 0) {
                 if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()
+                    $this
                         ->prepare('ROLLBACK')
                         ->execute();
                 }
 
-                $result = $this->getPDO()
+                $result = $this
                     ->prepare('BEGIN IMMEDIATE')
                     ->execute();
             } else {
-                $result = $this->getPDO()
+                $result = $this
                     ->prepare('SAVEPOINT transaction'.$this->inTransaction)
                     ->execute();
             }
@@ -326,14 +360,14 @@ class SQLite extends SQL
 
         try {
             if ($this->inTransaction > 1) {
-                $result = $this->getPDO()
+                $result = $this
                     ->prepare('RELEASE SAVEPOINT transaction' . ($this->inTransaction - 1))
                     ->execute();
                 $this->inTransaction--;
                 return $result;
             }
 
-            $result = $this->getPDO()
+            $result = $this
                 ->prepare('COMMIT')
                 ->execute();
             $this->inTransaction = 0;
@@ -358,12 +392,12 @@ class SQLite extends SQL
 
         try {
             if ($this->inTransaction > 1) {
-                $this->getPDO()
+                $this
                     ->prepare('ROLLBACK TO transaction' . ($this->inTransaction - 1))
                     ->execute();
                 $this->inTransaction--;
             } else {
-                $this->getPDO()
+                $this
                     ->prepare('ROLLBACK')
                     ->execute();
                 $this->inTransaction = 0;
@@ -408,10 +442,7 @@ class SQLite extends SQL
 			WHERE type='table' AND name = :table
 		";
 
-        $stmt = $this->getPDO()->prepare($sql);
-        if ($stmt === false) {
-            throw new DatabaseException('Failed to prepare collection existence query');
-        }
+        $stmt = $this->prepare($sql, 'Failed to prepare collection existence query');
 
         $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
 
@@ -503,11 +534,11 @@ class SQLite extends SQL
 		";
 
         try {
-            $this->getPDO()
+            $this
                 ->prepare($collection)
                 ->execute();
 
-            $this->getPDO()
+            $this
                 ->prepare($permissions)
                 ->execute();
 
@@ -556,7 +587,7 @@ class SQLite extends SQL
         // shadow tables; sum (pgsize - unused) over all of them.
         $ftsPattern = $this->escapeLikePattern($ftsPrefix) . '%' . $this->escapeLikePattern(self::FTS_TABLE_SUFFIX) . '%';
 
-        $stmt = $this->getPDO()->prepare("
+        $stmt = $this->prepare("
              SELECT COALESCE(SUM(\"pgsize\" - \"unused\"), 0)
              FROM \"dbstat\"
              WHERE name = :name OR name = :perms OR name LIKE :fts_pattern ESCAPE '\\';
@@ -600,18 +631,18 @@ class SQLite extends SQL
         // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
             $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
-            $this->getPDO()->prepare($sql)->execute();
+            $this->prepare($sql)->execute();
         }
 
         $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
 
-        $this->getPDO()
+        $this
             ->prepare($sql)
             ->execute();
 
         $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id.'_perms')}";
 
-        $this->getPDO()
+        $this
             ->prepare($sql)
             ->execute();
 
@@ -649,7 +680,7 @@ class SQLite extends SQL
             $tenantClause = $this->sharedTables ? ' AND `_tenant` = :_tenant' : '';
             $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
-            $stmt = $this->getPDO()->prepare($sql);
+            $stmt = $this->prepare($sql);
             $stmt->bindValue(':max', $attribute->size, PDO::PARAM_INT);
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
@@ -713,7 +744,7 @@ class SQLite extends SQL
         $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`";
 
         try {
-            return $this->getPDO()
+            return $this
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
@@ -746,7 +777,7 @@ class SQLite extends SQL
         }
 
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
-        $stmt = $this->getPDO()->prepare("
+        $stmt = $this->prepare("
 			SELECT name
 			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
@@ -760,7 +791,7 @@ class SQLite extends SQL
 
         $sql = $this->getSQLIndex($name, $id, $type, $attributes);
 
-        return $this->getPDO()
+        return $this
             ->prepare($sql)
             ->execute();
     }
@@ -782,7 +813,7 @@ class SQLite extends SQL
         $ftsTable = $this->getFulltextTableName($collection, $attributes);
         $parentTable = "{$this->getNamespace()}_{$collection}";
 
-        $stmt = $this->getPDO()->prepare("
+        $stmt = $this->prepare("
             SELECT name
             FROM sqlite_master
             WHERE type='table' AND name=:_table;
@@ -816,7 +847,7 @@ class SQLite extends SQL
         $this->startTransaction();
         try {
             $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"_id\")";
-            $this->getPDO()->prepare($createSql)->execute();
+            $this->prepare($createSql)->execute();
 
             $insertSuffix = self::FTS_TRIGGER_INSERT;
             $insertTrigger = "
@@ -824,7 +855,7 @@ class SQLite extends SQL
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
             ";
-            $this->getPDO()->prepare($insertTrigger)->execute();
+            $this->prepare($insertTrigger)->execute();
 
             $deleteSuffix = self::FTS_TRIGGER_DELETE;
             $deleteTrigger = "
@@ -832,7 +863,7 @@ class SQLite extends SQL
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
                 END
             ";
-            $this->getPDO()->prepare($deleteTrigger)->execute();
+            $this->prepare($deleteTrigger)->execute();
 
             $updateSuffix = self::FTS_TRIGGER_UPDATE;
             // OF <cols>: skip re-tokenise when only timestamps/permissions change.
@@ -842,10 +873,10 @@ class SQLite extends SQL
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
             ";
-            $this->getPDO()->prepare($updateTrigger)->execute();
+            $this->prepare($updateTrigger)->execute();
 
             $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`{$backfillWhere}";
-            $this->getPDO()->prepare($backfill)->execute();
+            $this->prepare($backfill)->execute();
 
             $this->commitTransaction();
         } catch (\Throwable $e) {
@@ -915,7 +946,15 @@ class SQLite extends SQL
             return (string) $this->tenant;
         }
 
-        return $this->getPDO()->quote((string) $this->tenant);
+        $pdo = $this->getPDO();
+        $quoted = $pdo instanceof PDOProxy
+            ? $pdo->__call('quote', [(string) $this->tenant])
+            : $pdo->quote((string) $this->tenant);
+        if (! \is_string($quoted)) {
+            throw new DatabaseException('Failed to quote SQLite tenant');
+        }
+
+        return $quoted;
     }
 
     /**
@@ -934,7 +973,7 @@ class SQLite extends SQL
         // table (whose name is keyed off attributes, not the id) or
         // already absent — try the FTS5 path before erroring.
         $regularIndex = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}";
-        $stmt = $this->getPDO()->prepare("
+        $stmt = $this->prepare("
             SELECT name FROM sqlite_master WHERE type='index' AND name=:_index
         ");
         $stmt->bindValue(':_index', $regularIndex);
@@ -953,7 +992,7 @@ class SQLite extends SQL
         $sql = "DROP INDEX `{$regularIndex}`";
 
         try {
-            return $this->getPDO()
+            return $this
                 ->prepare($sql)
                 ->execute();
         } catch (PDOException $e) {
@@ -1056,10 +1095,10 @@ class SQLite extends SQL
         $this->startTransaction();
         try {
             foreach ($triggerSuffixes as $suffix) {
-                $this->getPDO()->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`")->execute();
+                $this->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`")->execute();
             }
             $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
-            $this->getPDO()->prepare($sql)->execute();
+            $this->prepare($sql)->execute();
             $this->commitTransaction();
         } catch (\Throwable $e) {
             try {
@@ -1154,7 +1193,7 @@ class SQLite extends SQL
     {
         // ESCAPE '\\' so the literal `_` separators in the prefix don't
         // act as LIKE wildcards (e.g. `db_users_` matching `db_usersA_`).
-        $stmt = $this->getPDO()->prepare("
+        $stmt = $this->prepare("
             SELECT name FROM sqlite_master
             WHERE type='table'
               AND name LIKE :_prefix ESCAPE '\\'
@@ -1228,7 +1267,7 @@ class SQLite extends SQL
 
             $stmt->execute();
 
-            $statment = $this->getPDO()->prepare('SELECT last_insert_rowid() AS id');
+            $statment = $this->prepare('SELECT last_insert_rowid() AS id');
             $statment->execute();
             $last = $statment->fetch();
 
@@ -1644,8 +1683,11 @@ class SQLite extends SQL
 
         try {
             // Test if POWER function exists by attempting to use it
-            $stmt = $this->getPDO()->query('SELECT POWER(2, 3) as test');
-            if ($stmt === false) {
+            $pdo = $this->getPDO();
+            $stmt = $pdo instanceof PDOProxy
+                ? $pdo->__call('query', ['SELECT POWER(2, 3) as test'])
+                : $pdo->query('SELECT POWER(2, 3) as test');
+            if (! $stmt instanceof PDOStatement && ! $stmt instanceof PDOStatementProxy) {
                 $available = false;
 
                 return false;
@@ -2452,7 +2494,7 @@ class SQLite extends SQL
         // the same column order to match a UNIQUE constraint.
         $conflictKeys = $this->sharedTables ? '(_tenant, _uid)' : '(_uid)';
 
-        $stmt = $this->getPDO()->prepare(
+        $stmt = $this->prepare(
             "INSERT INTO {$this->getSQLTable($name)} {$columns}
             VALUES ".\implode(', ', $batchKeys)."
             ON CONFLICT {$conflictKeys} DO UPDATE
@@ -2545,7 +2587,7 @@ class SQLite extends SQL
         };
 
         foreach ($statements as $stmt) {
-            $this->getPDO()->prepare($stmt)->execute();
+            $this->prepare($stmt)->execute();
         }
 
         return true;
@@ -2624,7 +2666,7 @@ class SQLite extends SQL
         }
 
         foreach ($statements as $stmt) {
-            $this->getPDO()->prepare($stmt)->execute();
+            $this->prepare($stmt)->execute();
         }
 
         return true;
@@ -2684,7 +2726,7 @@ class SQLite extends SQL
         }
 
         foreach ($statements as $stmt) {
-            $this->getPDO()->prepare($stmt)->execute();
+            $this->prepare($stmt)->execute();
         }
 
         return true;
@@ -2703,7 +2745,7 @@ class SQLite extends SQL
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
 
-        $stmt = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
+        $stmt = $this->prepare("PRAGMA table_info(`{$table}`)");
         $stmt->execute();
         $rows = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -2748,7 +2790,7 @@ class SQLite extends SQL
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
 
-        $stmt = $this->getPDO()->prepare("PRAGMA index_list(`{$table}`)");
+        $stmt = $this->prepare("PRAGMA index_list(`{$table}`)");
         $stmt->execute();
         $indexes = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -2761,7 +2803,7 @@ class SQLite extends SQL
             $name = \is_scalar($index['name'] ?? null) ? (string) $index['name'] : '';
             $unique = ! empty($index['unique']);
 
-            $colStmt = $this->getPDO()->prepare("PRAGMA index_info(`{$name}`)");
+            $colStmt = $this->prepare("PRAGMA index_info(`{$name}`)");
             $colStmt->execute();
             $cols = $colStmt->fetchAll();
             $colStmt->closeCursor();
@@ -2862,7 +2904,7 @@ class SQLite extends SQL
 
         $entries = [];
         foreach ($tables as $ftsTable) {
-            $info = $this->getPDO()->prepare("PRAGMA table_info(`{$ftsTable}`)");
+            $info = $this->prepare("PRAGMA table_info(`{$ftsTable}`)");
             $info->execute();
             $cols = $info->fetchAll(PDO::FETCH_ASSOC);
             $info->closeCursor();
@@ -3187,7 +3229,7 @@ class SQLite extends SQL
     {
         $map = [];
         foreach ($this->findFulltextTables($collection) as $table) {
-            $info = $this->getPDO()->prepare("PRAGMA table_info(`{$table}`)");
+            $info = $this->prepare("PRAGMA table_info(`{$table}`)");
             $info->execute();
             $cols = $info->fetchAll(PDO::FETCH_ASSOC);
             $info->closeCursor();

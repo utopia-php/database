@@ -184,10 +184,13 @@ class QueryCacheTest extends TestCase
             ->method('saveWithLease')
             ->with(
                 'cache-key',
-                $this->callback(function (array $data) {
-                    return $data['version'] === 1
-                        && \is_array($data['documents'][0])
-                        && $data['documents'][0]['$id'] === 'doc1';
+                $this->callback(function (array $data): bool {
+                    $documents = $data['documents'] ?? null;
+
+                    return ($data['version'] ?? null) === 1
+                        && \is_array($documents)
+                        && \is_array($documents[0] ?? null)
+                        && ($documents[0]['$id'] ?? null) === 'doc1';
                 }),
                 '',
                 '0',

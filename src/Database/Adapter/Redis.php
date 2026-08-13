@@ -149,8 +149,15 @@ class Redis extends Adapter implements
             return false;
         }
 
-        $this->rollbackJournal();
-        $this->inTransaction--;
+        try {
+            $this->rollbackJournal();
+            $this->inTransaction--;
+        } catch (\Throwable $error) {
+            $this->inTransaction = 0;
+            $this->journalStack = [];
+
+            throw $error;
+        }
 
         return true;
     }

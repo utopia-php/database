@@ -793,9 +793,9 @@ trait DocumentTests
         // Plain read fills the plain slot with its own marker. Both slots of the
         // document key now hold an "empty" marker.
         $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
-        $cached = $cache->load($documentKey, Database::TTL, $plainHash);
-        $this->assertIsArray($cached);
-        $this->assertArrayHasKey('$empty', $cached);
+        $plainCached = $cache->load($documentKey, Database::TTL, \sprintf('%s', $plainHash));
+        $this->assertIsArray($plainCached);
+        $this->assertArrayHasKey('$empty', $plainCached);
 
         // Inserting the id purges the whole document key, so BOTH slots clear.
         $database->createDocument($collection, new Document([

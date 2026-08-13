@@ -79,6 +79,9 @@ final class SQLiteOperatorBehaviorTest extends TestCase
 
     private function value(string $id): float
     {
-        return (float) $this->adapter->getDocument($this->collection, $id)->getAttribute('value');
+        $value = $this->adapter->getDocument($this->collection, $id)->getAttribute('value');
+        $this->assertIsNumeric($value);
+
+        return (float) $value;
     }
 }

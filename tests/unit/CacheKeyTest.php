@@ -208,6 +208,7 @@ class CacheKeyTest extends TestCase
             . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
         );
         $field = $db->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($field);
 
         $this->assertStringStartsWith("{$schemaHash}:", $field);
         $this->assertStringEndsWith(':documents', $field);
@@ -225,6 +226,7 @@ class CacheKeyTest extends TestCase
             ]),
             [Query::limit(10)],
         );
+        $this->assertNotNull($field);
 
         $this->assertNotSame(
             $field,
@@ -237,7 +239,9 @@ class CacheKeyTest extends TestCase
             ),
         );
         $this->assertNotSame($field, $db->getQueryCacheField(null, [Query::limit(20)]));
-        $this->assertStringEndsWith(':total', $db->getQueryCacheField(null, [Query::limit(10)], 'total'));
+        $total = $db->getQueryCacheField(null, [Query::limit(10)], 'total');
+        $this->assertNotNull($total);
+        $this->assertStringEndsWith(':total', $total);
     }
 
     public function testQueryCacheFieldChangesWithActiveAuthorizationContext(): void

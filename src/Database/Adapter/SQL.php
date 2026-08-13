@@ -326,13 +326,18 @@ abstract class SQL extends Adapter
                     // effort; swallow it and begin a fresh transaction below.
                 }
 
-                $this->getPDO()->beginTransaction();
+                $result = $this->getPDO()->beginTransaction();
 
             } else {
                 $this->getPDO()->exec('SAVEPOINT transaction'.$this->inTransaction);
+                $result = true;
             }
         } catch (PDOException $e) {
             throw new TransactionException('Failed to start transaction: '.$e->getMessage(), $e->getCode(), $e);
+        }
+
+        if ($result !== true) {
+            throw new TransactionException('Failed to start transaction');
         }
 
         $this->inTransaction++;
@@ -388,13 +393,18 @@ abstract class SQL extends Adapter
             if ($this->inTransaction > 1) {
                 $this->getPDO()->exec('ROLLBACK TO transaction'.($this->inTransaction - 1));
                 $this->inTransaction--;
+                $result = true;
             } else {
-                $this->getPDO()->rollBack();
+                $result = $this->getPDO()->rollBack();
                 $this->inTransaction = 0;
             }
         } catch (PDOException $e) {
             $this->inTransaction = 0;
             throw new DatabaseException('Failed to rollback transaction: '.$e->getMessage(), $e->getCode(), $e);
+        }
+
+        if ($result !== true) {
+            throw new TransactionException('Failed to rollback transaction');
         }
 
         return true;

@@ -1235,20 +1235,36 @@ trait AttributeTests
         // Add custom encrypt filter
         $database->addFilter(
             'encrypt',
-            function (mixed $value) {
+            function (mixed $value): string {
+                if (! \is_scalar($value) && $value !== null) {
+                    throw new \InvalidArgumentException('Encrypted filter input must be scalar or null');
+                }
+
                 return json_encode([
-                    'data' => base64_encode($value),
+                    'data' => base64_encode((string) $value),
                     'method' => 'base64',
                     'version' => 'v1',
-                ]);
+                ]) ?: throw new \RuntimeException('Failed to encode encrypted filter input');
             },
-            function (mixed $value) {
+            function (mixed $value): ?string {
                 if (is_null($value)) {
-                    return;
+                    return null;
                 }
-                $value = json_decode($value, true);
+                if (! \is_string($value)) {
+                    throw new \InvalidArgumentException('Encrypted filter value must be a string');
+                }
 
-                return base64_decode($value['data']);
+                $value = json_decode($value, true);
+                if (! \is_array($value) || ! \is_string($value['data'] ?? null)) {
+                    throw new \InvalidArgumentException('Encrypted filter payload is invalid');
+                }
+
+                $decoded = base64_decode($value['data'], true);
+                if ($decoded === false) {
+                    throw new \InvalidArgumentException('Encrypted filter payload is not valid base64');
+                }
+
+                return $decoded;
             }
         );
 
@@ -1839,14 +1855,20 @@ trait AttributeTests
 
         $collection = $database->getCollection($collectionName);
         $attrs = $collection->getAttribute('attributes');
+        $this->assertIsArray($attrs);
         $this->assertCount(1, $attrs);
-        $this->assertEquals('foo', $attrs[0]['$id']);
-        $this->assertEquals(0, $attrs[0]['size']);
+        $attribute = $attrs[0] ?? null;
+        $this->assertInstanceOf(Document::class, $attribute);
+        $this->assertSame('foo', $attribute->getId());
+        $this->assertSame(0, $attribute->getAttribute('size'));
 
         $database->updateAttribute($collectionName, 'foo', size: 1);
         $collection = $database->getCollection($collectionName);
         $attrs = $collection->getAttribute('attributes');
-        $this->assertEquals(0, $attrs[0]['size']);
+        $this->assertIsArray($attrs);
+        $attribute = $attrs[0] ?? null;
+        $this->assertInstanceOf(Document::class, $attribute);
+        $this->assertSame(0, $attribute->getAttribute('size'));
     }
 
     public function testCreateAttributesBigIntValidationSignedUnsignedAndMetadata(): void
@@ -1868,24 +1890,26 @@ trait AttributeTests
 
         $collection = $database->getCollection($collectionName);
         $attributes = $collection->getAttribute('attributes', []);
+        $this->assertIsArray($attributes);
 
         $signedAttribute = null;
         $unsignedAttribute = null;
         foreach ($attributes as $attribute) {
-            if (($attribute['$id'] ?? '') === 'signed_bigint') {
+            $this->assertInstanceOf(Document::class, $attribute);
+            if ($attribute->getId() === 'signed_bigint') {
                 $signedAttribute = $attribute;
             }
-            if (($attribute['$id'] ?? '') === 'unsigned_bigint') {
+            if ($attribute->getId() === 'unsigned_bigint') {
                 $unsignedAttribute = $attribute;
             }
         }
 
-        $this->assertNotNull($signedAttribute);
-        $this->assertNotNull($unsignedAttribute);
-        $this->assertTrue($signedAttribute['signed']);
-        $this->assertFalse($unsignedAttribute['signed']);
-        $this->assertEquals(0, $signedAttribute['size']);
-        $this->assertEquals(0, $unsignedAttribute['size']);
+        $this->assertInstanceOf(Document::class, $signedAttribute);
+        $this->assertInstanceOf(Document::class, $unsignedAttribute);
+        $this->assertTrue($signedAttribute->getAttribute('signed'));
+        $this->assertFalse($unsignedAttribute->getAttribute('signed'));
+        $this->assertSame(0, $signedAttribute->getAttribute('size'));
+        $this->assertSame(0, $unsignedAttribute->getAttribute('size'));
 
         $largeUnsignedAttribute = [new Attribute(
             key: 'unsigned_bigint_large',

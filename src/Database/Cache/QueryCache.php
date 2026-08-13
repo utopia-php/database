@@ -104,18 +104,20 @@ class QueryCache
     }
 
     /**
-     * @param  array<Document>  $results
+     * @param  array<mixed>  $results
      */
     public function set(string $key, array $results, string $generation = '0'): bool
     {
+        $data = [];
         foreach ($results as $result) {
             if (! $result instanceof Document) {
                 return false;
             }
+
+            $data[] = $result->getArrayCopy();
         }
 
         [$cacheKey, $hash] = $this->splitKey($key);
-        $data = \array_map(fn (Document $doc) => $doc->getArrayCopy(), $results);
 
         return $this->cache->saveWithLease($cacheKey, [
             'version' => self::VERSION,

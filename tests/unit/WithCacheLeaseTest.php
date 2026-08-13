@@ -88,7 +88,7 @@ class LeasableMemoryCache implements Adapter, Leasable
     private const string GENERATION_FIELD = '__utopia_gen__';
 
     /**
-     * @var array<string, array<string, mixed>>
+     * @var array<string, array<string, array{time: int, data: array<int|string, mixed>|string}>>
      */
     private array $store = [];
 
@@ -128,7 +128,9 @@ class LeasableMemoryCache implements Adapter, Leasable
 
     public function getGeneration(string $key): string
     {
-        return $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
+        $generation = $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
+
+        return \is_string($generation) ? $generation : '0';
     }
 
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array

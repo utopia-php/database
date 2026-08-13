@@ -32,6 +32,11 @@ class QueryCacheTest extends TestCase
         return $database;
     }
 
+    private function withCache(Database $database, string $key, callable $callback): mixed
+    {
+        return $database->withCache($key, $callback);
+    }
+
     /**
      * @param array<Query> $queries
      * @return array<Document>
@@ -43,7 +48,7 @@ class QueryCacheTest extends TestCase
         ?string $namespace = null,
     ): array {
         foreach ($queries as $query) {
-            if ($query instanceof Query && $query->getMethod() === Method::OrderRandom) {
+            if ($query->getMethod() === Method::OrderRandom) {
                 return $database->find($collection, $queries);
             }
         }
@@ -125,7 +130,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): mixed {
                 $callbackCalls++;
@@ -135,9 +141,10 @@ class QueryCacheTest extends TestCase
 
         $this->assertNull($value);
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
-            function () use (&$callbackCalls): string {
+            function () use (&$callbackCalls): mixed {
                 $callbackCalls++;
                 return 'miss';
             },
@@ -197,9 +204,10 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
-            function () use (&$callbackCalls): bool {
+            function () use (&$callbackCalls): mixed {
                 $callbackCalls++;
                 return false;
             },
@@ -505,10 +513,22 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache, [
             'wrapped' => [
-                'encode' => static fn (mixed $value): string => 'encoded:' . $value,
-                'decode' => static fn (mixed $value): string => \str_starts_with((string) $value, 'encoded:')
-                    ? \substr((string) $value, 8)
-                    : 'double:' . $value,
+                'encode' => static function (mixed $value): string {
+                    if (! \is_scalar($value) && $value !== null) {
+                        throw new \InvalidArgumentException('Filter input must be scalar or null');
+                    }
+
+                    return 'encoded:'.(string) $value;
+                },
+                'decode' => static function (mixed $value): string {
+                    if (! \is_string($value)) {
+                        throw new \InvalidArgumentException('Encoded filter input must be a string');
+                    }
+
+                    return \str_starts_with($value, 'encoded:')
+                        ? \substr($value, 8)
+                        : 'double:'.$value;
+                },
             ],
         ]);
         $database->createCollection('secrets', [
@@ -635,6 +655,7 @@ class QueryCacheTest extends TestCase
         $collection = $database->getCollection('secureRules');
         $key = $database->getQueryCacheKey($collection->getId(), '_39');
         $hash = $database->getQueryCacheField($collection);
+        $this->assertNotNull($hash);
         $database->getCache()->save($key, [
             'collection' => $collection->getId(),
             'type' => 'documents',
@@ -679,6 +700,8 @@ class QueryCacheTest extends TestCase
         ];
 
         $collection = $database->getCollection('parents');
+        $hash = $database->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($hash);
         $cache->save(
             $database->getQueryCacheKey($collection->getId(), '_39'),
             [
@@ -695,14 +718,15 @@ class QueryCacheTest extends TestCase
                     ],
                 ],
             ],
-            $database->getQueryCacheField($collection, $queries),
+            $hash,
         );
 
         $parents = $this->findWithCache($database, 'parents', $queries, '_39');
 
         $this->assertCount(1, $parents);
-        $this->assertInstanceOf(Document::class, $parents[0]->getAttribute('child'));
-        $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
+        $child = $parents[0]->getAttribute('child');
+        $this->assertInstanceOf(Document::class, $child);
+        $this->assertSame('child-a', $child->getId());
     }
 
     public function testQueryCacheRefreshesInvalidPayload(): void
@@ -728,6 +752,8 @@ class QueryCacheTest extends TestCase
         ];
 
         $collection = $database->getCollection('wafRules');
+        $hash = $database->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($hash);
         $cache->save(
             $database->getQueryCacheKey($collection->getId(), '_39'),
             [
@@ -735,7 +761,7 @@ class QueryCacheTest extends TestCase
                 'type' => 'documents',
                 'value' => 'invalid',
             ],
-            $database->getQueryCacheField($collection, $queries),
+            $hash,
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
@@ -771,6 +797,8 @@ class QueryCacheTest extends TestCase
         ];
 
         $collection = $database->getCollection('wafRules');
+        $hash = $database->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($hash);
         $cache->save(
             $database->getQueryCacheKey($collection->getId(), '_39'),
             [
@@ -784,7 +812,7 @@ class QueryCacheTest extends TestCase
                     'invalid',
                 ],
             ],
-            $database->getQueryCacheField($collection, $queries),
+            $hash,
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');

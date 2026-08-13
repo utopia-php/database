@@ -723,10 +723,13 @@ trait SpatialTests
             $this->assertEquals(true, $database->createIndex($collectionName, new Index(key: 'loc_spatial', type: IndexType::Spatial, attributes: ['loc'])));
 
             $collection = $database->getCollection($collectionName);
-            $this->assertIsArray($collection->getAttribute('indexes'));
-            $this->assertCount(1, $collection->getAttribute('indexes'));
-            $this->assertEquals('loc_spatial', $collection->getAttribute('indexes')[0]['$id']);
-            $this->assertEquals(IndexType::Spatial->value, $collection->getAttribute('indexes')[0]['type']);
+            $indexes = $collection->getAttribute('indexes');
+            $this->assertIsArray($indexes);
+            $this->assertCount(1, $indexes);
+            $index = $indexes[0] ?? null;
+            $this->assertInstanceOf(Document::class, $index);
+            $this->assertSame('loc_spatial', $index->getId());
+            $this->assertSame(IndexType::Spatial->value, $index->getAttribute('type'));
 
             $this->assertEquals(true, $database->deleteIndex($collectionName, 'loc_spatial'));
             $collection = $database->getCollection($collectionName);
@@ -761,7 +764,11 @@ trait SpatialTests
             if ($orderSupported) {
                 $database->createCollection($collOrderCreate, $attributes, $indexes);
                 $meta = $database->getCollection($collOrderCreate);
-                $this->assertEquals('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
+                $createdIndexes = $meta->getAttribute('indexes');
+                $this->assertIsArray($createdIndexes);
+                $createdIndex = $createdIndexes[0] ?? null;
+                $this->assertInstanceOf(Document::class, $createdIndex);
+                $this->assertSame('idx_loc', $createdIndex->getId());
             } else {
                 try {
                     $database->createCollection($collOrderCreate, $attributes, $indexes);
@@ -821,7 +828,11 @@ trait SpatialTests
             if ($nullSupported) {
                 $database->createCollection($collNullCreate, $attributes, $indexes);
                 $meta = $database->getCollection($collNullCreate);
-                $this->assertEquals('idx_loc', $meta->getAttribute('indexes')[0]['$id']);
+                $createdIndexes = $meta->getAttribute('indexes');
+                $this->assertIsArray($createdIndexes);
+                $createdIndex = $createdIndexes[0] ?? null;
+                $this->assertInstanceOf(Document::class, $createdIndex);
+                $this->assertSame('idx_loc', $createdIndex->getId());
             } else {
                 try {
                     $database->createCollection($collNullCreate, $attributes, $indexes);
@@ -1635,13 +1646,21 @@ trait SpatialTests
 
         $results = $database->find($collectionName, [Query::select(['location'])]);
         foreach ($results as $document) {
-            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
+            $location = $document->getAttribute('location');
+            $this->assertIsArray($location);
+            $this->assertCount(2, $location); // POINT has 2 coordinates
         }
 
         $results = $database->find($collectionName, [Query::select(['area', 'location'])]);
         foreach ($results as $document) {
-            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
-            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+            $location = $document->getAttribute('location');
+            $this->assertIsArray($location);
+            $this->assertCount(2, $location); // POINT has 2 coordinates
+            $area = $document->getAttribute('area');
+            $this->assertIsArray($area);
+            $ring = $area[0] ?? null;
+            $this->assertIsArray($ring);
+            $this->assertGreaterThan(1, count($ring)); // POLYGON has multiple points
         }
 
         // Test 2: updateDocuments with spatial data
@@ -1959,7 +1978,11 @@ trait SpatialTests
                 // Should succeed on adapters that allow nullable spatial indexes
                 $database->updateAttribute($collectionName, 'geom', required: false);
                 $meta = $database->getCollection($collectionName);
-                $this->assertEquals(false, $meta->getAttribute('attributes')[0]['required']);
+                $attributes = $meta->getAttribute('attributes');
+                $this->assertIsArray($attributes);
+                $attribute = $attributes[0] ?? null;
+                $this->assertInstanceOf(Document::class, $attribute);
+                $this->assertFalse($attribute->getAttribute('required'));
             } else {
                 // Should error (index constraint) when making required=false while spatial index exists
                 $threw = false;
@@ -1971,7 +1994,11 @@ trait SpatialTests
                 $this->assertTrue($threw, 'Expected error when setting required=false with existing spatial index and adapter not supporting nullable indexes');
                 // Ensure attribute remains required
                 $meta = $database->getCollection($collectionName);
-                $this->assertEquals(true, $meta->getAttribute('attributes')[0]['required']);
+                $attributes = $meta->getAttribute('attributes');
+                $this->assertIsArray($attributes);
+                $attribute = $attributes[0] ?? null;
+                $this->assertInstanceOf(Document::class, $attribute);
+                $this->assertTrue($attribute->getAttribute('required'));
             }
 
             // 3) Spatial index order support: providing orders should fail if not supported
@@ -2339,8 +2366,10 @@ trait SpatialTests
         $database->createDocument($collectionName, $doc1);
 
         $result = $database->getDocument($collectionName, 'doc1');
-        $this->assertEquals($result->getAttribute('pointAttr')[0], 5.0);
-        $this->assertEquals($result->getAttribute('pointAttr')[1], 5.5);
+        $point = $result->getAttribute('pointAttr');
+        $this->assertIsArray($point);
+        $this->assertEquals($point[0], 5.0);
+        $this->assertEquals($point[1], 5.5);
         $database->deleteCollection($collectionName);
     }
 

@@ -179,6 +179,11 @@ final class UniqueViolationTest extends TestCase
         $class = new ReflectionClass($adapter);
         $method = $class->getMethod('processException');
 
-        return $method->invoke($class->newInstanceWithoutConstructor(), $exception);
+        $processed = $method->invoke($class->newInstanceWithoutConstructor(), $exception);
+        if (! $processed instanceof Throwable) {
+            throw new \LogicException('Adapter exception processor did not return a throwable');
+        }
+
+        return $processed;
     }
 }

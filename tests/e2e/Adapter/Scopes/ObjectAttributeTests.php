@@ -714,10 +714,13 @@ trait ObjectAttributeTests
 
         $database->purgeCachedDocument($collectionId, 'bigInts');
         $meta = $database->getDocument($collectionId, 'bigInts')->getAttribute('meta');
+        $this->assertIsArray($meta);
+        $nested = $meta['nested'] ?? null;
+        $this->assertIsArray($nested);
 
         $this->assertIsInt($meta['small']);
         $this->assertIsInt($meta['count']);
-        $this->assertIsInt($meta['nested']['deep']);
+        $this->assertIsInt($nested['deep']);
         $this->assertEquals([
             'small' => -42,
             'count' => -3408048000,
@@ -801,28 +804,38 @@ trait ObjectAttributeTests
             ],
         ]));
         $createdMeta = $created->getAttribute('meta');
+        $this->assertIsArray($createdMeta);
+        $createdArray = $createdMeta['arr'] ?? null;
+        $this->assertIsArray($createdArray);
         $this->assertSame('{}', json_encode($createdMeta['inner']));
-        $this->assertSame('{}', json_encode($createdMeta['arr'][0]));
-        $this->assertSame('{"x":1}', json_encode($createdMeta['arr'][1]));
+        $this->assertSame('{}', json_encode($createdArray[0]));
+        $this->assertSame('{"x":1}', json_encode($createdArray[1]));
         $this->assertSame('[]', json_encode($createdMeta['emptyArray']));
 
         $database->purgeCachedDocument($collectionId, 'nestedEmptyObjects');
         $readMeta = $database->getDocument($collectionId, 'nestedEmptyObjects')->getAttribute('meta');
+        $this->assertIsArray($readMeta);
+        $readArray = $readMeta['arr'] ?? null;
+        $this->assertIsArray($readArray);
         $this->assertSame('{}', json_encode($readMeta['inner']));
-        $this->assertSame('{}', json_encode($readMeta['arr'][0]));
-        $this->assertSame('{"x":1}', json_encode($readMeta['arr'][1]));
+        $this->assertSame('{}', json_encode($readArray[0]));
+        $this->assertSame('{"x":1}', json_encode($readArray[1]));
         $this->assertSame('[]', json_encode($readMeta['emptyArray']));
 
         $cached = $database->getDocument($collectionId, 'nestedEmptyObjects');
         $cachedMeta = $cached->getAttribute('meta');
+        $this->assertIsArray($cachedMeta);
+        $cachedArray = $cachedMeta['arr'] ?? null;
+        $this->assertIsArray($cachedArray);
         $this->assertSame('{}', json_encode($cachedMeta['inner']));
-        $this->assertSame('{}', json_encode($cachedMeta['arr'][0]));
-        $this->assertSame('{"x":1}', json_encode($cachedMeta['arr'][1]));
+        $this->assertSame('{}', json_encode($cachedArray[0]));
+        $this->assertSame('{"x":1}', json_encode($cachedArray[1]));
         $this->assertSame('[]', json_encode($cachedMeta['emptyArray']));
 
         $updatedMeta = $cachedMeta;
         $updatedMeta['inner'] = new \stdClass();
-        $updatedMeta['arr'][0] = new \stdClass();
+        $cachedArray[0] = new \stdClass();
+        $updatedMeta['arr'] = $cachedArray;
         $updated = $database->updateDocument($collectionId, 'nestedEmptyObjects', new Document([
             'meta' => $updatedMeta,
         ]));

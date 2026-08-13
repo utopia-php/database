@@ -399,7 +399,9 @@ trait AggregationTests
         $this->createProducts($database, 'avg_all');
         $results = $database->find('avg_all', [Query::avg('price', 'avg_price')]);
         $this->assertCount(1, $results);
-        $avgPrice = (float) $results[0]->getAttribute('avg_price');
+        $avgPrice = $results[0]->getAttribute('avg_price');
+        $this->assertIsNumeric($avgPrice);
+        $avgPrice = (float) $avgPrice;
         $this->assertEqualsWithDelta(309.44, $avgPrice, 1.0);
         $database->deleteCollection('avg_all');
     }

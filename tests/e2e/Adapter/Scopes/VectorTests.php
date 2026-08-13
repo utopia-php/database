@@ -41,24 +41,26 @@ trait VectorTests
         // Verify the attributes were created
         $collection = $database->getCollection('vectorCollection');
         $attributes = $collection->getAttribute('attributes');
+        $this->assertIsArray($attributes);
 
         $embeddingAttr = null;
         $largeEmbeddingAttr = null;
 
         foreach ($attributes as $attr) {
-            if ($attr['key'] === 'embedding') {
+            $this->assertInstanceOf(Document::class, $attr);
+            if ($attr->getAttribute('key') === 'embedding') {
                 $embeddingAttr = $attr;
-            } elseif ($attr['key'] === 'large_embedding') {
+            } elseif ($attr->getAttribute('key') === 'large_embedding') {
                 $largeEmbeddingAttr = $attr;
             }
         }
 
-        $this->assertNotNull($embeddingAttr);
-        $this->assertNotNull($largeEmbeddingAttr);
-        $this->assertEquals(ColumnType::Vector->value, $embeddingAttr['type']);
-        $this->assertEquals(3, $embeddingAttr['size']);
-        $this->assertEquals(ColumnType::Vector->value, $largeEmbeddingAttr['type']);
-        $this->assertEquals(128, $largeEmbeddingAttr['size']);
+        $this->assertInstanceOf(Document::class, $embeddingAttr);
+        $this->assertInstanceOf(Document::class, $largeEmbeddingAttr);
+        $this->assertEquals(ColumnType::Vector->value, $embeddingAttr->getAttribute('type'));
+        $this->assertEquals(3, $embeddingAttr->getAttribute('size'));
+        $this->assertEquals(ColumnType::Vector->value, $largeEmbeddingAttr->getAttribute('type'));
+        $this->assertEquals(128, $largeEmbeddingAttr->getAttribute('size'));
 
         // Cleanup
         $database->deleteCollection('vectorCollection');
@@ -398,8 +400,10 @@ trait VectorTests
             'embedding' => $largeVector,
         ]));
 
-        $this->assertCount(1536, $doc->getAttribute('embedding'));
-        $this->assertEquals(1.0, $doc->getAttribute('embedding')[0]);
+        $embedding = $doc->getAttribute('embedding');
+        $this->assertIsArray($embedding);
+        $this->assertCount(1536, $embedding);
+        $this->assertEquals(1.0, $embedding[0]);
 
         // Test vector search on large vectors
         $searchVector = array_fill(0, 1536, 0.0);
@@ -997,8 +1001,11 @@ trait VectorTests
         // Verify relationships are intact
         $parent1Fetched = $database->getDocument('vectorParent', $parent1->getId());
         $children = $parent1Fetched->getAttribute('children');
+        $this->assertIsArray($children);
         $this->assertCount(1, $children);
-        $this->assertEquals('Child 1', $children[0]->getAttribute('title'));
+        $child = $children[0] ?? null;
+        $this->assertInstanceOf(Document::class, $child);
+        $this->assertEquals('Child 1', $child->getAttribute('title'));
 
         // Query with vector and relationship filter combined
         $results = $database->find('vectorParent', [
@@ -1172,8 +1179,10 @@ trait VectorTests
         // Verify attribute is gone
         $collection = $database->getCollection('vectorDeleteAttr');
         $attributes = $collection->getAttribute('attributes');
+        $this->assertIsArray($attributes);
         foreach ($attributes as $attr) {
-            $this->assertNotEquals('embedding', $attr['key']);
+            $this->assertInstanceOf(Document::class, $attr);
+            $this->assertNotEquals('embedding', $attr->getAttribute('key'));
         }
 
         // Fetch document - should not have embedding anymore
@@ -1822,7 +1831,9 @@ trait VectorTests
             'embedding' => $largeVector,
         ]));
 
-        $this->assertCount(16000, $doc->getAttribute('embedding'));
+        $embedding = $doc->getAttribute('embedding');
+        $this->assertIsArray($embedding);
+        $this->assertCount(16000, $embedding);
 
         // Query should work
         $searchVector = array_fill(0, 16000, 0.0);

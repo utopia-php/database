@@ -115,6 +115,7 @@ trait Documents
 
     /**
      * @param  array<Document>  $documents
+     * @param  array<Query>  $selections
      * @return array<Document>
      *
      * @throws DatabaseException
@@ -147,7 +148,12 @@ trait Documents
             ));
 
             foreach ($refetched as $document) {
-                $refetchedMap[$document->getSequence()] = $document;
+                $sequence = $document->getSequence();
+                if ($sequence === null) {
+                    throw new DatabaseException('Cannot index refetched document without a $sequence: '.$document->getId());
+                }
+
+                $refetchedMap[$sequence] = $document;
             }
         }
 

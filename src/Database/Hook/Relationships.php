@@ -817,7 +817,9 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @param  array<Document>  $documents
+     * @param  array<string, array<Query>>  $selects
+     * @return array<Document>
      */
     public function populateDocuments(array $documents, Document $collection, int $fetchDepth, array $selects = []): array
     {
@@ -955,7 +957,9 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @param  array<Document>  $relationships
+     * @param  array<Query>  $queries
+     * @return array<string, array<Query>>
      */
     public function processQueries(array $relationships, array $queries): array
     {
@@ -1047,7 +1051,9 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * @param  array<Document>  $relationships
+     * @param  array<Query>  $queries
+     * @return array<Query>|null
      *
      * @throws QueryException If a relationship query references an invalid attribute
      */

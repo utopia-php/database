@@ -564,14 +564,31 @@ trait OperatorTests
         $database->addFilter(
             'operator_double_decode',
             function (mixed $value) {
+                if (! \is_scalar($value) && $value !== null) {
+                    throw new \InvalidArgumentException('Operator filter input must be scalar or null');
+                }
+
                 return json_encode(['data' => base64_encode((string) $value)]);
             },
-            function (mixed $value) {
+            function (mixed $value): ?string {
                 if (is_null($value)) {
-                    return;
+                    return null;
                 }
+                if (! \is_string($value)) {
+                    throw new \InvalidArgumentException('Encoded operator filter value must be a string');
+                }
+
                 $decoded = json_decode($value, true);
-                return base64_decode($decoded['data']);
+                if (! \is_array($decoded) || ! \is_string($decoded['data'] ?? null)) {
+                    throw new \InvalidArgumentException('Encoded operator filter payload is invalid');
+                }
+
+                $plain = base64_decode($decoded['data'], true);
+                if ($plain === false) {
+                    throw new \InvalidArgumentException('Encoded operator filter payload is not valid base64');
+                }
+
+                return $plain;
             }
         );
 
@@ -1861,7 +1878,9 @@ trait OperatorTests
                 // base) must still not store a wrong real number: the value is either untouched or
                 // an explicit "not a number" marker (NULL / NaN). Verify with a fresh read.
                 $stored = $database->getDocument($collectionId, $id)->getAttribute('value');
-                $safe = $stored === null || $stored == $start || !\is_finite((float) $stored);
+                $safe = $stored === null
+                    || $stored == $start
+                    || (\is_numeric($stored) && ! \is_finite((float) $stored));
                 $this->assertTrue($safe, "{$id}: undefined power neither raised a LimitException nor left a safe value; stored " . \var_export($stored, true));
             }
         }
@@ -2064,7 +2083,9 @@ trait OperatorTests
             $updated = $database->updateDocument($collectionId, 'doc', new Document([
                 'numbers' => Operator::arrayFilter($condition, $compare),
             ]));
-            $this->assertEquals($expected, \array_values($updated->getAttribute('numbers')), "arrayFilter('{$condition}') gave the wrong result");
+            $numbers = $updated->getAttribute('numbers');
+            $this->assertIsArray($numbers);
+            $this->assertEquals($expected, \array_values($numbers), "arrayFilter('{$condition}') gave the wrong result");
         }
 
         $database->deleteCollection($collectionId);

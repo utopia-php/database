@@ -1429,12 +1429,20 @@ trait OneToOneTests
         ]));
 
         $address1 = $database->getDocument('addresses', 'address1');
-        $this->assertEquals('house1', $address1['house']['$id']);
-        $this->assertArrayNotHasKey('address', $address1['house']);
-        $this->assertEquals('building1', $address1['house']['buildings'][0]['$id']);
-        $this->assertEquals('building2', $address1['house']['buildings'][1]['$id']);
-        $this->assertArrayNotHasKey('houses', $address1['house']['buildings'][0]);
-        $this->assertArrayNotHasKey('houses', $address1['house']['buildings'][1]);
+        $house = $address1->getAttribute('house');
+        $this->assertInstanceOf(Document::class, $house);
+        $this->assertSame('house1', $house->getId());
+        $this->assertArrayNotHasKey('address', $house->getArrayCopy());
+        $buildings = $house->getAttribute('buildings');
+        $this->assertIsArray($buildings);
+        $building1 = $buildings[0] ?? null;
+        $building2 = $buildings[1] ?? null;
+        $this->assertInstanceOf(Document::class, $building1);
+        $this->assertInstanceOf(Document::class, $building2);
+        $this->assertSame('building1', $building1->getId());
+        $this->assertSame('building2', $building2->getId());
+        $this->assertArrayNotHasKey('houses', $building1->getArrayCopy());
+        $this->assertArrayNotHasKey('houses', $building2->getArrayCopy());
 
         $database->createDocument('buildings', new Document([
             '$id' => 'building3',

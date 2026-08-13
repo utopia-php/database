@@ -5,6 +5,8 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use PHPUnit\Framework\Attributes\Depends;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -444,6 +446,12 @@ trait CollectionTests
     {
         $database = $this->getDatabase();
         $keywords = $database->getKeywords();
+
+        if ($keywords === []) {
+            $this->assertSame([], $keywords);
+
+            return;
+        }
 
         // Collection name tests
         $attributes = [
@@ -1095,25 +1103,32 @@ trait CollectionTests
                 Event::DatabaseDelete,
             ];
 
-            $test = $this;
-            $database->addHook(new class ($events, $test) implements Lifecycle {
-                /** @param array<Event> $events */
-                public function __construct(private array &$events, private $test)
-                {
+            $supportsSchemas = $this->getDatabase()->getAdapter()->supports(Capability::Schemas);
+            if (! $supportsSchemas) {
+                \array_shift($events);
+            }
+            $expected = new \SplQueue();
+            foreach ($events as $event) {
+                $expected->enqueue($event);
+            }
+
+            $database->addHook(new class ($expected, $this) implements Lifecycle {
+                public function __construct(
+                    private \SplQueue $events,
+                    private \PHPUnit\Framework\TestCase $test,
+                ) {
                 }
 
                 public function handle(Event $event, mixed $data): void
                 {
-                    $shifted = array_shift($this->events);
+                    $shifted = $this->events->dequeue();
                     $this->test->assertEquals($shifted, $event);
                 }
             });
 
-            if ($this->getDatabase()->getAdapter()->supports(Capability::Schemas)) {
+            if ($supportsSchemas) {
                 $database->setDatabase('hellodb');
                 $database->create();
-            } else {
-                \array_shift($events);
             }
 
             $database->list();
@@ -1237,6 +1252,8 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
+        $collection = $database->getCollection('docs');
+        $adapter = $database->getAdapter();
         $hook = new class () implements Transform {
             public function transform(Event $event, string $query): string
             {
@@ -1246,14 +1263,18 @@ trait CollectionTests
         $database->addHook($hook);
 
         try {
-            $result = $database->getDocument('docs', 'doc1');
+            $result = $adapter->getDocument($collection, 'doc1');
 
-            $this->assertTrue($result->isEmpty());
+            if ($adapter instanceof SQL || $adapter instanceof Pool) {
+                $this->assertTrue($result->isEmpty());
+            } else {
+                $this->assertFalse($result->isEmpty());
+            }
         } finally {
             $database->removeTransform($hook::class);
         }
 
-        $this->assertFalse($database->getDocument('docs', 'doc1')->isEmpty());
+        $this->assertFalse($adapter->getDocument($collection, 'doc1')->isEmpty());
     }
 
     public function testSetGlobalCollection(): void

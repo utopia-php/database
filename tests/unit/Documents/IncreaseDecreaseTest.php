@@ -14,12 +14,15 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Query\Schema\ColumnType;
 
 class IncreaseDecreaseTest extends TestCase
 {
+    private bool $definedAttributes = true;
+
     private Adapter&Stub $adapter;
 
     private Database $database;
@@ -48,11 +51,14 @@ class IncreaseDecreaseTest extends TestCase
         $this->adapter->method('getInternalIndexesKeys')->willReturn([]);
         $this->adapter->method('filter')->willReturnArgument(0);
         $this->adapter->method('supports')->willReturnCallback(function (Capability $cap) {
+            if ($cap === Capability::DefinedAttributes) {
+                return $this->definedAttributes;
+            }
+
             return in_array($cap, [
                 Capability::Index,
                 Capability::IndexArray,
                 Capability::UniqueIndex,
-                Capability::DefinedAttributes,
                 Capability::UnsignedBigInt,
             ]);
         });
@@ -165,6 +171,38 @@ class IncreaseDecreaseTest extends TestCase
 
         $result = $this->database->increaseDocumentAttribute('testCol', 'doc1', 'counter');
         $this->assertSame(6, $result->getAttribute('counter'));
+    }
+
+    public function testSchemalessIncreaseDefaultsOnlyMissingAttributeToZero(): void
+    {
+        $this->definedAttributes = false;
+        $missing = new Document([
+            '$id' => 'missing',
+            '$collection' => 'testCol',
+            '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]);
+        $this->setupCollectionWithDocument('testCol', $missing);
+
+        $result = $this->database->increaseDocumentAttribute('testCol', 'missing', 'counter');
+
+        $this->assertSame(1, $result->getAttribute('counter'));
+    }
+
+    public function testSchemalessIncreaseRejectsExplicitNull(): void
+    {
+        $this->definedAttributes = false;
+        $nullable = new Document([
+            '$id' => 'nullable',
+            '$collection' => 'testCol',
+            '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'counter' => null,
+        ]);
+        $this->setupCollectionWithDocument('testCol', $nullable);
+
+        $this->expectException(TypeException::class);
+        $this->database->increaseDocumentAttribute('testCol', 'nullable', 'counter');
     }
 
     public function testIncreaseDocumentAttributeByCustomValue(): void

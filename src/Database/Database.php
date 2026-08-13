@@ -600,7 +600,7 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (! \is_array($value)) {
+                if (! \is_array($value) && ! $value instanceof \stdClass) {
                     return $value;
                 }
 
@@ -617,9 +617,9 @@ class Database
                 if (! is_string($value)) {
                     return $value;
                 }
-                $decoded = json_decode($value, true);
+                $decoded = self::decodeObject($value);
 
-                return is_array($decoded) ? $decoded : $value;
+                return is_array($decoded) || $decoded instanceof \stdClass ? $decoded : $value;
             }
         );
     }

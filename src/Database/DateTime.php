@@ -34,6 +34,32 @@ class DateTime
     }
 
     /**
+     * Get the current date-time, advancing by one millisecond when needed.
+     */
+    public static function nowAfter(?string $previous): string
+    {
+        $current = self::format(new PhpDateTime());
+        if ($previous === null) {
+            return $current;
+        }
+
+        try {
+            $date = new PhpDateTime($current);
+            $minimum = new PhpDateTime($previous);
+        } catch (Throwable $error) {
+            throw new DatabaseException($error->getMessage(), $error->getCode(), $error);
+        }
+
+        if ($date <= $minimum) {
+            $minimum->modify('+1 millisecond');
+
+            return self::format($minimum);
+        }
+
+        return $current;
+    }
+
+    /**
      * Format a DateTime object into the database storage format.
      *
      * @param PhpDateTime $date The date to format

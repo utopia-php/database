@@ -171,6 +171,8 @@ final class BigIntegerTest extends TestCase
             [-10.0, Operator::multiply(-2, 50), 20.0],
             [5.0, Operator::power(3, 100), 5.0],
             [100.0, Operator::power(0.5, 50), 10.0],
+            [-4.0, Operator::power(2, 20), 16.0],
+            [-2.0, Operator::power(3, 100), -8.0],
             [0.0, Operator::power(-1, 100), 0.0],
             [-4.0, Operator::power(0.5, 100), -4.0],
             [PHP_INT_MAX, Operator::increment(2, PHP_INT_MAX), PHP_INT_MAX],

@@ -10,6 +10,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -193,8 +194,9 @@ trait SchemalessTests
             new Document(['$id' => 'doc1', '$permissions' => $permissions, 'counter' => 10, 'score' => 5.5]),
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'counter' => 20, 'points' => 100]),
             new Document(['$id' => 'doc3', '$permissions' => $permissions, 'value' => 0]),
+            new Document(['$id' => 'doc4', '$permissions' => $permissions, 'nullable' => null]),
         ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        $this->assertEquals(4, $database->createDocuments($colName, $docs));
 
         $doc1 = $database->increaseDocumentAttribute($colName, 'doc1', 'counter', 5);
         $this->assertEquals(15, $doc1->getAttribute('counter'));
@@ -211,6 +213,13 @@ trait SchemalessTests
         $this->assertEquals(0, $doc3->getAttribute('value'));
 
         try {
+            $database->increaseDocumentAttribute($colName, 'doc4', 'nullable', 1);
+            $this->fail('An explicitly null attribute must not use the missing-attribute numeric default.');
+        } catch (TypeException) {
+            $this->addToAssertionCount(1);
+        }
+
+        try {
             $database->increaseDocumentAttribute($colName, 'doc1', 'counter', 10, 20);
             $this->assertEquals(20, $database->getDocument($colName, 'doc1')->getAttribute('counter'));
         } catch (\Exception $e) {
@@ -218,7 +227,7 @@ trait SchemalessTests
         }
 
         $allDocs = $database->find($colName);
-        $this->assertCount(3, $allDocs);
+        $this->assertCount(4, $allDocs);
 
         $database->deleteCollection($colName);
     }

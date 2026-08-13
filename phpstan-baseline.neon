@@ -1117,12 +1117,6 @@ parameters:
 			path: tests/e2e/Adapter/Base.php
 
 		-
-			message: '#^Cannot call method assertEquals\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: tests/e2e/Adapter/Base.php
-
-		-
 			message: '#^Cannot call method getArrayCopy\(\) on array\<string, mixed\>\.$#'
 			identifier: method.nonObject
 			count: 3
@@ -1227,18 +1221,6 @@ parameters:
 		-
 			message: '#^Method Tests\\E2E\\Adapter\\Base\:\:singleAggregationProvider\(\) should return array\<string, array\{string, string, string, array\<Utopia\\Database\\Query\>, float\|int\}\> but returns array\{''count all products''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{\}, 9\}, ''count electronics''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 3\}, ''count clothing''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 3\}, ''count books''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 3\}, ''count price \> 100''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 4\}, ''count price \<\= 50''\: array\{''cnt'', ''count'', ''\*'', ''total'', array\{Utopia\\Database\\Query\}, 4\}, ''sum all prices''\: array\{''sum'', ''sum'', ''price'', ''total'', array\{\}, 2785\}, ''sum electronics''\: array\{''sum'', ''sum'', ''price'', ''total'', array\{Utopia\\Database\\Query\}, 2500\}, \.\.\.\}\.$#'
 			identifier: return.type
-			count: 1
-			path: tests/e2e/Adapter/Base.php
-
-		-
-			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1099\:\:__construct\(\) has parameter \$events with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: tests/e2e/Adapter/Base.php
-
-		-
-			message: '#^Method Utopia\\Database\\Hook\\Lifecycle@anonymous/tests/e2e/Adapter/Scopes/CollectionTests\.php\:1099\:\:__construct\(\) has parameter \$test with no type specified\.$#'
-			identifier: missingType.parameter
 			count: 1
 			path: tests/e2e/Adapter/Base.php
 

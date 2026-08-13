@@ -3386,7 +3386,7 @@ class Redis extends Adapter implements
                 $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
                 $base = $this->numericOr($current, 0);
-                if (($base == 0 && $by < 0) || ($base < 0 && \floor($by) !== $by)) {
+                if (($base == 0 && $by < 0) || ($base < 0 && \floor($by) != $by)) {
                     if (\is_numeric($max)) {
                         return $base;
                     }

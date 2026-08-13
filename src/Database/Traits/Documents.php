@@ -1260,9 +1260,17 @@ trait Documents
             }
         }
 
-        $hasOperators = ! empty(Operator::extractOperators($updates->getArrayCopy())['operators']);
+        $hasOperators = false;
+        $adapterData = [];
+        foreach ($updates->getArrayCopy() as $key => $value) {
+            if ($value instanceof Operator) {
+                $hasOperators = true;
+                $value = clone $value;
+            }
+            $adapterData[$key] = $value;
+        }
         $selections = $this->validateSelections($collection, $grouped['selections']);
-        $updates = $this->adapter->castingBefore($collection, $updates);
+        $adapterUpdates = $this->adapter->castingBefore($collection, new Document($adapterData));
 
         $originalLimit = $limit;
         $last = $cursor;
@@ -1298,7 +1306,7 @@ trait Documents
             sort($currentPermissions);
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, &$batch, $currentPermissions) {
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $adapterUpdates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -1316,7 +1324,11 @@ trait Documents
 
                     $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
 
-                    $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
+                    $updateData = [];
+                    foreach ($updates->getArrayCopy() as $key => $value) {
+                        $updateData[$key] = $value instanceof Operator ? clone $value : $value;
+                    }
+                    $new = new Document(\array_merge($document->getArrayCopy(), $updateData));
 
                     $hook = $this->relationshipHook;
                     if ($hook?->isEnabled()) {
@@ -1347,7 +1359,7 @@ trait Documents
 
                 $this->adapter->updateDocuments(
                     $collection,
-                    $updates,
+                    $adapterUpdates,
                     $batch
                 );
 
@@ -1892,10 +1904,14 @@ trait Documents
                 }
             }
 
+            $attributeExists = $document->offsetExists($attribute);
             $currentVal = $document->getAttribute($attribute);
             if ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentVal, $value, true);
             } else {
+                if (! $attributeExists) {
+                    $currentVal = 0;
+                }
                 if (! \is_int($currentVal) && ! \is_float($currentVal)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
@@ -1910,7 +1926,7 @@ trait Documents
                 throw new LimitException('Attribute value exceeds maximum limit: '.$max);
             }
 
-            $time = DateTime::now();
+            $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
             if ($max !== null) {
@@ -2011,10 +2027,14 @@ trait Documents
                 }
             }
 
+            $attributeExists = $document->offsetExists($attribute);
             $currentDecVal = $document->getAttribute($attribute);
             if ($numericAttribute instanceof Attribute) {
                 $result = $this->getNumericResult($numericAttribute, $currentDecVal, $value, false);
             } else {
+                if (! $attributeExists) {
+                    $currentDecVal = 0;
+                }
                 if (! \is_int($currentDecVal) && ! \is_float($currentDecVal)) {
                     throw new TypeException('Attribute value must be numeric.');
                 }
@@ -2029,7 +2049,7 @@ trait Documents
                 throw new LimitException('Attribute value exceeds minimum limit: '.$min);
             }
 
-            $time = DateTime::now();
+            $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
             if ($min !== null) {

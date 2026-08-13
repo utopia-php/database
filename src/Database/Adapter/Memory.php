@@ -3690,7 +3690,7 @@ class Memory extends Adapter
                 $byPow = $this->numericValue($values[0] ?? null, 1) ?? 1;
                 $maxPow = $this->numericValue($values[1] ?? null, null);
                 $basePow = \is_numeric($current) ? $current + 0 : 0;
-                if (($basePow == 0 && $byPow < 0) || ($basePow < 0 && \floor($byPow) !== $byPow)) {
+                if (($basePow == 0 && $byPow < 0) || ($basePow < 0 && \floor($byPow) != $byPow)) {
                     if ($maxPow !== null) {
                         return $basePow;
                     }

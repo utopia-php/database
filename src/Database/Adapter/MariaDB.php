@@ -4,6 +4,8 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
+use PDOStatement;
+use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -23,6 +25,7 @@ use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
@@ -109,9 +112,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $result = $this->createSchemaBuilder()->createDatabase($name);
         $sql = $result->query;
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->executeStatement($sql, Event::DatabaseCreate);
     }
 
     /**
@@ -263,8 +264,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $permissions = $permsResult->query;
 
         try {
-            $this->getPDO()->prepare($collection)->execute();
-            $this->getPDO()->prepare($permissions)->execute();
+            $this->executeStatement($collection, Event::CollectionCreate);
+            $this->executeStatement($permissions, Event::CollectionCreate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -289,9 +290,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $sql = $mainResult->query.'; '.$permsResult->query;
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->executeStatement($sql, Event::CollectionDelete);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -309,9 +308,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $result = $this->createSchemaBuilder()->analyzeTable($this->getSQLTableRaw($name));
         $sql = $result->query;
 
-        $stmt = $this->getPDO()->prepare($sql);
-
-        return $stmt->execute();
+        return $this->executeStatement($sql, Event::CollectionUpdate);
     }
 
     /**
@@ -341,8 +338,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             ->filter([BaseQuery::equal('NAME', [$permissions])])
             ->build();
 
-        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
-        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+        $collectionSize = $this->executeResult($collectionResult, Event::CollectionRead);
+        $permissionsSize = $this->executeResult($permissionsResult, Event::CollectionRead);
 
         foreach ($collectionResult->bindings as $i => $v) {
             $collectionSize->bindValue($i + 1, $v);
@@ -352,8 +349,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         }
 
         try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
+            $this->execute($collectionSize);
+            $this->execute($permissionsSize);
             $collSizeVal = $collectionSize->fetchColumn();
             $permSizeVal = $permissionsSize->fetchColumn();
             $size = (int) (\is_numeric($collSizeVal) ? $collSizeVal : 0) + (int) (\is_numeric($permSizeVal) ? $permSizeVal : 0);
@@ -396,8 +393,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             ])
             ->build();
 
-        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
-        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+        $collectionSize = $this->executeResult($collectionResult, Event::CollectionRead);
+        $permissionsSize = $this->executeResult($permissionsResult, Event::CollectionRead);
 
         foreach ($collectionResult->bindings as $i => $v) {
             $collectionSize->bindValue($i + 1, $v);
@@ -407,8 +404,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         }
 
         try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
+            $this->execute($collectionSize);
+            $this->execute($permissionsSize);
             $collVal = $collectionSize->fetchColumn();
             $permVal = $permissionsSize->fetchColumn();
             $size = (int) (\is_numeric($collVal) ? $collVal : 0) + (int) (\is_numeric($permVal) ? $permVal : 0);
@@ -441,7 +438,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             }
 
             try {
-                $ok = $this->getPDO()->prepare($sql)->execute();
+                $ok = $this->executeStatement($sql, Event::AttributeCreate);
                 $this->invalidateSpatialAttributesCache($collection);
 
                 return $ok;
@@ -477,9 +474,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $sql = $result->query;
 
         try {
-            $ok = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -575,9 +570,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $sql = $result->query;
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->executeStatement($sql, Event::IndexCreate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -600,9 +593,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $sql = $result->query;
 
         try {
-            return $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            return $this->executeStatement($sql, Event::IndexDelete);
         } catch (PDOException $e) {
             if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1091) {
                 return true;
@@ -626,9 +617,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $result = $this->createSchemaBuilder()->renameIndex($this->getSQLTableRaw($collection), $old, $new);
         $sql = $result->query;
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->executeStatement($sql, Event::IndexRename);
     }
 
     /**
@@ -717,8 +706,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                 $cleanupBuilder = $this->newBuilder($name.'_perms');
                 $cleanupBuilder->filter([BaseQuery::equal('_document', [$document->getId()])]);
                 $cleanupResult = $cleanupBuilder->delete();
-                $cleanupStmt = $this->executeResult($cleanupResult);
-                $cleanupStmt->execute();
+                $cleanupStmt = $this->executeResult($cleanupResult, Event::PermissionsDelete);
+                $this->execute($cleanupStmt);
 
                 $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
             }
@@ -847,6 +836,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
     /** Last value pushed to MariaDB session var max_statement_time, in seconds. */
     private float $appliedMaxStatementTime = 0.0;
 
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
         $event ??= $this->getStatementEvent($stmt);
@@ -1011,7 +1003,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $collection = $this->getNamespace().'_'.$this->filter($collection);
 
         try {
-            $stmt = $this->getPDO()->prepare('
+            $stmt = $this->prepareStatement('
                 SELECT
                 COLUMN_NAME as _id,
                 COLUMN_DEFAULT as columnDefault,
@@ -1026,10 +1018,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                 EXTRA as extra
                 FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
-            ');
+            ', Event::CollectionRead);
             $stmt->bindParam(':schema', $schema);
             $stmt->bindParam(':table', $collection);
-            $stmt->execute();
+            $this->execute($stmt);
             $results = $stmt->fetchAll();
             $stmt->closeCursor();
 
@@ -1318,7 +1310,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $collection = $this->getNamespace() . '_' . $this->filter($collection);
 
         try {
-            $stmt = $this->getPDO()->prepare('
+            $stmt = $this->prepareStatement('
                 SELECT
                     INDEX_NAME as indexName,
                     COLUMN_NAME as columnName,
@@ -1329,10 +1321,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                 FROM INFORMATION_SCHEMA.STATISTICS
                 WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table
                 ORDER BY INDEX_NAME, SEQ_IN_INDEX
-            ');
+            ', Event::CollectionRead);
             $stmt->bindParam(':schema', $schema);
             $stmt->bindParam(':table', $collection);
-            $stmt->execute();
+            $this->execute($stmt);
             $rows = $stmt->fetchAll();
             $stmt->closeCursor();
 

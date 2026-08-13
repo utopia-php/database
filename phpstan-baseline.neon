@@ -1,12 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
-			identifier: foreach.nonIterable
-			count: 2
-			path: src/Database/Adapter/MariaDB.php
-
-		-
 			message: '#^Call to an undefined method object\:\:exec\(\)\.$#'
 			identifier: method.notFound
 			count: 1
@@ -16,12 +10,6 @@ parameters:
 			message: '#^Call to an undefined method object\:\:lastInsertId\(\)\.$#'
 			identifier: method.notFound
 			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Call to an undefined method object\:\:prepare\(\)\.$#'
-			identifier: method.notFound
-			count: 16
 			path: src/Database/Adapter/MariaDB.php
 
 		-
@@ -61,93 +49,15 @@ parameters:
 			path: src/Database/Adapter/MariaDB.php
 
 		-
-			message: '#^Cannot call method bindParam\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 4
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Cannot call method bindValue\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 4
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Cannot call method closeCursor\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Cannot call method execute\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 16
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Cannot call method fetchAll\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Database/Adapter/MariaDB.php
-
-		-
 			message: '#^Cannot call method fetchColumn\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 5
+			count: 1
 			path: src/Database/Adapter/MariaDB.php
 
 		-
 			message: '#^Cannot cast mixed to int\.$#'
 			identifier: cast.int
 			count: 2
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:analyzeCollection\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:create\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:createAttribute\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:createIndex\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:deleteCollection\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:deleteIndex\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:renameIndex\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/MariaDB.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\MariaDB\:\:updateAttribute\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
 			path: src/Database/Adapter/MariaDB.php
 
 		-
@@ -160,30 +70,6 @@ parameters:
 			message: '#^Call to an undefined method object\:\:exec\(\)\.$#'
 			identifier: method.notFound
 			count: 1
-			path: src/Database/Adapter/MySQL.php
-
-		-
-			message: '#^Call to an undefined method object\:\:prepare\(\)\.$#'
-			identifier: method.notFound
-			count: 2
-			path: src/Database/Adapter/MySQL.php
-
-		-
-			message: '#^Cannot call method bindParam\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Database/Adapter/MySQL.php
-
-		-
-			message: '#^Cannot call method execute\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
-			path: src/Database/Adapter/MySQL.php
-
-		-
-			message: '#^Cannot call method fetchColumn\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 2
 			path: src/Database/Adapter/MySQL.php
 
 		-
@@ -211,56 +97,14 @@ parameters:
 			path: src/Database/Adapter/Postgres.php
 
 		-
-			message: '#^Call to an undefined method object\:\:prepare\(\)\.$#'
-			identifier: method.notFound
-			count: 20
-			path: src/Database/Adapter/Postgres.php
-
-		-
 			message: '#^Call to an undefined method object\:\:query\(\)\.$#'
 			identifier: method.notFound
 			count: 1
 			path: src/Database/Adapter/Postgres.php
 
 		-
-			message: '#^Cannot call method bindValue\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 7
-			path: src/Database/Adapter/Postgres.php
-
-		-
-			message: '#^Cannot call method closeCursor\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Database/Adapter/Postgres.php
-
-		-
-			message: '#^Cannot call method execute\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 7
-			path: src/Database/Adapter/Postgres.php
-
-		-
-			message: '#^Cannot call method fetchAll\(\) on mixed\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Database/Adapter/Postgres.php
-
-		-
 			message: '#^Cannot call method fetchColumn\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 5
-			path: src/Database/Adapter/Postgres.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\Postgres\:\:create\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/Postgres.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\Postgres\:\:createIndex\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
 			count: 1
 			path: src/Database/Adapter/Postgres.php
 
@@ -303,7 +147,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method object\:\:prepare\(\)\.$#'
 			identifier: method.notFound
-			count: 22
+			count: 5
 			path: src/Database/Adapter/SQL.php
 
 		-
@@ -319,33 +163,27 @@ parameters:
 			path: src/Database/Adapter/SQL.php
 
 		-
-			message: '#^Cannot access offset 0 on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: src/Database/Adapter/SQL.php
-
-		-
 			message: '#^Cannot call method bindValue\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 6
+			count: 2
 			path: src/Database/Adapter/SQL.php
 
 		-
 			message: '#^Cannot call method closeCursor\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 5
+			count: 2
 			path: src/Database/Adapter/SQL.php
 
 		-
 			message: '#^Cannot call method execute\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 12
+			count: 2
 			path: src/Database/Adapter/SQL.php
 
 		-
 			message: '#^Cannot call method fetchAll\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 4
+			count: 1
 			path: src/Database/Adapter/SQL.php
 
 		-
@@ -367,48 +205,6 @@ parameters:
 			path: src/Database/Adapter/SQL.php
 
 		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:createAttribute\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:createAttributes\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:createRelationship\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:delete\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:deleteAttribute\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:deleteCollection\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:deleteRelationship\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
 			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:getHostname\(\) should return string but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -422,18 +218,6 @@ parameters:
 
 		-
 			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:rawMutation\(\) should return int but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:renameAttribute\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:updateRelationship\(\) should return bool but returns mixed\.$#'
 			identifier: return.type
 			count: 1
 			path: src/Database/Adapter/SQL.php

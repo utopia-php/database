@@ -5,6 +5,7 @@ namespace Utopia\Database\Adapter;
 use Exception;
 use PDOException;
 use PDOStatement;
+use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -16,6 +17,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
 use Utopia\Query\Builder\MySQL as MySQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
@@ -79,6 +81,9 @@ class MySQL extends MariaDB
 
     private int $appliedMaxExecutionTime = 0;
 
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
         $event ??= $this->getStatementEvent($stmt);
@@ -87,7 +92,6 @@ class MySQL extends MariaDB
         $this->applyTimeout($timeout);
 
         $exception = null;
-        /** @var PDOStatement|\Swoole\Database\PDOStatementProxy $stmt */
         try {
             return $stmt->execute();
         } catch (Throwable $error) {
@@ -129,24 +133,24 @@ class MySQL extends MariaDB
         $name = $database.'/'.$collection;
         $permissions = $database.'/'.$collection.'_perms';
 
-        $collectionSize = $this->getPDO()->prepare('
+        $collectionSize = $this->prepareStatement('
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :name
-        ');
+        ', Event::CollectionRead);
 
-        $permissionsSize = $this->getPDO()->prepare('
+        $permissionsSize = $this->prepareStatement('
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  
              FROM INFORMATION_SCHEMA.INNODB_TABLESPACES
              WHERE NAME = :permissions
-        ');
+        ', Event::CollectionRead);
 
         $collectionSize->bindParam(':name', $name);
         $permissionsSize->bindParam(':permissions', $permissions);
 
         try {
-            $collectionSize->execute();
-            $permissionsSize->execute();
+            $this->execute($collectionSize);
+            $this->execute($permissionsSize);
             $collVal = $collectionSize->fetchColumn();
             $permVal = $permissionsSize->fetchColumn();
             $size = (int)(\is_numeric($collVal) ? $collVal : 0) + (int)(\is_numeric($permVal) ? $permVal : 0);

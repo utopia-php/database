@@ -27,6 +27,7 @@ use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
@@ -126,14 +127,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $schema = $this->createSchemaBuilder();
         $sql = $schema->createDatabase($name)->query;
 
-        $dbCreation = $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        $dbCreation = $this->executeStatement($sql, Event::DatabaseCreate);
 
         // Enable extensions — wrap in try-catch to handle concurrent creation race conditions
         foreach (['postgis', 'vector', 'pg_trgm'] as $ext) {
             try {
-                $this->getPDO()->prepare($schema->createExtension($ext)->query)->execute();
+                $this->executeStatement($schema->createExtension($ext)->query, Event::DatabaseCreate);
             } catch (PDOException) {
                 // Extension may already exist due to concurrent worker
             }
@@ -144,7 +143,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                 'provider' => 'icu',
                 'locale' => 'und-u-ks-level1',
             ], deterministic: false);
-            $this->getPDO()->prepare($collation->query)->execute();
+            $this->executeStatement($collation->query, Event::DatabaseCreate);
         } catch (PDOException) {
             // Collation may already exist due to concurrent worker
         }
@@ -162,17 +161,17 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         if ($collection !== null) {
             $collection = $this->filter($collection);
             $sql = 'SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?';
-            $stmt = $this->getPDO()->prepare($sql);
+            $stmt = $this->prepareStatement($sql, Event::CollectionRead);
             $stmt->bindValue(1, $database);
             $stmt->bindValue(2, "{$this->getNamespace()}_{$collection}");
         } else {
             $sql = 'SELECT "schema_name" FROM information_schema.schemata WHERE "schema_name" = ?';
-            $stmt = $this->getPDO()->prepare($sql);
+            $stmt = $this->prepareStatement($sql, Event::DatabaseList);
             $stmt->bindValue(1, $database);
         }
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
             $document = $stmt->fetchAll();
             $stmt->closeCursor();
         } catch (PDOException $e) {
@@ -298,8 +297,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $permsSql = $permsResult->query.'; '.implode('; ', $permsIndexStatements);
 
         try {
-            $this->getPDO()->prepare($collectionSql)->execute();
-            $this->getPDO()->prepare($permsSql)->execute();
+            $this->executeStatement($collectionSql, Event::CollectionCreate);
+            $this->executeStatement($permsSql, Event::CollectionCreate);
 
             foreach ($indexes as $index) {
                 $indexId = $this->filter($index->key);
@@ -328,6 +327,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                         ttl: $indexTtl,
                     ),
                     $indexAttributesWithType,
+                    event: Event::CollectionCreate,
                 );
             }
         } catch (DuplicateException $e) {
@@ -338,7 +338,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             if (! ($e instanceof DuplicateException)) {
                 $dropSchema = $this->createSchemaBuilder();
                 $dropSql = $dropSchema->dropIfExists($tableRaw)->query.'; '.$dropSchema->dropIfExists($permsTableRaw)->query;
-                $this->execute($this->getPDO()->prepare($dropSql));
+                $this->executeStatement($dropSql, Event::CollectionCreate);
             }
 
             throw $e;
@@ -363,8 +363,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $collectionResult = $builder->fromNone()->selectRaw('pg_total_relation_size(?)', [$name])->build();
         $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_total_relation_size(?)', [$permissions])->build();
 
-        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
-        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+        $collectionSize = $this->executeResult($collectionResult, Event::CollectionRead);
+        $permissionsSize = $this->executeResult($permissionsResult, Event::CollectionRead);
 
         foreach ($collectionResult->bindings as $i => $v) {
             $collectionSize->bindValue($i + 1, $v);
@@ -402,8 +402,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $collectionResult = $builder->fromNone()->selectRaw('pg_relation_size(?)', [$name])->build();
         $permissionsResult = $builder->reset()->fromNone()->selectRaw('pg_relation_size(?)', [$permissions])->build();
 
-        $collectionSize = $this->getPDO()->prepare($collectionResult->query);
-        $permissionsSize = $this->getPDO()->prepare($permissionsResult->query);
+        $collectionSize = $this->executeResult($collectionResult, Event::CollectionRead);
+        $permissionsSize = $this->executeResult($permissionsResult, Event::CollectionRead);
 
         foreach ($collectionResult->bindings as $i => $v) {
             $collectionSize->bindValue($i + 1, $v);
@@ -452,8 +452,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $sql = $result->query;
 
         try {
-            $ok = $this->execute($this->getPDO()
-                ->prepare($sql));
+            $ok = $this->executeStatement($sql, Event::AttributeCreate);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -495,8 +494,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
             $sql = $renameResult->query;
 
-            $result = $this->execute($this->getPDO()
-                ->prepare($sql));
+            $result = $this->executeStatement($sql, Event::AttributeUpdate);
 
             // Rename mutates the schema. Invalidate now so a subsequent
             // alterColumnType failure can't leave the cache pointing at the
@@ -523,8 +521,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $sql = $result->query;
 
         try {
-            $ok = $this->execute($this->getPDO()
-                ->prepare($sql));
+            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -552,8 +549,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $sql = $result->query;
 
         try {
-            $ok = $this->execute($this->getPDO()
-                ->prepare($sql));
+            $ok = $this->executeStatement($sql, Event::AttributeDelete);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -583,8 +579,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
         $sql = $result->query;
 
-        $ok = $this->execute($this->getPDO()
-            ->prepare($sql));
+        $ok = $this->executeStatement($sql, Event::AttributeUpdate);
         $this->invalidateSpatialAttributesCache($collection);
 
         return $ok;
@@ -596,8 +591,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      * @param  array<string,string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      */
-    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
-    {
+    public function createIndex(
+        string $collection,
+        Index $index,
+        array $indexAttributeTypes = [],
+        array $collation = [],
+        Event $event = Event::IndexCreate,
+    ): bool {
         $collection = $this->filter($collection);
         $id = $this->filter($index->key);
         $type = $index->type;
@@ -684,7 +684,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
 
         try {
-            return $this->getPDO()->prepare($sql)->execute();
+            return $this->executeStatement($sql, $event);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -709,8 +709,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         // Add IF EXISTS since the schema builder's dropIndex does not include it
         $sql = str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
 
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
+        return $this->executeStatement($sql, Event::IndexDelete);
     }
 
     /**
@@ -733,8 +732,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $schemaQualifiedOld = $schemaName.'.'.$oldIndexName;
         $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $schemaQualifiedOld, $newIndexName)->query;
 
-        return $this->execute($this->getPDO()
-            ->prepare($sql));
+        return $this->executeStatement($sql, Event::IndexRename);
     }
 
     /**
@@ -1175,6 +1173,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         return $rings; // array of rings, each ring is array of [x,y]
     }
 
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
         $pdo = $this->getPDO();
@@ -1182,7 +1183,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $timeout = $event === null ? $this->getTimeout() : $this->getTimeout($event);
 
         if ($timeout === 0) {
-            /** @var PDOStatement|PDOStatementProxy $stmt */
             return $stmt->execute();
         }
 
@@ -1193,7 +1193,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $pdo->exec($sql);
 
         $exception = null;
-        /** @var PDOStatement|PDOStatementProxy $stmt */
         try {
             return $stmt->execute();
         } catch (Throwable $error) {

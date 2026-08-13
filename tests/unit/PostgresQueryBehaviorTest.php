@@ -123,6 +123,7 @@ final class PostgresQueryBehaviorTest extends TestCase
         $this->assertCount(1, $documents);
         $this->assertSame(0.25, $documents[0]->getAttribute('$distance'));
         $this->assertMatchesRegularExpression('/SELECT \*, .*::text AS "_distance"/', $sql);
+        $this->assertStringContainsString('WHERE "table_main"."embedding" IS NOT NULL', $sql);
         $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "_id" ASC/', $sql);
         $this->assertSame([
             [1, '[1,0,0]', \PDO::PARAM_STR],
@@ -175,7 +176,7 @@ final class PostgresQueryBehaviorTest extends TestCase
         );
 
         $this->assertStringContainsString(
-            'WHERE ((("table_main"."embedding" <=> ?::vector)) > ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."_id" > ?))',
+            '"table_main"."embedding" IS NOT NULL AND ((("table_main"."embedding" <=> ?::vector)) > ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."_id" > ?))',
             $sql,
         );
         $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "_id" ASC/', $sql);

@@ -137,21 +137,20 @@ class SQLite extends SQL
      * Prepare a statement and reject drivers that return false or another
      * non-statement value before a method is called on it.
      */
-    private function prepare(string $query, string $message = 'Failed to prepare SQLite statement'): PDOStatement|DatabasePDOStatement|PDOStatementProxy
-    {
-        $pdo = $this->getPDO();
-        $statement = $pdo instanceof PDOProxy
-            ? $pdo->__call('prepare', [$query])
-            : $pdo->prepare($query);
-        if (
-            $statement instanceof PDOStatement
-            || $statement instanceof DatabasePDOStatement
-            || $statement instanceof PDOStatementProxy
-        ) {
-            return $statement;
-        }
+    private function prepare(
+        string $query,
+        string $message = 'Failed to prepare SQLite statement',
+        ?Event $event = null,
+    ): PDOStatement|DatabasePDOStatement|PDOStatementProxy {
+        try {
+            return parent::prepareStatement($query, $event);
+        } catch (DatabaseException $error) {
+            if ($error->getMessage() !== 'Failed to prepare SQL statement') {
+                throw $error;
+            }
 
-        throw new DatabaseException($message);
+            throw new DatabaseException($message, $error->getCode(), $error);
+        }
     }
 
     /**
@@ -295,9 +294,11 @@ class SQLite extends SQL
         }
     }
 
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
-        /** @var \PDOStatement|PDOStatementProxy $stmt */
         return $stmt->execute();
     }
 
@@ -442,11 +443,11 @@ class SQLite extends SQL
 			WHERE type='table' AND name = :table
 		";
 
-        $stmt = $this->prepare($sql, 'Failed to prepare collection existence query');
+        $stmt = $this->prepare($sql, 'Failed to prepare collection existence query', Event::CollectionRead);
 
         $stmt->bindValue(':table', "{$this->getNamespace()}_{$collection}", PDO::PARAM_STR);
 
-        $stmt->execute();
+        $this->execute($stmt);
 
         $document = $stmt->fetchAll();
         $stmt->closeCursor();
@@ -534,23 +535,19 @@ class SQLite extends SQL
 		";
 
         try {
-            $this
-                ->prepare($collection)
-                ->execute();
+            $this->execute($this->prepare($collection, event: Event::CollectionCreate));
 
-            $this
-                ->prepare($permissions)
-                ->execute();
+            $this->execute($this->prepare($permissions, event: Event::CollectionCreate));
 
-            $this->createIndex($id, new Index(key: '_index1', type: IndexType::Unique, attributes: ['_uid']));
-            $this->createIndex($id, new Index(key: '_created_at', type: IndexType::Key, attributes: ['_createdAt']));
-            $this->createIndex($id, new Index(key: '_updated_at', type: IndexType::Key, attributes: ['_updatedAt']));
+            $this->createIndex($id, new Index(key: '_index1', type: IndexType::Unique, attributes: ['_uid']), event: Event::CollectionCreate);
+            $this->createIndex($id, new Index(key: '_created_at', type: IndexType::Key, attributes: ['_createdAt']), event: Event::CollectionCreate);
+            $this->createIndex($id, new Index(key: '_updated_at', type: IndexType::Key, attributes: ['_updatedAt']), event: Event::CollectionCreate);
 
-            $this->createIndex("{$id}_perms", new Index(key: '_index_1', type: IndexType::Unique, attributes: ['_document', '_type', '_permission']));
-            $this->createIndex("{$id}_perms", new Index(key: '_index_2', type: IndexType::Key, attributes: ['_permission', '_type']));
+            $this->createIndex("{$id}_perms", new Index(key: '_index_1', type: IndexType::Unique, attributes: ['_document', '_type', '_permission']), event: Event::CollectionCreate);
+            $this->createIndex("{$id}_perms", new Index(key: '_index_2', type: IndexType::Key, attributes: ['_permission', '_type']), event: Event::CollectionCreate);
 
             if ($this->sharedTables) {
-                $this->createIndex($id, new Index(key: '_tenant_id', type: IndexType::Key, attributes: ['_id']));
+                $this->createIndex($id, new Index(key: '_tenant_id', type: IndexType::Key, attributes: ['_id']), event: Event::CollectionCreate);
             }
 
             foreach ($indexes as $index) {
@@ -561,7 +558,7 @@ class SQLite extends SQL
                     lengths: $index->lengths,
                     orders: $index->orders,
                     ttl: $index->ttl,
-                ));
+                ), event: Event::CollectionCreate);
             }
         } catch (PDOException $e) {
             throw $this->processException($e);
@@ -591,14 +588,14 @@ class SQLite extends SQL
              SELECT COALESCE(SUM(\"pgsize\" - \"unused\"), 0)
              FROM \"dbstat\"
              WHERE name = :name OR name = :perms OR name LIKE :fts_pattern ESCAPE '\\';
-        ");
+        ", event: Event::CollectionRead);
 
         $stmt->bindParam(':name', $name);
         $stmt->bindParam(':perms', $permissions);
         $stmt->bindParam(':fts_pattern', $ftsPattern);
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
             $size = (int) $stmt->fetchColumn();
             $stmt->closeCursor();
         } catch (PDOException $e) {
@@ -631,20 +628,16 @@ class SQLite extends SQL
         // FTS5 shadow tables don't drop with the parent.
         foreach ($this->findFulltextTables($id) as $ftsTable) {
             $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
-            $this->prepare($sql)->execute();
+            $this->execute($this->prepare($sql, event: Event::CollectionDelete));
         }
 
         $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id)}";
 
-        $this
-            ->prepare($sql)
-            ->execute();
+        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
         $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id.'_perms')}";
 
-        $this
-            ->prepare($sql)
-            ->execute();
+        $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
         unset($this->ftsTableCache[$id]);
 
@@ -680,14 +673,14 @@ class SQLite extends SQL
             $tenantClause = $this->sharedTables ? ' AND `_tenant` = :_tenant' : '';
             $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
-            $stmt = $this->prepare($sql);
+            $stmt = $this->prepare($sql, event: Event::AttributeUpdate);
             $stmt->bindValue(':max', $attribute->size, PDO::PARAM_INT);
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
 
             try {
-                $stmt->execute();
+                $this->execute($stmt);
                 $exceeds = $stmt->fetchColumn() !== false;
             } finally {
                 $stmt->closeCursor();
@@ -728,25 +721,23 @@ class SQLite extends SQL
             $indexId = \is_string($index['$id'] ?? null) ? (string) $index['$id'] : '';
             $indexType = \is_string($index['type'] ?? null) ? (string) $index['type'] : '';
             if ($attributes === [$id]) {
-                $this->deleteIndex($name, $indexId);
+                $this->deleteIndex($name, $indexId, Event::AttributeDelete);
             } elseif (\in_array($id, \is_array($attributes) ? $attributes : [])) {
-                $this->deleteIndex($name, $indexId);
+                $this->deleteIndex($name, $indexId, Event::AttributeDelete);
                 $this->createIndex($name, new Index(
                     key: $indexId,
                     type: IndexType::from($indexType),
                     attributes: \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($attributes) ? \array_values(\array_filter($attributes, fn ($v) => $v !== $id)) : []),
                     lengths: \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
                     orders: \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($index['orders'] ?? null) ? $index['orders'] : []),
-                ));
+                ), event: Event::AttributeDelete);
             }
         }
 
         $sql = "ALTER TABLE {$this->getSQLTable($name)} DROP COLUMN `{$id}`";
 
         try {
-            return $this
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->prepare($sql, event: Event::AttributeDelete));
         } catch (PDOException $e) {
             if (str_contains($e->getMessage(), 'no such column')) {
                 return true;
@@ -765,15 +756,20 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
-    {
+    public function createIndex(
+        string $collection,
+        Index $index,
+        array $indexAttributeTypes = [],
+        array $collation = [],
+        Event $event = Event::IndexCreate,
+    ): bool {
         $name = $this->filter($collection);
         $id = $this->filter($index->key);
         $type = $index->type;
         $attributes = $index->attributes;
 
         if ($type === IndexType::Fulltext) {
-            return $this->createFulltextIndex($name, $id, $attributes);
+            return $this->createFulltextIndex($name, $id, $attributes, $event);
         }
 
         // Workaround for no support for CREATE INDEX IF NOT EXISTS
@@ -781,9 +777,9 @@ class SQLite extends SQL
 			SELECT name
 			FROM sqlite_master
 			WHERE type='index' AND name=:_index;
-		");
+			", event: $event);
         $stmt->bindValue(':_index', "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}");
-        $stmt->execute();
+        $this->execute($stmt);
         $existingIndex = $stmt->fetch();
         if (! empty($existingIndex)) {
             return true;
@@ -791,9 +787,7 @@ class SQLite extends SQL
 
         $sql = $this->getSQLIndex($name, $id, $type, $attributes);
 
-        return $this
-            ->prepare($sql)
-            ->execute();
+        return $this->execute($this->prepare($sql, event: $event));
     }
 
     /**
@@ -803,7 +797,7 @@ class SQLite extends SQL
      * @param array<string> $attributes
      * @throws PDOException
      */
-    protected function createFulltextIndex(string $collection, string $id, array $attributes): bool
+    protected function createFulltextIndex(string $collection, string $id, array $attributes, Event $event = Event::IndexCreate): bool
     {
         if (empty($attributes)) {
             throw new DatabaseException('Fulltext index requires at least one attribute');
@@ -817,9 +811,9 @@ class SQLite extends SQL
             SELECT name
             FROM sqlite_master
             WHERE type='table' AND name=:_table;
-        ");
+        ", event: $event);
         $stmt->bindValue(':_table', $ftsTable);
-        $stmt->execute();
+        $this->execute($stmt);
         $exists = !empty($stmt->fetch());
         $stmt->closeCursor();
         if ($exists) {
@@ -847,7 +841,7 @@ class SQLite extends SQL
         $this->startTransaction();
         try {
             $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"_id\")";
-            $this->prepare($createSql)->execute();
+            $this->execute($this->prepare($createSql, event: $event));
 
             $insertSuffix = self::FTS_TRIGGER_INSERT;
             $insertTrigger = "
@@ -855,7 +849,7 @@ class SQLite extends SQL
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
             ";
-            $this->prepare($insertTrigger)->execute();
+            $this->execute($this->prepare($insertTrigger, event: $event));
 
             $deleteSuffix = self::FTS_TRIGGER_DELETE;
             $deleteTrigger = "
@@ -863,7 +857,7 @@ class SQLite extends SQL
                     INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
                 END
             ";
-            $this->prepare($deleteTrigger)->execute();
+            $this->execute($this->prepare($deleteTrigger, event: $event));
 
             $updateSuffix = self::FTS_TRIGGER_UPDATE;
             // OF <cols>: skip re-tokenise when only timestamps/permissions change.
@@ -873,10 +867,10 @@ class SQLite extends SQL
                     INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
                 END
             ";
-            $this->prepare($updateTrigger)->execute();
+            $this->execute($this->prepare($updateTrigger, event: $event));
 
             $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`{$backfillWhere}";
-            $this->prepare($backfill)->execute();
+            $this->execute($this->prepare($backfill, event: $event));
 
             $this->commitTransaction();
         } catch (\Throwable $e) {
@@ -963,7 +957,7 @@ class SQLite extends SQL
      * @throws Exception
      * @throws PDOException
      */
-    public function deleteIndex(string $collection, string $id): bool
+    public function deleteIndex(string $collection, string $id, Event $event = Event::IndexDelete): bool
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
@@ -975,9 +969,9 @@ class SQLite extends SQL
         $regularIndex = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$name}_{$id}";
         $stmt = $this->prepare("
             SELECT name FROM sqlite_master WHERE type='index' AND name=:_index
-        ");
+        ", event: $event);
         $stmt->bindValue(':_index', $regularIndex);
-        $stmt->execute();
+        $this->execute($stmt);
         $hasRegular = $stmt->fetchColumn() !== false;
         // Free the read cursor before issuing DDL — SQLite holds a SHARED
         // lock on the database while a statement has unfetched rows, and
@@ -985,16 +979,14 @@ class SQLite extends SQL
         // will trip "database table is locked".
         $stmt->closeCursor();
 
-        if (! $hasRegular && $this->dropFulltextIndexById($name, $id)) {
+        if (! $hasRegular && $this->dropFulltextIndexById($name, $id, $event)) {
             return true;
         }
 
         $sql = "DROP INDEX `{$regularIndex}`";
 
         try {
-            return $this
-                ->prepare($sql)
-                ->execute();
+            return $this->execute($this->prepare($sql, event: $event));
         } catch (PDOException $e) {
             if (str_contains($e->getMessage(), 'no such index')) {
                 return true;
@@ -1036,7 +1028,7 @@ class SQLite extends SQL
         }
 
         if ($index
-            && $this->deleteIndex($collection->getId(), $old)
+            && $this->deleteIndex($collection->getId(), $old, Event::IndexRename)
             && $this->createIndex(
                 $collection->getId(),
                 new Index(
@@ -1046,6 +1038,7 @@ class SQLite extends SQL
                     lengths: \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
                     orders: \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($index['orders'] ?? null) ? $index['orders'] : []),
                 ),
+                event: Event::IndexRename,
             )) {
             return true;
         }
@@ -1057,7 +1050,7 @@ class SQLite extends SQL
      * Drop the FTS5 vtable backing index `$id` on `$collection`. Returns
      * false when no FTS5 table exists; throws when ambiguous.
      */
-    protected function dropFulltextIndexById(string $collection, string $id): bool
+    protected function dropFulltextIndexById(string $collection, string $id, Event $event = Event::IndexDelete): bool
     {
         $tables = $this->findFulltextTables($collection);
 
@@ -1095,10 +1088,10 @@ class SQLite extends SQL
         $this->startTransaction();
         try {
             foreach ($triggerSuffixes as $suffix) {
-                $this->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`")->execute();
+                $this->execute($this->prepare("DROP TRIGGER IF EXISTS `{$ftsTable}_{$suffix}`", event: $event));
             }
             $sql = "DROP TABLE IF EXISTS `{$ftsTable}`";
-            $this->prepare($sql)->execute();
+            $this->execute($this->prepare($sql, event: $event));
             $this->commitTransaction();
         } catch (\Throwable $e) {
             try {
@@ -1267,8 +1260,8 @@ class SQLite extends SQL
 
             $this->execute($stmt);
 
-            $statment = $this->prepare('SELECT last_insert_rowid() AS id');
-            $statment->execute();
+            $statment = $this->prepare('SELECT last_insert_rowid() AS id', event: Event::DocumentCreate);
+            $this->execute($statment);
             $last = $statment->fetch();
 
             if (\is_array($last)) {
@@ -2498,7 +2491,8 @@ class SQLite extends SQL
             "INSERT INTO {$this->getSQLTable($name)} {$columns}
             VALUES ".\implode(', ', $batchKeys)."
             ON CONFLICT {$conflictKeys} DO UPDATE
-                SET ".\implode(', ', $updateColumns)
+                SET ".\implode(', ', $updateColumns),
+            event: Event::DocumentsUpsert
         );
 
         foreach ($bindValues as $key => $binding) {
@@ -2512,7 +2506,7 @@ class SQLite extends SQL
             }
         }
 
-        $stmt->execute();
+        $this->execute($stmt);
         $stmt->closeCursor();
     }
 
@@ -2542,7 +2536,7 @@ class SQLite extends SQL
         $this->startTransaction();
         try {
             foreach ($attributes as $attribute) {
-                $this->createAttribute($collection, $attribute);
+                $this->createAttributeWithEvent($collection, $attribute, Event::AttributesCreate);
             }
             $this->commitTransaction();
         } catch (\Throwable $e) {
@@ -2587,7 +2581,7 @@ class SQLite extends SQL
         };
 
         foreach ($statements as $stmt) {
-            $this->prepare($stmt)->execute();
+            $this->execute($this->prepare($stmt, event: Event::AttributeCreate));
         }
 
         return true;
@@ -2666,7 +2660,7 @@ class SQLite extends SQL
         }
 
         foreach ($statements as $stmt) {
-            $this->prepare($stmt)->execute();
+            $this->execute($this->prepare($stmt, event: Event::AttributeUpdate));
         }
 
         return true;
@@ -2726,7 +2720,7 @@ class SQLite extends SQL
         }
 
         foreach ($statements as $stmt) {
-            $this->prepare($stmt)->execute();
+            $this->execute($this->prepare($stmt, event: Event::AttributeDelete));
         }
 
         return true;
@@ -2745,8 +2739,8 @@ class SQLite extends SQL
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
 
-        $stmt = $this->prepare("PRAGMA table_info(`{$table}`)");
-        $stmt->execute();
+        $stmt = $this->prepare("PRAGMA table_info(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($stmt);
         $rows = $stmt->fetchAll();
         $stmt->closeCursor();
 
@@ -2790,8 +2784,8 @@ class SQLite extends SQL
     {
         $table = "{$this->getNamespace()}_{$this->filter($collection)}";
 
-        $stmt = $this->prepare("PRAGMA index_list(`{$table}`)");
-        $stmt->execute();
+        $stmt = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
+        $this->execute($stmt);
         $indexes = $stmt->fetchAll();
         $stmt->closeCursor();
 
@@ -2803,8 +2797,8 @@ class SQLite extends SQL
             $name = \is_scalar($index['name'] ?? null) ? (string) $index['name'] : '';
             $unique = ! empty($index['unique']);
 
-            $colStmt = $this->prepare("PRAGMA index_info(`{$name}`)");
-            $colStmt->execute();
+            $colStmt = $this->prepare("PRAGMA index_info(`{$name}`)", event: Event::CollectionRead);
+            $this->execute($colStmt);
             $cols = $colStmt->fetchAll();
             $colStmt->closeCursor();
 

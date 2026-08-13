@@ -31,6 +31,7 @@ use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
@@ -107,10 +108,10 @@ abstract class SQL extends Adapter
      * via json_encode, floats via float-precision string binding, and
      * booleans via int coercion when the adapter expects integers).
      *
-     * @param  PDOStatement|PDOStatementProxy  $stmt
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
      * @param  array<int, mixed>  $bindings
      */
-    protected function bindStatement(mixed $stmt, array $bindings): void
+    protected function bindStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, array $bindings): void
     {
         $intBools = $this->supports(Capability::IntegerBooleans);
 
@@ -436,10 +437,7 @@ abstract class SQL extends Adapter
                     BaseQuery::equal('TABLE_NAME', ["{$this->getNamespace()}_{$collection}"]),
                 ])
                 ->build();
-            $stmt = $this->getPDO()->prepare($result->query);
-            foreach ($result->bindings as $i => $v) {
-                $stmt->bindValue($i + 1, $v);
-            }
+            $stmt = $this->executeResult($result, Event::CollectionRead);
         } else {
             $builder = $this->createBuilder();
             $result = $builder
@@ -447,14 +445,11 @@ abstract class SQL extends Adapter
                 ->selectRaw('SCHEMA_NAME')
                 ->filter([BaseQuery::equal('SCHEMA_NAME', [$database])])
                 ->build();
-            $stmt = $this->getPDO()->prepare($result->query);
-            foreach ($result->bindings as $i => $v) {
-                $stmt->bindValue($i + 1, $v);
-            }
+            $stmt = $this->executeResult($result, Event::DatabaseList);
         }
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
             $document = $stmt->fetchAll();
             $stmt->closeCursor();
         } catch (PDOException $e) {
@@ -492,6 +487,11 @@ abstract class SQL extends Adapter
      */
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
+        return $this->createAttributeWithEvent($collection, $attribute, Event::AttributeCreate);
+    }
+
+    protected function createAttributeWithEvent(string $collection, Attribute $attribute, Event $event): bool
+    {
         $schema = $this->createSchemaBuilder();
         $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attribute) {
             $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
@@ -504,9 +504,7 @@ abstract class SQL extends Adapter
         }
 
         try {
-            $ok = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            $ok = $this->executeStatement($sql, $event);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -546,9 +544,7 @@ abstract class SQL extends Adapter
         }
 
         try {
-            $ok = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            $ok = $this->executeStatement($sql, Event::AttributesCreate);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -573,9 +569,7 @@ abstract class SQL extends Adapter
         $sql = $result->query;
 
         try {
-            $ok = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            $ok = $this->executeStatement($sql, Event::AttributeDelete);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -600,9 +594,7 @@ abstract class SQL extends Adapter
         $sql = $result->query;
 
         try {
-            $ok = $this->getPDO()
-                ->prepare($sql)
-                ->execute();
+            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;
@@ -639,17 +631,14 @@ abstract class SQL extends Adapter
             $aliasQuoted = $this->quote($alias);
             $uidQuoted = $this->quote('_uid');
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = :_uid";
-            $sql = $this->transformQuery(Event::DocumentRead, $sql);
-
             $stmt = null;
             $row = false;
             $exception = null;
 
             try {
-                /** @var \PDOStatement|PDOStatementProxy $stmt */
-                $stmt = $this->getPDO()->prepare($sql);
+                $stmt = $this->prepareStatement($sql, Event::DocumentRead);
                 $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-                $this->execute($stmt, Event::DocumentRead);
+                $this->execute($stmt);
                 /** @var array<string, mixed>|false $row */
                 $row = $stmt->fetch();
             } catch (PDOException $e) {
@@ -794,7 +783,7 @@ abstract class SQL extends Adapter
             }
 
             $result = $this->skipDuplicates ? $builder->insertOrIgnore() : $builder->insert();
-            $stmt = $this->executeResult($result, Event::DocumentCreate);
+            $stmt = $this->executeResult($result, Event::DocumentsCreate);
             $this->execute($stmt);
 
             $ctx = $this->buildWriteContext($name);
@@ -1086,8 +1075,8 @@ abstract class SQL extends Adapter
         $builder->filter([BaseQuery::equal('_uid', $documentIds)]);
 
         $result = $builder->build();
-        $stmt = $this->executeResult($result);
-        $stmt->execute();
+        $stmt = $this->executeResult($result, Event::DocumentRead);
+        $this->execute($stmt);
         /** @var array<string, mixed> $sequences */
         $sequences = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
         $stmt->closeCursor();
@@ -1127,7 +1116,8 @@ abstract class SQL extends Adapter
         $builder->filter($filters);
 
         $result = $builder->update();
-        $stmt = $this->executeResult($result, Event::DocumentUpdate);
+        $event = $value < 0 ? Event::DocumentDecrease : Event::DocumentIncrease;
+        $stmt = $this->executeResult($result, $event);
 
         try {
             $this->execute($stmt);
@@ -1207,18 +1197,14 @@ abstract class SQL extends Adapter
             $limitClause = $limit !== null ? " LIMIT {$limit}" : '';
             $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($limit !== null ? ' OFFSET 0' : '');
 
-            $sql = $this->transformQuery(
-                Event::DocumentFind,
-                "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}"
-            );
+            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}";
             $stmt = null;
             $rows = [];
             $exception = null;
 
             try {
-                /** @var \PDOStatement|PDOStatementProxy $stmt */
-                $stmt = $this->getPDO()->prepare($sql);
-                $this->execute($stmt, Event::DocumentFind);
+                $stmt = $this->prepareStatement($sql, Event::DocumentFind);
+                $this->execute($stmt);
                 /** @var array<int, array<string, mixed>> $rows */
                 $rows = $stmt->fetchAll();
             } catch (PDOException $e) {
@@ -1424,8 +1410,14 @@ abstract class SQL extends Adapter
         };
 
         $vectorDistance = null;
-        foreach ($vectorQueries as $query) {
-            $vectorDistance ??= $this->getVectorOrderRaw($query, $alias);
+        $vectorQuery = $vectorQueries[0] ?? null;
+        if ($vectorQuery !== null) {
+            $vectorDistance = $this->getVectorOrderRaw($vectorQuery, $alias);
+        }
+
+        if ($vectorDistance !== null && $vectorQuery !== null) {
+            $vectorAttribute = $this->quote($this->filter($vectorQuery->getAttribute()));
+            $builder->whereRaw($this->quote($alias).".{$vectorAttribute} IS NOT NULL");
         }
 
         // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
@@ -1717,9 +1709,8 @@ abstract class SQL extends Adapter
             $sql = "SELECT COUNT(1) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
 
             try {
-                /** @var \PDOStatement|PDOStatementProxy $stmt */
-                $stmt = $this->getPDO()->prepare($sql);
-                $this->execute($stmt, Event::DocumentCount);
+                $stmt = $this->prepareStatement($sql, Event::DocumentCount);
+                $this->execute($stmt);
             } catch (PDOException $e) {
                 throw $this->processException($e);
             }
@@ -1752,12 +1743,12 @@ abstract class SQL extends Adapter
 
         $result = $outerBuilder->build();
         $sql = $result->query;
-        $stmt = $this->getPDO()->prepare($sql);
+        $stmt = $this->prepareStatement($sql, Event::DocumentCount);
 
         $this->bindStatement($stmt, $result->bindings);
 
         try {
-            $this->execute($stmt, Event::DocumentCount);
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1813,9 +1804,8 @@ abstract class SQL extends Adapter
             $sql = "SELECT SUM({$this->quote($attribute)}) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
 
             try {
-                /** @var \PDOStatement|PDOStatementProxy $stmt */
-                $stmt = $this->getPDO()->prepare($sql);
-                $this->execute($stmt, Event::DocumentSum);
+                $stmt = $this->prepareStatement($sql, Event::DocumentSum);
+                $this->execute($stmt);
             } catch (PDOException $e) {
                 throw $this->processException($e);
             }
@@ -1853,12 +1843,12 @@ abstract class SQL extends Adapter
 
         $result = $outerBuilder->build();
         $sql = $result->query;
-        $stmt = $this->getPDO()->prepare($sql);
+        $stmt = $this->prepareStatement($sql, Event::DocumentSum);
 
         $this->bindStatement($stmt, $result->bindings);
 
         try {
-            $this->execute($stmt, Event::DocumentSum);
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -2480,9 +2470,7 @@ abstract class SQL extends Adapter
         $result = $this->createSchemaBuilder()->dropDatabase($name);
         $sql = $result->query;
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->executeStatement($sql, Event::DatabaseDelete);
     }
 
     /**
@@ -2500,7 +2488,7 @@ abstract class SQL extends Adapter
 
         $sql = $mainResult->query . '; ' . $permsResult->query;
 
-        $ok = $this->getPDO()->prepare($sql)->execute();
+        $ok = $this->executeStatement($sql, Event::CollectionDelete);
         // Schema is gone; drop any memoized spatial column list so a later
         // recreate-with-different-schema doesn't see the stale entry.
         $this->invalidateSpatialAttributesCache($id);
@@ -2542,9 +2530,7 @@ abstract class SQL extends Adapter
             return true;
         }
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->executeStatement($sql, Event::AttributeCreate);
     }
 
     /**
@@ -2638,9 +2624,7 @@ abstract class SQL extends Adapter
             return true;
         }
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->executeStatement($sql, Event::AttributeUpdate);
     }
 
     /**
@@ -2717,9 +2701,7 @@ abstract class SQL extends Adapter
                 throw new DatabaseException('Invalid relationship type');
         }
 
-        return $this->getPDO()
-            ->prepare($sql)
-            ->execute();
+        return $this->executeStatement($sql, Event::AttributeDelete);
     }
 
     /**
@@ -3313,19 +3295,11 @@ abstract class SQL extends Adapter
      * Does NOT call execute() - the caller is responsible for that.
      *
      * @param  Event|null  $event  Optional event to run through transformation system
-     * @return PDOStatement|PDOStatementProxy
+     * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
-    protected function executeResult(Statement $result, ?Event $event = null): PDOStatement|PDOStatementProxy
+    protected function executeResult(Statement $result, ?Event $event = null): PDOStatement|DatabasePDOStatement|PDOStatementProxy
     {
-        $sql = $result->query;
-        if ($event !== null) {
-            $sql = $this->transformQuery($event, $sql);
-        }
-        $stmt = $this->getPDO()->prepare($sql);
-        if ($event !== null && \is_object($stmt)) {
-            $this->statementEvents ??= new \WeakMap();
-            $this->statementEvents[$stmt] = $event;
-        }
+        $stmt = $this->prepareStatement($result->query, $event);
         foreach ($result->bindings as $i => $value) {
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
@@ -3340,9 +3314,11 @@ abstract class SQL extends Adapter
         return $stmt;
     }
 
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
-        /** @var PDOStatement|PDOStatementProxy $stmt */
         if ($this->profiler !== null && $this->profiler->isEnabled()) {
             $start = \microtime(true);
             $result = $stmt->execute();
@@ -3359,6 +3335,9 @@ abstract class SQL extends Adapter
         return $stmt->execute();
     }
 
+    /**
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     */
     protected function getStatementEvent(mixed $stmt): ?Event
     {
         if (! \is_object($stmt) || $this->statementEvents === null) {
@@ -3366,6 +3345,34 @@ abstract class SQL extends Adapter
         }
 
         return $this->statementEvents[$stmt] ?? null;
+    }
+
+    protected function prepareStatement(string $sql, ?Event $event = null): PDOStatement|DatabasePDOStatement|PDOStatementProxy
+    {
+        if ($event !== null) {
+            $sql = $this->transformQuery($event, $sql);
+        }
+
+        $statement = $this->getPDO()->prepare($sql);
+        if (
+            ! $statement instanceof PDOStatement
+            && ! $statement instanceof DatabasePDOStatement
+            && ! $statement instanceof PDOStatementProxy
+        ) {
+            throw new DatabaseException('Failed to prepare SQL statement');
+        }
+
+        if ($event !== null) {
+            $this->statementEvents ??= new \WeakMap();
+            $this->statementEvents[$statement] = $event;
+        }
+
+        return $statement;
+    }
+
+    protected function executeStatement(string $sql, Event $event): bool
+    {
+        return $this->execute($this->prepareStatement($sql, $event));
     }
 
     private function transformQuery(Event $event, string $sql): string
@@ -3549,7 +3556,7 @@ abstract class SQL extends Adapter
         }
 
         $result = $builder->upsert();
-        $stmt = $this->executeResult($result, Event::DocumentCreate);
+        $stmt = $this->executeResult($result, Event::DocumentsUpsert);
         $this->execute($stmt);
         $stmt->closeCursor();
     }

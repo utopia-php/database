@@ -529,7 +529,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorPagination');
-        $database->createAttribute('vectorPagination', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorPagination', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: false));
         $database->createAttribute('vectorPagination', new Attribute(key: 'index', type: ColumnType::Integer, size: 0, required: true));
 
         // Insert documents in an order deliberately unrelated to vector rank.
@@ -550,6 +550,12 @@ trait VectorTests
                 ],
             ]));
         }
+        $database->createDocument('vectorPagination', new Document([
+            '$id' => 'rank-null',
+            '$permissions' => [Permission::read(Role::any())],
+            'index' => -1,
+            'embedding' => null,
+        ]));
 
         // Test pagination with vector queries
         $searchVector = [1.0, 0.0, 0.0];
@@ -576,6 +582,7 @@ trait VectorTests
         $page1Ids = array_map(fn ($doc) => $doc->getId(), $page1);
         $page2Ids = array_map(fn ($doc) => $doc->getId(), $page2);
         $this->assertEmpty(array_intersect($page1Ids, $page2Ids));
+        $this->assertNotContains('rank-null', [...$page1Ids, ...$page2Ids]);
 
         // Test with cursor pagination
         $firstBatch = $database->find('vectorPagination', [
@@ -596,6 +603,7 @@ trait VectorTests
         $this->assertNotEquals($lastDoc->getId(), $nextBatch[0]->getId());
         $cursorIds = array_map(fn ($document) => $document->getId(), [...$firstBatch, ...$nextBatch]);
         $this->assertCount(10, array_unique($cursorIds));
+        $this->assertNotContains('rank-null', $cursorIds);
         $this->assertSame(
             array_map(fn (int $rank): string => "rank-{$rank}", range(0, 9)),
             $cursorIds,

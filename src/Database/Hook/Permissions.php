@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Hook;
 
-use PDOStatement;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
@@ -153,9 +152,8 @@ class Permissions extends Interceptor
             $removeBuilder = ($context->newBuilder)($collection.'_perms');
             $removeBuilder->filter([Query::or($removeConditions)]);
             $deleteResult = $removeBuilder->delete();
-            /** @var PDOStatement $deleteStmt */
             $deleteStmt = ($context->executeResult)($deleteResult, Event::PermissionsDelete);
-            $deleteStmt->execute();
+            ($context->execute)($deleteStmt);
         }
 
         if ($hasAdditions) {
@@ -217,9 +215,8 @@ class Permissions extends Interceptor
             $removeBuilder = ($context->newBuilder)($collection.'_perms');
             $removeBuilder->filter([Query::or($removeConditions)]);
             $deleteResult = $removeBuilder->delete();
-            /** @var PDOStatement $deleteStmt */
             $deleteStmt = ($context->executeResult)($deleteResult, Event::PermissionsDelete);
-            $deleteStmt->execute();
+            ($context->execute)($deleteStmt);
         }
 
         if ($hasAdditions) {
@@ -246,10 +243,9 @@ class Permissions extends Interceptor
         $permsBuilder = ($context->newBuilder)($collection.'_perms');
         $permsBuilder->filter([Query::equal('_document', $documentIds)]);
         $permsResult = $permsBuilder->delete();
-        /** @var PDOStatement $stmtPermissions */
         $stmtPermissions = ($context->executeResult)($permsResult, Event::PermissionsDelete);
 
-        if (! $stmtPermissions->execute()) {
+        if (! ($context->execute)($stmtPermissions)) {
             throw new DatabaseException('Failed to delete permissions');
         }
     }
@@ -287,9 +283,8 @@ class Permissions extends Interceptor
         $readBuilder->filter([Query::equal('_document', $documentIds)]);
 
         $readResult = $readBuilder->build();
-        /** @var PDOStatement $readStmt */
         $readStmt = ($context->executeResult)($readResult, Event::PermissionsRead);
-        $readStmt->execute();
+        ($context->execute)($readStmt);
         /** @var array<array<string, string>> $rows */
         $rows = (array) $readStmt->fetchAll();
         $readStmt->closeCursor();
@@ -349,9 +344,8 @@ class Permissions extends Interceptor
         $removeBuilder = ($context->newBuilder)($collection.'_perms');
         $removeBuilder->filter([Query::or($removeConditions)]);
         $deleteResult = $removeBuilder->delete();
-        /** @var PDOStatement $deleteStmt */
         $deleteStmt = ($context->executeResult)($deleteResult, Event::PermissionsDelete);
-        $deleteStmt->execute();
+        ($context->execute)($deleteStmt);
     }
 
     /**

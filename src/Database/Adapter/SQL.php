@@ -4569,6 +4569,7 @@ abstract class SQL extends Adapter
         string $alias,
         callable $resolveInternalKey,
     ): array {
+        $distance = \json_encode($distance, JSON_THROW_ON_ERROR);
         $distanceOperator = $cursorDirection === CursorDirection::Before ? '<' : '>';
         $clauses = ["({$vector['expression']}) {$distanceOperator} ?"];
         $bindings = [];

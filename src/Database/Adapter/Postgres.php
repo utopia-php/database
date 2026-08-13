@@ -1917,6 +1917,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             return new LimitException('Numeric value out of range', $e->getCode(), $e);
         }
 
+        // Invalid argument for power function
+        if ($e->getCode() === '2201F' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new LimitException('Invalid argument for power function', $e->getCode(), $e);
+        }
+
         // Datetime field overflow
         if ($e->getCode() === '22008' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new LimitException('Datetime field overflow', $e->getCode(), $e);

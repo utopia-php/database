@@ -596,7 +596,11 @@ class SQLite extends SQL
 
         try {
             $this->execute($stmt);
-            $size = (int) $stmt->fetchColumn();
+            $result = $stmt->fetchColumn();
+            if (! \is_int($result) && (! \is_string($result) || ! \is_numeric($result))) {
+                throw new DatabaseException('Failed to get collection size: invalid database result');
+            }
+            $size = (int) $result;
             $stmt->closeCursor();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: ' . $e->getMessage());

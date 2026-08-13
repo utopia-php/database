@@ -234,16 +234,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = $this->createMock(Cache::class);
         $queryCache = new QueryCache($cache);
-        $cache->method('load')->willReturn('epoch');
+        $this->configureInvalidationCache($cache);
 
         $cache->expects($this->once())
             ->method('purge')
             ->with('default:qcache:users#epoch')
             ->willReturn(true);
-        $cache->expects($this->once())
-            ->method('save')
-            ->with('default:qcache:users#epoch', $this->isString())
-            ->willReturnArgument(1);
 
         $queryCache->invalidateCollection('users');
     }
@@ -460,9 +456,24 @@ class QueryCacheTest extends TestCase
 
     private function configureInvalidationCache(Cache&MockObject $cache): void
     {
-        $cache->method('load')->willReturn('epoch');
-        $cache->method('save')->willReturnCallback(
-            static fn (string $key, array|string $data): array|string => $data,
+        $state = new InvalidationCacheState();
+        $cache->method('load')->willReturnCallback(
+            static function (string $key) use ($state): string {
+                return $state->epochs[$key] ?? 'epoch';
+            },
         );
+        $cache->method('save')->willReturnCallback(function (string $key, array|string $data) use ($state): array|string {
+            if (\is_string($data)) {
+                $state->epochs[$key] = $data;
+            }
+
+            return $data;
+        });
     }
+}
+
+final class InvalidationCacheState
+{
+    /** @var array<string, string> */
+    public array $epochs = [];
 }

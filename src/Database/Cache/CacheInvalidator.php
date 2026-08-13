@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Cache;
 
+use Throwable;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -16,12 +17,52 @@ class CacheInvalidator implements Lifecycle
 
     public function handle(Event $event, mixed $data): void
     {
+        $tokens = $this->tokens($event, $data);
+        $this->block($tokens);
+        $this->activate($tokens);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function tokens(Event $event, mixed $data): array
+    {
         if (! $this->isMutation($event)) {
-            return;
+            return [];
         }
 
-        foreach (\array_keys($this->extractCollections($event, $data)) as $collection) {
-            $this->queryCache->invalidateCollection($collection);
+        return \array_map(
+            static fn (): string => \bin2hex(\random_bytes(16)),
+            $this->extractCollections($event, $data),
+        );
+    }
+
+    /**
+     * @param  array<string, string>  $tokens
+     */
+    public function block(array $tokens): void
+    {
+        foreach ($tokens as $collection => $token) {
+            $this->queryCache->blockCollection($collection, $token);
+        }
+    }
+
+    /**
+     * @param  array<string, string>  $tokens
+     */
+    public function activate(array $tokens): void
+    {
+        $failure = null;
+        foreach ($tokens as $collection => $token) {
+            try {
+                $this->queryCache->activateCollection($collection, $token);
+            } catch (Throwable $error) {
+                $failure ??= $error;
+            }
+        }
+
+        if ($failure !== null) {
+            throw $failure;
         }
     }
 

@@ -100,7 +100,7 @@ final class DatabaseQueryCacheTest extends TestCase
 
         $queryAdapter->resetPurges();
         $database->createDocument('users', new Document(['$id' => 'a']));
-        $this->assertSame(1, $queryAdapter->getWrites('default:qcache:users#epoch'));
+        $this->assertSame(2, $queryAdapter->getWrites('default:qcache:users#epoch'));
 
         $database->setQueryCache(null);
         $queryAdapter->resetPurges();
@@ -419,6 +419,80 @@ final class DatabaseQueryCacheTest extends TestCase
         );
     }
 
+    public function testSharedBlockedEpochPreventsPreCommitStaleFill(): void
+    {
+        [$writer, $reader, $writerAdapter, $readerAdapter, $cache, $path] = $this->createSharedSQLiteDatabases();
+
+        try {
+            $this->assertSame(
+                ['existing' => 'original'],
+                $this->names($reader->find('users', [Query::orderAsc('$id')])),
+            );
+            $readerAdapter->observeFinds('users');
+
+            $duringCommit = [];
+            $writerAdapter->pauseNextCommit(function () use ($reader, $cache, &$duringCommit): void {
+                $epoch = $cache->load('default:qcache:users#epoch', 3600);
+                $this->assertIsString($epoch);
+                $this->assertStringStartsWith('blocked:', $epoch);
+                $duringCommit = $this->names($reader->find('users', [Query::orderAsc('$id')]));
+            });
+
+            $writer->updateDocument('users', 'existing', new Document(['name' => 'updated']));
+
+            $this->assertSame(['existing' => 'original'], $duringCommit);
+            $this->assertSame(
+                ['existing' => 'updated'],
+                $this->names($reader->find('users', [Query::orderAsc('$id')])),
+            );
+            $this->assertSame(2, $readerAdapter->getObservedFinds());
+            $this->assertSame(
+                ['existing' => 'updated'],
+                $this->names($reader->find('users', [Query::orderAsc('$id')])),
+            );
+            $this->assertSame(2, $readerAdapter->getObservedFinds());
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testActivationFailureAfterCommitLeavesSharedEpochBlocked(): void
+    {
+        [$writer, $reader, , $readerAdapter, $cache, $path] = $this->createSharedSQLiteDatabases();
+
+        try {
+            $this->assertSame(
+                ['existing' => 'original'],
+                $this->names($reader->find('users', [Query::orderAsc('$id')])),
+            );
+            $cache->failActivations();
+
+            try {
+                $writer->updateDocument('users', 'existing', new Document(['name' => 'updated']));
+                $this->fail('Post-commit query-cache activation failure was not propagated');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('activate query cache', $exception->getMessage());
+            }
+
+            $epoch = $cache->load('default:qcache:users#epoch', 3600);
+            $this->assertIsString($epoch);
+            $this->assertStringStartsWith('blocked:', $epoch);
+
+            $readerAdapter->observeFinds('users');
+            $this->assertSame(
+                ['existing' => 'updated'],
+                $this->names($reader->find('users', [Query::orderAsc('$id')])),
+            );
+            $this->assertSame(
+                ['existing' => 'updated'],
+                $this->names($reader->find('users', [Query::orderAsc('$id')])),
+            );
+            $this->assertSame(2, $readerAdapter->getObservedFinds());
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
     public function testPooledRollbackCannotPoisonPointOrQueryCaches(): void
     {
         $child = new DatabaseMemory();
@@ -533,6 +607,60 @@ final class DatabaseQueryCacheTest extends TestCase
         $this->assertSame(1, $adapter->getObservedFinds(), 'The stale cached query result must stay blocked');
     }
 
+    /**
+     * @return array{Database, Database, PausedSQLite, ObservedSQLite, LeasableHashCache, string}
+     */
+    private function createSharedSQLiteDatabases(): array
+    {
+        $path = \tempnam(\sys_get_temp_dir(), 'database-query-cache-');
+        if ($path === false) {
+            throw new \RuntimeException('Failed to create SQLite test database');
+        }
+
+        $attributes = SQLite::getPDOAttributes();
+        $attributes[\PDO::ATTR_PERSISTENT] = false;
+        $writerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $readerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $writerConnection->exec('PRAGMA journal_mode = WAL');
+        $writerConnection->exec('PRAGMA busy_timeout = 1000');
+        $readerConnection->exec('PRAGMA busy_timeout = 1000');
+
+        $writerAdapter = new PausedSQLite($writerConnection);
+        $readerAdapter = new ObservedSQLite($readerConnection);
+        $writer = new Database($writerAdapter, new Cache(new None()));
+        $reader = new Database($readerAdapter, new Cache(new None()));
+        $namespace = 'shared_cache_'.\uniqid();
+        foreach ([$writer, $reader] as $database) {
+            $database
+                ->setDatabase('cache-tests')
+                ->setNamespace($namespace);
+        }
+
+        $writer->create();
+        $writer->createCollection('users', [
+            new Attribute('name', ColumnType::String, 255, required: true),
+        ], permissions: $this->permissions());
+        $writer->createDocument('users', new Document([
+            '$id' => 'existing',
+            'name' => 'original',
+        ]));
+
+        $cache = new LeasableHashCache();
+        $writer->setQueryCache(new QueryCache(new Cache($cache)));
+        $reader->setQueryCache(new QueryCache(new Cache($cache)));
+
+        return [$writer, $reader, $writerAdapter, $readerAdapter, $cache, $path];
+    }
+
+    private function removeSQLiteFiles(string $path): void
+    {
+        foreach ([$path, $path.'-wal', $path.'-shm'] as $file) {
+            if (\is_file($file)) {
+                \unlink($file);
+            }
+        }
+    }
+
     /** @return array<string> */
     private function permissions(): array
     {
@@ -589,6 +717,8 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     /** @var array<string, int> */
     private array $writes = [];
 
+    private bool $failActivations = false;
+
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $hash = $hash === '' ? $key : $hash;
@@ -600,6 +730,15 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     public function save(string $key, array|string $data, string $hash = ''): bool|string|array
     {
         if ($key === '') {
+            return false;
+        }
+
+        if (
+            $this->failActivations
+            && \str_ends_with($key, '#epoch')
+            && \is_string($data)
+            && \str_starts_with($data, 'active:')
+        ) {
             return false;
         }
 
@@ -693,6 +832,11 @@ final class LeasableHashCache implements CacheAdapter, Leasable
     public function getWrites(string $key): int
     {
         return $this->writes[$key] ?? 0;
+    }
+
+    public function failActivations(): void
+    {
+        $this->failActivations = true;
     }
 }
 
@@ -850,6 +994,26 @@ final class ObservedSQLite extends SQLite
             $cursorDirection,
             $forPermission,
         );
+    }
+}
+
+final class PausedSQLite extends SQLite
+{
+    private ?Closure $commitCallback = null;
+
+    public function pauseNextCommit(Closure $callback): void
+    {
+        $this->commitCallback = $callback;
+    }
+
+    #[\Override]
+    public function commitTransaction(): bool
+    {
+        $callback = $this->commitCallback;
+        $this->commitCallback = null;
+        $callback?->__invoke();
+
+        return parent::commitTransaction();
     }
 }
 

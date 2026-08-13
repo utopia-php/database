@@ -322,6 +322,9 @@ class Database
     /** @var array<int, int> Lifecycle silence depth by coroutine id. */
     protected array $silencedEvents = [];
 
+    /** @var array<int, array<string, string>> Pending query-cache tombstones by coroutine id. */
+    protected array $queryCacheMutations = [];
+
     protected ?NativeDateTime $timestamp = null;
 
     protected ?Relationships $relationshipHook = null;
@@ -2459,6 +2462,30 @@ class Database
     protected function invalidate(Event $event, mixed $data = null): void
     {
         $this->queryCacheInvalidator?->handle($event, $data);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function getInvalidationTokens(Event $event, mixed $data = null): array
+    {
+        return $this->queryCacheInvalidator?->tokens($event, $data) ?? [];
+    }
+
+    /**
+     * @param  array<string, string>  $tokens
+     */
+    protected function blockInvalidation(array $tokens): void
+    {
+        $this->queryCacheInvalidator?->block($tokens);
+    }
+
+    /**
+     * @param  array<string, string>  $tokens
+     */
+    protected function activateInvalidation(array $tokens): void
+    {
+        $this->queryCacheInvalidator?->activate($tokens);
     }
 
     /**

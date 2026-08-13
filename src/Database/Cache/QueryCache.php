@@ -8,13 +8,16 @@ use Utopia\Database\Document;
 
 class QueryCache
 {
+    private const string ACTIVE_PREFIX = 'active:';
+
+    private const string BLOCKED_GENERATION = 'blocked';
+
+    private const string BLOCKED_PREFIX = 'blocked:';
+
     private const int VERSION = 1;
 
     /** @var array<string, CacheRegion> */
     private array $regions = [];
-
-    /** @var array<string, true> */
-    private array $blocked = [];
 
     private Cache $cache;
 
@@ -117,7 +120,7 @@ class QueryCache
         $collection = $this->getCollectionFromKey($cacheKey);
         $epoch = $this->getEpoch($cacheKey, $collection, true);
         if ($epoch === null) {
-            throw new RuntimeException("Failed to initialize query cache epoch for collection '{$collection}'");
+            return self::BLOCKED_GENERATION;
         }
         $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 
@@ -132,6 +135,10 @@ class QueryCache
      */
     public function set(string $key, array $results, string $generation = '0'): bool
     {
+        if ($generation === self::BLOCKED_GENERATION) {
+            return false;
+        }
+
         $data = [];
         foreach ($results as $result) {
             if (! $result instanceof Document) {
@@ -143,7 +150,14 @@ class QueryCache
 
         [$cacheKey, $hash] = $this->splitKey($key);
         $collection = $this->getCollectionFromKey($cacheKey);
-        [$epoch, $lease] = $this->decodeGeneration($generation, $cacheKey, $hash, $collection);
+        if (! $this->isEnabled($collection)) {
+            return false;
+        }
+        $decoded = $this->decodeGeneration($generation, $cacheKey, $hash, $collection);
+        if ($decoded === null) {
+            return false;
+        }
+        [$epoch, $lease] = $decoded;
         $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 
         return $this->cache->saveWithLease($physicalKey, [
@@ -154,30 +168,68 @@ class QueryCache
 
     public function invalidateCollection(string $collection): void
     {
-        $this->blocked[$collection] = true;
+        $token = \bin2hex(\random_bytes(16));
+        $this->blockCollection($collection, $token);
+        $this->activateCollection($collection, $token);
+    }
+
+    /**
+     * Publish a shared tombstone before a mutation starts.
+     */
+    public function blockCollection(string $collection, string $token): void
+    {
         $cacheKey = $this->getCollectionKey($collection);
         $epochKey = $this->getEpochKey($cacheKey);
         $existing = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
 
         $purged = $existing === false || $existing === null || $this->cache->purge($epochKey);
 
-        $epoch = \bin2hex(\random_bytes(16));
-        if ($this->cache->save($epochKey, $epoch) === false) {
-            throw new RuntimeException("Failed to advance query cache epoch for collection '{$collection}'");
+        if ($this->cache->save($epochKey, self::BLOCKED_PREFIX.$token) === false) {
+            throw new RuntimeException("Failed to block query cache for collection '{$collection}'");
         }
 
         if (! $purged) {
             throw new RuntimeException("Failed to purge query cache epoch for collection '{$collection}'");
         }
+    }
 
-        unset($this->blocked[$collection]);
+    /**
+     * Replace this mutation's shared tombstone with a fresh usable epoch.
+     */
+    public function activateCollection(string $collection, string $token): void
+    {
+        $epochKey = $this->getEpochKey($this->getCollectionKey($collection));
+        $blocked = self::BLOCKED_PREFIX.$token;
+        $current = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
+
+        if ($current !== $blocked) {
+            if (\is_string($current) && \str_starts_with($current, self::BLOCKED_PREFIX)) {
+                return;
+            }
+
+            $this->blockCollection($collection, $token);
+        }
+
+        $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
+        if ($this->cache->save($epochKey, $epoch) === false) {
+            throw new RuntimeException("Failed to activate query cache for collection '{$collection}'");
+        }
     }
 
     public function isEnabled(string $collection): bool
     {
         $region = $this->getRegion($collection);
 
-        return $region->enabled && ! isset($this->blocked[$collection]);
+        if (! $region->enabled) {
+            return false;
+        }
+
+        $epoch = $this->cache->load(
+            $this->getEpochKey($this->getCollectionKey($collection)),
+            $region->ttl,
+        );
+
+        return ! \is_string($epoch) || ! \str_starts_with($epoch, self::BLOCKED_PREFIX);
     }
 
     public function flush(): void
@@ -219,7 +271,7 @@ class QueryCache
                 return null;
             }
 
-            $epoch = \bin2hex(\random_bytes(16));
+            $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
             if ($this->cache->save($this->getEpochKey($cacheKey), $epoch) === false) {
                 throw new RuntimeException("Failed to initialize query cache epoch for collection '{$collection}'");
             }
@@ -229,6 +281,10 @@ class QueryCache
 
         if (! \is_string($epoch) || $epoch === '') {
             throw new RuntimeException("Invalid query cache epoch for collection '{$collection}'");
+        }
+
+        if (\str_starts_with($epoch, self::BLOCKED_PREFIX)) {
+            return null;
         }
 
         return $epoch;
@@ -251,17 +307,17 @@ class QueryCache
         }
     }
 
-    /** @return array{string, string} */
+    /** @return array{string, string}|null */
     private function decodeGeneration(
         string $generation,
         string $cacheKey,
         string $hash,
         string $collection,
-    ): array {
+    ): ?array {
         if ($generation === '0') {
             $epoch = $this->getEpoch($cacheKey, $collection, true);
             if ($epoch === null) {
-                throw new RuntimeException("Failed to initialize query cache epoch for collection '{$collection}'");
+                return null;
             }
             $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 

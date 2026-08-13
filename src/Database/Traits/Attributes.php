@@ -178,7 +178,10 @@ trait Attributes
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(Event::AttributeCreate, $attributeDoc);
+        $this->trigger(
+            Event::AttributeCreate,
+            (clone $attributeDoc)->setAttribute('$collection', $collection->getId()),
+        );
 
         return true;
     }
@@ -335,7 +338,11 @@ trait Attributes
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(Event::AttributeCreate, $attributeDocuments);
+        $this->trigger(Event::AttributesCreate, \array_map(
+            static fn (Document $attribute): Document => (clone $attribute)
+                ->setAttribute('$collection', $collection->getId()),
+            $attributeDocuments,
+        ));
 
         return true;
     }
@@ -556,7 +563,10 @@ trait Attributes
         // see the updated required/format/options/filters/default state.
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(Event::AttributeUpdate, $attributeDoc);
+        $this->trigger(
+            Event::AttributeUpdate,
+            (clone $attributeDoc)->setAttribute('$collection', $collection->getId()),
+        );
 
         return $attributeDoc;
     }
@@ -1062,7 +1072,10 @@ trait Attributes
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(Event::AttributeUpdate, $attribute);
+        $this->trigger(
+            Event::AttributeUpdate,
+            (clone $attribute)->setAttribute('$collection', $collection),
+        );
 
         return $attribute;
     }
@@ -1209,7 +1222,10 @@ trait Attributes
             '$collection' => self::METADATA,
         ]));
 
-        $this->trigger(Event::AttributeDelete, $attribute);
+        $this->trigger(
+            Event::AttributeDelete,
+            (clone $attribute)->setAttribute('$collection', $collection->getId()),
+        );
 
         return true;
     }
@@ -1327,7 +1343,10 @@ trait Attributes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(Event::AttributeUpdate, $attribute);
+        $this->trigger(
+            Event::AttributeUpdate,
+            (clone $attribute)->setAttribute('$collection', $collection->getId()),
+        );
 
         return $renamed;
     }

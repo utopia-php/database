@@ -279,8 +279,8 @@ trait Collections
         // the user has wired in a no-op cache adapter. The cache key includes
         // the active database, namespace and tenant so multi-tenant or
         // shared-table setups stay isolated.
-        $cacheKey = $this->adapter->getDatabase() . '::' . $this->adapter->getNamespace()
-            . '::' . ($this->adapter->getTenant() ?? '') . '::' . $id;
+        $cacheKey = $this->getCollectionMetadataCacheKey($id);
+        $generation = $this->getCollectionMetadataGeneration($cacheKey);
 
         if (isset($this->collectionMetadataCache[$cacheKey])) {
             // Always hand callers an independent copy: createIndex,
@@ -312,7 +312,10 @@ trait Collections
             return new Document();
         }
 
-        if (! $collection->isEmpty()) {
+        if (
+            ! $collection->isEmpty()
+            && $this->getCollectionMetadataGeneration($cacheKey) === $generation
+        ) {
             if (\count($this->collectionMetadataCache) >= self::COLLECTION_METADATA_CACHE_LIMIT) {
                 $this->collectionMetadataCache = [];
             }

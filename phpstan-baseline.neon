@@ -505,12 +505,6 @@ parameters:
 			path: src/Database/Database.php
 
 		-
-			message: '#^Parameter \#4 \$tenant of method Utopia\\Database\\Cache\\QueryCache\:\:buildQueryKey\(\) expects int\|null, int\|string\|null given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/Database.php
-
-		-
 			message: '#^Method Utopia\\Database\\Document\:\:getInternalKeySet\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1

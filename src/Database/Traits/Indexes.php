@@ -181,7 +181,10 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(Event::IndexCreate, $indexDoc);
+        $this->trigger(
+            Event::IndexCreate,
+            (clone $indexDoc)->setAttribute('$collection', $collection->getId()),
+        );
 
         return true;
     }
@@ -231,6 +234,10 @@ trait Indexes
             }
         }
 
+        if ($indexNew === null) {
+            throw new NotFoundException('Index not found');
+        }
+
         $collection->setAttribute('indexes', $indexes);
 
         $renamed = false;
@@ -263,7 +270,10 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(Event::IndexRename, $indexNew);
+        $this->trigger(
+            Event::IndexRename,
+            (clone $indexNew)->setAttribute('$collection', $collection->getId()),
+        );
 
         return true;
     }
@@ -355,7 +365,10 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->trigger(Event::IndexDelete, $indexDeleted);
+        $this->trigger(
+            Event::IndexDelete,
+            (clone $indexDeleted)->setAttribute('$collection', $collection->getId()),
+        );
 
         return $deleted;
     }

@@ -414,7 +414,10 @@ trait Relationships
             }
         });
 
-        $this->trigger(Event::AttributeCreate, $relationship);
+        $this->trigger(
+            Event::AttributeCreate,
+            (clone $relationship)->setAttribute('$collection', $collection->getId()),
+        );
 
         return true;
     }
@@ -977,7 +980,10 @@ trait Relationships
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
 
-        $this->trigger(Event::AttributeDelete, $relationship);
+        $this->trigger(
+            Event::AttributeDelete,
+            (clone $relationship)->setAttribute('$collection', $collection->getId()),
+        );
 
         return true;
     }

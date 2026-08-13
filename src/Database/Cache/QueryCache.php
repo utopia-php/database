@@ -33,15 +33,21 @@ class QueryCache
     }
 
     /**
-     * @param  array<\Utopia\Database\Query>  $queries
+     * @param  array<mixed>  $queries
      */
     public function buildQueryKey(
         string $collection,
         array $queries,
         string $namespace,
-        ?int $tenant,
+        int|string|null $tenant,
         string $context = '',
     ): string {
+        $tenant = match (true) {
+            $tenant === null => ['type' => 'null'],
+            \is_int($tenant) => ['type' => 'integer', 'value' => $tenant],
+            default => ['type' => 'string', 'value' => $tenant],
+        };
+
         $queriesHash = \md5(\serialize([
             'namespace' => $namespace,
             'tenant' => $tenant,

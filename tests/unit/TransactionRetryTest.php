@@ -151,11 +151,9 @@ class TransactionRetryTest extends TestCase
         $this->assertInstanceOf(\RuntimeException::class, $thrown);
 
         $inTransaction = new \ReflectionProperty(RedisAdapter::class, 'inTransaction');
-        $inTransaction->setAccessible(true);
         $this->assertSame(0, $inTransaction->getValue($adapter));
 
         $journalStack = new \ReflectionProperty(RedisAdapter::class, 'journalStack');
-        $journalStack->setAccessible(true);
         $this->assertSame([], $journalStack->getValue($adapter));
     }
 }

@@ -53,7 +53,8 @@ use Utopia\Query\Schema\IndexType;
 trait Documents
 {
     /**
-     * Cached validator instances keyed by `namespace:tenant:maxQueryValues:collectionId`.
+     * Cached validator instances keyed by context, collection epoch, and a
+     * stable schema/authorization fingerprint.
      *
      * Building DocumentsValidator deep-copies every collection attribute via
      * Attribute::getArrayCopy(), which is expensive on the find/count/sum
@@ -73,7 +74,9 @@ trait Documents
      */
     protected function getDocumentsValidator(Document $collection): DocumentsValidator
     {
-        $key = $this->documentsValidatorCacheKey($collection->getId());
+        $context = $this->getCollectionMetadataCacheKey($collection->getId());
+        $generation = $this->getCollectionMetadataGeneration($context);
+        $key = $this->documentsValidatorCacheKey($collection, $context, $generation);
 
         if (isset($this->documentsValidatorCache[$key])) {
             return $this->documentsValidatorCache[$key];
@@ -96,7 +99,11 @@ trait Documents
             $this->adapter->supports(Capability::UnsignedBigInt)
         );
 
-        return $this->documentsValidatorCache[$key] = $validator;
+        if ($this->getCollectionMetadataGeneration($context) === $generation) {
+            $this->documentsValidatorCache[$key] = $validator;
+        }
+
+        return $validator;
     }
 
     /**
@@ -105,12 +112,16 @@ trait Documents
      * share an id (different tenant schemas, different namespace prefixes,
      * or different per-request limits) from aliasing onto the same validator.
      */
-    private function documentsValidatorCacheKey(string $collectionId): string
+    private function documentsValidatorCacheKey(Document $collection, string $context, int $generation): string
     {
-        return $this->adapter->getNamespace().':'
-            .($this->adapter->getTenant() ?? '').':'
-            .$this->maxQueryValues.':'
-            .$collectionId;
+        $fingerprint = \hash('sha256', \serialize([
+            'attributes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('attributes', [])),
+            'indexes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('indexes', [])),
+            'permissions' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('$permissions', [])),
+            'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
+        ]));
+
+        return $context.'::'.$generation.'::'.$this->maxQueryValues.'::'.$fingerprint;
     }
 
     /**
@@ -2120,23 +2131,7 @@ trait Documents
 
         $this->cache->purge($collectionKey);
 
-        // Invalidate any in-process metadata memo — schema changed.
-        $metadataSuffix = '::'.$collectionId;
-        foreach (\array_keys($this->collectionMetadataCache) as $cachedKey) {
-            if (\str_ends_with((string) $cachedKey, $metadataSuffix)) {
-                unset($this->collectionMetadataCache[$cachedKey]);
-            }
-        }
-
-        // Drop every cached validator scoped to this collection id, regardless
-        // of the namespace/tenant/maxQueryValues prefix that was active when
-        // the entry was built.
-        $suffix = ':'.$collectionId;
-        foreach (\array_keys($this->documentsValidatorCache) as $cachedKey) {
-            if (\str_ends_with((string) $cachedKey, $suffix)) {
-                unset($this->documentsValidatorCache[$cachedKey]);
-            }
-        }
+        $this->invalidateCollectionMetadata($collectionId);
 
         return true;
     }
@@ -2162,12 +2157,7 @@ trait Documents
         // lives in the METADATA collection), drop the in-process metadata
         // memo for that collection too — its schema may have shifted.
         if ($collectionId === self::METADATA) {
-            $metadataSuffix = '::'.$id;
-            foreach (\array_keys($this->collectionMetadataCache) as $cachedKey) {
-                if (\str_ends_with((string) $cachedKey, $metadataSuffix)) {
-                    unset($this->collectionMetadataCache[$cachedKey]);
-                }
-            }
+            $this->invalidateCollectionMetadata($id);
         }
 
         return true;
@@ -2248,7 +2238,7 @@ trait Documents
         callable $callback,
         ?string $hash = '',
     ): mixed {
-        if ($hash === null) {
+        if ($hash === null || $this->adapter->inTransaction()) {
             return $callback();
         }
 
@@ -2460,6 +2450,8 @@ trait Documents
      */
     public function find(string $collection, array $queries = [], PermissionType $forPermission = PermissionType::Read): array
     {
+        $queryCacheQueries = $queries;
+
         // Inline silent() to avoid the per-find closure allocation; only the
         // CollectionRead event needs to be suppressed for this lookup.
         $previousSilenced = $this->eventsSilenced;
@@ -2648,11 +2640,12 @@ trait Documents
             if (
                 $this->queryCache !== null
                 && $this->adapter->supports(Capability::Caching)
+                && ! $this->adapter->inTransaction()
                 && $this->queryCache->isEnabled($collection->getId())
             ) {
                 $cacheContext = $skipAuth
-                    ? $this->authorization->skip(fn () => $this->getQueryCacheField($collection, $queries, forPermission: $forPermission))
-                    : $this->getQueryCacheField($collection, $queries, forPermission: $forPermission);
+                    ? $this->authorization->skip(fn () => $this->getQueryCacheField($collection, $queryCacheQueries, forPermission: $forPermission))
+                    : $this->getQueryCacheField($collection, $queryCacheQueries, forPermission: $forPermission);
 
                 if ($cacheContext !== null) {
                     $cacheContext .= ':'.($this->adapter->supports(Capability::Hostname) ? $this->adapter->getHostname() : '');
@@ -2661,7 +2654,25 @@ trait Documents
                 if ($cacheContext !== null) {
                     $cacheKey = $this->queryCache->buildQueryKey(
                         $collection->getId(),
-                        $queries,
+                        [
+                            'input' => \array_map(
+                                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                                $queryCacheQueries,
+                            ),
+                            'queries' => \array_map(
+                                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                                $queries,
+                            ),
+                            'limit' => $limit ?? 25,
+                            'offset' => $offset ?? 0,
+                            'orderAttributes' => $orderAttributes,
+                            'orderTypes' => \array_map(
+                                static fn (\Utopia\Query\OrderDirection $direction): string => $direction->value,
+                                $orderTypes,
+                            ),
+                            'cursor' => $this->normalizeQueryCacheQueryValue($cursor),
+                            'cursorDirection' => $cursorDirection->value,
+                        ],
                         $this->adapter->getNamespace(),
                         $this->adapter->getTenant(),
                         $cacheContext,

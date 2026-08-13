@@ -7,6 +7,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Cache\CacheInvalidator;
 use Utopia\Database\Cache\CacheRegion;
 use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Query;
@@ -70,6 +71,14 @@ class QueryCacheTest extends TestCase
 
         $this->assertNotSame($key, $differentNamespace);
         $this->assertNotSame($key, $differentTenant);
+    }
+
+    public function testBuildQueryKeyPreservesTenantType(): void
+    {
+        $integer = $this->queryCache->buildQueryKey('users', [], 'ns', 1);
+        $string = $this->queryCache->buildQueryKey('users', [], 'ns', '1');
+
+        $this->assertNotSame($integer, $string);
     }
 
     public function testBuildQueryKeyDifferentQueriesProduceDifferentKeys(): void
@@ -332,5 +341,49 @@ class QueryCacheTest extends TestCase
 
         $cache->expects($this->never())->method('purge');
         $invalidator->handle(Event::DocumentCreate, $doc);
+    }
+
+    public function testCacheInvalidatorInvalidatesBothRelationshipCollections(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+        $invalidator = new CacheInvalidator($queryCache);
+
+        $purged = [];
+        $cache->expects($this->exactly(2))
+            ->method('purge')
+            ->willReturnCallback(function (string $key) use (&$purged): bool {
+                $purged[] = $key;
+
+                return true;
+            });
+
+        $invalidator->handle(Event::AttributeCreate, new Document([
+            '$collection' => 'posts',
+            'options' => [
+                'relatedCollection' => 'authors',
+            ],
+        ]));
+
+        $this->assertSame([
+            'default:qcache:posts',
+            'default:qcache:authors',
+        ], $purged);
+    }
+
+    public function testCacheInvalidatorUsesCollectionIdentityForCollectionMutations(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+        $invalidator = new CacheInvalidator($queryCache);
+
+        $cache->expects($this->once())
+            ->method('purge')
+            ->with('default:qcache:users');
+
+        $invalidator->handle(Event::CollectionUpdate, new Document([
+            '$id' => 'users',
+            '$collection' => Database::METADATA,
+        ]));
     }
 }

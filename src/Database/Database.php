@@ -10,6 +10,7 @@ use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Cache\CacheInvalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -338,6 +339,14 @@ class Database
      */
     protected array $collectionMetadataCache = [];
 
+    /**
+     * Per-context epochs used to reject collection metadata and validator
+     * publications that began before a purge.
+     *
+     * @var array<string, int>
+     */
+    protected array $collectionMetadataGenerations = [];
+
     /** Soft cap to prevent unbounded growth in long-lived workers. */
     protected const COLLECTION_METADATA_CACHE_LIMIT = 256;
 
@@ -381,6 +390,8 @@ class Database
     protected ?TypeRegistry $typeRegistry = null;
 
     protected ?QueryCache $queryCache = null;
+
+    protected ?CacheInvalidator $queryCacheInvalidator = null;
 
     protected ?QueryProfiler $profiler = null;
 
@@ -806,7 +817,17 @@ class Database
 
     public function setQueryCache(?QueryCache $queryCache): static
     {
+        $this->lifecycleHooks = \array_values(\array_filter(
+            $this->lifecycleHooks,
+            static fn (Lifecycle $hook): bool => ! $hook instanceof CacheInvalidator,
+        ));
+        $this->queryCacheInvalidator = null;
         $this->queryCache = $queryCache;
+
+        if ($queryCache !== null) {
+            $this->queryCacheInvalidator = new CacheInvalidator($queryCache);
+            $this->lifecycleHooks[] = $this->queryCacheInvalidator;
+        }
 
         return $this;
     }
@@ -1339,6 +1360,14 @@ class Database
     public function addHook(\Utopia\Query\Hook $hook): static
     {
         if ($hook instanceof Lifecycle) {
+            if ($hook instanceof CacheInvalidator) {
+                $this->lifecycleHooks = \array_values(\array_filter(
+                    $this->lifecycleHooks,
+                    static fn (Lifecycle $registered): bool => ! $registered instanceof CacheInvalidator,
+                ));
+                $this->queryCacheInvalidator = $hook;
+            }
+
             $this->lifecycleHooks[] = $hook;
         }
 
@@ -2268,7 +2297,7 @@ class Database
     ): ?string {
         $this->checkQueryTypes($queries);
 
-        if ($forPermission !== PermissionType::Read) {
+        if ($forPermission !== PermissionType::Read || $this->adapter->inTransaction()) {
             return null;
         }
 
@@ -2357,6 +2386,55 @@ class Database
         }
 
         return $value;
+    }
+
+    protected function getCollectionMetadataCacheKey(string $collection): string
+    {
+        $tenant = $this->adapter->getTenant();
+        $tenantKey = match (true) {
+            $tenant === null => 'null',
+            \is_int($tenant) => 'integer:'.$tenant,
+            default => 'string:'.\strlen($tenant).':'.$tenant,
+        };
+
+        return $this->adapter->getDatabase().'::'.$this->adapter->getNamespace()
+            .'::'.$tenantKey.'::'.$collection;
+    }
+
+    protected function getCollectionMetadataGeneration(string $key): int
+    {
+        return $this->collectionMetadataGenerations[$key] ??= 0;
+    }
+
+    protected function invalidateCollectionMetadata(string $collection): void
+    {
+        $currentKey = $this->getCollectionMetadataCacheKey($collection);
+        $suffix = '::'.$collection;
+        $keys = [$currentKey => true];
+
+        foreach (\array_keys($this->collectionMetadataCache) as $key) {
+            if (\str_ends_with($key, $suffix)) {
+                $keys[$key] = true;
+            }
+        }
+
+        foreach (\array_keys($this->collectionMetadataGenerations) as $key) {
+            if (\str_ends_with($key, $suffix)) {
+                $keys[$key] = true;
+            }
+        }
+
+        foreach (\array_keys($keys) as $key) {
+            $this->collectionMetadataGenerations[$key] = ($this->collectionMetadataGenerations[$key] ?? 0) + 1;
+            unset($this->collectionMetadataCache[$key]);
+
+            $validatorPrefix = $key.'::';
+            foreach (\array_keys($this->documentsValidatorCache) as $validatorKey) {
+                if (\str_starts_with($validatorKey, $validatorPrefix)) {
+                    unset($this->documentsValidatorCache[$validatorKey]);
+                }
+            }
+        }
     }
 
     /**

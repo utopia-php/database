@@ -4934,6 +4934,77 @@ trait DocumentTests
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
+    public function testIntegersBeyondInt32(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__, attributes: [
+            new Document([
+                '$id' => 'amount',
+                'type' => Database::VAR_INTEGER,
+                'size' => 8,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'amounts',
+                'type' => Database::VAR_INTEGER,
+                'size' => 8,
+                'required' => true,
+                'signed' => true,
+                'array' => true,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+
+        // Small values encode as int32, large ones as int64. Mongo hands the
+        // latter back wrapped, so both widths have to appear in one row.
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'row1',
+            'amount' => 2000000000,
+            'amounts' => [-3408048000, -42, 3408048000, Database::MAX_BIG_INT],
+        ]));
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'row2',
+            'amount' => 2000000000,
+            'amounts' => [-42],
+        ]));
+
+        foreach (['getDocument' => $database->getDocument(__FUNCTION__, 'row1'), 'find' => $database->find(__FUNCTION__, [Query::equal('$id', ['row1'])])[0]] as $path => $document) {
+            $this->assertIsInt($document->getAttribute('amount'), $path . ' returned a non-int scalar');
+
+            $amounts = $document->getAttribute('amounts');
+            foreach ($amounts as $index => $amount) {
+                $this->assertIsInt($amount, $path . ' returned a non-int at amounts[' . $index . ']');
+            }
+
+            $this->assertSame([-3408048000, -42, 3408048000, Database::MAX_BIG_INT], $amounts);
+
+            // An Int64 wrapper survives assertSame above but serialises as
+            // {"$numberLong":"..."}, which is what reaches an API client.
+            $this->assertSame(
+                '{"amount":2000000000,"amounts":[-3408048000,-42,3408048000,' . Database::MAX_BIG_INT . ']}',
+                \json_encode([
+                    'amount' => $document->getAttribute('amount'),
+                    'amounts' => $amounts,
+                ]),
+                $path . ' did not serialise as plain JSON numbers'
+            );
+        }
+
+        // sum() declares float|int, so a total past int32 is a return type
+        // violation unless the adapter hands back a native integer.
+        $sum = $database->sum(__FUNCTION__, 'amount');
+        $this->assertIsInt($sum);
+        $this->assertSame(4000000000, $sum);
+    }
+
     public function testEncodeDecode(): void
     {
         $collection = new Document([

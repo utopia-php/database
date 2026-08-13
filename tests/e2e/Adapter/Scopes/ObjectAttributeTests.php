@@ -964,6 +964,51 @@ trait ObjectAttributeTests
         $database->deleteCollection($collectionId);
     }
 
+    public function testObjectAttributeIntegersBeyondInt32(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForObject()) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection($collectionId);
+        $this->createAttribute($database, $collectionId, 'meta', Database::VAR_OBJECT, 0, false);
+
+        // An object attribute has no per-key schema, so there is no typed cast
+        // to lean on: whatever the adapter decodes is what reaches the client.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'bigInts',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => [
+                'small' => -42,
+                'count' => -3408048000,
+                'nested' => ['deep' => 3408048000],
+            ],
+        ]));
+
+        $database->purgeCachedDocument($collectionId, 'bigInts');
+        $meta = $database->getDocument($collectionId, 'bigInts')->getAttribute('meta');
+
+        $this->assertIsInt($meta['small']);
+        $this->assertIsInt($meta['count']);
+        $this->assertIsInt($meta['nested']['deep']);
+        $this->assertEquals([
+            'small' => -42,
+            'count' => -3408048000,
+            'nested' => ['deep' => 3408048000],
+        ], $meta);
+
+        // A BSON wrapper serialises as {"$numberLong":"..."}, which is what
+        // would reach an API client. Key order is not asserted because jsonb
+        // does not preserve it.
+        $this->assertStringNotContainsString('$numberLong', json_encode($meta));
+
+        $database->deleteCollection($collectionId);
+    }
+
     public function testObjectAttributeEmptyObject(): void
     {
         /** @var Database $database */

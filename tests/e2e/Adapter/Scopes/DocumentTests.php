@@ -72,14 +72,15 @@ trait DocumentTests
      * Create the $this->getDocumentsCollection() collection with standard attributes and a test document.
      * Cached for non-functional mode backward compatibility.
      */
-    protected function initDocumentsFixture(): Document
+    protected function initDocumentsFixture(?string $collection = null): Document
     {
-        if (self::$documentsFixtureInit && self::$documentsFixtureDoc !== null) {
+        $cache = $collection === null;
+        if ($cache && self::$documentsFixtureInit && self::$documentsFixtureDoc !== null) {
             return clone self::$documentsFixtureDoc;
         }
 
         $database = $this->getDatabase();
-        $collection = $this->getDocumentsCollection();
+        $collection ??= $this->getDocumentsCollection();
 
         $database->createCollection($collection);
 
@@ -130,8 +131,10 @@ trait DocumentTests
             'id' => $sequence,
         ]));
 
-        self::$documentsFixtureInit = true;
-        self::$documentsFixtureDoc = $document;
+        if ($cache) {
+            self::$documentsFixtureInit = true;
+            self::$documentsFixtureDoc = $document;
+        }
 
         return $document;
     }
@@ -5209,14 +5212,14 @@ trait DocumentTests
     }
     public function testGetDocumentSelect(): void
     {
-        $document = $this->initDocumentsFixture();
+        $document = $this->initDocumentsFixture(__FUNCTION__);
 
         $documentId = $document->getId();
 
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->getDocument($this->getDocumentsCollection(), $documentId, [
+        $document = $database->getDocument($document->getCollection(), $documentId, [
             Query::select(['string', 'integer_signed']),
         ]);
 
@@ -5235,7 +5238,7 @@ trait DocumentTests
         $this->assertArrayHasKey('$permissions', $document);
         $this->assertArrayHasKey('$collection', $document);
 
-        $document = $database->getDocument($this->getDocumentsCollection(), $documentId, [
+        $document = $database->getDocument($document->getCollection(), $documentId, [
             Query::select(['string', 'integer_signed', '$id']),
         ]);
 
@@ -5248,6 +5251,20 @@ trait DocumentTests
         $this->assertArrayHasKey('string', $document);
         $this->assertArrayHasKey('integer_signed', $document);
         $this->assertArrayNotHasKey('float', $document);
+    }
+
+    public function testDocumentsFixturesCanBeIsolated(): void
+    {
+        $first = $this->initDocumentsFixture('fixtureIsolationFirst');
+        $second = $this->initDocumentsFixture('fixtureIsolationSecond');
+        $database = $this->getDatabase();
+
+        $database->deleteDocument($first->getCollection(), $first->getId());
+
+        $this->assertSame(true, $database->getDocument($first->getCollection(), $first->getId())->isEmpty());
+        $document = $database->getDocument($second->getCollection(), $second->getId());
+        $this->assertSame(false, $document->isEmpty());
+        $this->assertSame(-Database::MAX_INT, $document->getAttribute('integer_signed'));
     }
 
     public function testFindOne(): void
@@ -7151,7 +7168,7 @@ trait DocumentTests
     }
     public function testUpdateDocumentConflict(): void
     {
-        $document = $this->initDocumentsFixture();
+        $document = $this->initDocumentsFixture(__FUNCTION__);
 
         $document->setAttribute('integer_signed', 7);
         $result = $this->getDatabase()->withRequestTimestamp(new \DateTime(), function () use ($document) {
@@ -7173,7 +7190,7 @@ trait DocumentTests
     }
     public function testDeleteDocumentConflict(): void
     {
-        $document = $this->initDocumentsFixture();
+        $document = $this->initDocumentsFixture(__FUNCTION__);
 
         $oneHourAgo = (new \DateTime())->sub(new \DateInterval('PT1H'));
         $this->expectException(ConflictException::class);

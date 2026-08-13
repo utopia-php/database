@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use PHPUnit\Framework\Attributes\Depends;
+use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\SQL;
@@ -20,7 +21,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
@@ -1107,24 +1107,7 @@ trait CollectionTests
             if (! $supportsSchemas) {
                 \array_shift($events);
             }
-            $expected = new \SplQueue();
-            foreach ($events as $event) {
-                $expected->enqueue($event);
-            }
-
-            $database->addHook(new class ($expected, $this) implements Lifecycle {
-                public function __construct(
-                    private \SplQueue $events,
-                    private \PHPUnit\Framework\TestCase $test,
-                ) {
-                }
-
-                public function handle(Event $event, mixed $data): void
-                {
-                    $shifted = $this->events->dequeue();
-                    $this->test->assertEquals($shifted, $event);
-                }
-            });
+            $database->addHook(new EventRecorder($events, $this));
 
             if ($supportsSchemas) {
                 $database->setDatabase('hellodb');

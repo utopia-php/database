@@ -1262,6 +1262,7 @@ trait Documents
 
         $hasOperators = ! empty(Operator::extractOperators($updates->getArrayCopy())['operators']);
         $selections = $this->validateSelections($collection, $grouped['selections']);
+        $updates = $this->adapter->castingBefore($collection, $updates);
 
         $originalLimit = $limit;
         $last = $cursor;

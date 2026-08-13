@@ -295,7 +295,7 @@ class SQLite extends SQL
         }
     }
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $stmt, ?Event $event = null): bool
     {
         /** @var \PDOStatement|PDOStatementProxy $stmt */
         return $stmt->execute();
@@ -1265,7 +1265,7 @@ class SQLite extends SQL
             $result = $builder->insert();
             $stmt = $this->executeResult($result, Event::DocumentCreate);
 
-            $stmt->execute();
+            $this->execute($stmt);
 
             $statment = $this->prepare('SELECT last_insert_rowid() AS id');
             $statment->execute();
@@ -1350,7 +1350,7 @@ class SQLite extends SQL
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
-            $stmt->execute();
+            $this->execute($stmt);
 
             $ctx = $this->buildWriteContext($name);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));

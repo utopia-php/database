@@ -2542,19 +2542,7 @@ trait Documents
                 }
             }
 
-            $vectorSearch = false;
-            foreach ($filters as $filter) {
-                if (\in_array($filter->getMethod(), [
-                    Method::VectorDot,
-                    Method::VectorCosine,
-                    Method::VectorEuclidean,
-                ], true)) {
-                    $vectorSearch = true;
-                    break;
-                }
-            }
-
-            if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
+            if ($uniqueOrderBy === false) {
                 $leadingAttribute = $orderAttributes[0] ?? null;
                 $leadingOrderType = $orderTypes[0] ?? \Utopia\Query\OrderDirection::Asc;
 

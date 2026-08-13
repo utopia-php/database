@@ -42,6 +42,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     protected int $timeout = 0;
 
+    /**
+     * @var array<string, int>
+     */
+    protected array $timeouts = [];
+
     protected int $inTransaction = 0;
 
     protected bool $alterLocks = false;
@@ -359,7 +364,16 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        $this->timeout = $milliseconds;
+        $this->setTimeoutState($milliseconds, $event);
+    }
+
+    protected function setTimeoutState(int $milliseconds, Event $event): void
+    {
+        $this->timeouts[$event->value] = $milliseconds;
+
+        if ($event === Event::All) {
+            $this->timeout = $milliseconds;
+        }
     }
 
     /**
@@ -367,9 +381,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      *
      * @return int Timeout in milliseconds, or 0 if no timeout is set.
      */
-    public function getTimeout(): int
+    public function getTimeout(Event $event = Event::All): int
     {
-        return $this->timeout;
+        return $this->timeouts[$event->value]
+            ?? $this->timeouts[Event::All->value]
+            ?? $this->timeout;
     }
 
     /**
@@ -377,7 +393,19 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     public function clearTimeout(Event $event = Event::All): void
     {
-        $this->timeout = 0;
+        $this->clearTimeoutState($event);
+    }
+
+    protected function clearTimeoutState(Event $event): void
+    {
+        if ($event === Event::All) {
+            $this->timeouts = [];
+            $this->timeout = 0;
+
+            return;
+        }
+
+        unset($this->timeouts[$event->value]);
     }
 
     /**

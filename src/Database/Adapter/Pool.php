@@ -76,11 +76,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             $adapter->setTenantPerDocument($this->getTenantPerDocument());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
-            } else {
-                $adapter->clearTimeout();
-            }
+            $this->syncTimeouts($adapter);
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);
@@ -175,7 +171,13 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        $this->timeout = $milliseconds;
+        parent::setTimeout($milliseconds, $event);
+        $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        parent::clearTimeout($event);
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
@@ -256,11 +258,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             $adapter->setTenantPerDocument($this->getTenantPerDocument());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
-            } else {
-                $adapter->clearTimeout();
-            }
+            $this->syncTimeouts($adapter);
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);
@@ -294,6 +292,26 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         /** @var string $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
+    }
+
+    protected function syncTimeouts(Adapter $adapter): void
+    {
+        if (empty($this->timeouts)) {
+            $adapter->clearTimeout();
+
+            return;
+        }
+
+        if (count($this->timeouts) === 1 && isset($this->timeouts[Event::All->value])) {
+            $adapter->setTimeout($this->timeouts[Event::All->value]);
+
+            return;
+        }
+
+        $adapter->clearTimeout();
+        foreach ($this->timeouts as $event => $milliseconds) {
+            $adapter->setTimeout($milliseconds, Event::from($event));
+        }
     }
 
     /**

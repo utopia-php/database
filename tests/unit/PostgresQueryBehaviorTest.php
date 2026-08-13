@@ -131,6 +131,66 @@ final class PostgresQueryBehaviorTest extends TestCase
         ], $bindings);
     }
 
+    public function testVectorCursorComparesDistanceBeforeSequenceTieBreaker(): void
+    {
+        $statement = $this->getMockBuilder(\PDOStatement::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $bindings = [];
+        $statement->method('bindValue')
+            ->willReturnCallback(function (int $position, mixed $value, int $type) use (&$bindings): bool {
+                $bindings[] = [$position, $value, $type];
+
+                return true;
+            });
+        $statement->expects($this->once())->method('execute')->willReturn(true);
+        $statement->expects($this->once())->method('fetchAll')->willReturn([]);
+        $statement->expects($this->once())->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdo->expects($this->once())
+            ->method('prepare')
+            ->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+                $sql = $query;
+
+                return $statement;
+            });
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(
+            new Document(['$id' => 'movies']),
+            [Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
+            orderAttributes: ['$sequence'],
+            orderTypes: [OrderDirection::Asc],
+            cursor: ['$distance' => 0.25, '$sequence' => 17],
+        );
+
+        $this->assertStringContainsString(
+            'WHERE ((("table_main"."embedding" <=> ?::vector)) > ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."_id" > ?))',
+            $sql,
+        );
+        $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "_id" ASC/', $sql);
+        $this->assertSame([
+            [1, '[1,0,0]', \PDO::PARAM_STR],
+            [2, '[1,0,0]', \PDO::PARAM_STR],
+            [3, '0.25000000000000000', \PDO::PARAM_STR],
+            [4, '[1,0,0]', \PDO::PARAM_STR],
+            [5, '0.25000000000000000', \PDO::PARAM_STR],
+            [6, 17, \PDO::PARAM_INT],
+            [7, '[1,0,0]', \PDO::PARAM_STR],
+            [8, 25, \PDO::PARAM_INT],
+        ], $bindings);
+    }
+
     private function pdo(): \PDO
     {
         return $this->getMockBuilder(\PDO::class)

@@ -8,6 +8,7 @@ use PDO;
 use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
+use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -870,7 +871,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
-            $stmt->execute();
+            $this->execute($stmt);
 
             $ctx = $this->buildWriteContext($name);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
@@ -1174,29 +1175,39 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         return $rings; // array of rings, each ring is array of [x,y]
     }
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $stmt, ?Event $event = null): bool
     {
         $pdo = $this->getPDO();
+        $event ??= $this->getStatementEvent($stmt);
+        $timeout = $event === null ? $this->getTimeout() : $this->getTimeout($event);
 
-        // No timeout configured and not inside a transaction — session default
-        // is already 0, so skip the SET/RESET round-trip pair entirely.
-        if ($this->timeout === 0 && $this->inTransaction === 0) {
+        if ($timeout === 0) {
             /** @var PDOStatement|PDOStatementProxy $stmt */
             return $stmt->execute();
         }
 
         $sql = $this->inTransaction === 0
-            ? "SET statement_timeout = '{$this->timeout}ms'"
-            : "SET LOCAL statement_timeout = '{$this->timeout}ms'";
+            ? "SET statement_timeout = '{$timeout}ms'"
+            : "SET LOCAL statement_timeout = '{$timeout}ms'";
 
         $pdo->exec($sql);
 
+        $exception = null;
         /** @var PDOStatement|PDOStatementProxy $stmt */
         try {
             return $stmt->execute();
+        } catch (Throwable $error) {
+            $exception = $error;
+            throw $error;
         } finally {
-            if ($this->inTransaction === 0) {
-                $pdo->exec('RESET statement_timeout');
+            try {
+                $pdo->exec($this->inTransaction === 0
+                    ? 'RESET statement_timeout'
+                    : 'SET LOCAL statement_timeout = DEFAULT');
+            } catch (Throwable $error) {
+                if ($exception === null) {
+                    throw $error;
+                }
             }
         }
     }

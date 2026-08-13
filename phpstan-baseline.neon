@@ -9,7 +9,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method object\:\:exec\(\)\.$#'
 			identifier: method.notFound
-			count: 3
+			count: 1
 			path: src/Database/Adapter/MariaDB.php
 
 		-
@@ -159,7 +159,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method object\:\:exec\(\)\.$#'
 			identifier: method.notFound
-			count: 2
+			count: 1
 			path: src/Database/Adapter/MySQL.php
 
 		-
@@ -303,7 +303,7 @@ parameters:
 		-
 			message: '#^Call to an undefined method object\:\:prepare\(\)\.$#'
 			identifier: method.notFound
-			count: 23
+			count: 22
 			path: src/Database/Adapter/SQL.php
 
 		-
@@ -333,7 +333,7 @@ parameters:
 		-
 			message: '#^Cannot call method closeCursor\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 6
+			count: 5
 			path: src/Database/Adapter/SQL.php
 
 		-
@@ -345,7 +345,7 @@ parameters:
 		-
 			message: '#^Cannot call method fetchAll\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 5
+			count: 4
 			path: src/Database/Adapter/SQL.php
 
 		-

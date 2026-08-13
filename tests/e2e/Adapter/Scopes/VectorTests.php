@@ -532,16 +532,20 @@ trait VectorTests
         $database->createAttribute('vectorPagination', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
         $database->createAttribute('vectorPagination', new Attribute(key: 'index', type: ColumnType::Integer, size: 0, required: true));
 
-        // Create 10 documents
-        for ($i = 0; $i < 10; $i++) {
+        // Insert documents in an order deliberately unrelated to vector rank.
+        // Cursor pagination must continue from distance + sequence, not from
+        // sequence alone.
+        $ranks = [6, 1, 8, 3, 0, 9, 4, 2, 7, 5];
+        foreach ($ranks as $rank) {
             $database->createDocument('vectorPagination', new Document([
+                '$id' => "rank-{$rank}",
                 '$permissions' => [
                     Permission::read(Role::any()),
                 ],
-                'index' => $i,
+                'index' => $rank,
                 'embedding' => [
-                    cos($i * M_PI / 10),
-                    sin($i * M_PI / 10),
+                    cos($rank * M_PI / 10),
+                    sin($rank * M_PI / 10),
                     0.0,
                 ],
             ]));
@@ -590,6 +594,12 @@ trait VectorTests
 
         $this->assertCount(5, $nextBatch);
         $this->assertNotEquals($lastDoc->getId(), $nextBatch[0]->getId());
+        $cursorIds = array_map(fn ($document) => $document->getId(), [...$firstBatch, ...$nextBatch]);
+        $this->assertCount(10, array_unique($cursorIds));
+        $this->assertSame(
+            array_map(fn (int $rank): string => "rank-{$rank}", range(0, 9)),
+            $cursorIds,
+        );
 
         // Cleanup
         $database->deleteCollection('vectorPagination');

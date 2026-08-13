@@ -129,11 +129,7 @@ class ReadWritePool extends Pool
         $adapter->setTenantPerDocument($this->getTenantPerDocument());
         $adapter->setAuthorization($this->authorization);
 
-        if ($this->getTimeout() > 0) {
-            $adapter->setTimeout($this->getTimeout());
-        } else {
-            $adapter->clearTimeout();
-        }
+        $this->syncTimeouts($adapter);
 
         $adapter->resetDebug();
         foreach ($this->getDebug() as $key => $value) {

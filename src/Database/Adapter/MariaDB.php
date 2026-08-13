@@ -4,6 +4,7 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
+use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -691,7 +692,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             $result = $builder->insert();
             $stmt = $this->executeResult($result, Event::DocumentCreate);
 
-            $stmt->execute();
+            $this->execute($stmt);
 
             $document['$sequence'] = $this->pdo->lastInsertId();
 
@@ -796,7 +797,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
-            $stmt->execute();
+            $this->execute($stmt);
 
             $ctx = $this->buildWriteContext($name);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
@@ -818,27 +819,20 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
-        // Apply eagerly so direct $stmt->execute() paths (e.g. exists()) inherit
-        // the new timeout even before the next $this->execute() runs. Lazy
-        // application leaked stale timeouts across pool checkouts under paratest;
-        // mirrors the MySQL adapter's eager-apply fix for the same shape of bug.
-        $seconds = $milliseconds / 1000.0;
-        if ($seconds !== $this->appliedMaxStatementTime) {
-            $this->getPDO()->exec('SET max_statement_time = '.\sprintf('%.6F', $seconds));
-            $this->appliedMaxStatementTime = $seconds;
+        if ($event === Event::All) {
+            $this->applyTimeout($milliseconds);
         }
 
-        parent::setTimeout($milliseconds, $event);
+        $this->setTimeoutState($milliseconds, $event);
     }
 
     public function clearTimeout(Event $event = Event::All): void
     {
-        if ($this->appliedMaxStatementTime !== 0.0) {
-            $this->getPDO()->exec('SET max_statement_time = 0.000000');
-            $this->appliedMaxStatementTime = 0.0;
+        if ($event === Event::All) {
+            $this->applyTimeout(0);
         }
 
-        parent::clearTimeout($event);
+        $this->clearTimeoutState($event);
     }
 
     /**
@@ -853,21 +847,41 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
     /** Last value pushed to MariaDB session var max_statement_time, in seconds. */
     private float $appliedMaxStatementTime = 0.0;
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $stmt, ?Event $event = null): bool
     {
-        // MariaDB inherits the session-level max_statement_time across
-        // statements. Only push it when the desired value changes; an
-        // unconditional SET per query doubles the round-trip count for
-        // every hot-path read.
-        if ($this->timeout > 0 || $this->appliedMaxStatementTime !== 0.0) {
-            $seconds = $this->timeout > 0 ? $this->timeout / 1000.0 : 0.0;
-            if ($seconds !== $this->appliedMaxStatementTime) {
-                $this->getPDO()->exec('SET max_statement_time = '.\sprintf('%.6F', $seconds));
-                $this->appliedMaxStatementTime = $seconds;
+        $event ??= $this->getStatementEvent($stmt);
+        $baseline = $this->getTimeout();
+        $timeout = $event === null ? $baseline : $this->getTimeout($event);
+        $this->applyTimeout($timeout);
+
+        $exception = null;
+        try {
+            return parent::execute($stmt, $event);
+        } catch (Throwable $error) {
+            $exception = $error;
+            throw $error;
+        } finally {
+            if ($timeout !== $baseline) {
+                try {
+                    $this->applyTimeout($baseline);
+                } catch (Throwable $error) {
+                    if ($exception === null) {
+                        throw $error;
+                    }
+                }
             }
         }
+    }
 
-        return parent::execute($stmt);
+    private function applyTimeout(int $milliseconds): void
+    {
+        $seconds = $milliseconds > 0 ? $milliseconds / 1000.0 : 0.0;
+        if ($seconds === $this->appliedMaxStatementTime) {
+            return;
+        }
+
+        $this->getPDO()->exec('SET max_statement_time = '.\sprintf('%.6F', $seconds));
+        $this->appliedMaxStatementTime = $seconds;
     }
 
     /**

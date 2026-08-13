@@ -271,7 +271,7 @@ class FindLogicTest extends TestCase
         $this->database->find('testCol', [Query::orderAsc('$sequence')]);
     }
 
-    public function testVectorFindOmitsSequenceWithoutCursor(): void
+    public function testVectorFindIncludesSequenceTieBreakerWithoutCursor(): void
     {
         $attributes = [
             new Document(['$id' => 'embedding', 'key' => 'embedding', 'type' => ColumnType::Vector->value, 'size' => 2, 'required' => false, 'array' => false]),
@@ -284,7 +284,7 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
-                $this->callback(fn (array $orderAttributes): bool => ! \in_array('$sequence', $orderAttributes, true)),
+                ['$sequence'],
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),

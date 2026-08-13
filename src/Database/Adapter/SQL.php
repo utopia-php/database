@@ -94,6 +94,11 @@ abstract class SQL extends Adapter
     private ?AttributeMap $attributeMap = null;
 
     /**
+     * @var \WeakMap<object, Event>|null
+     */
+    private ?\WeakMap $statementEvents = null;
+
+    /**
      * Bind builder-produced positional parameters onto a prepared statement.
      *
      * Centralises the find / count / sum binding loops so the
@@ -634,9 +639,7 @@ abstract class SQL extends Adapter
             $aliasQuoted = $this->quote($alias);
             $uidQuoted = $this->quote('_uid');
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = :_uid";
-            foreach ($this->queryTransforms as $transform) {
-                $sql = $transform->transform(Event::DocumentRead, $sql);
-            }
+            $sql = $this->transformQuery(Event::DocumentRead, $sql);
 
             $stmt = null;
             $row = false;
@@ -646,7 +649,7 @@ abstract class SQL extends Adapter
                 /** @var \PDOStatement|PDOStatementProxy $stmt */
                 $stmt = $this->getPDO()->prepare($sql);
                 $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
-                $this->execute($stmt);
+                $this->execute($stmt, Event::DocumentRead);
                 /** @var array<string, mixed>|false $row */
                 $row = $stmt->fetch();
             } catch (PDOException $e) {
@@ -911,7 +914,7 @@ abstract class SQL extends Adapter
         $stmt = $this->executeResult($result, Event::DocumentsUpdate);
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1043,7 +1046,7 @@ abstract class SQL extends Adapter
             $result = $builder->delete();
             $stmt = $this->executeResult($result, Event::DocumentsDelete);
 
-            if (! $stmt->execute()) {
+            if (! $this->execute($stmt)) {
                 throw new DatabaseException('Failed to delete documents');
             }
 
@@ -1127,7 +1130,7 @@ abstract class SQL extends Adapter
         $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
         try {
-            $stmt->execute();
+            $this->execute($stmt);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1147,7 +1150,7 @@ abstract class SQL extends Adapter
             $result = $builder->delete();
             $stmt = $this->executeResult($result, Event::DocumentDelete);
 
-            if (! $stmt->execute()) {
+            if (! $this->execute($stmt)) {
                 throw new DatabaseException('Failed to delete document');
             }
 
@@ -1204,19 +1207,35 @@ abstract class SQL extends Adapter
             $limitClause = $limit !== null ? " LIMIT {$limit}" : '';
             $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($limit !== null ? ' OFFSET 0' : '');
 
-            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}";
+            $sql = $this->transformQuery(
+                Event::DocumentFind,
+                "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}"
+            );
+            $stmt = null;
+            $rows = [];
+            $exception = null;
 
             try {
                 /** @var \PDOStatement|PDOStatementProxy $stmt */
                 $stmt = $this->getPDO()->prepare($sql);
-                $this->execute($stmt);
+                $this->execute($stmt, Event::DocumentFind);
+                /** @var array<int, array<string, mixed>> $rows */
+                $rows = $stmt->fetchAll();
             } catch (PDOException $e) {
-                throw $this->processException($e);
+                $exception = $e;
+            } finally {
+                if ($stmt !== null) {
+                    try {
+                        $stmt->closeCursor();
+                    } catch (PDOException $e) {
+                        $exception ??= $e;
+                    }
+                }
             }
 
-            /** @var array<int, array<string, mixed>> $rows */
-            $rows = $stmt->fetchAll();
-            $stmt->closeCursor();
+            if ($exception !== null) {
+                throw $this->processException($exception);
+            }
 
             $documents = [];
             foreach ($rows as $row) {
@@ -1404,8 +1423,35 @@ abstract class SQL extends Adapter
                 ??= $this->filter($this->getInternalKeyForAttribute($attribute));
         };
 
+        $vectorDistance = null;
+        foreach ($vectorQueries as $query) {
+            $vectorDistance ??= $this->getVectorOrderRaw($query, $alias);
+        }
+
         // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
-        if (! empty($cursor)) {
+        if (! empty($cursor) && $vectorDistance !== null) {
+            $distance = $cursor[self::VECTOR_DISTANCE_ATTRIBUTE] ?? null;
+            if (! \is_numeric($distance)) {
+                throw new QueryException('Vector cursor is missing its distance');
+            }
+            if (empty($orderAttributes)) {
+                throw new QueryException('Vector cursor requires a unique order attribute');
+            }
+
+            $vectorCursor = $this->getVectorCursorCondition(
+                $vectorDistance,
+                (float) $distance,
+                \array_values($orderAttributes),
+                \array_values($orderTypes),
+                $cursor,
+                $cursorDirection,
+                $alias,
+                $resolveInternalKey,
+            );
+            $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
+        }
+
+        if (! empty($cursor) && $vectorDistance === null) {
             $cursorConditions = [];
 
             foreach ($orderAttributes as $i => $originalAttribute) {
@@ -1472,13 +1518,12 @@ abstract class SQL extends Adapter
         }
 
         // Vector ordering (comes first for similarity search)
-        $vectorDistance = null;
-        foreach ($vectorQueries as $query) {
-            $vectorRaw = $this->getVectorOrderRaw($query, $alias);
-            if ($vectorRaw !== null) {
-                $builder->orderByRaw($vectorRaw['expression'], $vectorRaw['bindings']);
-                $vectorDistance ??= $vectorRaw;
+        if ($vectorDistance !== null) {
+            $vectorOrder = $vectorDistance['expression'];
+            if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
+                $vectorOrder .= ' DESC';
             }
+            $builder->orderByRaw($vectorOrder, $vectorDistance['bindings']);
         }
 
         if ($vectorDistance !== null && ! $hasAggregation) {
@@ -1557,21 +1602,28 @@ abstract class SQL extends Adapter
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
 
-        $sql = $result->query;
-
+        $stmt = null;
+        $results = [];
+        $exception = null;
         try {
-            $stmt = $this->getPDO()->prepare($sql);
-            $this->bindStatement($stmt, $result->bindings);
+            $stmt = $this->executeResult($result, Event::DocumentFind);
             $this->execute($stmt);
+            /** @var array<int, array<string, mixed>> $results */
+            $results = $stmt->fetchAll();
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            $exception = $e;
+        } finally {
+            if ($stmt !== null) {
+                try {
+                    $stmt->closeCursor();
+                } catch (PDOException $e) {
+                    $exception ??= $e;
+                }
+            }
         }
 
-        $results = $stmt->fetchAll();
-        $stmt->closeCursor();
-
-        if (! \is_array($results)) {
-            throw new DatabaseException('Failed to fetch query results');
+        if ($exception !== null) {
+            throw $this->processException($exception);
         }
 
         $documents = [];
@@ -1667,7 +1719,7 @@ abstract class SQL extends Adapter
             try {
                 /** @var \PDOStatement|PDOStatementProxy $stmt */
                 $stmt = $this->getPDO()->prepare($sql);
-                $this->execute($stmt);
+                $this->execute($stmt, Event::DocumentCount);
             } catch (PDOException $e) {
                 throw $this->processException($e);
             }
@@ -1705,7 +1757,7 @@ abstract class SQL extends Adapter
         $this->bindStatement($stmt, $result->bindings);
 
         try {
-            $this->execute($stmt);
+            $this->execute($stmt, Event::DocumentCount);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -1763,7 +1815,7 @@ abstract class SQL extends Adapter
             try {
                 /** @var \PDOStatement|PDOStatementProxy $stmt */
                 $stmt = $this->getPDO()->prepare($sql);
-                $this->execute($stmt);
+                $this->execute($stmt, Event::DocumentSum);
             } catch (PDOException $e) {
                 throw $this->processException($e);
             }
@@ -1806,7 +1858,7 @@ abstract class SQL extends Adapter
         $this->bindStatement($stmt, $result->bindings);
 
         try {
-            $this->execute($stmt);
+            $this->execute($stmt, Event::DocumentSum);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -3260,11 +3312,13 @@ abstract class SQL extends Adapter
     {
         $sql = $result->query;
         if ($event !== null) {
-            foreach ($this->queryTransforms as $transform) {
-                $sql = $transform->transform($event, $sql);
-            }
+            $sql = $this->transformQuery($event, $sql);
         }
         $stmt = $this->getPDO()->prepare($sql);
+        if ($event !== null && \is_object($stmt)) {
+            $this->statementEvents ??= new \WeakMap();
+            $this->statementEvents[$stmt] = $event;
+        }
         foreach ($result->bindings as $i => $value) {
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
@@ -3279,7 +3333,7 @@ abstract class SQL extends Adapter
         return $stmt;
     }
 
-    protected function execute(mixed $stmt): bool
+    protected function execute(mixed $stmt, ?Event $event = null): bool
     {
         /** @var PDOStatement|PDOStatementProxy $stmt */
         if ($this->profiler !== null && $this->profiler->isEnabled()) {
@@ -3296,6 +3350,24 @@ abstract class SQL extends Adapter
         }
 
         return $stmt->execute();
+    }
+
+    protected function getStatementEvent(mixed $stmt): ?Event
+    {
+        if (! \is_object($stmt) || $this->statementEvents === null) {
+            return null;
+        }
+
+        return $this->statementEvents[$stmt] ?? null;
+    }
+
+    private function transformQuery(Event $event, string $sql): string
+    {
+        foreach ($this->queryTransforms as $transform) {
+            $sql = $transform->transform($event, $sql);
+        }
+
+        return $sql;
     }
 
     /**
@@ -3471,7 +3543,7 @@ abstract class SQL extends Adapter
 
         $result = $builder->upsert();
         $stmt = $this->executeResult($result, Event::DocumentCreate);
-        $stmt->execute();
+        $this->execute($stmt);
         $stmt->closeCursor();
     }
 
@@ -4448,6 +4520,72 @@ abstract class SQL extends Adapter
     protected function getVectorOrderRaw(Query $query, string $alias): ?array
     {
         return null;
+    }
+
+    /**
+     * @param array{expression: string, bindings: list<mixed>} $vector
+     * @param list<string> $orderAttributes
+     * @param list<OrderDirection> $orderTypes
+     * @param array<string, mixed> $cursor
+     * @param callable(string): string $resolveInternalKey
+     * @return array{expression: string, bindings: list<mixed>}
+     */
+    private function getVectorCursorCondition(
+        array $vector,
+        float $distance,
+        array $orderAttributes,
+        array $orderTypes,
+        array $cursor,
+        CursorDirection $cursorDirection,
+        string $alias,
+        callable $resolveInternalKey,
+    ): array {
+        $distanceOperator = $cursorDirection === CursorDirection::Before ? '<' : '>';
+        $clauses = ["({$vector['expression']}) {$distanceOperator} ?"];
+        $bindings = [];
+        \array_push($bindings, ...$vector['bindings']);
+        $bindings[] = $distance;
+        $quotedAlias = $this->quote($alias);
+
+        foreach ($orderAttributes as $index => $attribute) {
+            if (! \array_key_exists($attribute, $cursor)) {
+                throw new QueryException("Vector cursor is missing order attribute '{$attribute}'");
+            }
+
+            $parts = ["({$vector['expression']}) = ?"];
+            $clauseBindings = [];
+            \array_push($clauseBindings, ...$vector['bindings']);
+            $clauseBindings[] = $distance;
+
+            for ($previous = 0; $previous < $index; $previous++) {
+                $previousAttribute = $orderAttributes[$previous];
+                if (! \array_key_exists($previousAttribute, $cursor)) {
+                    throw new QueryException("Vector cursor is missing order attribute '{$previousAttribute}'");
+                }
+
+                $previousColumn = $this->quote($resolveInternalKey($previousAttribute));
+                $parts[] = "{$quotedAlias}.{$previousColumn} = ?";
+                $clauseBindings[] = $cursor[$previousAttribute];
+            }
+
+            $direction = $orderTypes[$index] ?? OrderDirection::Asc;
+            if ($cursorDirection === CursorDirection::Before) {
+                $direction = $direction === OrderDirection::Asc
+                    ? OrderDirection::Desc
+                    : OrderDirection::Asc;
+            }
+            $operator = $direction === OrderDirection::Desc ? '<' : '>';
+            $column = $this->quote($resolveInternalKey($attribute));
+            $parts[] = "{$quotedAlias}.{$column} {$operator} ?";
+            $clauseBindings[] = $cursor[$attribute];
+            $clauses[] = '('.\implode(' AND ', $parts).')';
+            \array_push($bindings, ...$clauseBindings);
+        }
+
+        return [
+            'expression' => '('.\implode(' OR ', $clauses).')',
+            'bindings' => $bindings,
+        ];
     }
 
     /**

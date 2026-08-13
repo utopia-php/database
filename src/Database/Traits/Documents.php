@@ -405,7 +405,12 @@ trait Documents
         $document = $skipAuth ? $this->authorization->skip($getDocument) : $getDocument();
 
         if ($document->isEmpty()) {
-            if ($cacheable && empty($relationships)) {
+            $missing = true;
+            if ($cacheable && empty($relationships) && $documentSecurity && ! $skipAuth) {
+                $missing = $this->authorization->skip($getDocument)->isEmpty();
+            }
+
+            if ($cacheable && empty($relationships) && $missing) {
                 try {
                     $marker = [self::CACHE_EMPTY_MARKER => true];
                     $this->cache->saveWithLease($physicalKey, $marker, '', $generation);
@@ -1092,6 +1097,13 @@ trait Documents
                 $document = $this->silent(fn () => $this->relationshipHook->afterDocumentUpdate($collection, $old, $document));
             }
 
+            foreach ($document->getArrayCopy() as $value) {
+                if (Operator::isOperator($value)) {
+                    $hasOperators = true;
+                    break;
+                }
+            }
+
             $document = $this->adapter->castingBefore($collection, $document);
 
             $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate));
@@ -1102,14 +1114,6 @@ trait Documents
 
             if ($document->getId() !== $id) {
                 $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
-            }
-
-            // If operators were used, refetch document to get computed values
-            foreach ($document->getArrayCopy() as $value) {
-                if (Operator::isOperator($value)) {
-                    $hasOperators = true;
-                    break;
-                }
             }
 
             if ($hasOperators) {
@@ -1256,6 +1260,9 @@ trait Documents
             }
         }
 
+        $hasOperators = ! empty(Operator::extractOperators($updates->getArrayCopy())['operators']);
+        $selections = $this->validateSelections($collection, $grouped['selections']);
+
         $originalLimit = $limit;
         $last = $cursor;
         $modified = 0;
@@ -1351,16 +1358,6 @@ trait Documents
                 }
             });
 
-            $updates = $this->adapter->castingBefore($collection, $updates);
-
-            $hasOperators = false;
-            foreach ($updates->getArrayCopy() as $value) {
-                if (Operator::isOperator($value)) {
-                    $hasOperators = true;
-                    break;
-                }
-            }
-
             if ($hasOperators) {
                 $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
             }
@@ -1370,7 +1367,8 @@ trait Documents
                 fn (Document $doc) =>
                 $this->decode(
                     $collection,
-                    $this->adapter->castingAfter($collection, $doc)
+                    $this->adapter->castingAfter($collection, $doc),
+                    $selections
                 ),
                 $batch
             );
@@ -1515,6 +1513,7 @@ trait Documents
         $time = DateTime::now();
         $created = 0;
         $updated = 0;
+        $operatorIds = [];
         $seenIds = [];
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
@@ -1711,7 +1710,11 @@ trait Documents
                 $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
             }
 
-            $seenIds[] = $this->getDocumentIdentity($document);
+            $identity = $this->getDocumentIdentity($document);
+            $seenIds[] = $identity;
+            if (! empty($operators)) {
+                $operatorIds[$identity] = true;
+            }
             $old = $this->adapter->castingBefore($collection, $old);
             $document = $this->adapter->castingBefore($collection, $document);
 
@@ -1730,6 +1733,14 @@ trait Documents
             /**
              * @var array<Change> $chunk
              */
+            $hasOperators = false;
+            foreach ($chunk as $change) {
+                if (isset($operatorIds[$this->getDocumentIdentity($change->getNew())])) {
+                    $hasOperators = true;
+                    break;
+                }
+            }
+
             $cacheTarget = $collection->getId() === self::METADATA
                 ? \array_map(static fn (Change $change): Document => $change->getNew(), $chunk)
                 : $collection->getId();
@@ -1767,16 +1778,6 @@ trait Documents
             $hook = $this->relationshipHook;
             if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
                 $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
-            }
-
-            // Check if any document in the batch contains operators
-            $hasOperators = false;
-            foreach ($batch as $doc) {
-                $extracted = Operator::extractOperators($doc->getArrayCopy());
-                if (! empty($extracted['operators'])) {
-                    $hasOperators = true;
-                    break;
-                }
             }
 
             if ($hasOperators) {

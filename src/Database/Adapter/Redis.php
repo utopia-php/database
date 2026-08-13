@@ -14,6 +14,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -3328,15 +3329,16 @@ class Redis extends Adapter implements
         $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
         if ($exact !== null) {
             $bound = $values[1] ?? null;
-            if (BigInt::isIntegerValue($bound)) {
-                $upper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
-                if (($upper && BigInt::compare($exact, $bound) > 0)
-                    || (! $upper && $method !== OperatorType::Modulo && BigInt::compare($exact, $bound) < 0)) {
-                    return BigInt::toNative($current ?? 0);
-                }
+            if ($method === OperatorType::Modulo || ! BigInt::isIntegerValue($bound)) {
+                return $exact;
             }
 
-            return $exact;
+            return $this->applyNumericLimit(
+                $current ?? 0,
+                $exact,
+                $bound,
+                \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true)
+            );
         }
 
         switch ($method) {
@@ -3344,34 +3346,22 @@ class Redis extends Adapter implements
                 $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
                 $base = $this->numericOr($current, 0);
-                if ($max !== null && \is_numeric($max)) {
-                    $maxNumeric = $max + 0;
-                    if ($base >= $maxNumeric || ($maxNumeric - $base) <= $by) {
-                        return $this->preserveNumericType($base, $maxNumeric);
-                    }
-                }
 
-                return $this->preserveNumericType($base, $base + $by);
+                return $this->applyNumericLimit($base, $base + $by, $max, true);
 
             case OperatorType::Decrement:
                 $by = $this->numericOr($values[0] ?? 1, 1);
                 $min = $values[1] ?? null;
                 $base = $this->numericOr($current, 0);
-                if ($min !== null && \is_numeric($min)) {
-                    $minNumeric = $min + 0;
-                    if ($base <= $minNumeric || ($base - $minNumeric) <= $by) {
-                        return $this->preserveNumericType($base, $minNumeric);
-                    }
-                }
 
-                return $this->preserveNumericType($base, $base - $by);
+                return $this->applyNumericLimit($base, $base - $by, $min, false);
 
             case OperatorType::Multiply:
                 $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
                 $base = $this->numericOr($current, 0);
 
-                return $this->applyNumericLimit($base * $by, $max, true);
+                return $this->applyNumericLimit($base, $base * $by, $max, true);
 
             case OperatorType::Divide:
                 $by = $values[0] ?? 1;
@@ -3381,7 +3371,7 @@ class Redis extends Adapter implements
                 }
                 $base = $this->numericOr($current, 0);
 
-                return $this->applyNumericLimit($base / ($by + 0), $min, false);
+                return $this->applyNumericLimit($base, $base / ($by + 0), $min, false);
 
             case OperatorType::Modulo:
                 $by = $values[0] ?? 1;
@@ -3396,8 +3386,24 @@ class Redis extends Adapter implements
                 $by = $this->numericOr($values[0] ?? 1, 1);
                 $max = $values[1] ?? null;
                 $base = $this->numericOr($current, 0);
+                if (($base == 0 && $by < 0) || ($base < 0 && \floor($by) !== $by)) {
+                    if (\is_numeric($max)) {
+                        return $base;
+                    }
 
-                return $this->applyNumericLimit($base ** $by, $max, true);
+                    throw new LimitException('Value out of range');
+                }
+
+                $candidate = $base ** $by;
+                if (! \is_finite((float) $candidate)) {
+                    if (\is_numeric($max)) {
+                        return $base;
+                    }
+
+                    throw new LimitException('Value out of range');
+                }
+
+                return $this->applyNumericLimit($base, $candidate, $max, true);
 
             case OperatorType::StringConcat:
                 return $this->stringOrEmpty($current).$this->stringOrEmpty($values[0] ?? '');
@@ -3483,18 +3489,30 @@ class Redis extends Adapter implements
         }
     }
 
-    protected function applyNumericLimit(mixed $value, mixed $bound, bool $isUpper): int|float
+    protected function applyNumericLimit(mixed $original, mixed $candidate, mixed $bound, bool $isUpper): int|float|string
     {
-        $numericValue = \is_numeric($value) ? $value + 0 : 0;
-        if (! \is_numeric($bound)) {
-            return $numericValue;
-        }
-        $numericBound = $bound + 0;
+        if (BigInt::isIntegerValue($original) && BigInt::isIntegerValue($candidate) && BigInt::isIntegerValue($bound)) {
+            $crossed = $isUpper
+                ? BigInt::compare($candidate, $bound) > 0
+                : BigInt::compare($candidate, $bound) < 0;
 
-        return $isUpper ? \min($numericValue, $numericBound) : \max($numericValue, $numericBound);
+            return $crossed ? BigInt::toNative($original) : BigInt::toNative($candidate);
+        }
+
+        $numericOriginal = \is_numeric($original) ? $original + 0 : 0;
+        $numericCandidate = \is_numeric($candidate) ? $candidate + 0 : 0;
+
+        if (\is_numeric($bound)) {
+            $numericBound = $bound + 0;
+            if (($isUpper && $numericCandidate > $numericBound) || (! $isUpper && $numericCandidate < $numericBound)) {
+                return $numericOriginal;
+            }
+        }
+
+        return $this->preserveNumericType($numericOriginal, $numericCandidate);
     }
 
-    protected function preserveNumericType(mixed $original, mixed $result): mixed
+    protected function preserveNumericType(int|float $original, int|float $result): int|float
     {
         if (\is_int($original) && \is_float($result) && $result === (float) (int) $result) {
             return (int) $result;

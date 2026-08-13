@@ -11,11 +11,13 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Authorization;
@@ -139,6 +141,74 @@ final class BigIntegerTest extends TestCase
             PHP_INT_MAX,
             $adapter->apply('9223372036854775808', Operator::decrement(1)),
         );
+    }
+
+    public function testMemoryAndRedisOperatorsLeaveValuesUnchangedWhenBoundsAreCrossed(): void
+    {
+        $memory = new class () extends Memory {
+            public function apply(mixed $current, Operator $operator): mixed
+            {
+                return $this->applyOperator($current, $operator);
+            }
+        };
+        $redis = new class (self::createStub(\Redis::class)) extends RedisAdapter {
+            public function apply(mixed $current, Operator $operator): mixed
+            {
+                return $this->applyOperator($current, $operator);
+            }
+        };
+
+        $cases = [
+            [10, Operator::increment(100, 50), 10],
+            [5.0, Operator::decrement(10, 0), 5.0],
+            [10, Operator::multiply(10, 75), 10],
+            [100.0, Operator::divide(-4, -10), 100.0],
+            [20.0, Operator::divide(-2, -50), -10.0],
+            [80.0, Operator::multiply(0.5, 50), 40.0],
+            [52.0, Operator::increment(-5, 50), 47.0],
+            [10, Operator::increment(5, 15), 15],
+            [10, Operator::decrement(5, 5), 5],
+            [-10.0, Operator::multiply(-2, 50), 20.0],
+            [5.0, Operator::power(3, 100), 5.0],
+            [100.0, Operator::power(0.5, 50), 10.0],
+            [0.0, Operator::power(-1, 100), 0.0],
+            [-4.0, Operator::power(0.5, 100), -4.0],
+            [PHP_INT_MAX, Operator::increment(2, PHP_INT_MAX), PHP_INT_MAX],
+            [PHP_INT_MAX, Operator::increment(1, BigInt::UNSIGNED_MAX), '9223372036854775808'],
+        ];
+
+        foreach ([$memory, $redis] as $adapter) {
+            foreach ($cases as [$current, $operator, $expected]) {
+                $this->assertSame($expected, $adapter->apply($current, $operator));
+            }
+        }
+    }
+
+    public function testMemoryAndRedisRejectUnboundedInvalidPowers(): void
+    {
+        $adapters = [
+            new class () extends Memory {
+                public function apply(mixed $current, Operator $operator): mixed
+                {
+                    return $this->applyOperator($current, $operator);
+                }
+            },
+            new class (self::createStub(\Redis::class)) extends RedisAdapter {
+                public function apply(mixed $current, Operator $operator): mixed
+                {
+                    return $this->applyOperator($current, $operator);
+                }
+            },
+        ];
+
+        foreach ($adapters as $adapter) {
+            try {
+                $adapter->apply(0.0, Operator::power(-1));
+                $this->fail('Expected invalid power to throw');
+            } catch (LimitException $exception) {
+                $this->assertSame('Value out of range', $exception->getMessage());
+            }
+        }
     }
 
     public function testSqlBuilderPreservesUnsignedIntegerBindings(): void

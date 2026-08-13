@@ -10,6 +10,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
@@ -1917,7 +1918,16 @@ trait AttributeTests
             default: '18446744073709551615',
             signed: false,
         )];
-        $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
+        if ($database->getAdapter()->supports(Capability::UnsignedBigInt)) {
+            $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
+        } else {
+            try {
+                $database->createAttributes($collectionName, $largeUnsignedAttribute);
+                $this->fail('Expected unsupported unsigned bigint default to be rejected');
+            } catch (DatabaseException $exception) {
+                $this->assertStringContainsString('does not match given type bigint', $exception->getMessage());
+            }
+        }
     }
 
     public function testCreateAttributesSuccessMultiple(): void

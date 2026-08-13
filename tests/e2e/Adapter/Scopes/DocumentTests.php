@@ -705,8 +705,9 @@ trait DocumentTests
         // repeated lookups don't keep hitting the adapter.
         $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
 
-        [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'ghost');
-        $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+        [$collectionKey] = $database->getCacheKeys($collection, 'ghost');
+        $epoch = $cache->load($collectionKey.'#epoch', Database::TTL);
+        $cached = $this->loadDocumentPointCache($database, $collection, 'ghost');
         $this->assertIsArray($cached);
         $this->assertArrayHasKey('$empty', $cached); // Database::CACHE_EMPTY_MARKER
 
@@ -717,7 +718,8 @@ trait DocumentTests
             'name' => 'real',
         ]));
 
-        $this->assertFalse($cache->load($documentKey, Database::TTL, $hashKey));
+        $this->assertNotSame($epoch, $cache->load($collectionKey.'#epoch', Database::TTL));
+        $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'ghost'));
 
         $document = $database->getDocument($collection, 'ghost');
         $this->assertFalse($document->isEmpty());
@@ -725,8 +727,9 @@ trait DocumentTests
 
         // Same guarantee through the batch create path.
         $this->assertTrue($database->getDocument($collection, 'batch')->isEmpty());
-        [, $batchKey, $batchHash] = $database->getCacheKeys($collection, 'batch');
-        $cached = $cache->load($batchKey, Database::TTL, $batchHash);
+        [$batchCollectionKey] = $database->getCacheKeys($collection, 'batch');
+        $batchEpoch = $cache->load($batchCollectionKey.'#epoch', Database::TTL);
+        $cached = $this->loadDocumentPointCache($database, $collection, 'batch');
         $this->assertIsArray($cached);
         $this->assertArrayHasKey('$empty', $cached);
 
@@ -738,13 +741,13 @@ trait DocumentTests
             ]),
         ]);
 
-        $this->assertFalse($cache->load($batchKey, Database::TTL, $batchHash));
+        $this->assertNotSame($batchEpoch, $cache->load($batchCollectionKey.'#epoch', Database::TTL));
+        $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'batch'));
         $this->assertEquals('batched', $database->getDocument($collection, 'batch')->getAttribute('name'));
 
         // A locking read must never publish anything to the cache.
         $this->assertTrue($database->getDocument($collection, 'phantom', forUpdate: true)->isEmpty());
-        [, $phantomKey, $phantomHash] = $database->getCacheKeys($collection, 'phantom');
-        $this->assertFalse($cache->load($phantomKey, Database::TTL, $phantomHash));
+        $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'phantom'));
     }
 
     public function testCacheEmptyDocumentSelect(): void
@@ -771,7 +774,7 @@ trait DocumentTests
         // The document key is select-independent, but the hashKey is not: a
         // projection is folded into it. So a projected read and a plain read of
         // the same missing id are cached under different slots of the same key.
-        [, $documentKey, $plainHash] = $database->getCacheKeys($collection, 'ghost');
+        [$collectionKey, , $plainHash] = $database->getCacheKeys($collection, 'ghost');
 
         // validateSelections() appends the internal attributes to the user
         // selection before it forms the key; mirror that set to address the
@@ -782,38 +785,39 @@ trait DocumentTests
 
         // Projected read caches its marker under the projected slot only.
         $this->assertTrue($database->getDocument($collection, 'ghost', [Query::select(['name'])])->isEmpty());
-        $cached = $cache->load($documentKey, Database::TTL, $selectHash);
+        $cached = $this->loadDocumentPointCache($database, $collection, 'ghost', $selects);
         $this->assertIsArray($cached);
         $this->assertArrayHasKey('$empty', $cached);
         $this->assertFalse(
-            $cache->load($documentKey, Database::TTL, $plainHash),
+            $this->loadDocumentPointCache($database, $collection, 'ghost'),
             'A projected read must not populate the no-projection cache slot'
         );
 
         // Plain read fills the plain slot with its own marker. Both slots of the
         // document key now hold an "empty" marker.
         $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
-        $plainCached = $cache->load($documentKey, Database::TTL, \sprintf('%s', $plainHash));
+        $plainCached = $this->loadDocumentPointCache($database, $collection, 'ghost');
         $this->assertIsArray($plainCached);
         $this->assertArrayHasKey('$empty', $plainCached);
 
-        // Inserting the id purges the whole document key, so BOTH slots clear.
+        $epoch = $cache->load($collectionKey.'#epoch', Database::TTL);
+
+        // Inserting the id advances the collection epoch, so both active slots clear.
         $database->createDocument($collection, new Document([
             '$id' => 'ghost',
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'real',
         ]));
 
-        $this->assertFalse($cache->load($documentKey, Database::TTL, $plainHash));
-        $this->assertFalse($cache->load($documentKey, Database::TTL, $selectHash));
+        $this->assertNotSame($epoch, $cache->load($collectionKey.'#epoch', Database::TTL));
+        $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'ghost'));
+        $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'ghost', $selects));
     }
 
     public function testCacheEmptyGetCollection(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        $cache = $database->getCache();
-
         // The Redis adapter runs with a no-op cache (reads hit Redis directly),
         // so there is no cache layer to inspect.
         if (!$database->getAdapter()->supports(Capability::Caching)) {
@@ -823,15 +827,10 @@ trait DocumentTests
 
         $collectionId = 'cacheEmptyCollection';
 
-        // getCollection() reads getDocument(METADATA, id) under the hood, so a
-        // lookup of a non-existent collection negatively caches its absence
-        // under the metadata key.
+        // Metadata point caching is disabled, so a missing collection must not
+        // leave a negative marker behind.
         $this->assertTrue($database->getCollection($collectionId)->isEmpty());
-
-        [, $metaKey, $metaHash] = $database->getCacheKeys(Database::METADATA, $collectionId);
-        $cached = $cache->load($metaKey, Database::TTL, $metaHash);
-        $this->assertIsArray($cached);
-        $this->assertArrayHasKey('$empty', $cached);
+        $this->assertFalse($this->loadDocumentPointCache($database, Database::METADATA, $collectionId));
 
         // createCollection() writes the metadata row via createDocument(METADATA),
         // which must purge that marker — otherwise the collection would keep
@@ -842,7 +841,7 @@ trait DocumentTests
         ], documentSecurity: false);
         $this->assertFalse($collection->isEmpty());
 
-        $this->assertFalse($cache->load($metaKey, Database::TTL, $metaHash));
+        $this->assertFalse($this->loadDocumentPointCache($database, Database::METADATA, $collectionId));
 
         $fetched = $database->getCollection($collectionId);
         $this->assertFalse($fetched->isEmpty());
@@ -864,8 +863,6 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
         $auth = $database->getAuthorization();
-        $cache = $database->getCache();
-
         // The Redis adapter runs with a no-op cache (reads hit Redis directly),
         // so there is no cache layer to inspect.
         if (!$database->getAdapter()->supports(Capability::Caching)) {
@@ -898,8 +895,7 @@ trait DocumentTests
 
             $this->assertTrue($database->getDocument($collection, 'secret')->isEmpty());
 
-            [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'secret');
-            $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+            $cached = $this->loadDocumentPointCache($database, $collection, 'secret');
             $this->assertFalse(
                 \is_array($cached) && isset($cached['$empty']),
                 'A permission-denied read of an existing document must not populate the negative cache'
@@ -917,8 +913,7 @@ trait DocumentTests
             // A genuinely missing id is user-independent, so it is still safe to
             // cache as empty even under document security.
             $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
-            [, $ghostKey, $ghostHash] = $database->getCacheKeys($collection, 'ghost');
-            $ghostCached = $cache->load($ghostKey, Database::TTL, $ghostHash);
+            $ghostCached = $this->loadDocumentPointCache($database, $collection, 'ghost');
             $this->assertIsArray($ghostCached);
             $this->assertArrayHasKey('$empty', $ghostCached);
         } finally {
@@ -8220,4 +8215,20 @@ trait DocumentTests
     }
 
 
+    /**
+     * Load the active epoch-addressed point-cache entry for a document.
+     *
+     * @param  array<string>  $selections
+     */
+    private function loadDocumentPointCache(Database $database, string $collection, string $id, array $selections = []): mixed
+    {
+        [$collectionKey, , $hashKey] = $database->getCacheKeys($collection, $id, $selections);
+        $cache = $database->getCache();
+        $epoch = $cache->load($collectionKey.'#epoch', Database::TTL);
+        if (! \is_string($epoch) || $epoch === '') {
+            return false;
+        }
+
+        return $cache->load($hashKey.'#'.$epoch, Database::TTL);
+    }
 }

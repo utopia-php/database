@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
@@ -3632,15 +3633,16 @@ class Memory extends Adapter
         $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
         if ($exact !== null) {
             $bound = $values[1] ?? null;
-            if (BigInt::isIntegerValue($bound)) {
-                $upper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
-                if (($upper && BigInt::compare($exact, $bound) > 0)
-                    || (! $upper && $method !== OperatorType::Modulo && BigInt::compare($exact, $bound) < 0)) {
-                    return BigInt::toNative($current ?? 0);
-                }
+            if ($method === OperatorType::Modulo || ! BigInt::isIntegerValue($bound)) {
+                return $exact;
             }
 
-            return $exact;
+            return $this->applyNumericLimit(
+                $current ?? 0,
+                $exact,
+                $bound,
+                \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true)
+            );
         }
 
         switch ($method) {
@@ -3648,35 +3650,22 @@ class Memory extends Adapter
                 $byInc = $this->numericValue($values[0] ?? null, 1);
                 $maxInc = $this->numericValue($values[1] ?? null, null);
                 $baseInc = \is_numeric($current) ? $current + 0 : 0;
-                if ($maxInc !== null) {
-                    // SQL allows the cap exactly (`col <= max - by`), so use a
-                    // strict `<` for the headroom guard. `<=` would short the
-                    // increment by one boundary step versus MariaDB.
-                    if ($baseInc >= $maxInc || ($maxInc - $baseInc) < $byInc) {
-                        return $this->preserveNumericType($baseInc, $maxInc);
-                    }
-                }
 
-                return $this->preserveNumericType($baseInc, $baseInc + $byInc);
+                return $this->applyNumericLimit($baseInc, $baseInc + $byInc, $maxInc, true);
 
             case OperatorType::Decrement:
                 $byDec = $this->numericValue($values[0] ?? null, 1);
                 $minDec = $this->numericValue($values[1] ?? null, null);
                 $baseDec = \is_numeric($current) ? $current + 0 : 0;
-                if ($minDec !== null) {
-                    if ($baseDec <= $minDec || ($baseDec - $minDec) < $byDec) {
-                        return $this->preserveNumericType($baseDec, $minDec);
-                    }
-                }
 
-                return $this->preserveNumericType($baseDec, $baseDec - $byDec);
+                return $this->applyNumericLimit($baseDec, $baseDec - $byDec, $minDec, false);
 
             case OperatorType::Multiply:
                 $byMul = $this->numericValue($values[0] ?? null, 1);
                 $maxMul = $this->numericValue($values[1] ?? null, null);
                 $baseMul = \is_numeric($current) ? $current + 0 : 0;
 
-                return $this->applyNumericLimit($baseMul * $byMul, $maxMul, true);
+                return $this->applyNumericLimit($baseMul, $baseMul * $byMul, $maxMul, true);
 
             case OperatorType::Divide:
                 $byDiv = $this->numericValue($values[0] ?? null, 1);
@@ -3686,7 +3675,7 @@ class Memory extends Adapter
                 }
                 $baseDiv = \is_numeric($current) ? $current + 0 : 0;
 
-                return $this->applyNumericLimit($baseDiv / $byDiv, $minDiv, false);
+                return $this->applyNumericLimit($baseDiv, $baseDiv / $byDiv, $minDiv, false);
 
             case OperatorType::Modulo:
                 $byMod = (int) $this->numericValue($values[0] ?? null, 1);
@@ -3698,11 +3687,27 @@ class Memory extends Adapter
                 return $baseMod % $byMod;
 
             case OperatorType::Power:
-                $byPow = $this->numericValue($values[0] ?? null, 1);
+                $byPow = $this->numericValue($values[0] ?? null, 1) ?? 1;
                 $maxPow = $this->numericValue($values[1] ?? null, null);
                 $basePow = \is_numeric($current) ? $current + 0 : 0;
+                if (($basePow == 0 && $byPow < 0) || ($basePow < 0 && \floor($byPow) !== $byPow)) {
+                    if ($maxPow !== null) {
+                        return $basePow;
+                    }
 
-                return $this->applyNumericLimit($basePow ** $byPow, $maxPow, true);
+                    throw new LimitException('Value out of range');
+                }
+
+                $candidate = $basePow ** $byPow;
+                if (! \is_finite((float) $candidate)) {
+                    if ($maxPow !== null) {
+                        return $basePow;
+                    }
+
+                    throw new LimitException('Value out of range');
+                }
+
+                return $this->applyNumericLimit($basePow, $candidate, $maxPow, true);
 
             case OperatorType::StringConcat:
                 $appendValue = $values[0] ?? '';
@@ -3825,17 +3830,29 @@ class Memory extends Adapter
     }
 
     /**
-     * Clamp an arithmetic result against an optional bound.
+     * Apply an arithmetic result unless it crosses an optional bound.
      *
      * @param  bool  $isUpper  true = bound is a maximum, false = minimum
      */
-    protected function applyNumericLimit(int|float $value, int|float|null $bound, bool $isUpper): int|float
+    protected function applyNumericLimit(mixed $original, mixed $candidate, mixed $bound, bool $isUpper): int|float|string
     {
-        if ($bound === null) {
-            return $value;
+        if (BigInt::isIntegerValue($original) && BigInt::isIntegerValue($candidate) && BigInt::isIntegerValue($bound)) {
+            $crossed = $isUpper
+                ? BigInt::compare($candidate, $bound) > 0
+                : BigInt::compare($candidate, $bound) < 0;
+
+            return $crossed ? BigInt::toNative($original) : $candidate;
         }
 
-        return $isUpper ? \min($value, $bound) : \max($value, $bound);
+        $numericOriginal = \is_numeric($original) ? $original + 0 : 0;
+        $numericCandidate = \is_numeric($candidate) ? $candidate + 0 : 0;
+        $numericBound = \is_numeric($bound) ? $bound + 0 : null;
+
+        if ($numericBound !== null && (($isUpper && $numericCandidate > $numericBound) || (! $isUpper && $numericCandidate < $numericBound))) {
+            return $numericOriginal;
+        }
+
+        return $this->preserveNumericType($numericOriginal, $numericCandidate);
     }
 
     /**

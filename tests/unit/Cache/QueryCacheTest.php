@@ -242,7 +242,7 @@ class QueryCacheTest extends TestCase
             ->willReturn(true);
         $cache->expects($this->once())
             ->method('save')
-            ->with('default:qcache:users#epoch', $this->isType('string'))
+            ->with('default:qcache:users#epoch', $this->isString())
             ->willReturnArgument(1);
 
         $queryCache->invalidateCollection('users');

@@ -73,18 +73,6 @@ parameters:
 			path: src/Database/Adapter/MySQL.php
 
 		-
-			message: '#^Method Utopia\\Database\\Adapter\\Pool\:\:getSchemaIndexes\(\) should return array\<Utopia\\Database\\Document\> but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/Pool.php
-
-		-
-			message: '#^Method Utopia\\Database\\Adapter\\Pool\:\:getSupportForSchemaIndexes\(\) should return bool but returns mixed\.$#'
-			identifier: return.type
-			count: 1
-			path: src/Database/Adapter/Pool.php
-
-		-
 			message: '#^Call to an undefined method object\:\:exec\(\)\.$#'
 			identifier: method.notFound
 			count: 2

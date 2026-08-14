@@ -26,7 +26,7 @@ use Utopia\Query\CursorDirection;
  * call is delegated to the underlying pooled adapter. If the pooled adapter does not
  * actually support a feature, the delegated call will throw at runtime.
  */
-class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCasting, Feature\Relationships, Feature\SchemaAttributes, Feature\Spatial, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting
+class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCasting, Feature\Relationships, Feature\SchemaAttributes, Feature\SchemaIndexes, Feature\Spatial, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting, Feature\RawQuery, Feature\QueryBuilder, Feature\ColumnTypes
 {
     /**
      * @var UtopiaPool<covariant Adapter>
@@ -58,47 +58,106 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
      */
     public function delegate(string $method, array $args): mixed
     {
+        return $this->borrowAndInvoke($method, $args);
+    }
+
+    /**
+     * @param  class-string  $feature
+     * @param  array<mixed>  $args
+     */
+    protected function delegateFeature(string $feature, string $method, array $args): mixed
+    {
+        return $this->borrowAndInvoke($method, $args, $feature);
+    }
+
+    /**
+     * @param  array<mixed>  $args
+     * @param  class-string|null  $feature
+     */
+    protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
+    {
         if ($this->pinnedAdapter !== null) {
-            if ($this->skipDuplicates) {
-                return $this->pinnedAdapter->skipDuplicates(
-                    fn () => $this->pinnedAdapter->{$method}(...$args)
-                );
-            }
-            return $this->pinnedAdapter->{$method}(...$args);
+            return $this->invokeDelegated($this->pinnedAdapter, $method, $args, $feature);
         }
 
-        return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
-            // Run setters in case config changed since this connection was last used
-            $adapter->setDatabase($this->getDatabase());
-            $adapter->setNamespace($this->getNamespace());
-            $adapter->setSharedTables($this->getSharedTables());
-            $adapter->setTenant($this->getTenant());
-            $adapter->setTenantPerDocument($this->getTenantPerDocument());
-            $adapter->setAuthorization($this->authorization);
+        return $this->pool->use(function (Adapter $adapter) use ($method, $args, $feature) {
+            $this->syncBorrowedAdapter($adapter);
 
-            $this->syncTimeouts($adapter);
-            $adapter->resetDebug();
-            foreach ($this->getDebug() as $key => $value) {
-                $adapter->setDebug($key, $value);
-            }
-            $adapter->resetMetadata();
-            foreach ($this->getMetadata() as $key => $value) {
-                $adapter->setMetadata($key, $value);
-            }
-            $adapter->setProfiler($this->profiler);
-            $adapter->resetTransforms();
-            foreach ($this->queryTransforms as $tName => $tTransform) {
-                $adapter->addTransform($tName, $tTransform);
-            }
-            $this->syncWriteHooks($adapter);
-
-            if ($this->skipDuplicates) {
-                return $adapter->skipDuplicates(
-                    fn () => $adapter->{$method}(...$args)
-                );
-            }
-            return $adapter->{$method}(...$args);
+            return $this->invokeDelegated($adapter, $method, $args, $feature);
         });
+    }
+
+    /**
+     * @param  array<mixed>  $args
+     * @param  class-string|null  $feature
+     */
+    protected function invokeDelegated(Adapter $adapter, string $method, array $args, ?string $feature = null): mixed
+    {
+        if ($feature !== null && ! $adapter instanceof $feature) {
+            throw new DatabaseException($this->unsupportedFeatureMessage($feature));
+        }
+
+        if (
+            ($method === 'setTimeout' || $method === 'clearTimeout')
+            && ! $adapter instanceof Feature\Timeouts
+        ) {
+            return null;
+        }
+
+        if ($this->skipDuplicates) {
+            return $adapter->skipDuplicates(
+                fn () => $adapter->{$method}(...$args)
+            );
+        }
+
+        return $adapter->{$method}(...$args);
+    }
+
+    /**
+     * @param  class-string  $feature
+     */
+    protected function unsupportedFeatureMessage(string $feature): string
+    {
+        return match ($feature) {
+            Feature\Upserts::class => 'Adapter does not support upserts',
+            Feature\RawQuery::class => 'Adapter does not support raw queries',
+            Feature\QueryBuilder::class => 'Adapter does not support query builder',
+            Feature\SchemaAttributes::class => 'Adapter does not support schema attributes',
+            Feature\SchemaIndexes::class => 'Adapter does not support schema indexes',
+            Feature\ColumnTypes::class => 'Adapter does not support column types',
+            Feature\Spatial::class => 'Adapter does not support spatial',
+            Feature\InternalCasting::class => 'Adapter does not support internal casting',
+            Feature\UTCCasting::class => 'Adapter does not support UTC casting',
+            Feature\ConnectionId::class => 'Adapter does not support connection id',
+            Feature\Relationships::class => 'Adapter does not support relationships',
+            default => 'Adapter does not support '.$feature,
+        };
+    }
+
+    protected function syncBorrowedAdapter(Adapter $adapter): void
+    {
+        $adapter->setDatabase($this->getDatabase());
+        $adapter->setNamespace($this->getNamespace());
+        $adapter->setSharedTables($this->getSharedTables());
+        $adapter->setTenant($this->getTenant());
+        $adapter->setTenantPerDocument($this->getTenantPerDocument());
+        $adapter->setAuthorization($this->authorization);
+
+        $this->syncTimeouts($adapter);
+        $adapter->resetDebug();
+        foreach ($this->getDebug() as $key => $value) {
+            $adapter->setDebug($key, $value);
+        }
+        $adapter->resetMetadata();
+        foreach ($this->getMetadata() as $key => $value) {
+            $adapter->setMetadata($key, $value);
+        }
+        $adapter->setProfiler($this->profiler);
+        $adapter->resetTransforms();
+        foreach ($this->queryTransforms as $tName => $tTransform) {
+            $adapter->addTransform($tName, $tTransform);
+        }
+        $this->syncWriteHooks($adapter);
     }
 
     public function getDriver(): mixed
@@ -167,13 +226,13 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        parent::setTimeout($milliseconds, $event);
+        $this->setTimeoutState($milliseconds, $event);
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function clearTimeout(Event $event = Event::All): void
     {
-        parent::clearTimeout($event);
+        $this->clearTimeoutState($event);
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
@@ -252,28 +311,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($callback) {
-            $adapter->setDatabase($this->getDatabase());
-            $adapter->setNamespace($this->getNamespace());
-            $adapter->setSharedTables($this->getSharedTables());
-            $adapter->setTenant($this->getTenant());
-            $adapter->setTenantPerDocument($this->getTenantPerDocument());
-            $adapter->setAuthorization($this->authorization);
-
-            $this->syncTimeouts($adapter);
-            $adapter->resetDebug();
-            foreach ($this->getDebug() as $key => $value) {
-                $adapter->setDebug($key, $value);
-            }
-            $adapter->resetMetadata();
-            foreach ($this->getMetadata() as $key => $value) {
-                $adapter->setMetadata($key, $value);
-            }
-            $adapter->setProfiler($this->profiler);
-            $adapter->resetTransforms();
-            foreach ($this->queryTransforms as $tName => $tTransform) {
-                $adapter->addTransform($tName, $tTransform);
-            }
-            $this->syncWriteHooks($adapter);
+            $this->syncBorrowedAdapter($adapter);
 
             $this->pinnedAdapter = $adapter;
             try {
@@ -298,6 +336,10 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
 
     protected function syncTimeouts(Adapter $adapter): void
     {
+        if (! ($adapter instanceof Feature\Timeouts)) {
+            return;
+        }
+
         if (empty($this->timeouts)) {
             $adapter->clearTimeout();
 
@@ -479,7 +521,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function createRelationship(Relationship $relationship): bool
     {
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -489,7 +531,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -499,7 +541,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function deleteRelationship(Relationship $relationship): bool
     {
         /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -589,7 +631,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
         /** @var array<Document> $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Upserts::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -844,7 +886,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function getConnectionId(): string
     {
         /** @var string $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\ConnectionId::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -864,18 +906,15 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function getSchemaAttributes(string $collection): array
     {
         /** @var array<Document> $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\SchemaAttributes::class, __FUNCTION__, \func_get_args());
         return $result;
-    }
-
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     public function getSchemaIndexes(string $collection): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegateFeature(Feature\SchemaIndexes::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
     /**
@@ -921,7 +960,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function decodePoint(string $wkb): array
     {
         /** @var array<float> $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -931,7 +970,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function decodeLinestring(string $wkb): array
     {
         /** @var array<array<float>> $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -941,7 +980,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function decodePolygon(string $wkb): array
     {
         /** @var array<array<array<float>>> $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -951,7 +990,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function castingBefore(Document $collection, Document $document): Document
     {
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -961,7 +1000,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function castingAfter(Document $collection, Document $document): Document
     {
         /** @var Document $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
@@ -970,7 +1009,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
      */
     public function setUTCDatetime(string $value): mixed
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->delegateFeature(Feature\UTCCasting::class, __FUNCTION__, \func_get_args());
     }
 
     /**
@@ -1012,28 +1051,35 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function rawQuery(string $query, array $bindings = []): array
     {
         /** @var array<Document> $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\RawQuery::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
     public function rawMutation(string $query, array $bindings = []): int
     {
         /** @var int $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\RawQuery::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
     public function getBuilder(string $collection): \Utopia\Query\Builder
     {
         /** @var \Utopia\Query\Builder $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 
     public function getSchema(): \Utopia\Query\Schema
     {
         /** @var \Utopia\Query\Schema $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        /** @var string $result */
+        $result = $this->delegateFeature(Feature\ColumnTypes::class, __FUNCTION__, \func_get_args());
         return $result;
     }
 

@@ -16,6 +16,13 @@ class ReadWritePool extends Pool
         'list',
         'getSchemaAttributes',
         'getSchemaIndexes',
+        'getBuilder',
+        'getSchema',
+        'rawQuery',
+        'getColumnType',
+        'decodePoint',
+        'decodeLinestring',
+        'decodePolygon',
         'getSizeOfCollection',
         'getSizeOfCollectionOnDisk',
         'ping',
@@ -79,21 +86,24 @@ class ReadWritePool extends Pool
 
     public function delegate(string $method, array $args): mixed
     {
-        if ($this->pinnedAdapter !== null) {
-            if ($this->skipDuplicates) {
-                return $this->pinnedAdapter->skipDuplicates(
-                    fn () => $this->pinnedAdapter->{$method}(...$args)
-                );
-            }
+        return $this->borrowAndInvoke($method, $args);
+    }
 
-            return $this->pinnedAdapter->{$method}(...$args);
+    /**
+     * @param  array<mixed>  $args
+     * @param  class-string|null  $feature
+     */
+    protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
+    {
+        if ($this->pinnedAdapter !== null) {
+            return $this->invokeDelegated($this->pinnedAdapter, $method, $args, $feature);
         }
 
         if ($this->isReadOperation($method) && ! $this->isSticky()) {
-            return $this->readPool->use(function (Adapter $adapter) use ($method, $args) {
+            return $this->readPool->use(function (Adapter $adapter) use ($method, $args, $feature) {
                 $this->syncConfig($adapter);
 
-                return $adapter->{$method}(...$args);
+                return $this->invokeDelegated($adapter, $method, $args, $feature);
             });
         }
 
@@ -101,7 +111,7 @@ class ReadWritePool extends Pool
             $this->lastWriteTimestamp = \microtime(true);
         }
 
-        return parent::delegate($method, $args);
+        return parent::borrowAndInvoke($method, $args, $feature);
     }
 
     private function isReadOperation(string $method): bool

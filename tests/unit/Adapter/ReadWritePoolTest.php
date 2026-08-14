@@ -7,6 +7,7 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Document;
 use Utopia\Database\Validator\Authorization;
@@ -60,6 +61,13 @@ class ReadWritePoolTest extends TestCase
             'list',
             'getSchemaAttributes',
             'getSchemaIndexes',
+            'getBuilder',
+            'getSchema',
+            'rawQuery',
+            'getColumnType',
+            'decodePoint',
+            'decodeLinestring',
+            'decodePolygon',
             'getSizeOfCollection',
             'getSizeOfCollectionOnDisk',
             'ping',
@@ -240,13 +248,23 @@ class ReadWritePoolTest extends TestCase
 
     public function testReadAdapterClearsStaleTimeout(): void
     {
-        $this->readAdapter->expects($this->once())
+        /** @var Adapter&Feature\Timeouts&MockObject $readAdapter */
+        $readAdapter = $this->createMock(TimeoutsAdapterStub::class);
+        $readAdapter->expects($this->once())
             ->method('clearTimeout');
-        $this->readAdapter->expects($this->once())
+        $readAdapter->expects($this->once())
             ->method('ping')
             ->willReturn(true);
 
-        $this->assertTrue($this->pool->delegate('ping', []));
+        $readPool = self::createStub(UtopiaPool::class);
+        $readPool->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($readAdapter),
+        );
+
+        $pool = new ReadWritePool($this->writePool, $readPool);
+        $pool->setAuthorization(new Authorization());
+
+        $this->assertTrue($pool->delegate('ping', []));
     }
 
     public function testNonReadNonStandardMethodGoesToWritePool(): void
@@ -278,6 +296,15 @@ class ReadWritePoolTest extends TestCase
         $this->pool->delegate('deleteCollection', ['collection']);
     }
 
+    public function testRawMutationRoutesToWritePool(): void
+    {
+        $this->writeAdapter->expects($this->once())
+            ->method('rawMutation')
+            ->willReturn(1);
+
+        $this->pool->delegate('rawMutation', ['UPDATE t SET a = 1', []]);
+    }
+
     /**
      * @return mixed
      */
@@ -296,7 +323,12 @@ class ReadWritePoolTest extends TestCase
             'getConnectionId', 'getIdAttributeType' => 'string',
             'getMinDateTime' => new \DateTime(),
             'getSchemaAttributes', 'getSchemaIndexes', 'getKeywords',
-            'getInternalIndexesKeys', 'capabilities' => [],
+            'getInternalIndexesKeys', 'capabilities', 'decodePoint',
+            'decodeLinestring', 'decodePolygon' => [],
+            'getBuilder' => $this->createStub(\Utopia\Query\Builder::class),
+            'getSchema' => $this->createStub(\Utopia\Query\Schema::class),
+            'rawQuery' => [],
+            'getColumnType' => 'VARCHAR',
             default => null,
         };
     }
@@ -327,8 +359,15 @@ class ReadWritePoolTest extends TestCase
             'getMinDateTime' => [],
             'getIdAttributeType' => [],
             'supports' => [\Utopia\Database\Capability::Index],
-            'getSchemaAttributes', 'getSchemaIndexes' => ['collection'],
+            'getSchemaAttributes', 'getSchemaIndexes', 'getBuilder' => ['collection'],
+            'rawQuery' => ['SELECT 1', []],
+            'getColumnType' => ['string', 255, true, false, false],
+            'decodePoint', 'decodeLinestring', 'decodePolygon' => ['wkb'],
             default => [],
         };
     }
+}
+
+abstract class TimeoutsAdapterStub extends Adapter implements Feature\Timeouts
+{
 }

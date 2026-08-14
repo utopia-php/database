@@ -8,6 +8,8 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Storage;
@@ -74,6 +76,24 @@ final class PoolTest extends TestCase
         $pool->addWriteHook($hook);
 
         $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+    }
+
+    public function testMemoryPoolPingDoesNotRequireTimeouts(): void
+    {
+        $pool = $this->createPool(new Memory());
+        $pool->setTimeout(1000);
+
+        $this->assertTrue($pool->ping());
+    }
+
+    public function testMissingFeatureThrows(): void
+    {
+        $pool = $this->createPool(new Memory());
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Adapter does not support upserts');
+
+        $pool->upsertDocuments(new Document(), 'id', []);
     }
 
     private function createPool(Adapter $adapter): Pool

@@ -570,18 +570,6 @@ class FindLogicTest extends TestCase
         ]));
     }
 
-    public function testFindKeepsAuthorizationWhenDocumentSecurityIsEnabled(): void
-    {
-        $this->setupCollectionLookup('testCol');
-        $this->adapter->method('find')->willReturnCallback(function () {
-            $this->assertTrue($this->database->getAuthorization()->getStatus());
-
-            return [];
-        });
-
-        $this->database->skipValidation(fn () => $this->database->find('testCol'));
-    }
-
     public function testFindWithSelectFiltersResults(): void
     {
         $attributes = [

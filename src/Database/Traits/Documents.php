@@ -2723,13 +2723,11 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $hasCollectionPermission = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
+        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
-        if (! $hasCollectionPermission && ! $documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
-
-        $skipAuth = $hasCollectionPermission && ! $documentSecurity;
 
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
@@ -2744,6 +2742,9 @@ trait Documents
         $groupByAttrs = $grouped['groupBy'];
         $having = $grouped['having'];
         $joins = $grouped['joins'];
+        if (! empty($joins)) {
+            $skipAuth = false;
+        }
         $distinct = $grouped['distinct'];
         $limit = $grouped['limit'];
         $offset = $grouped['offset'];

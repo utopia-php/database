@@ -1248,6 +1248,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $searchQueries = [];
         $hasAggregation = false;
         $hasJoins = false;
+        $hasDistinct = false;
 
         foreach ($queries as $query) {
             $method = $query->getMethod();
@@ -1276,6 +1277,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if ($method->isJoin()) {
                 $hasJoins = true;
             }
+            if ($method === Method::Distinct) {
+                $hasDistinct = true;
+            }
         }
 
         $queries = $otherQueries;
@@ -1290,7 +1294,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if (! $hasAggregation) {
             $selections = $this->getAttributeSelections($queries);
             if (! empty($selections) && ! \in_array('*', $selections)) {
-                $builder->select($this->mapSelectionsToColumns($selections));
+                $builder->select($this->mapSelectionsToColumns($selections, includeInternal: ! $hasDistinct));
                 $hasSelectionProjection = true;
             }
         }
@@ -3352,7 +3356,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * @param  array<string>  $selections
      * @return array<string>
      */
-    protected function mapSelectionsToColumns(array $selections): array
+    protected function mapSelectionsToColumns(array $selections, bool $includeInternal = true): array
     {
         $internalKeys = [
             Document::ID,
@@ -3364,8 +3368,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $selections = \array_diff($selections, [...$internalKeys, Document::COLLECTION]);
 
-        foreach ($internalKeys as $internalKey) {
-            $selections[] = $this->getInternalKeyForAttribute($internalKey);
+        if ($includeInternal) {
+            foreach ($internalKeys as $internalKey) {
+                $selections[] = $this->getInternalKeyForAttribute($internalKey);
+            }
         }
 
         $columns = [];

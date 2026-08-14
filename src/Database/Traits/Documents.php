@@ -2742,6 +2742,9 @@ trait Documents
         $groupByAttrs = $grouped['groupBy'];
         $having = $grouped['having'];
         $joins = $grouped['joins'];
+        if (! empty($joins)) {
+            $skipAuth = false;
+        }
         $distinct = $grouped['distinct'];
         $limit = $grouped['limit'];
         $offset = $grouped['offset'];

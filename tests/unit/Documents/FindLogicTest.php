@@ -612,7 +612,7 @@ class FindLogicTest extends TestCase
         $this->database->skipValidation(fn () => $this->database->find('testCol'));
     }
 
-    public function testFindDoesNotForceAuthorizationOnJoinsWhenCollectionAllowsRead(): void
+    public function testFindKeepsAuthorizationEnabledOnJoins(): void
     {
         $authOnFind = null;
         $db = null;
@@ -635,7 +635,7 @@ class FindLogicTest extends TestCase
             Query::join('other', 'fk', '$id'),
         ]));
 
-        $this->assertFalse($authOnFind);
+        $this->assertTrue($authOnFind);
     }
 
     public function testFindWithSelectFiltersResults(): void

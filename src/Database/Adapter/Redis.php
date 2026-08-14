@@ -457,6 +457,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function createRelationship(Relationship $relationship): bool
     {
         $collection = $relationship->collection;
@@ -487,6 +488,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
         $collection = $relationship->collection;
@@ -547,6 +549,7 @@ class Redis extends Adapter implements
         return true;
     }
 
+    #[\Override]
     public function deleteRelationship(Relationship $relationship): bool
     {
         $collection = $relationship->collection;
@@ -1010,6 +1013,7 @@ class Redis extends Adapter implements
         });
     }
 
+    #[\Override]
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
         if (empty($changes)) {
@@ -1543,6 +1547,7 @@ class Redis extends Adapter implements
         return $this->supportForAttributes;
     }
 
+    #[\Override]
     public function getConnectionId(): string
     {
         return '0';

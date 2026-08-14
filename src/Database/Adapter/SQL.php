@@ -862,7 +862,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            if (isset($spatialMap[$attribute]) || $this->isSpatialWriteValue($value)) {
+            if (isset($spatialMap[$attribute]) || $this->isSpatialWkt($value)) {
                 $spatialRows[$this->filter($attribute)] = $this->encodeSpatialWriteValue($value);
 
                 continue;
@@ -3304,7 +3304,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $row = [];
             foreach ($allColumnNames as $key) {
                 $value = $docAttrs[$key] ?? null;
-                if (isset($spatialMap[$key]) || $this->isSpatialWriteValue($value)) {
+                if (isset($spatialMap[$key]) || $this->isSpatialWkt($value)) {
                     $value = $this->encodeSpatialWriteValue($value);
                 } elseif (\is_array($value)) {
                     $value = \json_encode($value);
@@ -3574,7 +3574,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
             $value = $attributes[$key] ?? null;
-            if (isset($spatialMap[$key]) || $this->isSpatialWriteValue($value)) {
+            if (isset($spatialMap[$key]) || $this->isSpatialWkt($value)) {
                 $value = $this->encodeSpatialWriteValue($value);
             } elseif (\is_array($value)) {
                 $value = \json_encode($value);
@@ -3682,7 +3682,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $spatialMap = \array_fill_keys($spatialAttributes, true);
         foreach ($documents as $document) {
             foreach ($document->getAttributes() as $key => $value) {
-                if (! isset($spatialMap[$key]) && $this->isSpatialWriteValue($value)) {
+                if (! isset($spatialMap[$key]) && $this->isSpatialWkt($value)) {
                     $spatialAttributes[] = $key;
                     $spatialMap[$key] = true;
                 }

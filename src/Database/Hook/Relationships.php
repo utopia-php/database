@@ -585,7 +585,7 @@ class Relationships implements Hook
                             $this->db->purgeCachedDocument($relatedCollection->getId(), $value);
                         } elseif ($value instanceof Document) {
                             if ($value->getId() === '') {
-                                throw new RelationshipException('Invalid relationship value. Document must have a valid $id.');
+                                throw new RelationshipException('Invalid relationship value. Document must have a valid '.Document::ID.'.');
                             }
 
                             $related = $this->db->skipRelationships(

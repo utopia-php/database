@@ -679,13 +679,13 @@ class SQLite extends SQL
             // tenants; scoping the scan by `_tenant` keeps tenant A's
             // resize from being blocked (and tenant A's metadata from
             // leaking) by an oversized value owned by tenant B.
-            $tenantClause = $this->sharedTables ? ' AND '.$this->quote(Storage::TENANT).' = :_tenant' : '';
+            $tenantClause = $this->sharedTables ? ' AND '.$this->quote(Storage::TENANT).' = :'.Storage::TENANT : '';
             $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
             $stmt = $this->prepare($sql, event: Event::AttributeUpdate);
             $stmt->bindValue(':max', $attribute->size, PDO::PARAM_INT);
             if ($this->sharedTables) {
-                $stmt->bindValue(':_tenant', $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
+                $stmt->bindValue(':'.Storage::TENANT, $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
 
             try {

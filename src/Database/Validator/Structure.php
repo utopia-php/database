@@ -231,7 +231,7 @@ class Structure extends Validator
         }
 
         if (empty($document->getCollection())) {
-            $this->message = 'Missing collection attribute $collection';
+            $this->message = 'Missing collection attribute '.Document::COLLECTION;
 
             return false;
         }

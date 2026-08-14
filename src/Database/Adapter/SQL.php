@@ -623,14 +623,14 @@ abstract class SQL extends Adapter
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
             $uidQuoted = $this->quote(Storage::UID);
-            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = :_uid";
+            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = " . ':'.Storage::UID;
             $stmt = null;
             $row = false;
             $exception = null;
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentRead);
-                $stmt->bindValue(':_uid', $id, PDO::PARAM_STR);
+                $stmt->bindValue(':'.Storage::UID, $id, PDO::PARAM_STR);
                 $this->execute($stmt);
                 /** @var array<string, mixed>|false $row */
                 $row = $stmt->fetch();
@@ -4702,10 +4702,10 @@ abstract class SQL extends Adapter
 
         $bindings = [];
         if ($tenantCount === 0) {
-            $bindings[] = ':_tenant';
+            $bindings[] = ':'.Storage::TENANT;
         } else {
             for ($index = 0; $index < $tenantCount; $index++) {
-                $bindings[] = ":_tenant_{$index}";
+                $bindings[] = ':'.Storage::TENANT.'_'.$index;
             }
         }
         $bindings = \implode(',', $bindings);

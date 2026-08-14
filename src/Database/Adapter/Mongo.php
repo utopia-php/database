@@ -3332,11 +3332,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     protected function replaceChars(string $from, string $to, array $array): array
     {
         $filter = [
-            'permissions',
-            'createdAt',
-            'updatedAt',
-            'collection',
-            'version',
+            \substr(Document::PERMISSIONS, 1),
+            \substr(Document::CREATED_AT, 1),
+            \substr(Document::UPDATED_AT, 1),
+            \substr(Document::COLLECTION, 1),
+            \substr(Document::VERSION, 1),
         ];
 
         // First pass: recursively process array values and collect keys to rename

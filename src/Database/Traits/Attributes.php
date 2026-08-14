@@ -175,13 +175,13 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
         $this->triggerHooks(Event::DocumentPurge, new Document([
-            '$id' => $collection->getId(),
-            '$collection' => self::METADATA,
+            Document::ID => $collection->getId(),
+            Document::COLLECTION => self::METADATA,
         ]));
 
         $this->triggerHooks(
             Event::AttributeCreate,
-            (clone $attributeDoc)->setAttribute('$collection', $collection->getId()),
+            (clone $attributeDoc)->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return true;
@@ -335,13 +335,13 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
         $this->triggerHooks(Event::DocumentPurge, new Document([
-            '$id' => $collection->getId(),
-            '$collection' => self::METADATA,
+            Document::ID => $collection->getId(),
+            Document::COLLECTION => self::METADATA,
         ]));
 
         $this->triggerHooks(Event::AttributesCreate, \array_map(
             static fn (Document $attribute): Document => (clone $attribute)
-                ->setAttribute('$collection', $collection->getId()),
+                ->setAttribute(Document::COLLECTION, $collection->getId()),
             $attributeDocuments,
         ));
 
@@ -377,7 +377,7 @@ trait Attributes
         }
 
         $attribute = new Document([
-            '$id' => ID::custom($id),
+            Document::ID => ID::custom($id),
             'key' => $id,
             'type' => $type,
             'size' => $size,
@@ -558,7 +558,7 @@ trait Attributes
 
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
-        $index = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        $index = \array_search($id, \array_map(fn ($attribute) => $attribute[Document::ID], $attributes));
 
         if ($index === false) {
             throw new NotFoundException('Attribute not found');
@@ -586,7 +586,7 @@ trait Attributes
 
         $this->triggerHooks(
             Event::AttributeUpdate,
-            (clone $attributeDoc)->setAttribute('$collection', $collection->getId()),
+            (clone $attributeDoc)->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return $attributeDoc;
@@ -724,7 +724,7 @@ trait Attributes
 
         /** @var array<Document> $attributes */
         $attributes = $collectionDoc->getAttribute('attributes', []);
-        $attributeIndex = \array_search($id, \array_map(fn ($attribute) => $attribute['$id'], $attributes));
+        $attributeIndex = \array_search($id, \array_map(fn ($attribute) => $attribute[Document::ID], $attributes));
 
         if ($attributeIndex === false) {
             throw new NotFoundException('Attribute not found');
@@ -941,7 +941,7 @@ trait Attributes
         }
 
         $attribute
-            ->setAttribute('$id', $newKey ?? $id)
+            ->setAttribute(Document::ID, $newKey ?? $id)
             ->setAttribute('key', $newKey ?? $id)
             ->setAttribute('type', $type)
             ->setAttribute('size', $size)
@@ -1107,13 +1107,13 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection));
 
         $this->triggerHooks(Event::DocumentPurge, new Document([
-            '$id' => $collection,
-            '$collection' => self::METADATA,
+            Document::ID => $collection,
+            Document::COLLECTION => self::METADATA,
         ]));
 
         $this->triggerHooks(
             Event::AttributeUpdate,
-            (clone $attribute)->setAttribute('$collection', $collection),
+            (clone $attribute)->setAttribute(Document::COLLECTION, $collection),
         );
 
         return $attribute;
@@ -1257,13 +1257,13 @@ trait Attributes
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
         $this->triggerHooks(Event::DocumentPurge, new Document([
-            '$id' => $collection->getId(),
-            '$collection' => self::METADATA,
+            Document::ID => $collection->getId(),
+            Document::COLLECTION => self::METADATA,
         ]));
 
         $this->triggerHooks(
             Event::AttributeDelete,
-            (clone $attribute)->setAttribute('$collection', $collection->getId()),
+            (clone $attribute)->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return true;
@@ -1327,7 +1327,7 @@ trait Attributes
             }
         }
 
-        $attribute->setAttribute('$id', $new);
+        $attribute->setAttribute(Document::ID, $new);
         $attribute->setAttribute('key', $new);
 
         foreach ($indexes as $index) {
@@ -1384,7 +1384,7 @@ trait Attributes
 
         $this->triggerHooks(
             Event::AttributeUpdate,
-            (clone $attribute)->setAttribute('$collection', $collection->getId()),
+            (clone $attribute)->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return $renamed;

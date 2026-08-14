@@ -203,12 +203,12 @@ class Database
      * @var array<string, mixed>
      */
     protected const COLLECTION = [
-        '$id' => self::METADATA,
-        '$collection' => self::METADATA,
+        Document::ID => self::METADATA,
+        Document::COLLECTION => self::METADATA,
         'name' => 'collections',
         'attributes' => [
             [
-                '$id' => 'name',
+                Document::ID => 'name',
                 'key' => 'name',
                 'type' => 'string',
                 'size' => 256,
@@ -218,7 +218,7 @@ class Database
                 'filters' => [],
             ],
             [
-                '$id' => 'attributes',
+                Document::ID => 'attributes',
                 'key' => 'attributes',
                 'type' => 'string',
                 'size' => 1000000,
@@ -228,7 +228,7 @@ class Database
                 'filters' => ['json'],
             ],
             [
-                '$id' => 'indexes',
+                Document::ID => 'indexes',
                 'key' => 'indexes',
                 'type' => 'string',
                 'size' => 1000000,
@@ -238,7 +238,7 @@ class Database
                 'filters' => ['json'],
             ],
             [
-                '$id' => 'documentSecurity',
+                Document::ID => 'documentSecurity',
                 'key' => 'documentSecurity',
                 'type' => 'boolean',
                 'size' => 0,
@@ -248,7 +248,7 @@ class Database
                 'filters' => [],
             ],
             [
-                '$id' => 'externalId',
+                Document::ID => 'externalId',
                 'key' => 'externalId',
                 'type' => 'string',
                 'size' => 255,
@@ -424,11 +424,11 @@ class Database
                 }
 
                 /** @var array<string, mixed> $decoded */
-                if (array_key_exists('$id', $decoded)) {
+                if (array_key_exists(Document::ID, $decoded)) {
                     return new Document($decoded);
                 } else {
                     $decoded = array_map(function ($item) {
-                        if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
+                        if (is_array($item) && array_key_exists(Document::ID, $item)) { // if `$id` exists, create a Document instance
                             /** @var array<string, mixed> $item */
                             return new Document($item);
                         }
@@ -1564,14 +1564,14 @@ class Database
     {
         /** @var array<array<string, mixed>> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
-        $internalDateAttributes = ['$createdAt', '$updatedAt'];
+        $internalDateAttributes = [Document::CREATED_AT, Document::UPDATED_AT];
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
 
         foreach ($attributes as $attribute) {
             /** @var string $key */
-            $key = $attribute['$id'] ?? '';
+            $key = $attribute[Document::ID] ?? '';
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
             /** @var array<string> $filters */
@@ -1584,7 +1584,7 @@ class Database
                 continue;
             }
 
-            if ($key === '$permissions') {
+            if ($key === Document::PERMISSIONS) {
                 continue;
             }
 
@@ -1659,7 +1659,7 @@ class Database
             $documentArray = (array) $document;
             foreach ($relationships as $relationship) {
                 /** @var string $key */
-                $key = $relationship['$id'] ?? '';
+                $key = $relationship[Document::ID] ?? '';
                 $filteredKey = $this->adapter->filter($key);
 
                 if (
@@ -1686,8 +1686,8 @@ class Database
 
         foreach ($attributes as $attribute) {
             /** @var string $key */
-            $key = $attribute['$id'] ?? '';
-            if ($key === '$permissions') {
+            $key = $attribute[Document::ID] ?? '';
+            if ($key === Document::PERMISSIONS) {
                 continue;
             }
 
@@ -1750,9 +1750,9 @@ class Database
             if ($hasRelationshipSelections) {
                 foreach ($allAttributes as $attribute) {
                     /** @var string $key */
-                    $key = $attribute['$id'] ?? '';
+                    $key = $attribute[Document::ID] ?? '';
 
-                    if (($attribute['type'] ?? '') === $relationshipType || $key === '$permissions') {
+                    if (($attribute['type'] ?? '') === $relationshipType || $key === Document::PERMISSIONS) {
                         continue;
                     }
 
@@ -1800,8 +1800,8 @@ class Database
 
         foreach ($attributes as $attribute) {
             /** @var string $key */
-            $key = $attribute['$id'] ?? '';
-            if ($key === '$permissions') {
+            $key = $attribute[Document::ID] ?? '';
+            if ($key === Document::PERMISSIONS) {
                 continue;
             }
 
@@ -2344,7 +2344,7 @@ class Database
             $schemaHash = \md5(
                 (\json_encode($collection->getAttribute('attributes', [])) ?: '')
                 .(\json_encode($collection->getAttribute('indexes', [])) ?: '')
-                .(\json_encode($collection->getAttribute('$permissions', [])) ?: '')
+                .(\json_encode($collection->getAttribute(Document::PERMISSIONS, [])) ?: '')
                 .(\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
             );
         }

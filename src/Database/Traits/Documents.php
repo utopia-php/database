@@ -210,7 +210,7 @@ trait Documents
         $fingerprint = \hash('sha256', \serialize([
             'attributes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('attributes', [])),
             'indexes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('indexes', [])),
-            'permissions' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('$permissions', [])),
+            'permissions' => $this->normalizeQueryCacheQueryValue($collection->getAttribute(Document::PERMISSIONS, [])),
             'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
         ]));
 
@@ -245,7 +245,7 @@ trait Documents
                 fn () => $this->find(
                     $collection->getId(),
                     \array_merge([
-                        Query::equal('$sequence', $chunk),
+                        Query::equal(Document::SEQUENCE, $chunk),
                         Query::limit(\count($chunk)),
                     ], $selections)
                 )
@@ -433,7 +433,7 @@ trait Documents
             $document = $this->createDocumentInstance($collection->getId(), $document->getArrayCopy());
         }
 
-        $document->setAttribute('$collection', $collection->getId());
+        $document->setAttribute(Document::COLLECTION, $collection->getId());
 
         if ($collection->getId() !== self::METADATA) {
             if (! $this->authorization->isValid(new Input(PermissionType::Read, [
@@ -539,7 +539,7 @@ trait Documents
         }
 
         // Always preserve internal attributes (use hashmap for O(1) lookup)
-        $internalKeys = \array_map(fn (array $attr) => $attr['$id'] ?? '', $this->getInternalAttributes());
+        $internalKeys = \array_map(fn (array $attr) => $attr[Document::ID] ?? '', $this->getInternalAttributes());
         foreach ($internalKeys as $key) {
             /** @var string $key */
             $attributesToKeep[$key] = true;
@@ -601,17 +601,17 @@ trait Documents
 
         $id = $document->getId();
         $document
-            ->setAttribute('$id', (empty($id) || $id === 'unique()') ? ID::unique() : $id)
-            ->setAttribute('$collection', $collection->getId())
-            ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
-            ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
+            ->setAttribute(Document::ID, (empty($id) || $id === 'unique()') ? ID::unique() : $id)
+            ->setAttribute(Document::COLLECTION, $collection->getId())
+            ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
+            ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
         if ($collection->getId() !== self::METADATA) {
-            $document->setAttribute('$version', 1);
+            $document->setAttribute(Document::VERSION, 1);
         }
 
         if (empty($document->getPermissions())) {
-            $document->setAttribute('$permissions', []);
+            $document->setAttribute(Document::PERMISSIONS, []);
         }
 
         if ($this->adapter->getSharedTables()) {
@@ -623,7 +623,7 @@ trait Documents
                     throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                 }
             } else {
-                $document->setAttribute('$tenant', $this->adapter->getTenant());
+                $document->setAttribute(Document::TENANT, $this->adapter->getTenant());
             }
         }
 
@@ -760,17 +760,17 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute('$id', (empty($document->getId()) || $document->getId() === 'unique()') ? ID::unique() : $document->getId())
-                ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$createdAt', ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
-                ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
+                ->setAttribute(Document::ID, (empty($document->getId()) || $document->getId() === 'unique()') ? ID::unique() : $document->getId())
+                ->setAttribute(Document::COLLECTION, $collection->getId())
+                ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
+                ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
             if ($collection->getId() !== self::METADATA) {
-                $document->setAttribute('$version', 1);
+                $document->setAttribute(Document::VERSION, 1);
             }
 
             if (empty($document->getPermissions())) {
-                $document->setAttribute('$permissions', []);
+                $document->setAttribute(Document::PERMISSIONS, []);
             }
 
             if ($this->adapter->getSharedTables()) {
@@ -779,7 +779,7 @@ trait Documents
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
                 } else {
-                    $document->setAttribute('$tenant', $this->adapter->getTenant());
+                    $document->setAttribute(Document::TENANT, $this->adapter->getTenant());
                 }
             }
 
@@ -854,7 +854,7 @@ trait Documents
         }
 
         $this->triggerHooks(Event::DocumentsCreate, new Document([
-            '$collection' => $collection->getId(),
+            Document::COLLECTION => $collection->getId(),
             'modified' => $modified,
         ]));
 
@@ -885,7 +885,7 @@ trait Documents
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
         $cacheTarget = $collection->getId() === self::METADATA
-            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $time = DateTime::now();
@@ -898,7 +898,7 @@ trait Documents
 
             $skipPermissionsUpdate = true;
 
-            if ($document->offsetExists('$permissions')) {
+            if ($document->offsetExists(Document::PERMISSIONS)) {
                 $originalPermissions = $old->getPermissions();
                 $currentPermissions = $document->getPermissions();
 
@@ -910,11 +910,11 @@ trait Documents
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
-            $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
-            $document['$createdAt'] = ($createdAt === null || ! $this->preserveDates) ? $old->getCreatedAt() : $createdAt;
+            $document[Document::COLLECTION] = $old->getAttribute(Document::COLLECTION); // Make sure user doesn't switch collection ID
+            $document[Document::CREATED_AT] = ($createdAt === null || ! $this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
+                $document[Document::TENANT] = $old->getTenant(); // Make sure user doesn't switch tenant
             }
             $document = new Document($document);
 
@@ -941,7 +941,7 @@ trait Documents
                     }
                 }
 
-                $internalKeys = ['$internalId', '$collection', '$tenant', '$sequence'];
+                $internalKeys = [Document::INTERNAL_ID, Document::COLLECTION, Document::TENANT, Document::SEQUENCE];
 
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
@@ -1060,7 +1060,7 @@ trait Documents
             }
 
             if ($shouldUpdate) {
-                $document->setAttribute('$updatedAt', ($newUpdatedAt === null || ! $this->preserveDates) ? $time : $newUpdatedAt);
+                $document->setAttribute(Document::UPDATED_AT, ($newUpdatedAt === null || ! $this->preserveDates) ? $time : $newUpdatedAt);
             }
 
             // Check if document was updated after the request timestamp
@@ -1071,9 +1071,9 @@ trait Documents
 
             $oldVersion = $old->getVersion();
             if ($oldVersion !== null && $shouldUpdate) {
-                $document->setAttribute('$version', $oldVersion + 1);
+                $document->setAttribute(Document::VERSION, $oldVersion + 1);
             } elseif ($oldVersion !== null) {
-                $document->setAttribute('$version', $oldVersion);
+                $document->setAttribute(Document::VERSION, $oldVersion);
             }
 
             $document = $this->encode($collection, $document);
@@ -1222,21 +1222,21 @@ trait Documents
             throw new DatabaseException('Cursor document must be from the same Collection.');
         }
 
-        unset($updates['$id']);
-        unset($updates['$tenant']);
+        unset($updates[Document::ID]);
+        unset($updates[Document::TENANT]);
 
         if (($updates->getCreatedAt() === null || ! $this->preserveDates)) {
-            unset($updates['$createdAt']);
+            unset($updates[Document::CREATED_AT]);
         } else {
-            $updates['$createdAt'] = $updates->getCreatedAt();
+            $updates[Document::CREATED_AT] = $updates->getCreatedAt();
         }
 
         if ($this->adapter->getSharedTables()) {
-            $updates['$tenant'] = $this->adapter->getTenant();
+            $updates[Document::TENANT] = $this->adapter->getTenant();
         }
 
         $updatedAt = $updates->getUpdatedAt();
-        $updates['$updatedAt'] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
+        $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
 
         $updates = $this->encode(
             $collection,
@@ -1310,8 +1310,8 @@ trait Documents
                 foreach ($batch as $index => $document) {
                     $skipPermissionsUpdate = true;
 
-                    if ($updates->offsetExists('$permissions')) {
-                        if (! $document->offsetExists('$permissions')) {
+                    if ($updates->offsetExists(Document::PERMISSIONS)) {
+                        if (! $document->offsetExists(Document::PERMISSIONS)) {
                             throw new QueryException('Permission document missing in select');
                         }
 
@@ -1322,7 +1322,7 @@ trait Documents
                         $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
                     }
 
-                    $document->setAttribute('$skipPermissionsUpdate', $skipPermissionsUpdate);
+                    $document->setAttribute(Document::SKIP_PERMISSIONS_UPDATE, $skipPermissionsUpdate);
 
                     $updateData = [];
                     foreach ($updates->getArrayCopy() as $key => $value) {
@@ -1350,7 +1350,7 @@ trait Documents
 
                     $docVersion = $document->getVersion();
                     if ($docVersion !== null) {
-                        $document->setAttribute('$version', $docVersion + 1);
+                        $document->setAttribute(Document::VERSION, $docVersion + 1);
                     }
 
                     $encoded = $this->encode($collection, $document);
@@ -1389,7 +1389,7 @@ trait Documents
             $batch = $this->decorateDocuments(Event::DocumentsUpdate, $collection, $batch);
 
             foreach ($batch as $index => $doc) {
-                $doc->removeAttribute('$skipPermissionsUpdate');
+                $doc->removeAttribute(Document::SKIP_PERMISSIONS_UPDATE);
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {
@@ -1409,7 +1409,7 @@ trait Documents
         }
 
         $this->triggerHooks(Event::DocumentsUpdate, new Document([
-            '$collection' => $collection->getId(),
+            Document::COLLECTION => $collection->getId(),
             'modified' => $modified,
         ]));
 
@@ -1558,7 +1558,7 @@ trait Documents
 
             $skipPermissionsUpdate = true;
 
-            if ($document->offsetExists('$permissions')) {
+            if ($document->offsetExists(Document::PERMISSIONS)) {
                 $originalPermissions = $old->getPermissions();
                 $currentPermissions = $document->getPermissions();
 
@@ -1631,29 +1631,29 @@ trait Documents
             $updatedAt = $document->getUpdatedAt();
 
             $document
-                ->setAttribute('$id', (empty($document->getId()) || $document->getId() === 'unique()') ? ID::unique() : $document->getId())
-                ->setAttribute('$collection', $collection->getId())
-                ->setAttribute('$updatedAt', ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
+                ->setAttribute(Document::ID, (empty($document->getId()) || $document->getId() === 'unique()') ? ID::unique() : $document->getId())
+                ->setAttribute(Document::COLLECTION, $collection->getId())
+                ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
             if (! $this->preserveSequence) {
-                $document->removeAttribute('$sequence');
+                $document->removeAttribute(Document::SEQUENCE);
             }
 
             $createdAt = $document->getCreatedAt();
             if ($createdAt === null || ! $this->preserveDates) {
-                $document->setAttribute('$createdAt', $old->isEmpty() ? $time : $old->getCreatedAt());
+                $document->setAttribute(Document::CREATED_AT, $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
-                $document->setAttribute('$createdAt', $createdAt);
+                $document->setAttribute(Document::CREATED_AT, $createdAt);
             }
 
             if ($old->isEmpty()) {
-                $document->setAttribute('$version', 1);
+                $document->setAttribute(Document::VERSION, 1);
             } else {
                 $oldVersion = $old->getVersion();
                 if ($oldVersion !== null) {
-                    $document->setAttribute('$version', $oldVersion + 1);
+                    $document->setAttribute(Document::VERSION, $oldVersion + 1);
                 } else {
-                    $document->setAttribute('$version', 1);
+                    $document->setAttribute(Document::VERSION, 1);
                 }
             }
 
@@ -1661,7 +1661,7 @@ trait Documents
             // Doesn't use decode as that intentionally skips null defaults to reduce payload size
             foreach ($collectionAttributes as $attr) {
                 /** @var string $attrId */
-                $attrId = $attr['$id'];
+                $attrId = $attr[Document::ID];
                 if (! $attr->getAttribute('required') && ! \array_key_exists($attrId, (array) $document)) {
                     $document->setAttribute(
                         $attrId,
@@ -1671,7 +1671,7 @@ trait Documents
             }
 
             if ($skipPermissionsUpdate) {
-                $document->setAttribute('$permissions', $old->getPermissions());
+                $document->setAttribute(Document::PERMISSIONS, $old->getPermissions());
             }
 
             if ($this->adapter->getSharedTables()) {
@@ -1683,7 +1683,7 @@ trait Documents
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {
-                    $document->setAttribute('$tenant', $this->adapter->getTenant());
+                    $document->setAttribute(Document::TENANT, $this->adapter->getTenant());
                 }
             }
 
@@ -1823,7 +1823,7 @@ trait Documents
         }
 
         $this->triggerHooks(Event::DocumentsUpsert, new Document([
-            '$collection' => $collection->getId(),
+            Document::COLLECTION => $collection->getId(),
             'created' => $created,
             'updated' => $updated,
         ]));
@@ -1883,7 +1883,7 @@ trait Documents
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
-            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentIncrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $max, $numericAttribute) {
             /** @var Document $document */
@@ -2006,7 +2006,7 @@ trait Documents
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
-            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentDecrease, $cacheTarget, function () use ($collection, $id, $attribute, $value, $min, $numericAttribute) {
             /** @var Document $document */
@@ -2096,7 +2096,7 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
         $cacheTarget = $collection->getId() === self::METADATA
-            ? new Document(['$id' => $id, '$collection' => self::METADATA])
+            ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, &$document) {
             $document = $this->authorization->skip(fn () => $this->silent(
@@ -2310,7 +2310,7 @@ trait Documents
         }
 
         $this->triggerHooks(Event::DocumentsDelete, new Document([
-            '$collection' => $collection->getId(),
+            Document::COLLECTION => $collection->getId(),
             'modified' => $modified,
         ]));
 
@@ -2424,8 +2424,8 @@ trait Documents
 
         if ($id !== null) {
             $this->trigger(Event::DocumentPurge, new Document([
-                '$id' => $id,
-                '$collection' => $collectionId,
+                Document::ID => $id,
+                Document::COLLECTION => $collectionId,
             ]));
         }
 
@@ -2774,7 +2774,7 @@ trait Documents
         if (! $isAggregation) {
             $uniqueOrderBy = false;
             foreach ($orderAttributes as $order) {
-                if ($order === '$id' || $order === '$sequence') {
+                if ($order === Document::ID || $order === Document::SEQUENCE) {
                     $uniqueOrderBy = true;
                 }
             }
@@ -2783,11 +2783,11 @@ trait Documents
                 $leadingAttribute = $orderAttributes[0] ?? null;
                 $leadingOrderType = $orderTypes[0] ?? \Utopia\Query\OrderDirection::Asc;
 
-                if (\in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)) {
-                    \array_splice($orderAttributes, 1, 0, ['$sequence']);
+                if (\in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)) {
+                    \array_splice($orderAttributes, 1, 0, [Document::SEQUENCE]);
                     \array_splice($orderTypes, 1, 0, [$leadingOrderType]);
                 } else {
-                    $orderAttributes[] = '$sequence';
+                    $orderAttributes[] = Document::SEQUENCE;
                     $orderTypes[] = \Utopia\Query\OrderDirection::Asc;
                 }
             }
@@ -2986,7 +2986,7 @@ trait Documents
             }
 
             if (! $node->isEmpty()) {
-                $node->setAttribute('$collection', $collectionId);
+                $node->setAttribute(Document::COLLECTION, $collectionId);
             }
 
             $results[$index] = $node;
@@ -3320,7 +3320,7 @@ trait Documents
         // Allow querying internal attributes
         /** @var array<string> $keys */
         $keys = \array_map(
-            fn (array $attribute) => $attribute['$id'] ?? '',
+            fn (array $attribute) => $attribute[Document::ID] ?? '',
             $this->getInternalAttributes()
         );
 
@@ -3343,12 +3343,12 @@ trait Documents
 
         $selections = \array_merge($selections, $relationshipSelections);
 
-        $selections[] = '$id';
-        $selections[] = '$sequence';
-        $selections[] = '$collection';
-        $selections[] = '$createdAt';
-        $selections[] = '$updatedAt';
-        $selections[] = '$permissions';
+        $selections[] = Document::ID;
+        $selections[] = Document::SEQUENCE;
+        $selections[] = Document::COLLECTION;
+        $selections[] = Document::CREATED_AT;
+        $selections[] = Document::UPDATED_AT;
+        $selections[] = Document::PERMISSIONS;
 
         return \array_values(\array_unique($selections));
     }

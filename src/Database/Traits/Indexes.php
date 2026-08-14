@@ -183,7 +183,7 @@ trait Indexes
 
         $this->triggerHooks(
             Event::IndexCreate,
-            (clone $indexDoc)->setAttribute('$collection', $collection->getId()),
+            (clone $indexDoc)->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return true;
@@ -210,13 +210,13 @@ trait Indexes
         /** @var array<Document> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
 
-        $index = \in_array($old, \array_map(fn ($idx) => $idx['$id'], $indexes));
+        $index = \in_array($old, \array_map(fn ($idx) => $idx[Document::ID], $indexes));
 
         if ($index === false) {
             throw new NotFoundException('Index not found');
         }
 
-        $indexNewExists = \in_array($new, \array_map(fn ($idx) => $idx['$id'], $indexes));
+        $indexNewExists = \in_array($new, \array_map(fn ($idx) => $idx[Document::ID], $indexes));
 
         if ($indexNewExists !== false) {
             throw new DuplicateException('Index name already used');
@@ -227,7 +227,7 @@ trait Indexes
         foreach ($indexes as $key => $value) {
             if ($value->getId() === $old) {
                 $value->setAttribute('key', $new);
-                $value->setAttribute('$id', $new);
+                $value->setAttribute(Document::ID, $new);
                 $indexNew = $value;
                 $indexes[$key] = $value;
                 break;
@@ -272,7 +272,7 @@ trait Indexes
 
         $this->triggerHooks(
             Event::IndexRename,
-            (clone $indexNew)->setAttribute('$collection', $collection->getId()),
+            (clone $indexNew)->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return true;
@@ -367,7 +367,7 @@ trait Indexes
 
         $this->triggerHooks(
             Event::IndexDelete,
-            (clone $indexDeleted)->setAttribute('$collection', $collection->getId()),
+            (clone $indexDeleted)->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return $deleted;
@@ -391,7 +391,7 @@ trait Indexes
 
         /** @var array<Document> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
-        $index = \array_search($id, \array_map(fn ($idx) => $idx['$id'], $indexes));
+        $index = \array_search($id, \array_map(fn ($idx) => $idx[Document::ID], $indexes));
 
         if ($index === false) {
             throw new NotFoundException('Index not found');

@@ -127,8 +127,8 @@ trait Collections
         $indexDocs = array_map(fn (Index $idx) => $idx->toDocument(), $indexes);
 
         $collection = new Document(\array_merge([
-            '$id' => ID::custom($id),
-            '$permissions' => $permissions,
+            Document::ID => ID::custom($id),
+            Document::PERMISSIONS => $permissions,
             'name' => $id,
             'attributes' => $attributeDocs,
             'indexes' => $indexDocs,
@@ -254,7 +254,7 @@ trait Collections
         }
 
         $collection
-            ->setAttribute('$permissions', $permissions)
+            ->setAttribute(Document::PERMISSIONS, $permissions)
             ->setAttribute('documentSecurity', $documentSecurity);
 
         $collection = $this->skipValidation(fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection)));

@@ -65,8 +65,6 @@ class SpatialValidationTest extends TestCase
                 Capability::DefinedAttributes,
             ]);
         });
-        $this->adapter->method('castingBefore')->willReturnArgument(1);
-        $this->adapter->method('castingAfter')->willReturnArgument(1);
         $this->adapter->method('startTransaction')->willReturn(true);
         $this->adapter->method('commitTransaction')->willReturn(true);
         $this->adapter->method('rollbackTransaction')->willReturn(true);

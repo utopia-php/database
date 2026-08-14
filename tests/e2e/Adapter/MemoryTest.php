@@ -22,8 +22,9 @@ use Utopia\Query\Schema\IndexType;
  * E2E tests for the in-memory adapter. Inherits the standard adapter scopes
  * from Base so it is exercised against the same scenarios as MariaDB/MySQL/
  * Postgres. Scope tests that depend on features Memory does not implement
- * (relationships, operators, vectors, spatial, fulltext, schemaless,
- * object attributes) self-skip via the adapter's getSupportFor* flags.
+ * (upserts, operators, vectors, spatial, fulltext, schemaless, object
+ * attributes) self-skip via Feature instanceof / Capability checks. Memory
+ * implements relationships.
  *
  * The test methods declared directly on this class are Memory-specific
  * regressions for behaviour that is not exercised — or not exercised in the
@@ -102,8 +103,8 @@ class MemoryTest extends Base
     }
 
     /**
-     * The inherited scope test does not gate on getSupportForUpserts(); skip
-     * here because Memory throws on upsert by design.
+     * The inherited scope test does not gate on instanceof Feature\Upserts;
+     * skip here because Memory throws on upsert by design.
      */
     public function testUpsertWithJSONFilters(): void
     {
@@ -112,7 +113,7 @@ class MemoryTest extends Base
 
     /**
      * Operator scope tests that combine upserts with operators only gate on
-     * getSupportForOperators() — Memory doesn't implement upserts, so we
+     * Capability::Operators — Memory doesn't implement Feature\Upserts, so we
      * skip the upsert variants explicitly.
      */
     public function testBulkUpsertWithOperatorsCallbackReceivesFreshData(): void
@@ -133,30 +134,6 @@ class MemoryTest extends Base
     public function testUpsertDocumentsWithAllOperators(): void
     {
         $this->markTestSkipped('Memory adapter does not implement upserts.');
-    }
-
-    /**
-     * Inherited test creates a self-relationship; Memory has no relationships.
-     */
-    public function testAttributeNamesWithDots(): void
-    {
-        $this->markTestSkipped('Memory adapter does not implement relationships.');
-    }
-
-    /**
-     * Inherited test asserts permission cascade through a relationship.
-     */
-    public function testCollectionPermissionsRelationships(): void
-    {
-        $this->markTestSkipped('Memory adapter does not implement relationships.');
-    }
-
-    /**
-     * Inherited test asserts cursor ordering across a relationship join.
-     */
-    public function testOrderAndCursorWithRelationshipQueries(): void
-    {
-        $this->markTestSkipped('Memory adapter does not implement relationships.');
     }
 
     /**
@@ -214,14 +191,12 @@ class MemoryTest extends Base
 
     /**
      * Memory does not implement upserts. Inherited scope tests that rely on
-     * upserts skip themselves via getSupportForUpserts().
+     * upserts skip themselves via instanceof Feature\Upserts.
      */
     public function testUpsertIsNotImplemented(): void
     {
-        $collection = new Document(['$id' => 'any']);
-
         $this->expectException(\Utopia\Database\Exception::class);
-        $this->freshDatabase()->getAdapter()->upsertDocuments($collection, '', []);
+        $this->freshDatabase()->upsertDocuments('any', []);
     }
 
     /**

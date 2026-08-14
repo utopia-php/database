@@ -80,12 +80,6 @@ class CustomDocumentTypeTest extends TestCase
                 default => false,
             };
         });
-        $this->adapter->method('castingBefore')->willReturnCallback(
-            fn (Document $collection, Document $document) => $document
-        );
-        $this->adapter->method('castingAfter')->willReturnCallback(
-            fn (Document $collection, Document $document) => $document
-        );
         $this->adapter->method('withTransaction')->willReturnCallback(
             fn (callable $callback) => $callback()
         );

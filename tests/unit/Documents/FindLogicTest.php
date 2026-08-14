@@ -62,8 +62,6 @@ class FindLogicTest extends TestCase
                 Capability::Vectors,
             ]);
         });
-        $this->adapter->method('castingBefore')->willReturnArgument(1);
-        $this->adapter->method('castingAfter')->willReturnArgument(1);
 
         $cache = new Cache(new None());
         $this->database = new Database($this->adapter, $cache);
@@ -848,8 +846,6 @@ class FindLogicTest extends TestCase
         $adapter->method('getAttributeWidth')->willReturn(0);
         $adapter->method('getInternalIndexesKeys')->willReturn([]);
         $adapter->method('filter')->willReturnArgument(0);
-        $adapter->method('castingBefore')->willReturnArgument(1);
-        $adapter->method('castingAfter')->willReturnArgument(1);
         $adapter->method('supports')->willReturnCallback(function (Capability $cap) use ($capabilities) {
             return in_array($cap, $capabilities);
         });

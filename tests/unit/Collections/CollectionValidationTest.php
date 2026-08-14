@@ -55,8 +55,6 @@ class CollectionValidationTest extends TestCase
                 Capability::DefinedAttributes,
             ]);
         });
-        $this->adapter->method('castingBefore')->willReturnArgument(1);
-        $this->adapter->method('castingAfter')->willReturnArgument(1);
         $this->adapter->method('startTransaction')->willReturn(true);
         $this->adapter->method('commitTransaction')->willReturn(true);
         $this->adapter->method('rollbackTransaction')->willReturn(true);
@@ -188,8 +186,6 @@ class CollectionValidationTest extends TestCase
                 Capability::DefinedAttributes,
             ]);
         });
-        $adapter->method('castingBefore')->willReturnArgument(1);
-        $adapter->method('castingAfter')->willReturnArgument(1);
         $adapter->method('createCollection')->willReturn(true);
         $adapter->method('deleteCollection')->willReturn(true);
         $adapter->method('getDocument')->willReturn(new Document());
@@ -240,8 +236,6 @@ class CollectionValidationTest extends TestCase
                 Capability::DefinedAttributes,
             ]);
         });
-        $adapter->method('castingBefore')->willReturnArgument(1);
-        $adapter->method('castingAfter')->willReturnArgument(1);
         $adapter->method('createCollection')->willReturn(true);
         $adapter->method('deleteCollection')->willReturn(true);
         $adapter->method('getDocument')->willReturn(new Document());

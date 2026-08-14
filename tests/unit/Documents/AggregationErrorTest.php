@@ -40,8 +40,6 @@ class AggregationErrorTest extends TestCase
         $adapter->method('getAttributeWidth')->willReturn(0);
         $adapter->method('getInternalIndexesKeys')->willReturn([]);
         $adapter->method('filter')->willReturnArgument(0);
-        $adapter->method('castingBefore')->willReturnArgument(1);
-        $adapter->method('castingAfter')->willReturnArgument(1);
         $adapter->method('supports')->willReturnCallback(function (Capability $cap) use ($capabilities) {
             return in_array($cap, $capabilities);
         });

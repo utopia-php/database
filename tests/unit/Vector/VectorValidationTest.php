@@ -58,8 +58,6 @@ class VectorValidationTest extends TestCase
                 Capability::Vectors,
             ]);
         });
-        $this->adapter->method('castingBefore')->willReturnArgument(1);
-        $this->adapter->method('castingAfter')->willReturnArgument(1);
         $this->adapter->method('startTransaction')->willReturn(true);
         $this->adapter->method('commitTransaction')->willReturn(true);
         $this->adapter->method('rollbackTransaction')->willReturn(true);

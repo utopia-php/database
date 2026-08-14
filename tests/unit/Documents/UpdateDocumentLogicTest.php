@@ -59,8 +59,6 @@ class UpdateDocumentLogicTest extends TestCase
                 Capability::DefinedAttributes,
             ]);
         });
-        $adapter->method('castingBefore')->willReturnArgument(1);
-        $adapter->method('castingAfter')->willReturnArgument(1);
         $adapter->method('startTransaction')->willReturn(true);
         $adapter->method('commitTransaction')->willReturn(true);
         $adapter->method('rollbackTransaction')->willReturn(true);

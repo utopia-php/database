@@ -59,8 +59,6 @@ class IndexValidationTest extends TestCase
                 Capability::TTLIndexes,
             ]);
         });
-        $this->adapter->method('castingBefore')->willReturnArgument(1);
-        $this->adapter->method('castingAfter')->willReturnArgument(1);
         $this->adapter->method('startTransaction')->willReturn(true);
         $this->adapter->method('commitTransaction')->willReturn(true);
         $this->adapter->method('rollbackTransaction')->willReturn(true);
@@ -172,8 +170,6 @@ class IndexValidationTest extends TestCase
         $adapter->method('supports')->willReturnCallback(function (Capability $cap) {
             return in_array($cap, [Capability::Index, Capability::IndexArray, Capability::UniqueIndex, Capability::DefinedAttributes]);
         });
-        $adapter->method('castingBefore')->willReturnArgument(1);
-        $adapter->method('castingAfter')->willReturnArgument(1);
         $adapter->method('createIndex')->willReturn(true);
 
         $attributes = [

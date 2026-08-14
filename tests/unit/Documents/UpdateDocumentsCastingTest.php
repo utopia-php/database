@@ -5,6 +5,7 @@ namespace Tests\Unit\Documents;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
@@ -16,7 +17,7 @@ final class UpdateDocumentsCastingTest extends TestCase
 {
     public function testCastsUpdatesBeforeEveryBatchWrite(): void
     {
-        $adapter = new class () extends Memory {
+        $adapter = new class () extends Memory implements Feature\InternalCasting {
             /** @var array<int, true> */
             private array $casted = [];
 
@@ -32,7 +33,6 @@ final class UpdateDocumentsCastingTest extends TestCase
             /** @var array<int, int> */
             public array $receivedUpdateIds = [];
 
-            #[\Override]
             public function castingBefore(Document $collection, Document $document): Document
             {
                 $this->casted[\spl_object_id($document)] = true;
@@ -45,7 +45,12 @@ final class UpdateDocumentsCastingTest extends TestCase
                     }
                 }
 
-                return parent::castingBefore($collection, $document);
+                return $document;
+            }
+
+            public function castingAfter(Document $collection, Document $document): Document
+            {
+                return $document;
             }
 
             #[\Override]

@@ -19,6 +19,7 @@ global $cli;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Console;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
@@ -774,7 +775,7 @@ function benchmarkOperatorAcrossOperations(
 
     foreach ($operationTypes as $opType => $method) {
         // Skip upsert operations if not supported
-        if (str_contains($method, 'upsert') && ! $database->getAdapter()->getSupportForUpserts()) {
+        if (str_contains($method, 'upsert') && ! ($database->getAdapter() instanceof Feature\Upserts)) {
             Console::warning("  Skipping {$opType} (not supported by adapter)");
 
             continue;

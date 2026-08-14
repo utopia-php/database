@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
@@ -189,7 +190,7 @@ final class SQLTimeoutScopeTest extends TestCase
     }
 
     /**
-     * @param class-string<SQL> $adapterClass
+     * @param class-string<SQL&Feature\Timeouts> $adapterClass
      * @param list<string> $expected
      */
     #[DataProvider('adapters')]
@@ -222,7 +223,7 @@ final class SQLTimeoutScopeTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{class-string<SQL>, list<string>}>
+     * @return iterable<string, array{class-string<SQL&Feature\Timeouts>, list<string>}>
      */
     public static function adapters(): iterable
     {

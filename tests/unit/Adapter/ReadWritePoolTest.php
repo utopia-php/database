@@ -24,16 +24,16 @@ class ReadWritePoolTest extends TestCase
 
     private ReadWritePool $pool;
 
-    /** @var Adapter&MockObject */
+    /** @var FeatureAdapterStub&MockObject */
     private Adapter $writeAdapter;
 
-    /** @var Adapter&MockObject */
+    /** @var FeatureAdapterStub&MockObject */
     private Adapter $readAdapter;
 
     protected function setUp(): void
     {
-        $this->writeAdapter = $this->createMock(Adapter::class);
-        $this->readAdapter = $this->createMock(Adapter::class);
+        $this->writeAdapter = $this->createMock(FeatureAdapterStub::class);
+        $this->readAdapter = $this->createMock(FeatureAdapterStub::class);
 
         $this->writePool = self::createStub(UtopiaPool::class);
         $this->readPool = self::createStub(UtopiaPool::class);
@@ -249,7 +249,7 @@ class ReadWritePoolTest extends TestCase
     public function testReadAdapterClearsStaleTimeout(): void
     {
         /** @var Adapter&Feature\Timeouts&MockObject $readAdapter */
-        $readAdapter = $this->createMock(TimeoutsAdapterStub::class);
+        $readAdapter = $this->createMock(FeatureAdapterStub::class);
         $readAdapter->expects($this->once())
             ->method('clearTimeout');
         $readAdapter->expects($this->once())
@@ -368,6 +368,14 @@ class ReadWritePoolTest extends TestCase
     }
 }
 
-abstract class TimeoutsAdapterStub extends Adapter implements Feature\Timeouts
+abstract class FeatureAdapterStub extends Adapter implements
+    Feature\ColumnTypes,
+    Feature\ConnectionId,
+    Feature\QueryBuilder,
+    Feature\RawQuery,
+    Feature\SchemaAttributes,
+    Feature\SchemaIndexes,
+    Feature\Spatial,
+    Feature\Timeouts
 {
 }

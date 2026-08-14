@@ -33,6 +33,15 @@ final class PermissionJoinFilterTest extends TestCase
         $this->assertSame(Placement::Where, $result->placement);
     }
 
+    public function testFullOuterJoinPlacesPermissionInOnClause(): void
+    {
+        $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
+        $result = $hook->filterJoin('j0', JoinType::FullOuter);
+
+        $this->assertNotNull($result);
+        $this->assertSame(Placement::On, $result->placement);
+    }
+
     private function permissionFilter(): PermissionFilter
     {
         return new PermissionFilter(

@@ -456,4 +456,18 @@ class DocumentTest extends TestCase
         $this->assertNull($empty->getSequence());
         $this->assertNotSame('', $empty->getSequence());
     }
+
+    public function testGetSequenceStringifiesObjectIdentifiers(): void
+    {
+        $sequence = new class () {
+            public function __toString(): string
+            {
+                return '507f1f77bcf86cd799439011';
+            }
+        };
+
+        $document = new Document([Document::SEQUENCE => $sequence]);
+
+        $this->assertSame('507f1f77bcf86cd799439011', $document->getSequence());
+    }
 }

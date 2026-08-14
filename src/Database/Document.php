@@ -161,12 +161,23 @@ class Document extends ArrayObject
     {
         $sequence = $this->getAttribute(self::SEQUENCE);
 
-        if ($sequence === null) {
+        if ($sequence === null || $sequence === '') {
             return null;
         }
 
-        /** @var string $sequence */
-        return $sequence;
+        if (\is_string($sequence)) {
+            return $sequence;
+        }
+
+        if (\is_scalar($sequence)) {
+            return (string) $sequence;
+        }
+
+        if (\is_object($sequence) && \method_exists($sequence, '__toString')) {
+            return (string) $sequence;
+        }
+
+        return null;
     }
 
     /**

@@ -3356,17 +3356,16 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // Handle special attribute mappings
         if ($from === '_') {
             if (isset($array[Storage::SEQUENCE])) {
-                /** @var mixed $idVal */
-                $idVal = $array[Storage::SEQUENCE];
-                $array[Document::SEQUENCE] = \is_string($idVal) ? $idVal : (\is_scalar($idVal) ? (string) $idVal : '');
+                $array[Document::SEQUENCE] = $this->stringifyIdentifier($array[Storage::SEQUENCE]);
                 unset($array[Storage::SEQUENCE]);
             }
             if (isset($array[Storage::UID])) {
-                $array[Document::ID] = $array[Storage::UID];
+                $array[Document::ID] = $this->stringifyIdentifier($array[Storage::UID]);
                 unset($array[Storage::UID]);
             }
             if (isset($array[Storage::TENANT])) {
-                $array[Document::TENANT] = $array[Storage::TENANT];
+                $tenant = $array[Storage::TENANT];
+                $array[Document::TENANT] = \is_int($tenant) ? $tenant : $this->stringifyIdentifier($tenant);
                 unset($array[Storage::TENANT]);
             }
         } elseif ($from === '$') {
@@ -3385,6 +3384,23 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $array;
+    }
+
+    private function stringifyIdentifier(mixed $value): string
+    {
+        if (\is_string($value)) {
+            return $value;
+        }
+
+        if (\is_scalar($value)) {
+            return (string) $value;
+        }
+
+        if (\is_object($value) && \method_exists($value, '__toString')) {
+            return (string) $value;
+        }
+
+        return '';
     }
 
     /**

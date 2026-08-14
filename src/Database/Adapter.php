@@ -2,7 +2,6 @@
 
 namespace Utopia\Database;
 
-use BadMethodCallException;
 use DateTime;
 use Exception;
 use Throwable;
@@ -356,17 +355,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         return $this;
     }
 
-    /**
-     * Set a global timeout for database queries.
-     *
-     * @param int $milliseconds Timeout duration in milliseconds.
-     * @param Event $event The event scope for the timeout.
-     */
-    public function setTimeout(int $milliseconds, Event $event = Event::All): void
-    {
-        $this->setTimeoutState($milliseconds, $event);
-    }
-
     protected function setTimeoutState(int $milliseconds, Event $event): void
     {
         $this->timeouts[$event->value] = $milliseconds;
@@ -386,14 +374,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         return $this->timeouts[$event->value]
             ?? $this->timeouts[Event::All->value]
             ?? $this->timeout;
-    }
-
-    /**
-     * Clears a global timeout for database queries.
-     */
-    public function clearTimeout(Event $event = Event::All): void
-    {
-        $this->clearTimeoutState($event);
     }
 
     protected function clearTimeoutState(Event $event): void
@@ -540,16 +520,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * Reconnect Database
      */
     abstract public function reconnect(): void;
-
-    /**
-     * Get the unique identifier for the current database connection.
-     *
-     * @return string The connection ID, or empty string if not applicable.
-     */
-    public function getConnectionId(): string
-    {
-        return '';
-    }
 
     /**
      * Start a new transaction.
@@ -742,41 +712,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
-     * Create a relationship between two collections in the database schema.
-     *
-     * @param Relationship $relationship The relationship definition.
-     * @return bool True on success.
-     */
-    public function createRelationship(Relationship $relationship): bool
-    {
-        return true;
-    }
-
-    /**
-     * Update an existing relationship, optionally renaming keys.
-     *
-     * @param Relationship $relationship The current relationship definition.
-     * @param string|null $newKey New key name for the parent side, or null to keep unchanged.
-     * @param string|null $newTwoWayKey New key name for the child side, or null to keep unchanged.
-     * @return bool True on success.
-     */
-    public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
-    {
-        return true;
-    }
-
-    /**
-     * Delete a relationship from the database schema.
-     *
-     * @param Relationship $relationship The relationship to delete.
-     * @return bool True on success.
-     */
-    public function deleteRelationship(Relationship $relationship): bool
-    {
-        return true;
-    }
-
-    /**
      * @param  array<string, string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      */
@@ -829,18 +764,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * @throws DatabaseException
      */
     abstract public function updateDocuments(Document $collection, Document $updates, array $documents): int;
-
-    /**
-     * @param  array<Change>  $changes
-     * @return array<Document>
-     */
-    public function upsertDocuments(
-        Document $collection,
-        string $attribute,
-        array $changes
-    ): array {
-        return [];
-    }
 
     /**
      * Increase or decrease attribute value
@@ -1031,44 +954,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * Get the physical schema attributes for a collection from the database engine.
-     *
-     * @param string $collection The collection identifier.
-     * @return array<Document>
-     */
-    public function getSchemaAttributes(string $collection): array
-    {
-        return [];
-    }
-
-    /**
-     * Get the physical schema indexes for a collection from the database engine.
-     *
-     * Returns physical index definitions from the database schema.
-     *
-     * @param string $collection The collection identifier.
-     * @return array<Document>
-     */
-    public function getSchemaIndexes(string $collection): array
-    {
-        return [];
-    }
-
-    /**
-     * Get the expected column type for a given attribute type.
-     *
-     * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
-     * that would be used when creating a column for the given attribute parameters.
-     * Returns an empty string if the adapter does not support this operation.
-     *
-     * @throws DatabaseException For unknown types on adapters that support column-type resolution.
-     */
-    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
-    {
-        return '';
-    }
-
-    /**
      * Get the query to check for tenant when in shared tables mode
      *
      * @param  string  $collection  The collection being queried
@@ -1082,111 +967,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     public function getSupportNonUtfCharacters(): bool
     {
         return false;
-    }
-
-    /**
-     * Apply adapter-specific type casting before writing a document.
-     *
-     * @param Document $collection The collection definition.
-     * @param Document $document The document to cast.
-     * @return Document The document with casting applied.
-     */
-    public function castingBefore(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    /**
-     * Apply adapter-specific type casting after reading a document.
-     *
-     * @param Document $collection The collection definition.
-     * @param Document $document The document to cast.
-     * @return Document The document with casting applied.
-     */
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    /**
-     * Convert a datetime string to UTC format for the adapter.
-     *
-     * @param string $value The datetime string to convert.
-     * @return mixed The converted datetime value.
-     */
-    public function setUTCDatetime(string $value): mixed
-    {
-        return $value;
-    }
-
-    /**
-     * Decode a WKB point value into an array of floats.
-     *
-     * @return array<float>
-     *
-     * @throws BadMethodCallException
-     */
-    public function decodePoint(string $wkb): array
-    {
-        throw new BadMethodCallException('decodePoint is not implemented by this adapter');
-    }
-
-    /**
-     * Decode a WKB linestring value into an array of point arrays.
-     *
-     * @return array<array<float>>
-     *
-     * @throws BadMethodCallException
-     */
-    public function decodeLinestring(string $wkb): array
-    {
-        throw new BadMethodCallException('decodeLinestring is not implemented by this adapter');
-    }
-
-    /**
-     * Decode a WKB polygon value into an array of linestring arrays.
-     *
-     * @return array<array<array<float>>>
-     *
-     * @throws BadMethodCallException
-     */
-    public function decodePolygon(string $wkb): array
-    {
-        throw new BadMethodCallException('decodePolygon is not implemented by this adapter');
-    }
-
-    /**
-     * Execute a raw query and return results as Documents.
-     *
-     * @param string $query The raw query string
-     * @param array<mixed> $bindings Parameter bindings for prepared statements
-     * @return array<Document> The query results as Document objects
-     *
-     * @throws DatabaseException
-     */
-    public function rawQuery(string $query, array $bindings = []): array
-    {
-        throw new DatabaseException('Raw queries are not supported by this adapter');
-    }
-
-    /**
-     * @param  array<mixed>  $bindings
-     *
-     * @throws DatabaseException
-     */
-    public function rawMutation(string $query, array $bindings = []): int
-    {
-        throw new DatabaseException('Raw mutations are not supported by this adapter');
-    }
-
-    public function getBuilder(string $collection): \Utopia\Query\Builder
-    {
-        throw new DatabaseException('Query builder is not supported by this adapter');
-    }
-
-    public function getSchema(): \Utopia\Query\Schema
-    {
-        throw new DatabaseException('Schema builder is not supported by this adapter');
     }
 
     /**

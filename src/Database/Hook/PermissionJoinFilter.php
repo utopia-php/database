@@ -27,7 +27,7 @@ final class PermissionJoinFilter implements JoinFilter
         return new JoinCondition(
             $this->filter->filter($table),
             match ($joinType) {
-                JoinType::Left, JoinType::Right => Placement::On,
+                JoinType::Left, JoinType::Right, JoinType::FullOuter => Placement::On,
                 default => Placement::Where,
             },
         );

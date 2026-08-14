@@ -23,6 +23,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\PermissionAllowNullUid;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Hook\PermissionJoinFilter;
 use Utopia\Database\Hook\Permissions;
@@ -1307,6 +1308,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $joinTablePrefixes = [];
         $joinIndex = 0;
+        $allowNullPrimaryUid = false;
 
         if ($hasJoins) {
             foreach ($queries as $query) {
@@ -1319,6 +1321,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     && ! $builder instanceof FullOuterJoinsFeature
                 ) {
                     throw new QueryException('Full outer joins are not supported');
+                }
+
+                if ($query->getMethod() === Method::RightJoin || $query->getMethod() === Method::FullOuterJoin) {
+                    $allowNullPrimaryUid = true;
                 }
 
                 $joinTable = $query->getAttribute();
@@ -1346,7 +1352,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $query->setValues($values);
                 }
 
-                $joinTablePrefixes[$joinTable] = $joinAlias;
+                $joinTablePrefixes[] = ['table' => $joinTable, 'alias' => $joinAlias];
             }
         }
 
@@ -1357,7 +1363,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             foreach ($collectionAttrs as $attr) {
                 $mainAttributeSet[$attr->getId()] = true;
             }
-            $defaultJoinPrefix = \array_values($joinTablePrefixes)[0];
+            $defaultJoinPrefix = $joinTablePrefixes[0]['alias'];
 
             foreach ($queries as $query) {
                 if ($query->getMethod()->isAggregate()) {
@@ -1410,17 +1416,25 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         // Permission subquery for primary table
         if ($this->authorization->getStatus()) {
             $docCol = $hasJoins ? $alias . '.' . Storage::UID : Storage::UID;
-            $builder->addHook($this->newPermissionHook($name, $roles, $forPermission->value, $docCol));
+            $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
+            if ($allowNullPrimaryUid) {
+                $permissionHook = new PermissionAllowNullUid(
+                    $permissionHook,
+                    $docCol,
+                    $this->getIdentifierQuoteChar(),
+                );
+            }
+            $builder->addHook($permissionHook);
 
-            foreach ($joinTablePrefixes as $joinTable => $joinAlias) {
+            foreach ($joinTablePrefixes as $join) {
                 $builder->addHook(new PermissionJoinFilter(
                     $this->newPermissionHook(
-                        $this->filter($joinTable),
+                        $this->filter($join['table']),
                         $roles,
                         $forPermission->value,
-                        $joinAlias.'.'.Storage::UID
+                        $join['alias'].'.'.Storage::UID
                     ),
-                    $joinAlias
+                    $join['alias']
                 ));
             }
         }

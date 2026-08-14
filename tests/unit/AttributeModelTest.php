@@ -4,6 +4,8 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
+use Utopia\Database\Attribute\Integer;
+use Utopia\Database\Attribute\StringType;
 use Utopia\Database\Document;
 use Utopia\Query\Schema\ColumnType;
 
@@ -362,5 +364,43 @@ class AttributeModelTest extends TestCase
 
         $attr = Attribute::fromDocument($doc);
         $this->assertSame(ColumnType::Boolean, $attr->type);
+    }
+
+    public function testFromDocumentReturnsStringType(): void
+    {
+        $doc = new Document([
+            '$id' => 'name',
+            'key' => 'name',
+            'type' => 'string',
+        ]);
+
+        $attr = Attribute::fromDocument($doc);
+
+        $this->assertInstanceOf(StringType::class, $attr);
+    }
+
+    public function testFromArrayReturnsInteger(): void
+    {
+        $attr = Attribute::fromArray(['type' => 'integer']);
+
+        $this->assertInstanceOf(Integer::class, $attr);
+    }
+
+    public function testSubclassDefaultValues(): void
+    {
+        $stringAttr = Attribute::string(key: 's', size: 32, default: 'hello');
+        $this->assertSame('hello', $stringAttr->default);
+
+        $intAttr = Attribute::integer(key: 'i', default: 42);
+        $this->assertSame(42, $intAttr->default);
+
+        $boolAttr = Attribute::boolean(key: 'b', default: true);
+        $this->assertSame(true, $boolAttr->default);
+
+        $doubleAttr = Attribute::double(key: 'd', default: 3.14);
+        $this->assertSame(3.14, $doubleAttr->default);
+
+        $nullAttr = Attribute::string(key: 'n', size: 32, default: null);
+        $this->assertSame(null, $nullAttr->default);
     }
 }

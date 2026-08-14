@@ -39,7 +39,7 @@
         "ext-mongodb": "*",
         "ext-mbstring": "*",
         "ext-redis": "*",
-        "utopia-php/validators": "0.4.*",
+        "utopia-php/validators": "0.5.*",
         "utopia-php/console": "0.1.*",
         "utopia-php/cache": "4.*",
         "utopia-php/pools": "2.*",

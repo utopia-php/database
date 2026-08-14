@@ -104,6 +104,11 @@ trait Relationships
         RelationSide $side = RelationSide::Parent,
         int $maxAttempts = 3
     ): void {
+        $adapter = $this->adapter;
+        if (! ($adapter instanceof Feature\Relationships)) {
+            throw new DatabaseException('Adapter does not support relationships');
+        }
+
         $relationshipModel = new Relationship(
             collection: $collectionId,
             relatedCollection: $relatedCollectionId,
@@ -114,7 +119,7 @@ trait Relationships
             side: $side,
         );
         $this->cleanup(
-            fn () => $this->adapter->deleteRelationship($relationshipModel),
+            fn () => $adapter->deleteRelationship($relationshipModel),
             'relationship',
             $key,
             $maxAttempts
@@ -739,7 +744,7 @@ trait Relationships
             }
 
             // Reverse adapter update
-            if ($adapterUpdated) {
+            if ($adapterUpdated && $this->adapter instanceof Feature\Relationships) {
                 try {
                     $reverseRelModel2 = new Relationship(
                         collection: $collection->getId(),

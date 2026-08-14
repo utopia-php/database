@@ -3228,4 +3228,291 @@ trait JoinTests
             $this->cleanupAggCollections($database, $cols);
         }
     }
+
+    public function testRightJoinDoesNotLeakUnauthorizedJoinDocument(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $cCol = 't8_rjlk_c';
+        $oCol = 't8_rjlk_o';
+        $cols = [$cCol, $oCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($oCol, new Attribute(key: 'customerId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($cCol, new Document([
+            '$id' => 'cust1',
+            'name' => 'Alice',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($cCol, new Document([
+            '$id' => 'cust2',
+            'name' => 'Bob',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($oCol, new Document([
+            '$id' => 'ord-public',
+            'customerId' => 'cust1',
+            'amount' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($oCol, new Document([
+            '$id' => 'ord-secret',
+            'customerId' => 'cust1',
+            'amount' => 999,
+            '$permissions' => [Permission::read(Role::user('other'))],
+        ]));
+
+        $authorization = $database->getAuthorization();
+        $previousRoles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            $results = $database->find($cCol, [
+                Query::rightJoin($oCol, '$id', 'customerId'),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+
+            $amounts = [];
+            foreach ($results as $document) {
+                $this->assertNotSame('ord-secret', $document->getId());
+                $amount = $document->getAttribute('amount');
+                if ($amount !== null && $amount !== '') {
+                    $amounts[] = (int) $amount;
+                }
+                $this->assertNotSame(999, (int) $amount);
+            }
+            $this->assertContains(10, $amounts);
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($previousRoles as $role) {
+                $authorization->addRole($role);
+            }
+            $this->cleanupAggCollections($database, $cols);
+        }
+    }
+
+    public function testFullOuterJoinDoesNotLeakUnauthorizedJoinDocument(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $cCol = 't8_folk_c';
+        $oCol = 't8_folk_o';
+        $cols = [$cCol, $oCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($oCol, new Attribute(key: 'customerId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($cCol, new Document([
+            '$id' => 'cust1',
+            'name' => 'Alice',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($cCol, new Document([
+            '$id' => 'cust2',
+            'name' => 'Bob',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($oCol, new Document([
+            '$id' => 'ord-public',
+            'customerId' => 'cust1',
+            'amount' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($oCol, new Document([
+            '$id' => 'ord-secret',
+            'customerId' => 'cust1',
+            'amount' => 999,
+            '$permissions' => [Permission::read(Role::user('other'))],
+        ]));
+
+        $adapter = $database->getAdapter();
+        if (! $adapter instanceof SQL || ! $adapter->getBuilder($cCol) instanceof FullOuterJoinsFeature) {
+            try {
+                $database->find($cCol, [
+                    Query::fullOuterJoin($oCol, '$id', 'customerId'),
+                ]);
+                $this->fail('Expected QueryException for full outer join');
+            } catch (QueryException $exception) {
+                $this->assertNotSame('', $exception->getMessage());
+            } finally {
+                $this->cleanupAggCollections($database, $cols);
+            }
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+        $previousRoles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            $results = $database->find($cCol, [
+                Query::fullOuterJoin($oCol, '$id', 'customerId'),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+
+            $amounts = [];
+            foreach ($results as $document) {
+                $this->assertNotSame('ord-secret', $document->getId());
+                $amount = $document->getAttribute('amount');
+                if ($amount !== null && $amount !== '') {
+                    $amounts[] = (int) $amount;
+                }
+                $this->assertNotSame(999, (int) $amount);
+            }
+            $this->assertContains(10, $amounts);
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($previousRoles as $role) {
+                $authorization->addRole($role);
+            }
+            $this->cleanupAggCollections($database, $cols);
+        }
+    }
+
+    public function testRightJoinUnmatchedRowSurvivesSharedTables(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
+
+        $sharedTablesDb = 'sharedTablesRj_'.static::getTestToken();
+        $pCol = 't8_rjst_p';
+        $rCol = 't8_rjst_r';
+
+        try {
+            if ($database->exists($sharedTablesDb)) {
+                $database->setDatabase($sharedTablesDb)->delete();
+            }
+
+            $database
+                ->setDatabase($sharedTablesDb)
+                ->setNamespace('')
+                ->setSharedTables(true)
+                ->setTenant(null)
+                ->create();
+
+            $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+            $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+            $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+            $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
+            $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+            $database->setTenant(1);
+            $database->createDocument($pCol, new Document([
+                '$id' => 'p1',
+                'name' => 'Product p1',
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($rCol, new Document([
+                '$id' => 'r-match',
+                'prod_uid' => 'p1',
+                'score' => 5,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($rCol, new Document([
+                '$id' => 'r-unmatched',
+                'prod_uid' => 'missing',
+                'score' => 9,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+
+            $database->setTenant(2);
+            $database->createDocument($rCol, new Document([
+                '$id' => 'r-other-tenant',
+                'prod_uid' => 'missing',
+                'score' => 77,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($rCol, new Document([
+                '$id' => 'r-other-match',
+                'prod_uid' => 'p1',
+                'score' => 88,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+
+            $database->setTenant(1);
+            $results = $database->find($pCol, [
+                Query::rightJoin($rCol, '$id', 'prod_uid', '=', 'rev'),
+                Query::select(['name', 'rev.score']),
+            ]);
+
+            $this->assertSame(2, \count($results));
+
+            $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
+            \sort($ids);
+            $this->assertSame(['', 'p1'], $ids);
+
+            $scores = [];
+            $unmatched = null;
+            foreach ($results as $document) {
+                $this->assertNotSame('r-other-tenant', $document->getId());
+                $this->assertNotSame('r-other-match', $document->getId());
+                $score = $document->getAttribute('score');
+                if ($score !== null && $score !== '') {
+                    $scores[] = (int) $score;
+                }
+                $this->assertNotSame(77, (int) $score);
+                $this->assertNotSame(88, (int) $score);
+                if ($document->getId() === '') {
+                    $unmatched = $document;
+                }
+            }
+
+            $this->assertNotNull($unmatched);
+            $this->assertTrue($unmatched->getAttribute('name') === null || $unmatched->getAttribute('name') === '');
+            \sort($scores);
+            $this->assertSame([5, 9], $scores);
+        } finally {
+            $database->setTenant(null)->setSharedTables(false);
+            if ($database->exists($sharedTablesDb)) {
+                $database->delete($sharedTablesDb);
+            }
+            $database
+                ->setSharedTables($sharedTables)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
+        }
+    }
 }

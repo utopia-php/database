@@ -33,13 +33,37 @@ final class PermissionJoinFilterTest extends TestCase
         $this->assertSame(Placement::Where, $result->placement);
     }
 
-    public function testFullOuterJoinPlacesPermissionInOnClause(): void
+    public function testRightJoinPlacesPermissionInWhereClause(): void
+    {
+        $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
+        $result = $hook->filterJoin('j0', JoinType::Right);
+
+        $this->assertNotNull($result);
+        $this->assertSame(Placement::Where, $result->placement);
+        $this->assertStringContainsString('j0.'.Storage::UID, $result->condition->expression);
+        $this->assertStringNotContainsString('IS NULL', $result->condition->expression);
+    }
+
+    public function testFullOuterJoinPlacesPermissionInWhereClauseAndAllowsNullUid(): void
     {
         $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
         $result = $hook->filterJoin('j0', JoinType::FullOuter);
 
         $this->assertNotNull($result);
-        $this->assertSame(Placement::On, $result->placement);
+        $this->assertSame(Placement::Where, $result->placement);
+        $this->assertStringContainsString('j0.'.Storage::UID, $result->condition->expression);
+        $this->assertStringContainsString('IS NULL', $result->condition->expression);
+        $this->assertSame($this->permissionFilter()->filter('j0')->bindings, $result->condition->bindings);
+    }
+
+    public function testCrossJoinPlacesPermissionInWhereClause(): void
+    {
+        $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
+        $result = $hook->filterJoin('j0', JoinType::Cross);
+
+        $this->assertNotNull($result);
+        $this->assertSame(Placement::Where, $result->placement);
+        $this->assertStringNotContainsString('IS NULL', $result->condition->expression);
     }
 
     private function permissionFilter(): PermissionFilter

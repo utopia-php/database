@@ -1871,6 +1871,30 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
+    public function test_object_default_allowed_on_json_filter_attribute(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('data'),
+            'key' => 'data',
+            'type' => ColumnType::String->value,
+            'size' => 65535,
+            'required' => false,
+            'default' => new \stdClass(),
+            'signed' => true,
+            'array' => false,
+            'filters' => ['json', 'encrypt'],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
     public function test_get_type(): void
     {
         $validator = new Attribute(

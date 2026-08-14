@@ -477,6 +477,10 @@ class Attribute extends Validator
             throw new DatabaseException($this->message);
         }
 
+        if (\in_array('json', $attribute->filters, true)) {
+            return true;
+        }
+
         $this->validateDefaultTypes($type, $default, $signed);
 
         return true;

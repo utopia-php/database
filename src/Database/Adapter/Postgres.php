@@ -50,7 +50,7 @@ use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
  * 3. DATETIME is TIMESTAMP
  * 4. Full-text search is different - to_tsvector() and to_tsquery()
  */
-class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationships, Feature\Spatial, Feature\Timeouts, Feature\Upserts
+class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Feature\Timeouts
 {
     public const MAX_IDENTIFIER_NAME = 63;
 
@@ -883,7 +883,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             throw new DatabaseException('Timeout must be greater than 0');
         }
 
-        parent::setTimeout($milliseconds, $event);
+        $this->setTimeoutState($milliseconds, $event);
+    }
+
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        $this->clearTimeoutState($event);
     }
 
     /**
@@ -904,6 +909,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      *
      * @throws DatabaseException If the input is invalid.
      */
+    #[\Override]
     public function decodePoint(string $wkb): array
     {
         if (str_starts_with(strtoupper($wkb), 'POINT(')) {
@@ -973,6 +979,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      *
      * @throws DatabaseException If the input is invalid.
      */
+    #[\Override]
     public function decodeLinestring(mixed $wkb): array
     {
         $wkb = \is_string($wkb) ? $wkb : '';
@@ -1068,6 +1075,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      *
      * @throws DatabaseException If the input is invalid.
      */
+    #[\Override]
     public function decodePolygon(string $wkb): array
     {
         // POLYGON((x1,y1),(x2,y2))

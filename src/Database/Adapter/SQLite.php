@@ -56,7 +56,7 @@ use Utopia\Query\Schema\IndexType;
  * 9. MODIFY COLUMN is not supported
  * 10. Can't rename an index directly
  */
-class SQLite extends SQL
+class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaIndexes
 {
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const FTS_TABLE_SUFFIX = '_fts';

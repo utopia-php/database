@@ -17,4 +17,12 @@ interface Timeouts
      * @return void
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void;
+
+    /**
+     * Clear a timeout for database operations.
+     *
+     * @param Event $event The event scope to clear the timeout from.
+     * @return void
+     */
+    public function clearTimeout(Event $event = Event::All): void;
 }

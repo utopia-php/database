@@ -19,6 +19,7 @@ use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Query\Builder\MySQL as MySQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
@@ -131,7 +132,7 @@ class MySQL extends MariaDB
         $collection = $this->getNamespace().'_'.$collection;
         $database = $this->getDatabase();
         $name = $database.'/'.$collection;
-        $permissions = $database.'/'.$collection.'_perms';
+        $permissions = $database.'/'.Storage::permissionsTable($collection);
 
         $collectionSize = $this->prepareStatement('
              SELECT SUM(FS_BLOCK_SIZE + ALLOCATED_SIZE)  

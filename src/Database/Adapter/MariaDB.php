@@ -29,6 +29,7 @@ use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Query\Builder\MariaDB as MariaDBBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
@@ -136,12 +137,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         }
 
         $table = $schema->table($this->getSQLTableRaw($id));
-        $table->id('_id');
-        $table->string('_uid', 255);
-        $table->datetime('_createdAt', 3)->nullable()->default(null);
-        $table->datetime('_updatedAt', 3)->nullable()->default(null);
-        $table->mediumText('_permissions')->nullable()->default(null);
-        $table->rawColumn('`_version` INT(11) UNSIGNED DEFAULT 1');
+        $table->id(Storage::SEQUENCE);
+        $table->string(Storage::UID, 255);
+        $table->datetime(Storage::CREATED_AT, 3)->nullable()->default(null);
+        $table->datetime(Storage::UPDATED_AT, 3)->nullable()->default(null);
+        $table->mediumText(Storage::PERMISSIONS)->nullable()->default(null);
+        $table->rawColumn('`'.Storage::VERSION.'` INT(11) UNSIGNED DEFAULT 1');
 
         foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->key);
@@ -210,7 +211,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             }
 
             if ($sharedTables && $indexType !== IndexType::Fulltext && $indexType !== IndexType::Spatial) {
-                \array_unshift($regularColumns, '_tenant');
+                \array_unshift($regularColumns, Storage::TENANT);
             }
 
             $table->addIndex(
@@ -224,33 +225,33 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         }
 
         if ($sharedTables) {
-            $table->rawColumn('_tenant INT(11) UNSIGNED DEFAULT NULL');
-            $table->uniqueIndex(['_uid', '_tenant'], '_uid');
-            $table->index(['_tenant', '_createdAt'], '_created_at');
-            $table->index(['_tenant', '_updatedAt'], '_updated_at');
-            $table->index(['_tenant', '_id'], '_tenant_id');
+            $table->rawColumn(Storage::TENANT.' INT(11) UNSIGNED DEFAULT NULL');
+            $table->uniqueIndex([Storage::UID, Storage::TENANT], Storage::UID);
+            $table->index([Storage::TENANT, Storage::CREATED_AT], Storage::INDEX_CREATED_AT);
+            $table->index([Storage::TENANT, Storage::UPDATED_AT], Storage::INDEX_UPDATED_AT);
+            $table->index([Storage::TENANT, Storage::SEQUENCE], Storage::INDEX_TENANT_ID);
         } else {
-            $table->uniqueIndex(['_uid'], '_uid');
-            $table->index(['_createdAt'], '_created_at');
-            $table->index(['_updatedAt'], '_updated_at');
+            $table->uniqueIndex([Storage::UID], Storage::UID);
+            $table->index([Storage::CREATED_AT], Storage::INDEX_CREATED_AT);
+            $table->index([Storage::UPDATED_AT], Storage::INDEX_UPDATED_AT);
         }
 
         $collectionResult = $table->create();
         $collection = $collectionResult->query;
 
-        $permsTable = $schema->table($this->getSQLTableRaw($id.'_perms'));
-        $permsTable->id('_id');
-        $permsTable->string('_type', 12);
-        $permsTable->string('_permission', 255);
-        $permsTable->string('_document', 255);
+        $permsTable = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)));
+        $permsTable->id(Storage::SEQUENCE);
+        $permsTable->string(Storage::PERM_TYPE, 12);
+        $permsTable->string(Storage::PERM_PERMISSION, 255);
+        $permsTable->string(Storage::PERM_DOCUMENT, 255);
 
         if ($sharedTables) {
-            $permsTable->integer('_tenant')->unsigned()->nullable()->default(null);
-            $permsTable->uniqueIndex(['_document', '_tenant', '_type', '_permission'], '_index1');
-            $permsTable->index(['_tenant', '_permission', '_type'], '_permission');
+            $permsTable->integer(Storage::TENANT)->unsigned()->nullable()->default(null);
+            $permsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::TENANT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
+            $permsTable->index([Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
         } else {
-            $permsTable->uniqueIndex(['_document', '_type', '_permission'], '_index1');
-            $permsTable->index(['_permission', '_type'], '_permission');
+            $permsTable->uniqueIndex([Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], Storage::INDEX_1);
+            $permsTable->index([Storage::PERM_PERMISSION, Storage::PERM_TYPE], Storage::PERM_PERMISSION);
         }
 
         $permsResult = $permsTable->create();
@@ -278,7 +279,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
 
         $schema = $this->createSchemaBuilder();
         $mainResult = $schema->table($this->getSQLTableRaw($id))->drop();
-        $permsResult = $schema->table($this->getSQLTableRaw($id.'_perms'))->drop();
+        $permsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->drop();
 
         $sql = $mainResult->query.'; '.$permsResult->query;
 
@@ -315,7 +316,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $collection = $this->getNamespace().'_'.$collection;
         $database = $this->getDatabase();
         $name = $database.'/'.$collection;
-        $permissions = $database.'/'.$collection.'_perms';
+        $permissions = $database.'/'.Storage::permissionsTable($collection);
 
         $builder = $this->createBuilder();
 
@@ -364,7 +365,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $collection = $this->filter($collection);
         $collection = $this->getNamespace().'_'.$collection;
         $database = $this->getDatabase();
-        $permissions = $collection.'_perms';
+        $permissions = Storage::permissionsTable($collection);
 
         $builder = $this->createBuilder();
 
@@ -485,7 +486,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
      */
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
-        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $collection);
 
         if ($collection->isEmpty()) {
@@ -513,7 +514,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         foreach ($attributes as $i => $attr) {
             $attribute = null;
             foreach ($collectionAttributes as $collectionAttribute) {
-                $collAttrId = $collectionAttribute['$id'] ?? '';
+                $collAttrId = $collectionAttribute[Document::ID] ?? '';
                 if (\strtolower(\is_string($collAttrId) ? $collAttrId : '') === \strtolower($attr)) {
                     $attribute = $collectionAttribute;
                     break;
@@ -538,7 +539,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         }
 
         if ($this->sharedTables && $type !== IndexType::Fulltext && $type !== IndexType::Spatial) {
-            \array_unshift($schemaColumns, '_tenant');
+            \array_unshift($schemaColumns, Storage::TENANT);
         }
 
         $unique = $type === IndexType::Unique;
@@ -628,12 +629,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = \json_encode($document->getPermissions());
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
             $version = $document->getVersion();
             if ($version !== null) {
-                $attributes['_version'] = $version;
+                $attributes[Storage::VERSION] = $version;
             }
 
             $name = $this->filter($collection);
@@ -641,10 +642,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             // Build document INSERT using query builder
             // Spatial columns use insertColumnExpression() for ST_GeomFromText() wrapping
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
-            $row = ['_uid' => $document->getId()];
+            $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
-                $row['_id'] = $document->getSequence();
+                $row[Storage::SEQUENCE] = $document->getSequence();
             }
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
@@ -675,10 +676,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
 
             $this->execute($stmt);
 
-            $document['$sequence'] = $this->pdo->lastInsertId();
+            $document[Document::SEQUENCE] = $this->pdo->lastInsertId();
 
-            if (empty($document['$sequence'])) {
-                throw new DatabaseException('Error creating document empty "$sequence"');
+            if (empty($document[Document::SEQUENCE])) {
+                throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
             }
 
             $ctx = $this->buildWriteContext($name);
@@ -688,15 +689,15 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                 $isOrphanedPermission = $e->getCode() === '23000'
                     && isset($e->errorInfo[1])
                     && $e->errorInfo[1] === 1062
-                    && \str_contains($e->getMessage(), '_index1');
+                    && \str_contains($e->getMessage(), Storage::INDEX_1);
 
                 if (! $isOrphanedPermission) {
                     throw $e;
                 }
 
                 // Clean up orphaned permissions from a previous failed delete, then retry
-                $cleanupBuilder = $this->newBuilder($name.'_perms');
-                $cleanupBuilder->filter([BaseQuery::equal('_document', [$document->getId()])]);
+                $cleanupBuilder = $this->newBuilder(Storage::permissionsTable($name));
+                $cleanupBuilder->filter([BaseQuery::equal(Storage::PERM_DOCUMENT, [$document->getId()])]);
                 $cleanupResult = $cleanupBuilder->delete();
                 $cleanupStmt = $this->executeResult($cleanupResult, Event::PermissionsDelete);
                 $this->execute($cleanupStmt);
@@ -726,13 +727,13 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = json_encode($document->getPermissions());
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
-                $attributes['_version'] = $version;
+                $attributes[Storage::VERSION] = $version;
             }
 
             $name = $this->filter($collection);
@@ -745,7 +746,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             }
 
             $builder = $this->newBuilder($name);
-            $regularRow = ['_uid' => $document->getId()];
+            $regularRow = [Storage::UID => $document->getId()];
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
@@ -774,7 +775,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             }
 
             $builder->set($regularRow);
-            $builder->filter([BaseQuery::equal('_id', [$document->getSequence()])]);
+            $builder->filter([BaseQuery::equal(Storage::SEQUENCE, [$document->getSequence()])]);
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
@@ -1026,8 +1027,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             $docs = [];
             foreach ($results as $document) {
                 /** @var array<string, mixed> $document */
-                $document['$id'] = $document['_id'];
-                unset($document['_id']);
+                $document[Document::ID] = $document[Storage::SEQUENCE];
+                unset($document[Storage::SEQUENCE]);
 
                 $docs[] = new Document($document);
             }
@@ -1331,7 +1332,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
                 $name = $row['indexName'];
                 if (!isset($grouped[$name])) {
                     $grouped[$name] = [
-                        '$id' => $name,
+                        Document::ID => $name,
                         'indexName' => $name,
                         'indexType' => $row['indexType'],
                         'nonUnique' => (int)$row['nonUnique'],
@@ -1378,10 +1379,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
             $key = $this->getViolatedKey($e->getMessage());
-            if ($key === '_index1') {
+            if ($key === Storage::INDEX_1) {
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
-            if ($key !== null && $key !== '_uid' && $key !== 'PRIMARY') {
+            if ($key !== null && $key !== Storage::UID && $key !== 'PRIMARY') {
                 return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
 

@@ -160,6 +160,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @param Event $event The event scope for the timeout
      * @return void
      */
+    #[\Override]
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->timeout = $milliseconds;
@@ -171,6 +172,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @param Event $event The event scope to clear
      * @return void
      */
+    #[\Override]
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->timeout = 0;
@@ -3200,34 +3202,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function setUTCDatetime(string $value): mixed
     {
         return new UTCDateTime(new NativeDateTime($value));
-    }
-
-    /**
-     * @return array<mixed>
-     */
-    public function decodePoint(string $wkb): array
-    {
-        return [];
-    }
-
-    /**
-     * Decode a WKB or textual LINESTRING into [[x1, y1], [x2, y2], ...]
-     *
-     * @return float[][] Array of points, each as [x, y]
-     */
-    public function decodeLinestring(string $wkb): array
-    {
-        return [];
-    }
-
-    /**
-     * Decode a WKB or textual POLYGON into [[[x1, y1], [x2, y2], ...], ...]
-     *
-     * @return float[][][] Array of rings, each ring is an array of points [x, y]
-     */
-    public function decodePolygon(string $wkb): array
-    {
-        return [];
     }
 
     /**

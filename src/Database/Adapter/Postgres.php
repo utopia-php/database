@@ -765,11 +765,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             foreach ($attributes as $attr => $value) {
                 $column = $this->filter($attr);
 
-                if (isset($spatialMap[$attr]) || $this->isSpatialWkt($value)) {
-                    if (\is_array($value)) {
-                        $value = $this->convertArrayToWKT($value);
-                    }
-                    $row[$column] = $value;
+                if (isset($spatialMap[$attr]) || $this->isSpatialWriteValue($value)) {
+                    $row[$column] = $this->encodeSpatialWriteValue($value);
                     $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
                 } else {
                     if (\is_array($value)) {
@@ -844,11 +841,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                         $opResult = $this->getOperatorBuilderExpression($column, $op);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
-                } elseif (isset($spatialMap[$attribute])) {
-                    if (\is_array($value)) {
-                        $value = $this->convertArrayToWKT($value);
-                    }
-                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);
+                } elseif (isset($spatialMap[$attribute]) || $this->isSpatialWriteValue($value)) {
+                    $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$this->encodeSpatialWriteValue($value)]);
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);

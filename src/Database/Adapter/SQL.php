@@ -74,10 +74,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Memoized spatial column ids, keyed by database/namespace/collection so
      * that Pool sibling adapters reusing the same instance across tenants
-     * never cross-contaminate. Invalidated on schema mutations via
+     * never cross-contaminate. The cached entry also stores an attribute
+     * fingerprint so a long-lived process (Appwrite API workers) that added
+     * spatial columns after the first write still rescans instead of serving
+     * a stale empty list. Explicitly invalidated on schema mutations via
      * invalidateSpatialAttributesCache().
      *
-     * @var array<string, list<string>>
+     * @var array<string, array{fingerprint: string, attributes: list<string>}>
      */
     private array $spatialAttributesCache = [];
 
@@ -758,15 +761,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
 
-            // Register spatial column expressions for ST_GeomFromText wrapping
+            // Hoist per-row guards out of the document loop so a 1k-doc batch
+            // doesn't reallocate the spatial map and re-resolve the capability
+            // 1k times. Also pick up WKT / geometry-array values the collection
+            // metadata scan missed (stale process-local cache, typed Attribute
+            // objects, or encode() already converting defaults to WKT).
+            $spatialAttributes = $this->expandSpatialAttributes($spatialAttributes, $documents);
+            $spatialMap = \array_fill_keys($spatialAttributes, true);
+
             foreach ($spatialAttributes as $spatialCol) {
                 $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
             }
 
-            // Hoist per-row guards out of the document loop so a 1k-doc batch
-            // doesn't reallocate the spatial map and re-resolve the capability
-            // 1k times.
-            $spatialMap = \array_fill_keys($spatialAttributes, true);
             $intBools = $this->supports(Capability::IntegerBooleans);
 
             foreach ($documents as $document) {
@@ -856,11 +862,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            if (isset($spatialMap[$attribute]) || $this->isSpatialWkt($value)) {
-                if (\is_array($value)) {
-                    $value = $this->convertArrayToWKT($value);
-                }
-                $spatialRows[$this->filter($attribute)] = $value;
+            if (isset($spatialMap[$attribute]) || $this->isSpatialWriteValue($value)) {
+                $spatialRows[$this->filter($attribute)] = $this->encodeSpatialWriteValue($value);
 
                 continue;
             }
@@ -1990,25 +1993,47 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
          */
         $total = 1067;
 
-        /** @var array<int, array<string, mixed>> $attributes */
+        /** @var array<int, Attribute|Document|array<string, mixed>> $attributes */
         $attributes = $collection->getAttributes()['attributes'] ?? [];
 
         foreach ($attributes as $attribute) {
+            if ($attribute instanceof Attribute) {
+                $isArray = $attribute->array;
+                $attrSize = $attribute->size;
+                $attrType = $attribute->type->value;
+            } elseif ($attribute instanceof Document) {
+                $isArray = (bool) $attribute->getAttribute('array', false);
+                $size = $attribute->getAttribute('size', 0);
+                $attrSize = \is_numeric($size) ? (int) $size : 0;
+                $rawType = $attribute->getAttribute('type', '');
+                if ($rawType instanceof ColumnType) {
+                    $rawType = $rawType->value;
+                }
+                $rawType = \is_scalar($rawType) ? (string) $rawType : '';
+                $normalizedType = Attribute::tryNormalizeType($rawType);
+                $attrType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
+            } else {
+                $isArray = (bool) ($attribute['array'] ?? false);
+                $attrSize = (int) (is_scalar($attribute['size'] ?? 0) ? ($attribute['size'] ?? 0) : 0);
+                $rawType = $attribute['type'] ?? '';
+                if ($rawType instanceof ColumnType) {
+                    $rawType = $rawType->value;
+                }
+                $rawType = \is_scalar($rawType) ? (string) $rawType : '';
+                $normalizedType = Attribute::tryNormalizeType($rawType);
+                $attrType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
+            }
+
             /**
              * Json / Longtext
              * only the pointer contributes 20 bytes
              * data is stored externally
              */
-            if ($attribute['array'] ?? false) {
+            if ($isArray) {
                 $total += 20;
 
                 continue;
             }
-
-            $attrSize = (int) (is_scalar($attribute['size'] ?? 0) ? ($attribute['size'] ?? 0) : 0);
-            $rawType = (string) (\is_scalar($attribute['type'] ?? '') ? ($attribute['type'] ?? '') : '');
-            $normalizedType = Attribute::tryNormalizeType($rawType);
-            $attrType = $normalizedType instanceof ColumnType ? $normalizedType->value : $rawType;
 
             switch ($attrType) {
                 case ColumnType::Id->value:
@@ -2874,20 +2899,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return "'axis-order=long-lat'";
     }
 
-    /**
-     * Build geometry WKT string from array input for spatial queries
-     *
-     * @param  array<mixed>  $geometry
-     *
-     * @throws DatabaseException
-     */
     protected function isSpatialWkt(mixed $value): bool
     {
         return \is_string($value) && \preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value) === 1;
     }
 
+    /**
+     * @param  array<mixed>  $geometry
+     *
+     * @throws DatabaseException
+     */
     protected function convertArrayToWKT(array $geometry): string
     {
+        if ($geometry === [] || ! \array_is_list($geometry)) {
+            throw new DatabaseException('Unrecognized geometry array format');
+        }
+
         // point [x, y]
         if (count($geometry) === 2 && is_numeric($geometry[0]) && is_numeric($geometry[1])) {
             return "POINT({$geometry[0]} {$geometry[1]})";
@@ -3193,7 +3220,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     ): void {
         $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
 
-        // Register spatial column expressions for ST_GeomFromText wrapping
+        $spatialAttributes = $this->expandSpatialAttributes(
+            $spatialAttributes,
+            \array_map(static fn (Change $change) => $change->getNew(), $changes),
+        );
+
         foreach ($spatialAttributes as $spatialCol) {
             $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
         }
@@ -3273,7 +3304,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $row = [];
             foreach ($allColumnNames as $key) {
                 $value = $docAttrs[$key] ?? null;
-                if (\is_array($value)) {
+                if (isset($spatialMap[$key]) || $this->isSpatialWriteValue($value)) {
+                    $value = $this->encodeSpatialWriteValue($value);
+                } elseif (\is_array($value)) {
                     $value = \json_encode($value);
                 }
                 if ($intBools && ! isset($spatialMap[$key])) {
@@ -3541,7 +3574,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
             $value = $attributes[$key] ?? null;
-            if (\is_array($value)) {
+            if (isset($spatialMap[$key]) || $this->isSpatialWriteValue($value)) {
+                $value = $this->encodeSpatialWriteValue($value);
+            } elseif (\is_array($value)) {
                 $value = \json_encode($value);
             }
             if ($intBools && ! isset($spatialMap[$key])) {
@@ -3556,7 +3591,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Helper method to extract spatial type attributes from collection attributes.
      *
-     * The result is memoized by collection id; invalidate via
+     * The result is memoized by collection id and an attribute-set fingerprint
+     * so a process that created documents before spatial columns existed does
+     * not keep serving an empty list. Invalidate via
      * invalidateSpatialAttributesCache() when adding or removing attributes.
      *
      * @return list<string>
@@ -3564,31 +3601,123 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function getSpatialAttributes(Document $collection): array
     {
         $key = $this->spatialCacheKey($collection->getId());
-        if (isset($this->spatialAttributesCache[$key])) {
-            return $this->spatialAttributesCache[$key];
-        }
-
         /** @var array<mixed> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
+        $fingerprint = $this->spatialAttributeFingerprint($collectionAttributes);
+        $cached = $this->spatialAttributesCache[$key] ?? null;
+        if ($cached !== null && $cached['fingerprint'] === $fingerprint) {
+            return $cached['attributes'];
+        }
+
         $spatialAttributes = [];
         $spatialTypes = [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value];
         foreach ($collectionAttributes as $attr) {
-            if ($attr instanceof Document) {
-                $attributeType = $attr->getAttribute('type');
-                $attributeKey = $attr->getAttribute('key', $attr->getId());
-            } elseif (\is_array($attr)) {
-                $attributeType = $attr['type'] ?? null;
-                $attributeKey = $attr['key'] ?? $attr[Document::ID] ?? null;
-            } else {
-                continue;
-            }
-
+            [$attributeKey, $attributeType] = $this->attributeKeyAndType($attr);
             if (\is_string($attributeKey) && \in_array($attributeType, $spatialTypes, true)) {
                 $spatialAttributes[] = $attributeKey;
             }
         }
 
-        return $this->spatialAttributesCache[$key] = $spatialAttributes;
+        $this->spatialAttributesCache[$key] = [
+            'fingerprint' => $fingerprint,
+            'attributes' => $spatialAttributes,
+        ];
+
+        return $spatialAttributes;
+    }
+
+    /**
+     * @param  array<mixed>  $collectionAttributes
+     */
+    private function spatialAttributeFingerprint(array $collectionAttributes): string
+    {
+        $parts = [];
+        foreach ($collectionAttributes as $attr) {
+            [$key, $type] = $this->attributeKeyAndType($attr);
+            if (\is_string($key)) {
+                $parts[] = $key.':'.($type ?? '');
+            }
+        }
+        \sort($parts);
+
+        return \implode(',', $parts);
+    }
+
+    /**
+     * @return array{0: ?string, 1: ?string}
+     */
+    private function attributeKeyAndType(mixed $attr): array
+    {
+        if ($attr instanceof Attribute) {
+            return [$attr->key, $attr->type->value];
+        }
+
+        if ($attr instanceof Document) {
+            $type = $attr->getAttribute('type');
+            $key = $attr->getAttribute('key', $attr->getId());
+        } elseif (\is_array($attr)) {
+            $type = $attr['type'] ?? null;
+            $key = $attr['key'] ?? $attr[Document::ID] ?? null;
+        } else {
+            return [null, null];
+        }
+
+        if ($type instanceof ColumnType) {
+            $type = $type->value;
+        }
+
+        return [
+            \is_string($key) ? $key : null,
+            \is_string($type) ? $type : null,
+        ];
+    }
+
+    /**
+     * @param  list<string>  $spatialAttributes
+     * @param  array<Document>  $documents
+     * @return list<string>
+     */
+    protected function expandSpatialAttributes(array $spatialAttributes, array $documents): array
+    {
+        $spatialMap = \array_fill_keys($spatialAttributes, true);
+        foreach ($documents as $document) {
+            foreach ($document->getAttributes() as $key => $value) {
+                if (! isset($spatialMap[$key]) && $this->isSpatialWriteValue($value)) {
+                    $spatialAttributes[] = $key;
+                    $spatialMap[$key] = true;
+                }
+            }
+        }
+
+        return $spatialAttributes;
+    }
+
+    protected function isSpatialWriteValue(mixed $value): bool
+    {
+        if ($this->isSpatialWkt($value)) {
+            return true;
+        }
+
+        if (! \is_array($value) || $value === []) {
+            return false;
+        }
+
+        try {
+            $this->convertArrayToWKT($value);
+
+            return true;
+        } catch (DatabaseException) {
+            return false;
+        }
+    }
+
+    protected function encodeSpatialWriteValue(mixed $value): mixed
+    {
+        if (\is_array($value)) {
+            return $this->convertArrayToWKT($value);
+        }
+
+        return $value;
     }
 
     /**

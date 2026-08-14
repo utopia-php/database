@@ -584,21 +584,9 @@ class FindLogicTest extends TestCase
         ]));
     }
 
-    public function testFindKeepsAuthorizationWhenDocumentSecurityIsEnabled(): void
+    public function testFindSkipsAuthorizationWhenCollectionAllowsRead(): void
     {
         $this->setupCollectionLookup('testCol');
-        $this->adapter->method('find')->willReturnCallback(function () {
-            $this->assertTrue($this->database->getAuthorization()->getStatus());
-
-            return [];
-        });
-
-        $this->database->skipValidation(fn () => $this->database->find('testCol'));
-    }
-
-    public function testFindSkipsAuthorizationWithoutDocumentSecurity(): void
-    {
-        $this->setupCollectionLookup('testCol', documentSecurity: false);
         $this->adapter->method('find')->willReturnCallback(function () {
             $this->assertFalse($this->database->getAuthorization()->getStatus());
 
@@ -608,7 +596,23 @@ class FindLogicTest extends TestCase
         $this->database->skipValidation(fn () => $this->database->find('testCol'));
     }
 
-    public function testFindKeepsAuthorizationWhenJoinedCollectionHasDocumentSecurity(): void
+    public function testFindKeepsAuthorizationWithoutCollectionRead(): void
+    {
+        $this->setupCollectionLookup('testCol', permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]);
+        $this->adapter->method('find')->willReturnCallback(function () {
+            $this->assertTrue($this->database->getAuthorization()->getStatus());
+
+            return [];
+        });
+
+        $this->database->skipValidation(fn () => $this->database->find('testCol'));
+    }
+
+    public function testFindDoesNotForceAuthorizationOnJoinsWhenCollectionAllowsRead(): void
     {
         $authOnFind = null;
         $db = null;
@@ -619,24 +623,7 @@ class FindLogicTest extends TestCase
             Capability::DefinedAttributes,
             Capability::Joins,
         ], function (Adapter&MockObject $adapter, array &$collectionMap) use (&$authOnFind, &$db): void {
-            $collectionMap['testCol'] = new Document([
-                '$id' => 'testCol',
-                '$collection' => Database::METADATA,
-                '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any())],
-                'name' => 'testCol',
-                'attributes' => [],
-                'indexes' => [],
-                'documentSecurity' => false,
-            ]);
-            $collectionMap['other'] = new Document([
-                '$id' => 'other',
-                '$collection' => Database::METADATA,
-                '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any())],
-                'name' => 'other',
-                'attributes' => [],
-                'indexes' => [],
-                'documentSecurity' => true,
-            ]);
+            $collectionMap['other'] = $this->collectionDoc('other');
             $adapter->method('find')->willReturnCallback(function () use (&$authOnFind, &$db) {
                 $authOnFind = $db?->getAuthorization()->getStatus();
 
@@ -648,7 +635,7 @@ class FindLogicTest extends TestCase
             Query::join('other', 'fk', '$id'),
         ]));
 
-        $this->assertTrue($authOnFind);
+        $this->assertFalse($authOnFind);
     }
 
     public function testFindWithSelectFiltersResults(): void

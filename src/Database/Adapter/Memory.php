@@ -43,7 +43,7 @@ use Utopia\Query\Schema\IndexType;
  * Spatial types and vector search throw a DatabaseException — those
  * features only make sense against a real engine.
  */
-class Memory extends Adapter
+class Memory extends Adapter implements Feature\Relationships
 {
     /**
      * Map of database name to the set of collection storage keys it owns.
@@ -731,6 +731,7 @@ class Memory extends Adapter
         return true;
     }
 
+    #[\Override]
     public function createRelationship(Relationship $relationship): bool
     {
         // Memory stores documents as flexible maps, so the relationship "column"
@@ -770,6 +771,7 @@ class Memory extends Adapter
         return true;
     }
 
+    #[\Override]
     public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
         $collection = $relationship->collection;
@@ -830,6 +832,7 @@ class Memory extends Adapter
         return true;
     }
 
+    #[\Override]
     public function deleteRelationship(Relationship $relationship): bool
     {
         $collection = $relationship->collection;

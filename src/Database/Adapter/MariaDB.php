@@ -27,7 +27,6 @@ use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
-use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Query\Builder\MariaDB as MariaDBBuilder;
@@ -37,7 +36,6 @@ use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
-use Utopia\Query\Schema\Table;
 
 /**
  * Database adapter for MariaDB, extending the base SQL adapter with MariaDB-specific features.
@@ -137,130 +135,125 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
             $hash[$attrId] = $attribute;
         }
 
-        // Build main collection table using schema builder
-        $collectionResult = $schema->create($this->getSQLTableRaw($id), function (Table $table) use ($attributes, $indexes, $hash, $sharedTables) {
-            // System columns
-            $table->id('_id');
-            $table->string('_uid', 255);
-            $table->datetime('_createdAt', 3)->nullable()->default(null);
-            $table->datetime('_updatedAt', 3)->nullable()->default(null);
-            $table->mediumText('_permissions')->nullable()->default(null);
-            $table->rawColumn('`_version` INT(11) UNSIGNED DEFAULT 1');
+        $table = $schema->table($this->getSQLTableRaw($id));
+        $table->id('_id');
+        $table->string('_uid', 255);
+        $table->datetime('_createdAt', 3)->nullable()->default(null);
+        $table->datetime('_updatedAt', 3)->nullable()->default(null);
+        $table->mediumText('_permissions')->nullable()->default(null);
+        $table->rawColumn('`_version` INT(11) UNSIGNED DEFAULT 1');
 
-            // User-defined attribute columns (raw SQL via getSQLType())
-            foreach ($attributes as $attribute) {
-                $attrId = $this->filter($attribute->key);
+        foreach ($attributes as $attribute) {
+            $attrId = $this->filter($attribute->key);
 
-                // Skip virtual relationship attributes
-                if ($attribute->type === ColumnType::Relationship) {
-                    $options = $attribute->options ?? [];
-                    $relationType = $options['relationType'] ?? null;
-                    $twoWay = $options['twoWay'] ?? false;
-                    $side = $options['side'] ?? null;
+            if ($attribute->type === ColumnType::Relationship) {
+                $options = $attribute->options ?? [];
+                $relationType = $options['relationType'] ?? null;
+                $twoWay = $options['twoWay'] ?? false;
+                $side = $options['side'] ?? null;
 
-                    if (
-                        $relationType === RelationType::ManyToMany->value
-                        || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
-                        || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
-                        || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
-                    ) {
-                        continue;
-                    }
+                if (
+                    $relationType === RelationType::ManyToMany->value
+                    || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
+                    || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
+                    || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
+                ) {
+                    continue;
                 }
-
-                $attrType = $this->getSQLType(
-                    $attribute->type,
-                    $attribute->size,
-                    $attribute->signed,
-                    $attribute->array,
-                    $attribute->required
-                );
-                $table->rawColumn("`{$attrId}` {$attrType}");
             }
 
-            // User-defined indexes
-            foreach ($indexes as $index) {
-                $indexId = $this->filter($index->key);
-                $indexType = $index->type;
-                $indexAttributes = $index->attributes;
+            $attrType = $this->getSQLType(
+                $attribute->type,
+                $attribute->size,
+                $attribute->signed,
+                $attribute->array,
+                $attribute->required
+            );
+            $table->rawColumn("`{$attrId}` {$attrType}");
+        }
 
-                $regularColumns = [];
-                $indexLengths = [];
-                $indexOrders = [];
-                $rawCastColumns = [];
+        foreach ($indexes as $index) {
+            $indexId = $this->filter($index->key);
+            $indexType = $index->type;
+            $indexAttributes = $index->attributes;
 
-                foreach ($indexAttributes as $nested => $attribute) {
-                    $indexLength = $index->lengths[$nested] ?? '';
-                    $indexOrder = $index->orders[$nested] ?? '';
+            $regularColumns = [];
+            $indexLengths = [];
+            $indexOrders = [];
+            $rawCastColumns = [];
 
-                    if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
-                        throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
-                    }
+            foreach ($indexAttributes as $nested => $attribute) {
+                $indexLength = $index->lengths[$nested] ?? '';
+                $indexOrder = $index->orders[$nested] ?? '';
 
-                    $indexAttribute = $this->filter($this->getInternalKeyForAttribute($attribute));
-
-                    if ($indexType === IndexType::Fulltext) {
-                        $indexOrder = '';
-                    }
-
-                    if (! empty($hash[$indexAttribute]->array) && $this->supports(Capability::CastIndexArray)) {
-                        $rawCastColumns[] = '(CAST(`'.$indexAttribute.'` AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
-                    } else {
-                        $regularColumns[] = $indexAttribute;
-                        if (! empty($indexLength)) {
-                            $indexLengths[$indexAttribute] = (int) $indexLength;
-                        }
-                        if (! empty($indexOrder)) {
-                            $indexOrders[$indexAttribute] = $indexOrder;
-                        }
-                    }
+                if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
+                    throw new DatabaseException('Spatial indexes with explicit orders are not supported. Remove the orders to create this index.');
                 }
 
-                if ($sharedTables && $indexType !== IndexType::Fulltext && $indexType !== IndexType::Spatial) {
-                    \array_unshift($regularColumns, '_tenant');
+                $indexAttribute = $this->filter($this->getInternalKeyForAttribute($attribute));
+
+                if ($indexType === IndexType::Fulltext) {
+                    $indexOrder = '';
                 }
 
-                $table->addIndex(
-                    $indexId,
-                    $regularColumns,
-                    $indexType,
-                    $indexLengths,
-                    $indexOrders,
-                    rawColumns: $rawCastColumns,
-                );
+                if (! empty($hash[$indexAttribute]->array) && $this->supports(Capability::CastIndexArray)) {
+                    $rawCastColumns[] = '(CAST(`'.$indexAttribute.'` AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
+                } else {
+                    $regularColumns[] = $indexAttribute;
+                    if (! empty($indexLength)) {
+                        $indexLengths[$indexAttribute] = (int) $indexLength;
+                    }
+                    if (! empty($indexOrder)) {
+                        $indexOrders[$indexAttribute] = $indexOrder;
+                    }
+                }
             }
 
-            // Tenant column and system indexes
-            if ($sharedTables) {
-                $table->rawColumn('_tenant INT(11) UNSIGNED DEFAULT NULL');
-                $table->uniqueIndex(['_uid', '_tenant'], '_uid');
-                $table->index(['_tenant', '_createdAt'], '_created_at');
-                $table->index(['_tenant', '_updatedAt'], '_updated_at');
-                $table->index(['_tenant', '_id'], '_tenant_id');
-            } else {
-                $table->uniqueIndex(['_uid'], '_uid');
-                $table->index(['_createdAt'], '_created_at');
-                $table->index(['_updatedAt'], '_updated_at');
+            if ($sharedTables && $indexType !== IndexType::Fulltext && $indexType !== IndexType::Spatial) {
+                \array_unshift($regularColumns, '_tenant');
             }
-        });
+
+            $table->addIndex(
+                $indexId,
+                $regularColumns,
+                $indexType,
+                $indexLengths,
+                $indexOrders,
+                rawColumns: $rawCastColumns,
+            );
+        }
+
+        if ($sharedTables) {
+            $table->rawColumn('_tenant INT(11) UNSIGNED DEFAULT NULL');
+            $table->uniqueIndex(['_uid', '_tenant'], '_uid');
+            $table->index(['_tenant', '_createdAt'], '_created_at');
+            $table->index(['_tenant', '_updatedAt'], '_updated_at');
+            $table->index(['_tenant', '_id'], '_tenant_id');
+        } else {
+            $table->uniqueIndex(['_uid'], '_uid');
+            $table->index(['_createdAt'], '_created_at');
+            $table->index(['_updatedAt'], '_updated_at');
+        }
+
+        $collectionResult = $table->create();
         $collection = $collectionResult->query;
 
-        // Build permissions table using schema builder
-        $permsResult = $schema->create($this->getSQLTableRaw($id.'_perms'), function (Table $table) use ($sharedTables) {
-            $table->id('_id');
-            $table->string('_type', 12);
-            $table->string('_permission', 255);
-            $table->string('_document', 255);
+        $permsTable = $schema->table($this->getSQLTableRaw($id.'_perms'));
+        $permsTable->id('_id');
+        $permsTable->string('_type', 12);
+        $permsTable->string('_permission', 255);
+        $permsTable->string('_document', 255);
 
-            if ($sharedTables) {
-                $table->integer('_tenant')->unsigned()->nullable()->default(null);
-                $table->uniqueIndex(['_document', '_tenant', '_type', '_permission'], '_index1');
-                $table->index(['_tenant', '_permission', '_type'], '_permission');
-            } else {
-                $table->uniqueIndex(['_document', '_type', '_permission'], '_index1');
-                $table->index(['_permission', '_type'], '_permission');
-            }
-        });
+        if ($sharedTables) {
+            $permsTable->integer('_tenant')->unsigned()->nullable()->default(null);
+            $permsTable->uniqueIndex(['_document', '_tenant', '_type', '_permission'], '_index1');
+            $permsTable->index(['_tenant', '_permission', '_type'], '_permission');
+        } else {
+            $permsTable->uniqueIndex(['_document', '_type', '_permission'], '_index1');
+            $permsTable->index(['_permission', '_type'], '_permission');
+        }
+
+        $permsResult = $permsTable->create();
         $permissions = $permsResult->query;
 
         try {
@@ -284,8 +277,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $id = $this->filter($id);
 
         $schema = $this->createSchemaBuilder();
-        $mainResult = $schema->drop($this->getSQLTableRaw($id));
-        $permsResult = $schema->drop($this->getSQLTableRaw($id.'_perms'));
+        $mainResult = $schema->table($this->getSQLTableRaw($id))->drop();
+        $permsResult = $schema->table($this->getSQLTableRaw($id.'_perms'))->drop();
 
         $sql = $mainResult->query.'; '.$permsResult->query;
 
@@ -461,7 +454,6 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         $id = $this->filter($attribute->key);
         $newKey = empty($newKey) ? null : $this->filter($newKey);
         $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
-        /** @var MySQLSchema $schema */
         $schema = $this->createSchemaBuilder();
         $tableRaw = $this->getSQLTableRaw($name);
 
@@ -980,6 +972,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
     protected function createBuilder(): SQLBuilder
     {
         return new MariaDBBuilder();
+    }
+
+    #[\Override]
+    protected function createSchemaBuilder(): MySQLSchema
+    {
+        return new MySQLSchema();
     }
 
     /**

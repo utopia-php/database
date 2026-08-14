@@ -44,7 +44,7 @@
         "utopia-php/cache": "4.*",
         "utopia-php/pools": "2.*",
         "utopia-php/mongo": "1.*",
-        "utopia-php/query": "0.2.*",
+        "utopia-php/query": "0.4.*",
         "utopia-php/async": "0.1.*"
     },
     "require-dev": {
@@ -64,10 +64,6 @@
 
     },
     "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/utopia-php/query.git"
-        },
         {
             "type": "vcs",
             "url": "https://github.com/utopia-php/async.git"

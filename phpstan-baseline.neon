@@ -2155,12 +2155,6 @@ parameters:
 			path: tests/unit/Repository/RepositoryTest.php
 
 		-
-			message: '#^Parameter \#1 \$callback of function array_map expects \(callable\(mixed\)\: mixed\)\|null, Closure\(Utopia\\Database\\Query\)\: \(''and''\|''avg''\|''between''\|''bitAnd''\|''bitOr''\|''bitXor''\|''contains''\|''containsAll''\|''containsAny''\|''count''\|''countDistinct''\|''covers''\|''crosses''\|''crossJoin''\|''cursorAfter''\|''cursorBefore''\|''distanceEqual''\|''distanceGreaterThan''\|''distanceLessThan''\|''distanceNotEqual''\|''distinct''\|''elemMatch''\|''endsWith''\|''equal''\|''exists''\|''fullOuterJoin''\|''greaterThan''\|''greaterThanEqual''\|''groupBy''\|''having''\|''intersects''\|''isNotNull''\|''isNull''\|''join''\|''jsonContains''\|''jsonNotContains''\|''jsonOverlaps''\|''jsonPath''\|''leftJoin''\|''lessThan''\|''lessThanEqual''\|''limit''\|''max''\|''min''\|''naturalJoin''\|''notBetween''\|''notContains''\|''notCovers''\|''notCrosses''\|''notEndsWith''\|''notEqual''\|''notExists''\|''notIntersects''\|''notOverlaps''\|''notSearch''\|''notSpatialEquals''\|''notStartsWith''\|''notTouches''\|''offset''\|''or''\|''orderAsc''\|''orderDesc''\|''orderRandom''\|''orderVectorDistance''\|''overlaps''\|''raw''\|''regex''\|''rightJoin''\|''search''\|''select''\|''spatialEquals''\|''startsWith''\|''stddev''\|''stddevPop''\|''stddevSamp''\|''sum''\|''touches''\|''union''\|''unionAll''\|''variance''\|''varPop''\|''varSamp''\|''vectorCosine''\|''vectorDot''\|''vectorEuclidean''\) given\.$#'
-			identifier: argument.type
-			count: 1
-			path: tests/unit/Repository/RepositoryTest.php
-
-		-
 			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:expects\(\)\.$#'
 			identifier: method.notFound
 			count: 12

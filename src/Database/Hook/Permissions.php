@@ -6,6 +6,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\PermissionType;
+use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Query;
 
 /**
@@ -43,7 +44,15 @@ class Permissions extends Interceptor
         }
 
         if ($hasPermissions) {
-            $result = $context->skipDuplicates ? $permBuilder->insertOrIgnore() : $permBuilder->insert();
+            if ($context->skipDuplicates) {
+                if (! $permBuilder instanceof InsertOrIgnoreFeature) {
+                    throw new DatabaseException('Insert-or-ignore is not supported on this dialect');
+                }
+
+                $result = $permBuilder->insertOrIgnore();
+            } else {
+                $result = $permBuilder->insert();
+            }
             $stmt = ($context->executeResult)($result, Event::PermissionsCreate);
             ($context->execute)($stmt);
         }

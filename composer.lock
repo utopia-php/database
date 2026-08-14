@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "34095872c9559b3c45f5b84658255fb5",
+    "content-hash": "6c32de508f93aa0e9269bdd86779b3ae",
     "packages": [
         {
             "name": "brick/math",
@@ -2492,16 +2492,16 @@
         },
         {
             "name": "utopia-php/query",
-            "version": "0.2.0",
+            "version": "0.4.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "ca96081596aef2457aee6d653966a8f6a85f6f8c"
+                "reference": "c334515035a2ab0aa49176eeca96de3e1c096e22"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/ca96081596aef2457aee6d653966a8f6a85f6f8c",
-                "reference": "ca96081596aef2457aee6d653966a8f6a85f6f8c",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/c334515035a2ab0aa49176eeca96de3e1c096e22",
+                "reference": "c334515035a2ab0aa49176eeca96de3e1c096e22",
                 "shasum": ""
             },
             "require": {
@@ -2521,38 +2521,7 @@
                     "Utopia\\Query\\": "src/Query"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "Tests\\Query\\": "tests/Query",
-                    "Tests\\Integration\\": "tests/Integration"
-                }
-            },
-            "scripts": {
-                "test": [
-                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance"
-                ],
-                "test:coverage": [
-                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance --coverage-php coverage/unit.cov"
-                ],
-                "test:performance": [
-                    "vendor/bin/phpunit --testsuite Query --group=performance"
-                ],
-                "test:integration": [
-                    "vendor/bin/phpunit --testsuite Integration"
-                ],
-                "test:integration:coverage": [
-                    "vendor/bin/phpunit --testsuite Integration --coverage-php coverage/integration.cov"
-                ],
-                "lint": [
-                    "php -d memory_limit=2G ./vendor/bin/pint --test"
-                ],
-                "format": [
-                    "php -d memory_limit=2G ./vendor/bin/pint"
-                ],
-                "check": [
-                    "./vendor/bin/phpstan analyse --level max src tests --memory-limit 2G"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -2565,10 +2534,10 @@
                 "utopia"
             ],
             "support": {
-                "source": "https://github.com/utopia-php/query/tree/0.2.0",
-                "issues": "https://github.com/utopia-php/query/issues"
+                "issues": "https://github.com/utopia-php/query/issues",
+                "source": "https://github.com/utopia-php/query/tree/0.4.0"
             },
-            "time": "2026-04-23T10:57:49+00:00"
+            "time": "2026-08-14T01:42:36+00:00"
         },
         {
             "name": "utopia-php/telemetry",

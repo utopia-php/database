@@ -40,7 +40,6 @@ use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
-use Utopia\Query\Schema\Table;
 
 /**
  * Differences between MariaDB and Postgres
@@ -198,50 +197,48 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
         $schema = $this->createSchemaBuilder();
 
-        // Build main collection table using schema builder
-        $collectionResult = $schema->create($tableRaw, function (Table $table) use ($attributes) {
-            $table->id('_id');
-            $table->string('_uid', 255);
+        $table = $schema->table($tableRaw);
+        $table->id('_id');
+        $table->string('_uid', 255);
 
-            if ($this->sharedTables) {
-                $table->integer('_tenant')->nullable()->default(null);
-            }
+        if ($this->sharedTables) {
+            $table->integer('_tenant')->nullable()->default(null);
+        }
 
-            $table->datetime('_createdAt', 3)->nullable()->default(null);
-            $table->datetime('_updatedAt', 3)->nullable()->default(null);
+        $table->datetime('_createdAt', 3)->nullable()->default(null);
+        $table->datetime('_updatedAt', 3)->nullable()->default(null);
 
-            foreach ($attributes as $attribute) {
-                // Ignore relationships with virtual attributes
-                if ($attribute->type === ColumnType::Relationship) {
-                    $options = $attribute->options ?? [];
-                    $relationType = $options['relationType'] ?? null;
-                    $twoWay = $options['twoWay'] ?? false;
-                    $side = $options['side'] ?? null;
+        foreach ($attributes as $attribute) {
+            if ($attribute->type === ColumnType::Relationship) {
+                $options = $attribute->options ?? [];
+                $relationType = $options['relationType'] ?? null;
+                $twoWay = $options['twoWay'] ?? false;
+                $side = $options['side'] ?? null;
 
-                    if (
-                        $relationType === RelationType::ManyToMany->value
-                        || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
-                        || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
-                        || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
-                    ) {
-                        continue;
-                    }
+                if (
+                    $relationType === RelationType::ManyToMany->value
+                    || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
+                    || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
+                    || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
+                ) {
+                    continue;
                 }
-
-                $this->addTableColumn(
-                    $table,
-                    $attribute->key,
-                    $attribute->type,
-                    $attribute->size,
-                    $attribute->signed,
-                    $attribute->array,
-                    $attribute->required
-                );
             }
 
-            $table->json('_permissions')->nullable()->default(null);
-            $table->integer('_version')->nullable()->default(1);
-        });
+            $this->addTableColumn(
+                $table,
+                $attribute->key,
+                $attribute->type,
+                $attribute->size,
+                $attribute->signed,
+                $attribute->array,
+                $attribute->required
+            );
+        }
+
+        $table->json('_permissions')->nullable()->default(null);
+        $table->integer('_version')->nullable()->default(1);
+        $collectionResult = $table->create();
 
         // Build default indexes using schema builder
         $indexStatements = [];
@@ -270,14 +267,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
         $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
 
-        // Build permissions table using schema builder
-        $permsResult = $schema->create($permsTableRaw, function (Table $table) {
-            $table->id('_id');
-            $table->integer('_tenant')->nullable()->default(null);
-            $table->string('_type', 12);
-            $table->string('_permission', 255);
-            $table->string('_document', 255);
-        });
+        $permsTable = $schema->table($permsTableRaw);
+        $permsTable->id('_id');
+        $permsTable->integer('_tenant')->nullable()->default(null);
+        $permsTable->string('_type', 12);
+        $permsTable->string('_permission', 255);
+        $permsTable->string('_document', 255);
+        $permsResult = $permsTable->create();
 
         // Build permission indexes using schema builder
         $permsIndexStatements = [];
@@ -337,7 +333,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
             if (! ($e instanceof DuplicateException)) {
                 $dropSchema = $this->createSchemaBuilder();
-                $dropSql = $dropSchema->dropIfExists($tableRaw)->query.'; '.$dropSchema->dropIfExists($permsTableRaw)->query;
+                $dropSql = $dropSchema->table($tableRaw)->dropIfExists()->query.'; '.$dropSchema->table($permsTableRaw)->dropIfExists()->query;
                 $this->executeStatement($dropSql, Event::CollectionCreate);
             }
 
@@ -444,9 +440,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         }
 
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attribute) {
-            $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
-        });
+        $table = $schema->table($this->getSQLTableRaw($collection));
+        $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $result = $table->alter();
 
         // Postgres does not support LOCK= on ALTER TABLE, so no lock type appended
         $sql = $result->query;
@@ -488,9 +484,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         if (! empty($newKey) && $id !== $newKey) {
             $newKey = $this->filter($newKey);
 
-            $renameResult = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($id, $newKey) {
-                $table->renameColumn($id, $newKey);
-            });
+            $renameTable = $schema->table($this->getSQLTableRaw($collection));
+            $renameTable->renameColumn($id, $newKey);
+            $renameResult = $renameTable->alter();
 
             $sql = $renameResult->query;
 
@@ -542,9 +538,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     public function deleteAttribute(string $collection, string $id): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($id) {
-            $table->dropColumn($this->filter($id));
-        });
+        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table->dropColumn($this->filter($id));
+        $result = $table->alter();
 
         $sql = $result->query;
 
@@ -573,9 +569,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($old, $new) {
-            $table->renameColumn($this->filter($old), $this->filter($new));
-        });
+        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table->renameColumn($this->filter($old), $this->filter($new));
+        $result = $table->alter();
 
         $sql = $result->query;
 
@@ -1672,6 +1668,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         return new PostgreSQLBuilder();
     }
 
+    #[\Override]
     protected function createSchemaBuilder(): PostgreSQLSchema
     {
         return new PostgreSQLSchema();

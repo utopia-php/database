@@ -115,7 +115,9 @@ class RepositoryTest extends TestCase
             ->with(
                 'users',
                 $this->callback(function (array $queries) {
-                    $methods = array_map(fn (Query $q) => $q->getMethod()->value, $queries);
+                    $methods = array_map(static function (mixed $query): string {
+                        return $query instanceof Query ? $query->getMethod()->value : '';
+                    }, $queries);
 
                     return in_array('equal', $methods) && in_array('limit', $methods);
                 })

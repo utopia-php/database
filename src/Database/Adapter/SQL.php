@@ -38,6 +38,8 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\BigInt;
+use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
+use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
 use Utopia\Query\CursorDirection;
@@ -51,7 +53,10 @@ use Utopia\Query\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
+use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 use Utopia\Query\Schema\Table;
+use Utopia\Query\Schema\Table\MySQL as MySQLTable;
+use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
 
 /**
  * Abstract base adapter for SQL-based database engines (MariaDB, MySQL, PostgreSQL, SQLite).
@@ -493,9 +498,9 @@ abstract class SQL extends Adapter
     protected function createAttributeWithEvent(string $collection, Attribute $attribute, Event $event): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attribute) {
-            $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
-        });
+        $table = $schema->table($this->getSQLTableRaw($collection));
+        $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+        $result = $table->alter();
 
         $sql = $result->query;
         $lockType = $this->getLockType();
@@ -523,19 +528,19 @@ abstract class SQL extends Adapter
     public function createAttributes(string $collection, array $attributes): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($attributes) {
-            foreach ($attributes as $attribute) {
-                $this->addTableColumn(
-                    $table,
-                    $attribute->key,
-                    $attribute->type,
-                    $attribute->size,
-                    $attribute->signed,
-                    $attribute->array,
-                    $attribute->required,
-                );
-            }
-        });
+        $table = $schema->table($this->getSQLTableRaw($collection));
+        foreach ($attributes as $attribute) {
+            $this->addTableColumn(
+                $table,
+                $attribute->key,
+                $attribute->type,
+                $attribute->size,
+                $attribute->signed,
+                $attribute->array,
+                $attribute->required,
+            );
+        }
+        $result = $table->alter();
 
         $sql = $result->query;
         $lockType = $this->getLockType();
@@ -562,9 +567,9 @@ abstract class SQL extends Adapter
     public function deleteAttribute(string $collection, string $id): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($id) {
-            $table->dropColumn($this->filter($id));
-        });
+        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table->dropColumn($this->filter($id));
+        $result = $table->alter();
 
         $sql = $result->query;
 
@@ -587,9 +592,9 @@ abstract class SQL extends Adapter
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $schema = $this->createSchemaBuilder();
-        $result = $schema->alter($this->getSQLTableRaw($collection), function (Table $table) use ($old, $new) {
-            $table->renameColumn($this->filter($old), $this->filter($new));
-        });
+        $table = $schema->table($this->getSQLTableRaw($collection));
+        $table->renameColumn($this->filter($old), $this->filter($new));
+        $result = $table->alter();
 
         $sql = $result->query;
 
@@ -782,7 +787,15 @@ abstract class SQL extends Adapter
                 $builder->set($row);
             }
 
-            $result = $this->skipDuplicates ? $builder->insertOrIgnore() : $builder->insert();
+            if ($this->skipDuplicates) {
+                if (! $builder instanceof InsertOrIgnoreFeature) {
+                    throw new DatabaseException('Insert-or-ignore is not supported on this dialect');
+                }
+
+                $result = $builder->insertOrIgnore();
+            } else {
+                $result = $builder->insert();
+            }
             $stmt = $this->executeResult($result, Event::DocumentsCreate);
             $this->execute($stmt);
 
@@ -2483,8 +2496,8 @@ abstract class SQL extends Adapter
         $id = $this->filter($id);
 
         $schema = $this->createSchemaBuilder();
-        $mainResult = $schema->drop($this->getSQLTableRaw($id));
-        $permsResult = $schema->drop($this->getSQLTableRaw($id . '_perms'));
+        $mainResult = $schema->table($this->getSQLTableRaw($id))->drop();
+        $permsResult = $schema->table($this->getSQLTableRaw($id . '_perms'))->drop();
 
         $sql = $mainResult->query . '; ' . $permsResult->query;
 
@@ -2512,9 +2525,9 @@ abstract class SQL extends Adapter
 
         $schema = $this->createSchemaBuilder();
         $addRelColumn = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Table $table) use ($columnId) {
-                $table->string($columnId, 255)->nullable()->default(null);
-            });
+            $table = $schema->table($this->getSQLTableRaw($tableName));
+            $table->string($columnId, 255)->nullable()->default(null);
+            $result = $table->alter();
 
             return $result->query;
         };
@@ -2562,9 +2575,9 @@ abstract class SQL extends Adapter
 
         $schema = $this->createSchemaBuilder();
         $renameCol = function (string $tableName, string $from, string $to) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Table $table) use ($from, $to) {
-                $table->renameColumn($from, $to);
-            });
+            $table = $schema->table($this->getSQLTableRaw($tableName));
+            $table->renameColumn($from, $to);
+            $result = $table->alter();
 
             return $result->query;
         };
@@ -2646,9 +2659,9 @@ abstract class SQL extends Adapter
 
         $schema = $this->createSchemaBuilder();
         $dropCol = function (string $tableName, string $columnId) use ($schema): string {
-            $result = $schema->alter($this->getSQLTableRaw($tableName), function (Table $table) use ($columnId) {
-                $table->dropColumn($columnId);
-            });
+            $table = $schema->table($this->getSQLTableRaw($tableName));
+            $table->dropColumn($columnId);
+            $result = $table->alter();
 
             return $result->query;
         };
@@ -2692,8 +2705,8 @@ abstract class SQL extends Adapter
                     ? '_' . $collection->getSequence() . '_' . $relatedCollection->getSequence()
                     : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
 
-                $junctionResult = $schema->drop($this->getSQLTableRaw($junctionName));
-                $permsResult = $schema->drop($this->getSQLTableRaw($junctionName . '_perms'));
+                $junctionResult = $schema->table($this->getSQLTableRaw($junctionName))->drop();
+                $permsResult = $schema->table($this->getSQLTableRaw($junctionName . '_perms'))->drop();
 
                 $sql = $junctionResult->query . '; ' . $permsResult->query;
                 break;
@@ -3167,7 +3180,7 @@ abstract class SQL extends Adapter
     /**
      * Create a new schema builder instance for this adapter's SQL dialect.
      */
-    protected function createSchemaBuilder(): Schema
+    protected function createSchemaBuilder(): MySQLSchema|PostgreSQLSchema
     {
         return new MySQLSchema();
     }
@@ -3555,6 +3568,10 @@ abstract class SQL extends Adapter
             }
         }
 
+        if (! $builder instanceof UpsertFeature) {
+            throw new DatabaseException('Upserts are not supported on this dialect');
+        }
+
         $result = $builder->upsert();
         $stmt = $this->executeResult($result, Event::DocumentsUpsert);
         $this->execute($stmt);
@@ -3641,7 +3658,7 @@ abstract class SQL extends Adapter
                 ? $table->bigInteger($filteredId)
                 : $table->integer($filteredId),
             ColumnType::BigInteger => $table->bigInteger($filteredId),
-            ColumnType::BigSerial => $table->bigSerial($filteredId),
+            ColumnType::BigSerial => $this->addBigSerialColumn($table, $filteredId),
             ColumnType::Float, ColumnType::Double => $table->float($filteredId),
             ColumnType::Boolean => $table->boolean($filteredId),
             ColumnType::Datetime => $table->datetime($filteredId, 3),
@@ -3652,7 +3669,7 @@ abstract class SQL extends Adapter
             ColumnType::MediumText => $table->mediumText($filteredId),
             ColumnType::LongText => $table->longText($filteredId),
             ColumnType::Object => $table->json($filteredId),
-            ColumnType::Vector => $table->vector($filteredId, $size),
+            ColumnType::Vector => $this->addVectorColumn($table, $filteredId, $size),
             default => throw new DatabaseException('Unknown type: '.$type->value),
         };
 
@@ -3670,6 +3687,24 @@ abstract class SQL extends Adapter
         $col->nullable();
 
         return $col;
+    }
+
+    private function addBigSerialColumn(Table $table, string $name): Column
+    {
+        if (! $table instanceof MySQLTable && ! $table instanceof PostgreSQLTable) {
+            throw new DatabaseException('Serial columns are not supported on this dialect');
+        }
+
+        return $table->bigSerial($name);
+    }
+
+    private function addVectorColumn(Table $table, string $name, int $size): Column
+    {
+        if (! $table instanceof PostgreSQLTable) {
+            throw new DatabaseException('Vector columns are only supported on PostgreSQL');
+        }
+
+        return $table->vector($name, $size);
     }
 
     /**

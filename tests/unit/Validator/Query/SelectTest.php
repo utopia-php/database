@@ -105,4 +105,20 @@ class SelectTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::select(['$id', '$createdAt'])));
         $this->assertTrue($this->validator->isValid(Query::select(['artist.name'])));
     }
+
+    public function testDottedJoinAliasIsAcceptedAfterAllowJoinAliases(): void
+    {
+        $this->validator->allowJoinAliases(['ord']);
+
+        $this->assertTrue($this->validator->isValid(Query::select(['ord.amount'])));
+        $this->assertTrue($this->validator->isValid(Query::select(['ord.$id'])));
+    }
+
+    public function testUnqualifiedAmountIsStillRejected(): void
+    {
+        $this->validator->allowJoinAliases(['ord']);
+
+        $this->assertFalse($this->validator->isValid(Query::select(['amount'])));
+        $this->assertSame('Attribute not found in schema: amount', $this->validator->getDescription());
+    }
 }

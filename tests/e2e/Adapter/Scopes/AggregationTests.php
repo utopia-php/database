@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -1470,6 +1471,118 @@ trait AggregationTests
         ]);
         $this->assertEquals($expected, $results[0]->getAttribute('cnt'));
         $database->deleteCollection($col);
+    }
+
+    public function testStddevPopOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'stddev_pop');
+        $results = $database->find('stddev_pop', [Query::stddevPop('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(406.87456737949, (float) $results[0]->getAttribute('result'), 0.5);
+        $database->deleteCollection('stddev_pop');
+    }
+
+    public function testStddevSampOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'stddev_samp');
+        $results = $database->find('stddev_samp', [Query::stddevSamp('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(431.55564852957, (float) $results[0]->getAttribute('result'), 0.5);
+        $database->deleteCollection('stddev_samp');
+    }
+
+    public function testVarPopOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'var_pop');
+        $results = $database->find('var_pop', [Query::varPop('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(165546.91358025, (float) $results[0]->getAttribute('result'), 1.0);
+        $database->deleteCollection('var_pop');
+    }
+
+    public function testVarSampOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'var_samp');
+        $results = $database->find('var_samp', [Query::varSamp('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(186240.27777778, (float) $results[0]->getAttribute('result'), 1.0);
+        $database->deleteCollection('var_samp');
+    }
+
+    public function testBitAndOfIntegerColumn(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'bit_and');
+        $results = $database->find('bit_and', [Query::bitAnd('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertSame(0, (int) $results[0]->getAttribute('result'));
+        $database->deleteCollection('bit_and');
+    }
+
+    public function testBitOrOfIntegerColumn(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'bit_or');
+        $results = $database->find('bit_or', [Query::bitOr('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertSame(2047, (int) $results[0]->getAttribute('result'));
+        $database->deleteCollection('bit_or');
+    }
+
+    public function testBitXorOfIntegerColumn(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'bit_xor');
+        $results = $database->find('bit_xor', [Query::bitXor('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertSame(1545, (int) $results[0]->getAttribute('result'));
+        $database->deleteCollection('bit_xor');
     }
 
 }

@@ -3,9 +3,11 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -2633,6 +2635,395 @@ trait JoinTests
         $this->assertEquals(100, (int) $results[0]->getAttribute('total'));
         $this->assertEquals('c2', $results[1]->getAttribute('cust_uid'));
         $this->assertEquals(200, (int) $results[1]->getAttribute('total'));
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testRightJoinIncludesUnmatchedRightRows(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $pCol = 't8_rj_p';
+        $rCol = 't8_rj_r';
+        $cols = [$pCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p1',
+            'name' => 'Product p1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p2',
+            'name' => 'Product p2',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $database->createDocument($rCol, new Document([
+            'prod_uid' => 'p1',
+            'score' => 5,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            'prod_uid' => 'missing',
+            'score' => 9,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $results = $database->getAuthorization()->skip(fn () => $database->find($pCol, [
+            Query::rightJoin($rCol, '$id', 'prod_uid'),
+            Query::select(['name']),
+        ]));
+
+        $this->assertCount(2, $results);
+        $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
+        \sort($ids);
+        $this->assertSame(['', 'p1'], $ids);
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testCrossJoinCartesianProduct(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $aCol = 't8_xj_a';
+        $bCol = 't8_xj_b';
+        $cols = [$aCol, $bCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($aCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($aCol, new Attribute(key: 'label', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($bCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($bCol, new Attribute(key: 'tag', type: ColumnType::String, size: 100, required: true));
+
+        foreach (['a1', 'a2', 'a3'] as $id) {
+            $database->createDocument($aCol, new Document([
+                '$id' => $id,
+                'label' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+        foreach (['b1', 'b2'] as $id) {
+            $database->createDocument($bCol, new Document([
+                '$id' => $id,
+                'tag' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $results = $database->find($aCol, [
+            Query::crossJoin($bCol),
+        ]);
+
+        $this->assertCount(6, $results);
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testFullOuterJoinIncludesBothUnmatched(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $pCol = 't8_fo_p';
+        $rCol = 't8_fo_r';
+        $cols = [$pCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p1',
+            'name' => 'Product p1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p2',
+            'name' => 'Product p2',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            'prod_uid' => 'p1',
+            'score' => 5,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            'prod_uid' => 'missing',
+            'score' => 9,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        if (! $database->getAdapter() instanceof Postgres) {
+            try {
+                $database->find($pCol, [
+                    Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+                ]);
+                $this->fail('Expected QueryException for full outer join');
+            } catch (QueryException $exception) {
+                $this->assertNotSame('', $exception->getMessage());
+            } finally {
+                $this->cleanupAggCollections($database, $cols);
+            }
+
+            return;
+        }
+
+        $results = $database->getAuthorization()->skip(fn () => $database->find($pCol, [
+            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::select(['name']),
+        ]));
+
+        $this->assertCount(3, $results);
+        $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
+        \sort($ids);
+        $this->assertSame(['', 'p1', 'p2'], $ids);
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testNaturalJoinThrowsQueryException(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $pCol = 't8_nj_p';
+        $rCol = 't8_nj_r';
+        $cols = [$pCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($rCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        try {
+            $database->find($pCol, [
+                Query::naturalJoin($rCol),
+            ]);
+            $this->fail('Expected QueryException for natural join');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('Natural joins are not supported', $exception->getMessage());
+        } finally {
+            $this->cleanupAggCollections($database, $cols);
+        }
+    }
+
+    public function testJoinOperatorGreaterThan(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $lCol = 't8_jgt_l';
+        $rCol = 't8_jgt_r';
+        $cols = [$lCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($lCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($lCol, new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($rCol, new Attribute(key: 'threshold', type: ColumnType::Integer, size: 0, required: true));
+
+        foreach ([10, 20, 30] as $value) {
+            $database->createDocument($lCol, new Document([
+                'value' => $value,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+        foreach ([15, 25] as $threshold) {
+            $database->createDocument($rCol, new Document([
+                'threshold' => $threshold,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $results = $database->find($lCol, [
+            Query::join($rCol, 'value', 'threshold', '>'),
+        ]);
+
+        $this->assertCount(3, $results);
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinPreservesUserAlias(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $cCol = 't8_jua_c';
+        $oCol = 't8_jua_o';
+        $cols = [$cCol, $oCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($cCol, new Document([
+            '$id' => 'c1',
+            'name' => 'Customer 1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($oCol, new Document([
+            'cust_uid' => 'c1',
+            'amount' => 150,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $results = $database->find($cCol, [
+            Query::join($oCol, '$id', 'cust_uid', '=', 'ord'),
+            Query::select(['name', 'ord.amount']),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame('c1', $results[0]->getId());
+        $this->assertSame('Customer 1', $results[0]->getAttribute('name'));
+        $this->assertSame(150, (int) $results[0]->getAttribute('amount'));
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testChainedJoinsQualifySecondJoinLeft(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $cCol = 't8_jch_c';
+        $oCol = 't8_jch_o';
+        $iCol = 't8_jch_i';
+        $cols = [$cCol, $oCol, $iCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createCollection($iCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($iCol, new Attribute(key: 'order_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($iCol, new Attribute(key: 'sku', type: ColumnType::String, size: 100, required: true));
+
+        $database->createDocument($cCol, new Document([
+            '$id' => 'c1',
+            'name' => 'Customer 1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($oCol, new Document([
+            '$id' => 'o1',
+            'cust_uid' => 'c1',
+            'amount' => 150,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($iCol, new Document([
+            'order_uid' => 'o1',
+            'sku' => 'widget',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $results = $database->find($cCol, [
+            Query::join($oCol, '$id', 'cust_uid', '=', 'ord'),
+            Query::join($iCol, 'ord.$id', 'order_uid', '=', 'itm'),
+            Query::select(['name', 'ord.amount', 'itm.sku']),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame('c1', $results[0]->getId());
+        $this->assertSame(150, (int) $results[0]->getAttribute('amount'));
+        $this->assertSame('widget', $results[0]->getAttribute('sku'));
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testSelectJoinedColumnByAlias(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $cCol = 't8_jsa_c';
+        $oCol = 't8_jsa_o';
+        $cols = [$cCol, $oCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($cCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($oCol, new Attribute(key: 'cust_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($oCol, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($cCol, new Document([
+            '$id' => 'c1',
+            'name' => 'Customer 1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($oCol, new Document([
+            'cust_uid' => 'c1',
+            'amount' => 275,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $results = $database->find($cCol, [
+            Query::select(['name', 'ord.amount']),
+            Query::join($oCol, '$id', 'cust_uid', '=', 'ord'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame('Customer 1', $results[0]->getAttribute('name'));
+        $this->assertSame(275, (int) $results[0]->getAttribute('amount'));
 
         $this->cleanupAggCollections($database, $cols);
     }

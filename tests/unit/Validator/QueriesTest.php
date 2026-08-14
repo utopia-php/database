@@ -17,6 +17,7 @@ use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Schema\ColumnType;
 
 class QueriesTest extends TestCase
@@ -200,6 +201,28 @@ class QueriesTest extends TestCase
         $validator = new Queries([new Join()]);
 
         $this->assertTrue($validator->isValid([Query::join('orders', 'user_id', 'id')]));
+    }
+
+    public function testSelectBeforeJoinAcceptsDottedAlias(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Select($attributes),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::select(['ord.amount']),
+            Query::join('orders', '$id', 'customer_uid', '=', 'ord'),
+        ]), $validator->getDescription());
     }
 
     public function test_is_array(): void

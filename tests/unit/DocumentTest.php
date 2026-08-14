@@ -92,6 +92,17 @@ class DocumentTest extends TestCase
         ]);
     }
 
+    public function testFromRowCoercesNullIdToEmptyString(): void
+    {
+        $document = Document::fromRow([
+            Document::ID => null,
+            'name' => 'unmatched',
+        ]);
+
+        $this->assertSame('', $document->getId());
+        $this->assertSame('unmatched', $document->getAttribute('name'));
+    }
+
     public function test_id_and_collection_accessors(): void
     {
         $document = new Document([

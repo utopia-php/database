@@ -3104,7 +3104,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             Method::NotContains,
         ];
 
-        if (\in_array($method, $likeMethods, true)) {
+        if (\in_array($method, $likeMethods, true) && ! $query->isSpatialAttribute()) {
             // Array CONTAINS via json_each — exact element match without
             // LIKE substring false positives (`%2%` matching `[12, 200]`).
             $arrayContainsMethods = [

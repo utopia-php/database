@@ -7,6 +7,7 @@ use Throwable;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -22,11 +23,10 @@ use Utopia\Query\CursorDirection;
 /**
  * Connection pool adapter that delegates database operations to pooled adapter instances.
  *
- * Pool implements all Feature interfaces because it is a complete proxy — every method
- * call is delegated to the underlying pooled adapter. If the pooled adapter does not
- * actually support a feature, the delegated call will throw at runtime.
+ * Pool is a proxy: optional Feature methods are forwarded to the borrowed adapter.
+ * Feature support is reported by hasFeature(), not instanceof.
  */
-class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCasting, Feature\Relationships, Feature\SchemaAttributes, Feature\SchemaIndexes, Feature\Spatial, Feature\Timeouts, Feature\Upserts, Feature\UTCCasting, Feature\RawQuery, Feature\QueryBuilder, Feature\ColumnTypes
+class Pool extends Adapter
 {
     /**
      * @var UtopiaPool<covariant Adapter>
@@ -631,7 +631,8 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     }
 
     /**
-     * {@inheritDoc}
+     * @param  array<Change>  $changes
+     * @return array<Document>
      */
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
@@ -906,7 +907,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     }
 
     /**
-     * {@inheritDoc}
+     * @return array<Document>
      */
     public function getSchemaAttributes(string $collection): array
     {
@@ -915,6 +916,9 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         return $result;
     }
 
+    /**
+     * @return array<Document>
+     */
     public function getSchemaIndexes(string $collection): array
     {
         /** @var array<Document> $result */
@@ -1051,7 +1055,8 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     }
 
     /**
-     * {@inheritDoc}
+     * @param  array<mixed>  $bindings
+     * @return array<Document>
      */
     public function rawQuery(string $query, array $bindings = []): array
     {
@@ -1060,6 +1065,9 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
         return $result;
     }
 
+    /**
+     * @param  array<mixed>  $bindings
+     */
     public function rawMutation(string $query, array $bindings = []): int
     {
         /** @var int $result */

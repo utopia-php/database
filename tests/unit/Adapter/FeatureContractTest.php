@@ -71,6 +71,44 @@ final class FeatureContractTest extends TestCase
         $this->assertSame(true, $pool->hasFeature(Feature\Relationships::class));
     }
 
+    public function testPoolDoesNotImplementOptionalFeatureInterfaces(): void
+    {
+        $implements = $this->interfaces(Pool::class);
+
+        foreach ([
+            Feature\ConnectionId::class,
+            Feature\InternalCasting::class,
+            Feature\Relationships::class,
+            Feature\SchemaAttributes::class,
+            Feature\SchemaIndexes::class,
+            Feature\Spatial::class,
+            Feature\Timeouts::class,
+            Feature\Upserts::class,
+            Feature\UTCCasting::class,
+            Feature\RawQuery::class,
+            Feature\QueryBuilder::class,
+            Feature\ColumnTypes::class,
+        ] as $feature) {
+            $this->assertArrayNotHasKey($feature, $implements, $feature);
+        }
+
+        foreach ([
+            'decodePoint',
+            'upsertDocuments',
+            'setTimeout',
+            'getConnectionId',
+            'rawQuery',
+            'getBuilder',
+            'getColumnType',
+            'castingBefore',
+            'setUTCDatetime',
+            'getSchemaAttributes',
+            'createRelationship',
+        ] as $method) {
+            $this->assertSame(true, \method_exists(Pool::class, $method), $method);
+        }
+    }
+
     public function testRedisAdvertisesUpsertsConnectionIdAndRelationships(): void
     {
         $class = Redis::class;

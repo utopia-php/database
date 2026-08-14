@@ -8,6 +8,8 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -17,6 +19,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Query\Schema\ColumnType;
 
 class CollectionValidationTest extends TestCase
 {
@@ -203,6 +206,23 @@ class CollectionValidationTest extends TestCase
         $this->expectException(LimitException::class);
         $this->expectExceptionMessage('Attribute limit');
         $db->createCollection('newCol', [$attr]);
+    }
+
+    public function testCreateCollectionRejectsPointAttributeOnMemoryWhenValidateIsOn(): void
+    {
+        $database = new Database(new Memory(), new Cache(new None()));
+        $database
+            ->setDatabase('testing')
+            ->setNamespace('collections')
+            ->enableValidation();
+        $database->create();
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Spatial attributes are not supported');
+
+        $database->createCollection('places', [
+            new Attribute(key: 'location', type: ColumnType::Point),
+        ]);
     }
 
     public function testCreateCollectionWithIndexLimits(): void

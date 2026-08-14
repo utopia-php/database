@@ -22,6 +22,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -177,11 +178,11 @@ class Memory extends Adapter
         if ($this->sharedTables && $collectionId === Database::METADATA) {
             $lower = \strtolower($id);
             foreach ($this->data[$key]['documents'] as $storageKey => $candidate) {
-                $uid = $candidate['_uid'] ?? '';
+                $uid = $candidate[Storage::UID] ?? '';
                 if (
                     \is_string($uid)
                     && \strtolower($uid) === $lower
-                    && ($candidate['_tenant'] ?? null) === null
+                    && ($candidate[Storage::TENANT] ?? null) === null
                 ) {
                     return [$storageKey, $candidate];
                 }
@@ -1016,8 +1017,8 @@ class Memory extends Adapter
             return null;
         }
 
-        $collectionSequence = $collectionDoc[1]['_id'] ?? null;
-        $relatedSequence = $relatedDoc[1]['_id'] ?? null;
+        $collectionSequence = $collectionDoc[1][Storage::SEQUENCE] ?? null;
+        $relatedSequence = $relatedDoc[1][Storage::SEQUENCE] ?? null;
         if (! \is_scalar($collectionSequence) || ! \is_scalar($relatedSequence)) {
             return null;
         }
@@ -1096,7 +1097,7 @@ class Memory extends Adapter
                     continue;
                 }
                 if ($this->sharedTables) {
-                    \array_unshift($signature, $row['_tenant'] ?? null);
+                    \array_unshift($signature, $row[Storage::TENANT] ?? null);
                 }
                 $hash = \serialize($signature);
                 if (isset($hashTable[$hash])) {
@@ -1241,8 +1242,8 @@ class Memory extends Adapter
                 // Mirrors MariaDB's `INSERT IGNORE` — duplicate primary key is
                 // silently dropped and the existing row's sequence is returned.
                 $existing = $this->data[$key]['documents'][$docKey];
-                $existingId = $existing['_id'] ?? '';
-                $document['$sequence'] = \is_scalar($existingId) ? (string) $existingId : '';
+                $existingId = $existing[Storage::SEQUENCE] ?? '';
+                $document[Document::SEQUENCE] = \is_scalar($existingId) ? (string) $existingId : '';
 
                 return $document;
             }
@@ -1273,7 +1274,7 @@ class Memory extends Adapter
         }
 
         $row = $this->documentToRow($document);
-        $row['_id'] = $sequence;
+        $row[Storage::SEQUENCE] = $sequence;
 
         $entry['documents'][$docKey] = $row;
         unset($entry);
@@ -1288,7 +1289,7 @@ class Memory extends Adapter
 
         $this->writePermissions($key, $document);
 
-        $document['$sequence'] = (string) $sequence;
+        $document[Document::SEQUENCE] = (string) $sequence;
 
         return $document;
     }
@@ -1359,15 +1360,15 @@ class Memory extends Adapter
         $oldSignatures = $this->rowUniqueSignatures($key, $existing);
         $this->checkUniqueSignatures($key, $newSignatures, $oldKey);
 
-        $row['_id'] = $existing['_id'];
-        if ($this->sharedTables && \array_key_exists('_tenant', $existing)) {
+        $row[Storage::SEQUENCE] = $existing[Storage::SEQUENCE];
+        if ($this->sharedTables && \array_key_exists(Storage::TENANT, $existing)) {
             // Preserve the row's stored tenant — MariaDB's UPDATE statements
             // never rewrite `_tenant` and tests rely on the original tenant
             // (e.g. the metadata NULL-tenant rows) surviving an update.
-            $row['_tenant'] = $existing['_tenant'];
+            $row[Storage::TENANT] = $existing[Storage::TENANT];
         }
 
-        $tenantValue = $existing['_tenant'] ?? $this->getTenant();
+        $tenantValue = $existing[Storage::TENANT] ?? $this->getTenant();
         $newKey = $this->sharedTables
             ? (\is_scalar($tenantValue) ? (string) $tenantValue : '').'|'.\strtolower($newId)
             : \strtolower($newId);
@@ -1477,7 +1478,7 @@ class Memory extends Adapter
         $attrs = $updates->getAttributes();
         $hasCreatedAt = ! empty($updates->getCreatedAt());
         $hasUpdatedAt = ! empty($updates->getUpdatedAt());
-        $hasPermissions = $updates->offsetExists('$permissions');
+        $hasPermissions = $updates->offsetExists(Document::PERMISSIONS);
         if (empty($attrs) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
             return 0;
         }
@@ -1504,7 +1505,7 @@ class Memory extends Adapter
                 ? new Document(\array_merge(
                     $this->rowToDocument($existingRow),
                     $resolvedAttrs,
-                    ['$id' => $uid]
+                    [Document::ID => $uid]
                 ))
                 : null;
 
@@ -1565,13 +1566,13 @@ class Memory extends Adapter
             }
 
             if ($hasCreatedAt) {
-                $row['_createdAt'] = $updates->getCreatedAt();
+                $row[Storage::CREATED_AT] = $updates->getCreatedAt();
             }
             if ($hasUpdatedAt) {
-                $row['_updatedAt'] = $updates->getUpdatedAt();
+                $row[Storage::UPDATED_AT] = $updates->getUpdatedAt();
             }
             if ($hasPermissions) {
-                $row['_permissions'] = $updates->getPermissions();
+                $row[Storage::PERMISSIONS] = $updates->getPermissions();
             }
             unset($row);
 
@@ -1624,8 +1625,8 @@ class Memory extends Adapter
             // — the lookup must use each document's own tenant, not the adapter's current tenant.
             $existing = $this->data[$key]['documents'][$this->documentKey($doc->getId(), $doc->getTenant())] ?? null;
             if ($existing !== null) {
-                $existingId = $existing['_id'] ?? '';
-                $documents[$index]->setAttribute('$sequence', \is_scalar($existingId) ? (string) $existingId : '');
+                $existingId = $existing[Storage::SEQUENCE] ?? '';
+                $documents[$index]->setAttribute(Document::SEQUENCE, \is_scalar($existingId) ? (string) $existingId : '');
             }
         }
 
@@ -1689,11 +1690,11 @@ class Memory extends Adapter
             // With sharedTables the row map is keyed by "tenant|uid" so sequence
             // collisions across tenants are possible. Skip rows that don't belong
             // to the current tenant so we never delete another tenant's data.
-            if ($this->sharedTables && ($row['_tenant'] ?? null) !== $this->getTenant()) {
+            if ($this->sharedTables && ($row[Storage::TENANT] ?? null) !== $this->getTenant()) {
                 continue;
             }
-            $rowId = $row['_id'] ?? '';
-            $rowUid = $row['_uid'] ?? $docKey;
+            $rowId = $row[Storage::SEQUENCE] ?? '';
+            $rowUid = $row[Storage::UID] ?? $docKey;
             if (isset($seqSet[\is_scalar($rowId) ? (string) $rowId : ''])) {
                 $deletedIds[\is_scalar($rowUid) ? (string) $rowUid : $docKey] = true;
                 $oldSignatures = $this->rowUniqueSignatures($key, $row);
@@ -1822,7 +1823,7 @@ class Memory extends Adapter
 
         $column = $this->filter($attribute);
         $previousValue = $this->data[$key]['documents'][$docKey][$column] ?? null;
-        $previousUpdatedAt = $this->data[$key]['documents'][$docKey]['_updatedAt'] ?? null;
+        $previousUpdatedAt = $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] ?? null;
         $current = $previousValue ?? 0;
         $exact = (\is_int($current) || (\is_string($current) && BigInt::isIntegerString($current)))
             && (\is_int($value) || (\is_string($value) && BigInt::isIntegerString($value)));
@@ -1856,7 +1857,7 @@ class Memory extends Adapter
         }
 
         $this->data[$key]['documents'][$docKey][$column] = $result;
-        $this->data[$key]['documents'][$docKey]['_updatedAt'] = $updatedAt;
+        $this->data[$key]['documents'][$docKey][Storage::UPDATED_AT] = $updatedAt;
 
         $this->journal(function () use ($key, $docKey, $column, $previousValue, $previousUpdatedAt): void {
             if (! isset($this->data[$key]['documents'][$docKey])) {
@@ -1869,9 +1870,9 @@ class Memory extends Adapter
                 $row[$column] = $previousValue;
             }
             if ($previousUpdatedAt === null) {
-                unset($row['_updatedAt']);
+                unset($row[Storage::UPDATED_AT]);
             } else {
-                $row['_updatedAt'] = $previousUpdatedAt;
+                $row[Storage::UPDATED_AT] = $previousUpdatedAt;
             }
             unset($row);
         });
@@ -2337,15 +2338,15 @@ class Memory extends Adapter
             $row[$this->filter($attribute)] = $value;
         }
 
-        $row['_uid'] = $document->getId();
-        $row['_createdAt'] = $document->getCreatedAt();
-        $row['_updatedAt'] = $document->getUpdatedAt();
-        $row['_permissions'] = $document->getPermissions();
+        $row[Storage::UID] = $document->getId();
+        $row[Storage::CREATED_AT] = $document->getCreatedAt();
+        $row[Storage::UPDATED_AT] = $document->getUpdatedAt();
+        $row[Storage::PERMISSIONS] = $document->getPermissions();
         if ($this->sharedTables) {
             // Mirror MariaDB: the row's `_tenant` follows the document's own
             // tenant — that matters in tenantPerDocument mode where the
             // adapter's current tenant is null but each document is tagged.
-            $row['_tenant'] = $document->getTenant() ?? $this->getTenant();
+            $row[Storage::TENANT] = $document->getTenant() ?? $this->getTenant();
         }
 
         return $row;
@@ -2377,23 +2378,23 @@ class Memory extends Adapter
         $document = [];
         foreach ($row as $key => $value) {
             switch ($key) {
-                case '_id':
-                    $document['$sequence'] = \is_scalar($value) ? (string) $value : '';
+                case Storage::SEQUENCE:
+                    $document[Document::SEQUENCE] = \is_scalar($value) ? (string) $value : '';
                     break;
-                case '_uid':
-                    $document['$id'] = $value;
+                case Storage::UID:
+                    $document[Document::ID] = $value;
                     break;
-                case '_tenant':
-                    $document['$tenant'] = $value;
+                case Storage::TENANT:
+                    $document[Document::TENANT] = $value;
                     break;
-                case '_createdAt':
-                    $document['$createdAt'] = $value;
+                case Storage::CREATED_AT:
+                    $document[Document::CREATED_AT] = $value;
                     break;
-                case '_updatedAt':
-                    $document['$updatedAt'] = $value;
+                case Storage::UPDATED_AT:
+                    $document[Document::UPDATED_AT] = $value;
                     break;
-                case '_permissions':
-                    $document['$permissions'] = $value ?? [];
+                case Storage::PERMISSIONS:
+                    $document[Document::PERMISSIONS] = $value ?? [];
                     break;
                 default:
                     if ($allowed !== null && ! isset($allowed[$key])) {
@@ -2628,7 +2629,7 @@ class Memory extends Adapter
             // tenant into the hash key so two tenants holding the same
             // value do not collide.
             if ($this->sharedTables) {
-                \array_unshift($signature, $row['_tenant'] ?? null);
+                \array_unshift($signature, $row[Storage::TENANT] ?? null);
             }
             $result[$indexId] = \serialize($signature);
         }
@@ -2711,7 +2712,7 @@ class Memory extends Adapter
         $output = [];
         foreach ($documents as $row) {
             if ($tenantCheck) {
-                $rowTenant = $row['_tenant'] ?? null;
+                $rowTenant = $row[Storage::TENANT] ?? null;
                 if ($allowNullTenant && $rowTenant === null) {
                     // visible
                 } elseif ($rowTenant !== $tenant) {
@@ -2719,7 +2720,7 @@ class Memory extends Adapter
                 }
             }
 
-            $rowUid = $row['_uid'] ?? '';
+            $rowUid = $row[Storage::UID] ?? '';
             if ($allowSet !== null && (! \is_string($rowUid) || ! isset($allowSet[$rowUid]))) {
                 continue;
             }
@@ -3364,15 +3365,7 @@ class Memory extends Adapter
 
     protected function mapAttribute(string $attribute): string
     {
-        return match ($attribute) {
-            '$id' => '_uid',
-            '$sequence' => '_id',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            '$permissions' => '_permissions',
-            default => $this->filter($attribute),
-        };
+        return $this->filter(Storage::column($attribute));
     }
 
     /**
@@ -3444,8 +3437,8 @@ class Memory extends Adapter
             // is supplied — sort by the auto-incrementing _id ascending so
             // pagination via limit/offset is stable across calls.
             \usort($rows, function (array $a, array $b) use ($reverse) {
-                $av = $a['_id'] ?? 0;
-                $bv = $b['_id'] ?? 0;
+                $av = $a[Storage::SEQUENCE] ?? 0;
+                $bv = $b[Storage::SEQUENCE] ?? 0;
                 if ($av === $bv) {
                     return 0;
                 }
@@ -3524,7 +3517,7 @@ class Memory extends Adapter
         }
 
         if (empty($orderAttributes)) {
-            $orderAttributes = ['$sequence'];
+            $orderAttributes = [Document::SEQUENCE];
             $orderTypes = [OrderDirection::Asc];
         }
 

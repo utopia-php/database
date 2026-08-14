@@ -248,7 +248,7 @@ class Redis extends Adapter implements
         $attributePayload = [];
         foreach ($attributes as $attribute) {
             $attributePayload[] = [
-                '$id' => $attribute->key,
+                Document::ID => $attribute->key,
                 'key' => $attribute->key,
                 'type' => $attribute->type->value,
                 'size' => $attribute->size,
@@ -261,7 +261,7 @@ class Redis extends Adapter implements
         $indexPayload = [];
         foreach ($indexes as $index) {
             $indexPayload[] = [
-                '$id' => $index->key,
+                Document::ID => $index->key,
                 'key' => $index->key,
                 'type' => $index->type->value,
                 'attributes' => $index->attributes,
@@ -271,7 +271,7 @@ class Redis extends Adapter implements
         }
 
         $schema = new Document([
-            '$id' => $id,
+            Document::ID => $id,
             'name' => $name,
             'attributes' => $attributePayload,
             'indexes' => $indexPayload,
@@ -333,7 +333,7 @@ class Redis extends Adapter implements
         }
 
         $record = [
-            '$id' => $id,
+            Document::ID => $id,
             'key' => $id,
             'type' => $attribute->type->value,
             'size' => $attribute->size,
@@ -376,7 +376,7 @@ class Redis extends Adapter implements
         }
 
         $record = [
-            '$id' => $id,
+            Document::ID => $id,
             'key' => $id,
             'type' => $attribute->type->value,
             'size' => $attribute->size,
@@ -441,7 +441,7 @@ class Redis extends Adapter implements
                 if ($this->filter($existingId) !== $old) {
                     continue;
                 }
-                $attribute['$id'] = $new;
+                $attribute[Document::ID] = $new;
                 $attribute['key'] = $new;
                 $attrs[$i] = $attribute;
                 $touched = true;
@@ -612,7 +612,7 @@ class Redis extends Adapter implements
             $indexes = $this->readIndexesField($client, $metaKey);
 
             foreach ($indexes as $existing) {
-                if (($existing['$id'] ?? $existing['key'] ?? null) === $id) {
+                if (($existing[Document::ID] ?? $existing['key'] ?? null) === $id) {
                     throw new DuplicateException('Index already exists');
                 }
             }
@@ -637,7 +637,7 @@ class Redis extends Adapter implements
                         }
                         $document = $this->decode($payload);
                         if ($sharedTables) {
-                            $rowTenant = $document->getAttribute('$tenant');
+                            $rowTenant = $document->getAttribute(Document::TENANT);
                             if ($rowTenant !== $currentTenant) {
                                 continue;
                             }
@@ -668,7 +668,7 @@ class Redis extends Adapter implements
             }
 
             $indexes[] = [
-                '$id' => $id,
+                Document::ID => $id,
                 'key' => $id,
                 'type' => $type,
                 'attributes' => \array_values($attributes),
@@ -696,7 +696,7 @@ class Redis extends Adapter implements
             $indexes = $this->readIndexesField($client, $metaKey);
             $filtered = [];
             foreach ($indexes as $index) {
-                if (($index['$id'] ?? $index['key'] ?? null) === $id) {
+                if (($index[Document::ID] ?? $index['key'] ?? null) === $id) {
                     continue;
                 }
                 $filtered[] = $index;
@@ -722,8 +722,8 @@ class Redis extends Adapter implements
             $indexes = $this->readIndexesField($client, $metaKey);
             $changed = false;
             foreach ($indexes as $i => $index) {
-                if (($index['$id'] ?? $index['key'] ?? null) === $old) {
-                    $indexes[$i]['$id'] = $new;
+                if (($index[Document::ID] ?? $index['key'] ?? null) === $old) {
+                    $indexes[$i][Document::ID] = $new;
                     $indexes[$i]['key'] = $new;
                     $changed = true;
                     break;
@@ -754,7 +754,7 @@ class Redis extends Adapter implements
         $document = $this->decode($payload);
 
         if ($this->getSharedTables()) {
-            $rowTenant = $document->getAttribute('$tenant');
+            $rowTenant = $document->getAttribute(Document::TENANT);
             $tenant = $this->getTenant();
             $allowNullTenant = $col === Database::METADATA && $rowTenant === null;
             if (! $allowNullTenant && $rowTenant !== $tenant) {
@@ -780,7 +780,7 @@ class Redis extends Adapter implements
         $id = $document->getId();
         if ($id === '') {
             $id = ID::unique();
-            $document->setAttribute('$id', $id);
+            $document->setAttribute(Document::ID, $id);
         }
         $tenant = $document->getTenant();
         $docKey = $this->docKey($col, $id, $tenant);
@@ -794,7 +794,7 @@ class Redis extends Adapter implements
                     $existingPayload = $redis->get($docKey);
                     if (\is_string($existingPayload) && $existingPayload !== '') {
                         $existing = $this->decode($existingPayload);
-                        $document->setAttribute('$sequence', $existing->getSequence() ?? '');
+                        $document->setAttribute(Document::SEQUENCE, $existing->getSequence() ?? '');
                     }
 
                     return $document;
@@ -822,7 +822,7 @@ class Redis extends Adapter implements
                     $redis->set($seqKey, $sequence);
                 }
             }
-            $document->setAttribute('$sequence', $sequence);
+            $document->setAttribute(Document::SEQUENCE, $sequence);
 
             $redis->set($docKey, $this->encode($document));
             $redis->sAdd($idxKey, \strtolower($id));
@@ -884,7 +884,7 @@ class Redis extends Adapter implements
 
             $resolved = $this->applyOperators($document->getArrayCopy(), $existing->getArrayCopy());
             $merged = \array_merge($existing->getArrayCopy(), $resolved);
-            $merged['$id'] = $newId;
+            $merged[Document::ID] = $newId;
             $mergedDocument = new Document($merged);
 
             $this->enforceUniqueIndexes($redis, $col, $mergedDocument, $id);
@@ -929,7 +929,7 @@ class Redis extends Adapter implements
         $attrs = $updates->getAttributes();
         $hasCreatedAt = ! empty($updates->getCreatedAt());
         $hasUpdatedAt = ! empty($updates->getUpdatedAt());
-        $hasPermissions = $updates->offsetExists('$permissions');
+        $hasPermissions = $updates->offsetExists(Document::PERMISSIONS);
         if (empty($attrs) && ! $hasCreatedAt && ! $hasUpdatedAt && ! $hasPermissions) {
             return 0;
         }
@@ -978,13 +978,13 @@ class Redis extends Adapter implements
                     $merged[$attribute] = $value;
                 }
                 if ($hasCreatedAt) {
-                    $merged['$createdAt'] = $updates->getCreatedAt();
+                    $merged[Document::CREATED_AT] = $updates->getCreatedAt();
                 }
                 if ($hasUpdatedAt) {
-                    $merged['$updatedAt'] = $updates->getUpdatedAt();
+                    $merged[Document::UPDATED_AT] = $updates->getUpdatedAt();
                 }
                 if ($hasPermissions) {
-                    $merged['$permissions'] = $updates->getPermissions();
+                    $merged[Document::PERMISSIONS] = $updates->getPermissions();
                 }
 
                 $mergedDocument = new Document($merged);
@@ -1055,7 +1055,7 @@ class Redis extends Adapter implements
                     $existingArray = $existing->getArrayCopy();
                     $resolved = $this->applyOperators($document->getArrayCopy(), $existingArray);
                     $merged = \array_merge($existingArray, $resolved);
-                    $merged['$id'] = $id;
+                    $merged[Document::ID] = $id;
 
                     if ($attribute !== '') {
                         $previous = $existing->getAttribute($attribute);
@@ -1094,7 +1094,7 @@ class Redis extends Adapter implements
                             $redis->set($seqKey, $sequence);
                         }
                     }
-                    $document->setAttribute('$sequence', $sequence);
+                    $document->setAttribute(Document::SEQUENCE, $sequence);
 
                     $resolved = $this->applyOperators($document->getArrayCopy(), []);
                     foreach ($resolved as $attr => $value) {
@@ -1169,7 +1169,7 @@ class Redis extends Adapter implements
             $existing = $this->decode($payload);
             $sequence = $existing->getSequence();
             if (! empty($sequence)) {
-                $documents[$index]->setAttribute('$sequence', (string) $sequence);
+                $documents[$index]->setAttribute(Document::SEQUENCE, (string) $sequence);
             }
         }
 
@@ -1421,7 +1421,7 @@ class Redis extends Adapter implements
             }
 
             $document->setAttribute($attribute, $result);
-            $document->setAttribute('$updatedAt', $updatedAt);
+            $document->setAttribute(Document::UPDATED_AT, $updatedAt);
 
             $redis->set($docKey, $this->encode($document));
 
@@ -1896,7 +1896,7 @@ class Redis extends Adapter implements
      */
     private function recordIdentifier(array $record): string
     {
-        $id = $record['$id'] ?? null;
+        $id = $record[Document::ID] ?? null;
         if (\is_string($id)) {
             return $id;
         }
@@ -2041,7 +2041,7 @@ class Redis extends Adapter implements
      */
     private function upsertAttributeRecord(array $attrs, array $record): array
     {
-        $targetId = $this->stringOrEmpty($record['$id'] ?? '');
+        $targetId = $this->stringOrEmpty($record[Document::ID] ?? '');
         $replaced = false;
         foreach ($attrs as $i => $existing) {
             $existingId = $this->recordIdentifier($existing);
@@ -2091,7 +2091,7 @@ class Redis extends Adapter implements
 
         $newSignatures = [];
         $sharedTables = $this->getSharedTables();
-        $tenant = $sharedTables ? ($document->getAttribute('$tenant') ?? $this->getTenant()) : null;
+        $tenant = $sharedTables ? ($document->getAttribute(Document::TENANT) ?? $this->getTenant()) : null;
         foreach ($uniqueIndexes as $i => $attributes) {
             $signature = [];
             $hasNull = false;
@@ -2145,7 +2145,7 @@ class Redis extends Adapter implements
             }
             $existing = $this->decode($payload);
             if ($sharedTables) {
-                $rowTenant = $existing->getAttribute('$tenant');
+                $rowTenant = $existing->getAttribute(Document::TENANT);
                 if ($rowTenant !== $tenant) {
                     continue;
                 }
@@ -2321,7 +2321,7 @@ class Redis extends Adapter implements
         }
 
         $record = [
-            '$id' => $field,
+            Document::ID => $field,
             'key' => $field,
             'type' => ColumnType::Relationship->value,
             'size' => 0,
@@ -2550,7 +2550,7 @@ class Redis extends Adapter implements
             $document = $this->decode($payload);
 
             if ($sharedTables) {
-                $rowTenant = $document->getAttribute('$tenant');
+                $rowTenant = $document->getAttribute(Document::TENANT);
                 $crossTenant = $rowTenant !== $tenant
                     && ! ($allowNullTenant && $rowTenant === null);
                 if ($crossTenant) {
@@ -2917,8 +2917,8 @@ class Redis extends Adapter implements
 
         if (empty($orderAttributes)) {
             \usort($documents, function (Document $a, Document $b) use ($reverse): int {
-                $av = $a->getAttribute('$sequence', 0);
-                $bv = $b->getAttribute('$sequence', 0);
+                $av = $a->getAttribute(Document::SEQUENCE, 0);
+                $bv = $b->getAttribute(Document::SEQUENCE, 0);
                 $av = \is_numeric($av) ? $av + 0 : 0;
                 $bv = \is_numeric($bv) ? $bv + 0 : 0;
                 if ($av === $bv) {
@@ -2979,7 +2979,7 @@ class Redis extends Adapter implements
         }
 
         if (empty($orderAttributes)) {
-            $orderAttributes = ['$sequence'];
+            $orderAttributes = [Document::SEQUENCE];
             $orderTypes = [OrderDirection::Asc];
         }
 

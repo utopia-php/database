@@ -225,6 +225,35 @@ class CollectionValidationTest extends TestCase
         ]);
     }
 
+    public function testCreateCollectionAllowsJsonAndRequiredDefaultsWhenValidateIsOn(): void
+    {
+        $database = new Database(new Memory(), new Cache(new None()));
+        $database
+            ->setDatabase('testing')
+            ->setNamespace('collections')
+            ->enableValidation();
+        $database->create();
+
+        $collection = $database->createCollection('users', [
+            new Attribute(
+                key: 'prefs',
+                type: ColumnType::String,
+                size: 65535,
+                default: new \stdClass(),
+                filters: ['json'],
+            ),
+            new Attribute(
+                key: 'status',
+                type: ColumnType::String,
+                size: 32,
+                required: true,
+                default: 'active',
+            ),
+        ]);
+
+        $this->assertSame('users', $collection->getId());
+    }
+
     public function testCreateCollectionWithIndexLimits(): void
     {
         $adapter = self::createStub(Adapter::class);

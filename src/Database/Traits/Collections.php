@@ -22,7 +22,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Attribute as AttributeValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Query\Schema\ColumnType;
@@ -188,34 +187,14 @@ trait Collections
         }
 
         if ($this->validate) {
-            $validatedAttributes = [];
+            $supportsSpatial = $this->adapter->hasFeature(Feature\Spatial::class);
             foreach ($attributes as $attribute) {
-                $validator = new AttributeValidator(
-                    attributes: $validatedAttributes,
-                    schemaAttributes: [],
-                    maxAttributes: $this->adapter->getLimitForAttributes(),
-                    maxWidth: $this->adapter->getDocumentSizeLimit(),
-                    maxStringLength: $this->adapter->getLimitForString(),
-                    maxVarcharLength: $this->adapter->getMaxVarcharLength(),
-                    maxIntLength: $this->adapter->getLimitForInt(),
-                    maxBigIntLength: $this->adapter->getLimitForBigInt(),
-                    supportForSchemaAttributes: $this->adapter->hasFeature(Feature\SchemaAttributes::class),
-                    supportForVectors: $this->adapter->supports(Capability::Vectors),
-                    supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
-                    supportForObject: $this->adapter->supports(Capability::Objects),
-                    supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
-                    attributeCountCallback: fn (Document $attrDoc) => $this->adapter->getCountOfAttributes($collection),
-                    attributeWidthCallback: fn (Document $attrDoc) => $this->adapter->getAttributeWidth($collection),
-                    filterCallback: fn (string $filterId) => $this->adapter->filter($filterId),
-                    isMigrating: $this->isMigrating(),
-                    sharedTables: $this->getSharedTables(),
-                );
-
-                if (! $validator->isValid($attribute)) {
-                    throw new DatabaseException($validator->getDescription());
+                if (
+                    \in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)
+                    && ! $supportsSpatial
+                ) {
+                    throw new DatabaseException('Spatial attributes are not supported');
                 }
-
-                $validatedAttributes[] = $attribute;
             }
         }
 

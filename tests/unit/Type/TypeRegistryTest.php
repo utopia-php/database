@@ -3,7 +3,7 @@
 namespace Tests\Unit\Type;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Type\CustomType;
+use Utopia\Database\Type\Custom;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Query\Schema\ColumnType;
 
@@ -12,7 +12,7 @@ class TypeRegistryTest extends TestCase
     public function testRegisterAndGet(): void
     {
         $registry = new TypeRegistry();
-        $type = new class () implements CustomType {
+        $type = new class () implements Custom {
             public function name(): string
             {
                 return 'money';
@@ -48,7 +48,7 @@ class TypeRegistryTest extends TestCase
     public function testAll(): void
     {
         $registry = new TypeRegistry();
-        $type = new class () implements CustomType {
+        $type = new class () implements Custom {
             public function name(): string
             {
                 return 'test_type';

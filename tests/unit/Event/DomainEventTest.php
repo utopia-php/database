@@ -5,11 +5,11 @@ namespace Tests\Unit\Event;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
-use Utopia\Database\Event\CollectionCreated;
-use Utopia\Database\Event\CollectionDeleted;
-use Utopia\Database\Event\DocumentCreated;
-use Utopia\Database\Event\DocumentDeleted;
-use Utopia\Database\Event\DocumentUpdated;
+use Utopia\Database\Event\Collection\Created as CollectionCreated;
+use Utopia\Database\Event\Collection\Deleted as CollectionDeleted;
+use Utopia\Database\Event\Document\Created as DocumentCreated;
+use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
+use Utopia\Database\Event\Document\Updated as DocumentUpdated;
 use Utopia\Database\Event\DomainEvent;
 
 class DomainEventTest extends TestCase

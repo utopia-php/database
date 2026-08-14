@@ -1,10 +1,11 @@
 <?php
 
-namespace Utopia\Database\Event;
+namespace Utopia\Database\Event\Document;
 
 use Utopia\Database\Event;
+use Utopia\Database\Event\DomainEvent;
 
-class DocumentDeleted extends DomainEvent
+class Deleted extends DomainEvent
 {
     public function __construct(
         string $collection,

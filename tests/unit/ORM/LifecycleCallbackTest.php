@@ -6,12 +6,12 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\ORM\Mapping\Column;
 use Utopia\Database\ORM\Mapping\Entity;
 use Utopia\Database\ORM\Mapping\Id;
-use Utopia\Database\ORM\Mapping\PostPersist;
-use Utopia\Database\ORM\Mapping\PostRemove;
-use Utopia\Database\ORM\Mapping\PostUpdate;
-use Utopia\Database\ORM\Mapping\PrePersist;
-use Utopia\Database\ORM\Mapping\PreRemove;
-use Utopia\Database\ORM\Mapping\PreUpdate;
+use Utopia\Database\ORM\Mapping\Post\Persist as PostPersist;
+use Utopia\Database\ORM\Mapping\Post\Remove as PostRemove;
+use Utopia\Database\ORM\Mapping\Post\Update as PostUpdate;
+use Utopia\Database\ORM\Mapping\Pre\Persist as PrePersist;
+use Utopia\Database\ORM\Mapping\Pre\Remove as PreRemove;
+use Utopia\Database\ORM\Mapping\Pre\Update as PreUpdate;
 use Utopia\Database\ORM\MetadataFactory;
 use Utopia\Query\Schema\ColumnType;
 

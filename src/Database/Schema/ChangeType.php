@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Schema;
 
-enum SchemaChangeType
+enum ChangeType
 {
     case CreateCollection;
     case DropCollection;

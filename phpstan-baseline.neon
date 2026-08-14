@@ -265,16 +265,16 @@ parameters:
 			path: src/Database/Document.php
 
 		-
-			message: '#^Parameter \#1 \$collection of class Utopia\\Database\\Event\\DocumentDeleted constructor expects string, mixed given\.$#'
+			message: '#^Parameter \#1 \$collection of class Utopia\\Database\\Event\\Document\\Deleted constructor expects string, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Database/Event/EventDispatcherHook.php
+			path: src/Database/Event/DispatcherHook.php
 
 		-
-			message: '#^Parameter \#2 \$documentId of class Utopia\\Database\\Event\\DocumentDeleted constructor expects string, mixed given\.$#'
+			message: '#^Parameter \#2 \$documentId of class Utopia\\Database\\Event\\Document\\Deleted constructor expects string, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Database/Event/EventDispatcherHook.php
+			path: src/Database/Event/DispatcherHook.php
 
 		-
 			message: '#^Parameter \$attributes of class Utopia\\Database\\Index constructor expects array\<string\>, mixed given\.$#'
@@ -325,28 +325,28 @@ parameters:
 			path: src/Database/Loading/LazyProxy.php
 
 		-
-			message: '#^Parameter \#1 \$version of method Utopia\\Database\\Migration\\MigrationTracker\:\:markRolledBack\(\) expects string, mixed given\.$#'
+			message: '#^Parameter \#1 \$version of method Utopia\\Database\\Migration\\Tracker\:\:markRolledBack\(\) expects string, mixed given\.$#'
 			identifier: argument.type
 			count: 1
-			path: src/Database/Migration/MigrationRunner.php
+			path: src/Database/Migration/Runner.php
 
 		-
 			message: '#^Possibly invalid array key type mixed\.$#'
 			identifier: offsetAccess.invalidOffset
 			count: 2
-			path: src/Database/Migration/MigrationRunner.php
+			path: src/Database/Migration/Runner.php
 
 		-
 			message: '#^Cannot cast mixed to int\.$#'
 			identifier: cast.int
 			count: 1
-			path: src/Database/Migration/MigrationTracker.php
+			path: src/Database/Migration/Tracker.php
 
 		-
-			message: '#^Method Utopia\\Database\\Migration\\MigrationTracker\:\:getAppliedVersions\(\) should return array\<string\> but returns array\<mixed\>\.$#'
+			message: '#^Method Utopia\\Database\\Migration\\Tracker\:\:getAppliedVersions\(\) should return array\<string\> but returns array\<mixed\>\.$#'
 			identifier: return.type
 			count: 1
-			path: src/Database/Migration/MigrationTracker.php
+			path: src/Database/Migration/Tracker.php
 
 		-
 			message: '#^Call to function method_exists\(\) with Utopia\\Database\\Adapter and ''enableAlterLocks'' will always evaluate to true\.$#'
@@ -469,10 +469,10 @@ parameters:
 			path: src/Database/Seeder/Factory.php
 
 		-
-			message: '#^Method Utopia\\Database\\Type\\EmbeddableType\:\:compose\(\) has parameter \$values with no value type specified in iterable type array\.$#'
+			message: '#^Method Utopia\\Database\\Type\\Embeddable\:\:compose\(\) has parameter \$values with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
-			path: src/Database/Type/EmbeddableType.php
+			path: src/Database/Type/Embeddable.php
 
 		-
 			message: '#^Parameter \#1 \$array of function array_unique expects an array of values castable to string, array\<mixed\> given\.$#'
@@ -1822,31 +1822,31 @@ parameters:
 			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:method\(\)\.$#'
 			identifier: method.notFound
 			count: 7
-			path: tests/unit/Migration/MigrationRunnerTest.php
+			path: tests/unit/Migration/RunnerTest.php
 
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsString\(\) with string will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 1
-			path: tests/unit/Migration/MigrationRunnerTest.php
+			path: tests/unit/Migration/RunnerTest.php
 
 		-
 			message: '#^Cannot call method willReturnCallback\(\) on mixed\.$#'
 			identifier: method.nonObject
 			count: 7
-			path: tests/unit/Migration/MigrationRunnerTest.php
+			path: tests/unit/Migration/RunnerTest.php
 
 		-
-			message: '#^Method Tests\\Unit\\Migration\\MigrationRunnerTest\:\:createTrackerMock\(\) has parameter \$appliedVersions with no value type specified in iterable type array\.$#'
+			message: '#^Method Tests\\Unit\\Migration\\RunnerTest\:\:createTrackerMock\(\) has parameter \$appliedVersions with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
-			path: tests/unit/Migration/MigrationRunnerTest.php
+			path: tests/unit/Migration/RunnerTest.php
 
 		-
-			message: '#^Method Tests\\Unit\\Migration\\MigrationRunnerTest\:\:createTrackerMock\(\) has parameter \$batchDocs with no value type specified in iterable type array\.$#'
+			message: '#^Method Tests\\Unit\\Migration\\RunnerTest\:\:createTrackerMock\(\) has parameter \$batchDocs with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
-			path: tests/unit/Migration/MigrationRunnerTest.php
+			path: tests/unit/Migration/RunnerTest.php
 
 		-
 			message: '#^Call to an undefined method Utopia\\Database\\Database\:\:expects\(\)\.$#'
@@ -2176,19 +2176,19 @@ parameters:
 			message: '#^Cannot access property \$key on Utopia\\Database\\Attribute\|null\.$#'
 			identifier: property.nonObject
 			count: 2
-			path: tests/unit/Schema/SchemaDiffTest.php
+			path: tests/unit/Schema/DiffTest.php
 
 		-
 			message: '#^Cannot access property \$key on Utopia\\Database\\Index\|null\.$#'
 			identifier: property.nonObject
 			count: 1
-			path: tests/unit/Schema/SchemaDiffTest.php
+			path: tests/unit/Schema/DiffTest.php
 
 		-
 			message: '#^Cannot access property \$size on Utopia\\Database\\Attribute\|null\.$#'
 			identifier: property.nonObject
 			count: 2
-			path: tests/unit/Schema/SchemaDiffTest.php
+			path: tests/unit/Schema/DiffTest.php
 
 		-
 			message: '#^Cannot call method getId\(\) on mixed\.$#'

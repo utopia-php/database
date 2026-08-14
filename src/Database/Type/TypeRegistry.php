@@ -6,13 +6,13 @@ use Utopia\Database\Database;
 
 class TypeRegistry
 {
-    /** @var array<string, CustomType> */
+    /** @var array<string, Custom> */
     private array $types = [];
 
-    /** @var array<string, EmbeddableType> */
+    /** @var array<string, Embeddable> */
     private array $embeddables = [];
 
-    public function register(CustomType $type): void
+    public function register(Custom $type): void
     {
         $this->types[$type->name()] = $type;
 
@@ -23,23 +23,23 @@ class TypeRegistry
         );
     }
 
-    public function registerEmbeddable(EmbeddableType $type): void
+    public function registerEmbeddable(Embeddable $type): void
     {
         $this->embeddables[$type->name()] = $type;
     }
 
-    public function get(string $name): ?CustomType
+    public function get(string $name): ?Custom
     {
         return $this->types[$name] ?? null;
     }
 
-    public function getEmbeddable(string $name): ?EmbeddableType
+    public function getEmbeddable(string $name): ?Embeddable
     {
         return $this->embeddables[$name] ?? null;
     }
 
     /**
-     * @return array<string, CustomType>
+     * @return array<string, Custom>
      */
     public function all(): array
     {
@@ -47,7 +47,7 @@ class TypeRegistry
     }
 
     /**
-     * @return array<string, EmbeddableType>
+     * @return array<string, Embeddable>
      */
     public function allEmbeddables(): array
     {

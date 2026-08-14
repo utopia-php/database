@@ -18,7 +18,7 @@ class QueryCache
 
     private const int VERSION = 1;
 
-    /** @var array<string, CacheRegion> */
+    /** @var array<string, Region> */
     private array $regions = [];
 
     private Cache $cache;
@@ -31,14 +31,14 @@ class QueryCache
         $this->cacheName = $cacheName;
     }
 
-    public function setRegion(string $collection, CacheRegion $region): void
+    public function setRegion(string $collection, Region $region): void
     {
         $this->regions[$collection] = $region;
     }
 
-    public function getRegion(string $collection): CacheRegion
+    public function getRegion(string $collection): Region
     {
-        return $this->regions[$collection] ?? new CacheRegion();
+        return $this->regions[$collection] ?? new Region();
     }
 
     /**

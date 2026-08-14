@@ -4,7 +4,7 @@ namespace Utopia\Database\Type;
 
 use Utopia\Database\Attribute;
 
-interface EmbeddableType
+interface Embeddable
 {
     public function name(): string;
 

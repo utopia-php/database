@@ -5,18 +5,18 @@ namespace Tests\Unit\Event;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
-use Utopia\Database\Event\DocumentCreated;
-use Utopia\Database\Event\DocumentDeleted;
-use Utopia\Database\Event\DocumentUpdated;
-use Utopia\Database\Event\EventDispatcherHook;
+use Utopia\Database\Event\DispatcherHook;
+use Utopia\Database\Event\Document\Created as DocumentCreated;
+use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
+use Utopia\Database\Event\Document\Updated as DocumentUpdated;
 
-class EventDispatcherHookTest extends TestCase
+class DispatcherHookTest extends TestCase
 {
-    private EventDispatcherHook $hook;
+    private DispatcherHook $hook;
 
     protected function setUp(): void
     {
-        $this->hook = new EventDispatcherHook();
+        $this->hook = new DispatcherHook();
     }
 
     public function testDocumentCreatedEvent(): void

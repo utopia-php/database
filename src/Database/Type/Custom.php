@@ -4,7 +4,7 @@ namespace Utopia\Database\Type;
 
 use Utopia\Query\Schema\ColumnType;
 
-interface CustomType
+interface Custom
 {
     public function name(): string;
 

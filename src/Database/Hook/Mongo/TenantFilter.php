@@ -1,8 +1,9 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Hook\Mongo;
 
 use Closure;
+use Utopia\Database\Hook\Read;
 use Utopia\Database\Storage;
 
 /**
@@ -13,7 +14,7 @@ use Utopia\Database\Storage;
  * The Mongo adapter sets this field during document creation without a separate write hook.
  * Read filtering is sufficient because tenant isolation only requires query-time filtering.
  */
-class MongoTenantFilter implements Read
+class TenantFilter implements Read
 {
     /**
      * @param int|string|null $tenant The current tenant ID

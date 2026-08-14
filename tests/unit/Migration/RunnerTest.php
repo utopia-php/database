@@ -7,17 +7,17 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
+use Utopia\Database\Migration\Generator;
 use Utopia\Database\Migration\Migration;
-use Utopia\Database\Migration\MigrationGenerator;
-use Utopia\Database\Migration\MigrationRunner;
-use Utopia\Database\Migration\MigrationTracker;
+use Utopia\Database\Migration\Runner;
+use Utopia\Database\Migration\Tracker;
+use Utopia\Database\Schema\Change;
+use Utopia\Database\Schema\ChangeType;
 use Utopia\Database\Schema\DiffResult;
-use Utopia\Database\Schema\SchemaChange;
-use Utopia\Database\Schema\SchemaChangeType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
-class MigrationRunnerTest extends TestCase
+class RunnerTest extends TestCase
 {
     private Database $db;
 
@@ -65,9 +65,9 @@ class MigrationRunnerTest extends TestCase
         };
     }
 
-    private function createTrackerMock(array $appliedVersions = [], int $lastBatch = 0, array $batchDocs = []): MigrationTracker
+    private function createTrackerMock(array $appliedVersions = [], int $lastBatch = 0, array $batchDocs = []): Tracker
     {
-        $tracker = self::createStub(MigrationTracker::class);
+        $tracker = self::createStub(Tracker::class);
         $tracker->method('setup');
         $tracker->method('getAppliedVersions')->willReturn($appliedVersions);
         $tracker->method('getLastBatch')->willReturn($lastBatch);
@@ -94,7 +94,7 @@ class MigrationRunnerTest extends TestCase
         $tracker = $this->createTrackerMock();
         $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $runner->migrate([$m1, $m2]);
 
         $this->assertEquals(['001', '002'], $order);
@@ -114,7 +114,7 @@ class MigrationRunnerTest extends TestCase
         $tracker = $this->createTrackerMock(appliedVersions: ['001']);
         $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $runner->migrate([$m1, $m2]);
 
         $this->assertEquals(['002'], $executed);
@@ -128,7 +128,7 @@ class MigrationRunnerTest extends TestCase
         $tracker = $this->createTrackerMock();
         $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $count = $runner->migrate([$m1, $m2]);
 
         $this->assertEquals(2, $count);
@@ -140,7 +140,7 @@ class MigrationRunnerTest extends TestCase
 
         $tracker = $this->createTrackerMock(appliedVersions: ['001']);
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $count = $runner->migrate([$m1]);
 
         $this->assertEquals(0, $count);
@@ -167,7 +167,7 @@ class MigrationRunnerTest extends TestCase
         $tracker = $this->createTrackerMock(lastBatch: 1, batchDocs: $batchDocs);
         $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $runner->rollback([$m1, $m2], 1);
 
         $this->assertEquals(['002', '001'], $order);
@@ -195,7 +195,7 @@ class MigrationRunnerTest extends TestCase
         $tracker = $this->createTrackerMock(lastBatch: 2, batchDocs: $batchDocs);
         $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $count = $runner->rollback([$m1, $m2, $m3], 1);
 
         $this->assertEquals(2, $count);
@@ -214,7 +214,7 @@ class MigrationRunnerTest extends TestCase
         $tracker = $this->createTrackerMock(lastBatch: 1, batchDocs: $batchDocs);
         $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $count = $runner->rollback([$m1], 1);
 
         $this->assertEquals(1, $count);
@@ -227,7 +227,7 @@ class MigrationRunnerTest extends TestCase
 
         $tracker = $this->createTrackerMock(appliedVersions: ['001']);
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $status = $runner->status([$m1, $m2]);
 
         $this->assertCount(2, $status);
@@ -242,23 +242,23 @@ class MigrationRunnerTest extends TestCase
 
         $tracker = $this->createTrackerMock();
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $status = $runner->status([$m1, $m2]);
 
         $this->assertEquals('001', $status[0]['version']);
         $this->assertEquals('003', $status[1]['version']);
     }
 
-    public function testGetTrackerReturnsMigrationTracker(): void
+    public function testGetTrackerReturnsTracker(): void
     {
         $tracker = $this->createTrackerMock();
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $this->assertSame($tracker, $runner->getTracker());
     }
 
-    public function testMigrationGeneratorGenerateEmptyProducesValidPHP(): void
+    public function testGeneratorGenerateEmptyProducesValidPHP(): void
     {
-        $generator = new MigrationGenerator();
+        $generator = new Generator();
         $output = $generator->generateEmpty('V001_CreateUsers');
 
         $this->assertStringContainsString('class V001_CreateUsers extends Migration', $output);
@@ -267,16 +267,16 @@ class MigrationRunnerTest extends TestCase
         $this->assertStringContainsString('public function down(Database $db): void', $output);
     }
 
-    public function testMigrationGeneratorGenerateWithDiffResultIncludesUpDownMethods(): void
+    public function testGeneratorGenerateWithDiffResultIncludesUpDownMethods(): void
     {
         $diff = new DiffResult([
-            new SchemaChange(
-                type: SchemaChangeType::AddAttribute,
+            new Change(
+                type: ChangeType::AddAttribute,
                 attribute: new Attribute(key: 'email', type: ColumnType::String, size: 255),
             ),
         ]);
 
-        $generator = new MigrationGenerator();
+        $generator = new Generator();
         $output = $generator->generate($diff, 'V002_AddEmail');
 
         $this->assertStringContainsString('class V002_AddEmail extends Migration', $output);
@@ -284,16 +284,16 @@ class MigrationRunnerTest extends TestCase
         $this->assertStringContainsString('email', $output);
     }
 
-    public function testMigrationGeneratorExtractVersionFromV001Prefix(): void
+    public function testGeneratorExtractVersionFromV001Prefix(): void
     {
-        $generator = new MigrationGenerator();
+        $generator = new Generator();
         $output = $generator->generateEmpty('V042_SomeChange');
         $this->assertStringContainsString("return '042'", $output);
     }
 
-    public function testMigrationGeneratorFallsBackToClassName(): void
+    public function testGeneratorFallsBackToClassName(): void
     {
-        $generator = new MigrationGenerator();
+        $generator = new Generator();
         $output = $generator->generateEmpty('CreateUsersTable');
         $this->assertStringContainsString("return 'CreateUsersTable'", $output);
     }
@@ -308,7 +308,7 @@ class MigrationRunnerTest extends TestCase
     public function testMigrateWithEmptyArrayReturnsZero(): void
     {
         $tracker = $this->createTrackerMock();
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $count = $runner->migrate([]);
         $this->assertEquals(0, $count);
     }
@@ -318,37 +318,37 @@ class MigrationRunnerTest extends TestCase
         $tracker = $this->createTrackerMock(lastBatch: 1, batchDocs: [1 => []]);
         $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
 
-        $runner = new MigrationRunner($this->db, $tracker);
+        $runner = new Runner($this->db, $tracker);
         $count = $runner->rollback([], 1);
         $this->assertEquals(0, $count);
     }
 
-    public function testMigrationGeneratorGenerateWithDropAttribute(): void
+    public function testGeneratorGenerateWithDropAttribute(): void
     {
         $diff = new DiffResult([
-            new SchemaChange(
-                type: SchemaChangeType::DropAttribute,
+            new Change(
+                type: ChangeType::DropAttribute,
                 attribute: new Attribute(key: 'legacy', type: ColumnType::String, size: 100),
             ),
         ]);
 
-        $generator = new MigrationGenerator();
+        $generator = new Generator();
         $output = $generator->generate($diff, 'V003_DropLegacy');
 
         $this->assertStringContainsString('legacy', $output);
         $this->assertStringContainsString('deleteAttribute', $output);
     }
 
-    public function testMigrationGeneratorGenerateWithAddIndex(): void
+    public function testGeneratorGenerateWithAddIndex(): void
     {
         $diff = new DiffResult([
-            new SchemaChange(
-                type: SchemaChangeType::AddIndex,
+            new Change(
+                type: ChangeType::AddIndex,
                 index: new Index(key: 'idx_email', type: IndexType::Index, attributes: ['email']),
             ),
         ]);
 
-        $generator = new MigrationGenerator();
+        $generator = new Generator();
         $output = $generator->generate($diff, 'V004_AddIndex');
 
         $this->assertStringContainsString('idx_email', $output);

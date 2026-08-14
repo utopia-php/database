@@ -2,7 +2,7 @@
 
 namespace Utopia\Database\Cache;
 
-class CacheRegion
+class Region
 {
     public function __construct(
         public int $ttl = 3600,

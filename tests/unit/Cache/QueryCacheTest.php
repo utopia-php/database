@@ -8,9 +8,9 @@ use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
-use Utopia\Database\Cache\CacheInvalidator;
-use Utopia\Database\Cache\CacheRegion;
+use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Region;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -45,7 +45,7 @@ class QueryCacheTest extends TestCase
 
     public function testSetRegionAndGetRegion(): void
     {
-        $region = new CacheRegion(ttl: 600, enabled: false);
+        $region = new Region(ttl: 600, enabled: false);
         $this->queryCache->setRegion('users', $region);
         $retrieved = $this->queryCache->getRegion('users');
         $this->assertSame($region, $retrieved);
@@ -54,7 +54,7 @@ class QueryCacheTest extends TestCase
     public function testGetRegionReturnsDefaultForUnknownCollection(): void
     {
         $region = $this->queryCache->getRegion('unknown');
-        $this->assertInstanceOf(CacheRegion::class, $region);
+        $this->assertInstanceOf(Region::class, $region);
         $this->assertEquals(3600, $region->ttl);
         $this->assertTrue($region->enabled);
     }
@@ -166,7 +166,7 @@ class QueryCacheTest extends TestCase
     {
         $cache = $this->createMock(Cache::class);
         $queryCache = new QueryCache($cache);
-        $queryCache->setRegion('users', new CacheRegion(ttl: 120));
+        $queryCache->setRegion('users', new Region(ttl: 120));
         $key = $queryCache->buildQueryKey('users', [Query::limit(10)], 'ns', null);
         [, $hash] = \explode('#', $key, 2);
 
@@ -252,7 +252,7 @@ class QueryCacheTest extends TestCase
 
     public function testIsEnabledReturnsFalseWhenRegionDisabled(): void
     {
-        $this->queryCache->setRegion('users', new CacheRegion(enabled: false));
+        $this->queryCache->setRegion('users', new Region(enabled: false));
         $this->assertFalse($this->queryCache->isEnabled('users'));
     }
 
@@ -268,25 +268,25 @@ class QueryCacheTest extends TestCase
         $queryCache->flush();
     }
 
-    public function testCacheRegionDefaults(): void
+    public function testRegionDefaults(): void
     {
-        $region = new CacheRegion();
+        $region = new Region();
         $this->assertEquals(3600, $region->ttl);
         $this->assertTrue($region->enabled);
     }
 
-    public function testCacheRegionCustomValues(): void
+    public function testRegionCustomValues(): void
     {
-        $region = new CacheRegion(ttl: 120, enabled: false);
+        $region = new Region(ttl: 120, enabled: false);
         $this->assertEquals(120, $region->ttl);
         $this->assertFalse($region->enabled);
     }
 
-    public function testCacheInvalidatorInvalidatesOnDocumentCreate(): void
+    public function testInvalidatorInvalidatesOnDocumentCreate(): void
     {
         $cache = new InvalidationCache();
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'users']);
 
@@ -294,11 +294,11 @@ class QueryCacheTest extends TestCase
         $this->assertSame(1, $cache->getPurges('default:qcache:users#epoch'));
     }
 
-    public function testCacheInvalidatorInvalidatesOnDocumentUpdate(): void
+    public function testInvalidatorInvalidatesOnDocumentUpdate(): void
     {
         $cache = new InvalidationCache();
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'posts']);
 
@@ -306,11 +306,11 @@ class QueryCacheTest extends TestCase
         $this->assertSame(1, $cache->getPurges('default:qcache:posts#epoch'));
     }
 
-    public function testCacheInvalidatorInvalidatesOnDocumentDelete(): void
+    public function testInvalidatorInvalidatesOnDocumentDelete(): void
     {
         $cache = new InvalidationCache();
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'users']);
 
@@ -318,11 +318,11 @@ class QueryCacheTest extends TestCase
         $this->assertSame(1, $cache->getPurges('default:qcache:users#epoch'));
     }
 
-    public function testCacheInvalidatorIgnoresNonWriteEvents(): void
+    public function testInvalidatorIgnoresNonWriteEvents(): void
     {
         $cache = $this->createMock(Cache::class);
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'users']);
 
@@ -330,32 +330,32 @@ class QueryCacheTest extends TestCase
         $invalidator->handle(Event::DocumentFind, $doc);
     }
 
-    public function testCacheInvalidatorExtractsCollectionFromDocument(): void
+    public function testInvalidatorExtractsCollectionFromDocument(): void
     {
         $cache = new InvalidationCache();
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1', '$collection' => 'orders']);
         $invalidator->handle(Event::DocumentCreate, $doc);
         $this->assertSame(1, $cache->getPurges('default:qcache:orders#epoch'));
     }
 
-    public function testCacheInvalidatorHandlesStringData(): void
+    public function testInvalidatorHandlesStringData(): void
     {
         $cache = new InvalidationCache();
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $invalidator->handle(Event::DocumentCreate, 'products');
         $this->assertSame(1, $cache->getPurges('default:qcache:products#epoch'));
     }
 
-    public function testCacheInvalidatorIgnoresEmptyCollection(): void
+    public function testInvalidatorIgnoresEmptyCollection(): void
     {
         $cache = $this->createMock(Cache::class);
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $doc = new Document(['$id' => 'doc1']);
 
@@ -363,11 +363,11 @@ class QueryCacheTest extends TestCase
         $invalidator->handle(Event::DocumentCreate, $doc);
     }
 
-    public function testCacheInvalidatorInvalidatesBothRelationshipCollections(): void
+    public function testInvalidatorInvalidatesBothRelationshipCollections(): void
     {
         $cache = new InvalidationCache();
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $invalidator->handle(Event::AttributeCreate, new Document([
             '$collection' => 'posts',
@@ -380,11 +380,11 @@ class QueryCacheTest extends TestCase
         $this->assertSame(1, $cache->getPurges('default:qcache:authors#epoch'));
     }
 
-    public function testCacheInvalidatorUsesCollectionIdentityForCollectionMutations(): void
+    public function testInvalidatorUsesCollectionIdentityForCollectionMutations(): void
     {
         $cache = new InvalidationCache();
         $queryCache = new QueryCache($cache);
-        $invalidator = new CacheInvalidator($queryCache);
+        $invalidator = new Invalidator($queryCache);
 
         $invalidator->handle(Event::CollectionUpdate, new Document([
             '$id' => 'users',

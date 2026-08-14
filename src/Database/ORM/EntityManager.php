@@ -172,7 +172,7 @@ class EntityManager
         $currentDoc = $this->db->getCollection($metadata->collection);
         $current = \Utopia\Database\Collection::fromDocument($currentDoc);
 
-        $differ = new \Utopia\Database\Schema\SchemaDiff();
+        $differ = new \Utopia\Database\Schema\Diff();
         $diff = $differ->diff($current, $desired);
 
         if ($diff->hasChanges()) {

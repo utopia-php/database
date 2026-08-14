@@ -8,7 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Hook\Lifecycle;
 
-class CacheInvalidator implements Lifecycle
+class Invalidator implements Lifecycle
 {
     public function __construct(
         private QueryCache $queryCache,

@@ -1,9 +1,10 @@
 <?php
 
-namespace Utopia\Database\Hook;
+namespace Utopia\Database\Hook\Mongo;
 
 use MongoDB\BSON\Regex;
 use Utopia\Database\Database;
+use Utopia\Database\Hook\Read;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
@@ -16,7 +17,7 @@ use Utopia\Database\Validator\Authorization;
  * corresponding MongoPermission hook. Read filtering is sufficient because the
  * permissions are part of the document itself.
  */
-class MongoPermissionFilter implements Read
+class PermissionFilter implements Read
 {
     /**
      * @param Authorization $authorization The authorization instance providing current user roles

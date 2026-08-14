@@ -1,11 +1,12 @@
 <?php
 
-namespace Utopia\Database\Event;
+namespace Utopia\Database\Event\Collection;
 
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\DomainEvent;
 
-class CollectionCreated extends DomainEvent
+class Created extends DomainEvent
 {
     public function __construct(
         string $collection,

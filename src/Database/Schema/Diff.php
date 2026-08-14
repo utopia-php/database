@@ -5,7 +5,7 @@ namespace Utopia\Database\Schema;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 
-class SchemaDiff
+class Diff
 {
     public function diff(Collection $source, Collection $target): DiffResult
     {
@@ -23,10 +23,10 @@ class SchemaDiff
 
         foreach ($targetAttrs as $key => $attr) {
             if (! isset($sourceAttrs[$key])) {
-                $changes[] = new SchemaChange(SchemaChangeType::AddAttribute, attribute: $attr);
+                $changes[] = new Change(ChangeType::AddAttribute, attribute: $attr);
             } elseif ($this->attributeDiffers($sourceAttrs[$key], $attr)) {
-                $changes[] = new SchemaChange(
-                    SchemaChangeType::ModifyAttribute,
+                $changes[] = new Change(
+                    ChangeType::ModifyAttribute,
                     attribute: $attr,
                     previousAttribute: $sourceAttrs[$key],
                 );
@@ -35,7 +35,7 @@ class SchemaDiff
 
         foreach ($sourceAttrs as $key => $attr) {
             if (! isset($targetAttrs[$key])) {
-                $changes[] = new SchemaChange(SchemaChangeType::DropAttribute, attribute: $attr);
+                $changes[] = new Change(ChangeType::DropAttribute, attribute: $attr);
             }
         }
 
@@ -51,13 +51,13 @@ class SchemaDiff
 
         foreach ($targetIndexes as $key => $idx) {
             if (! isset($sourceIndexes[$key])) {
-                $changes[] = new SchemaChange(SchemaChangeType::AddIndex, index: $idx);
+                $changes[] = new Change(ChangeType::AddIndex, index: $idx);
             }
         }
 
         foreach ($sourceIndexes as $key => $idx) {
             if (! isset($targetIndexes[$key])) {
-                $changes[] = new SchemaChange(SchemaChangeType::DropIndex, index: $idx);
+                $changes[] = new Change(ChangeType::DropIndex, index: $idx);
             }
         }
 

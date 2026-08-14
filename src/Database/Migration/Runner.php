@@ -4,16 +4,16 @@ namespace Utopia\Database\Migration;
 
 use Utopia\Database\Database;
 
-class MigrationRunner
+class Runner
 {
     private Database $db;
 
-    private MigrationTracker $tracker;
+    private Tracker $tracker;
 
-    public function __construct(Database $db, ?MigrationTracker $tracker = null)
+    public function __construct(Database $db, ?Tracker $tracker = null)
     {
         $this->db = $db;
-        $this->tracker = $tracker ?? new MigrationTracker($db);
+        $this->tracker = $tracker ?? new Tracker($db);
     }
 
     /**
@@ -121,7 +121,7 @@ class MigrationRunner
         return $this->migrate($migrations);
     }
 
-    public function getTracker(): MigrationTracker
+    public function getTracker(): Tracker
     {
         return $this->tracker;
     }

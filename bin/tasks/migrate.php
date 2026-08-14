@@ -8,9 +8,9 @@ global $cli;
 use Utopia\CLI\CLI;
 use Utopia\Console;
 use Utopia\Database\Database;
+use Utopia\Database\Migration\Generator;
 use Utopia\Database\Migration\Migration;
-use Utopia\Database\Migration\MigrationGenerator;
-use Utopia\Database\Migration\MigrationRunner;
+use Utopia\Database\Migration\Runner;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
@@ -48,7 +48,7 @@ $cli
         if (! $db instanceof Database) {
             throw new \RuntimeException('The database resource must return a Database instance.');
         }
-        $runner = new MigrationRunner($db);
+        $runner = new Runner($db);
         $count = $runner->migrate($migrations);
 
         Console::success("Ran {$count} migration(s).");
@@ -70,7 +70,7 @@ $cli
         if (! $db instanceof Database) {
             throw new \RuntimeException('The database resource must return a Database instance.');
         }
-        $runner = new MigrationRunner($db);
+        $runner = new Runner($db);
         $count = $runner->rollback($migrations, $steps);
 
         Console::success("Rolled back {$count} migration(s).");
@@ -91,7 +91,7 @@ $cli
         if (! $db instanceof Database) {
             throw new \RuntimeException('The database resource must return a Database instance.');
         }
-        $runner = new MigrationRunner($db);
+        $runner = new Runner($db);
         $status = $runner->status($migrations);
 
         Console::info(\str_pad('Version', 20) . \str_pad('Name', 40) . 'Applied');
@@ -118,7 +118,7 @@ $cli
         if (! $db instanceof Database) {
             throw new \RuntimeException('The database resource must return a Database instance.');
         }
-        $runner = new MigrationRunner($db);
+        $runner = new Runner($db);
 
         Console::warning('Dropping all collections and re-migrating...');
         $count = $runner->fresh($migrations);
@@ -135,7 +135,7 @@ $cli
         $timestamp = \date('YmdHis');
         $className = 'V' . $timestamp . '_' . \str_replace(' ', '', \ucwords(\str_replace('_', ' ', $name)));
 
-        $generator = new MigrationGenerator();
+        $generator = new Generator();
         $content = $generator->generateEmpty($className);
 
         if (! \is_dir($path)) {

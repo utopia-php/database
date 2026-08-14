@@ -9,7 +9,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
 
-class MigrationTracker
+class Tracker
 {
     private const COLLECTION = '_migrations';
 

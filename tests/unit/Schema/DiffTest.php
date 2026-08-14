@@ -6,18 +6,18 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Index;
-use Utopia\Database\Schema\SchemaChangeType;
-use Utopia\Database\Schema\SchemaDiff;
+use Utopia\Database\Schema\ChangeType;
+use Utopia\Database\Schema\Diff;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
-class SchemaDiffTest extends TestCase
+class DiffTest extends TestCase
 {
-    private SchemaDiff $differ;
+    private Diff $differ;
 
     protected function setUp(): void
     {
-        $this->differ = new SchemaDiff();
+        $this->differ = new Diff();
     }
 
     public function testNoChanges(): void
@@ -58,7 +58,7 @@ class SchemaDiffTest extends TestCase
         $additions = $result->getAdditions();
         $this->assertCount(1, $additions);
         $change = \array_values($additions)[0];
-        $this->assertEquals(SchemaChangeType::AddAttribute, $change->type);
+        $this->assertEquals(ChangeType::AddAttribute, $change->type);
         $this->assertEquals('email', $change->attribute->key);
     }
 
@@ -84,7 +84,7 @@ class SchemaDiffTest extends TestCase
         $removals = $result->getRemovals();
         $this->assertCount(1, $removals);
         $change = \array_values($removals)[0];
-        $this->assertEquals(SchemaChangeType::DropAttribute, $change->type);
+        $this->assertEquals(ChangeType::DropAttribute, $change->type);
         $this->assertEquals('email', $change->attribute->key);
     }
 
@@ -109,7 +109,7 @@ class SchemaDiffTest extends TestCase
         $modifications = $result->getModifications();
         $this->assertCount(1, $modifications);
         $change = \array_values($modifications)[0];
-        $this->assertEquals(SchemaChangeType::ModifyAttribute, $change->type);
+        $this->assertEquals(ChangeType::ModifyAttribute, $change->type);
         $this->assertEquals(255, $change->attribute->size);
         $this->assertEquals(100, $change->previousAttribute->size);
     }
@@ -129,7 +129,7 @@ class SchemaDiffTest extends TestCase
         $additions = $result->getAdditions();
         $this->assertCount(1, $additions);
         $change = \array_values($additions)[0];
-        $this->assertEquals(SchemaChangeType::AddIndex, $change->type);
+        $this->assertEquals(ChangeType::AddIndex, $change->type);
         $this->assertEquals('idx_name', $change->index->key);
     }
 
@@ -148,7 +148,7 @@ class SchemaDiffTest extends TestCase
         $removals = $result->getRemovals();
         $this->assertCount(1, $removals);
         $change = \array_values($removals)[0];
-        $this->assertEquals(SchemaChangeType::DropIndex, $change->type);
+        $this->assertEquals(ChangeType::DropIndex, $change->type);
     }
 
     public function testComplexDiff(): void

@@ -4,9 +4,14 @@ namespace Utopia\Database\Event;
 
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\Collection\Created as CollectionCreated;
+use Utopia\Database\Event\Collection\Deleted as CollectionDeleted;
+use Utopia\Database\Event\Document\Created as DocumentCreated;
+use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
+use Utopia\Database\Event\Document\Updated as DocumentUpdated;
 use Utopia\Database\Hook\Lifecycle;
 
-class EventDispatcherHook implements Lifecycle
+class DispatcherHook implements Lifecycle
 {
     /** @var array<string, array<callable>> */
     private array $listeners = [];

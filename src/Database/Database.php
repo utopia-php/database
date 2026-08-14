@@ -10,7 +10,7 @@ use Throwable;
 use Utopia\Cache\Cache;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Cache\CacheInvalidator;
+use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -366,7 +366,7 @@ class Database
 
     protected ?QueryCache $queryCache = null;
 
-    protected ?CacheInvalidator $queryCacheInvalidator = null;
+    protected ?Invalidator $queryCacheInvalidator = null;
 
     protected ?QueryProfiler $profiler = null;
 
@@ -806,13 +806,13 @@ class Database
     {
         $this->lifecycleHooks = \array_values(\array_filter(
             $this->lifecycleHooks,
-            static fn (Lifecycle $hook): bool => ! $hook instanceof CacheInvalidator,
+            static fn (Lifecycle $hook): bool => ! $hook instanceof Invalidator,
         ));
         $this->queryCacheInvalidator = null;
         $this->queryCache = $queryCache;
 
         if ($queryCache !== null) {
-            $this->queryCacheInvalidator = new CacheInvalidator($queryCache);
+            $this->queryCacheInvalidator = new Invalidator($queryCache);
         }
 
         return $this;
@@ -1354,10 +1354,10 @@ class Database
     public function addHook(\Utopia\Query\Hook $hook): static
     {
         if ($hook instanceof Lifecycle) {
-            if ($hook instanceof CacheInvalidator) {
+            if ($hook instanceof Invalidator) {
                 $this->lifecycleHooks = \array_values(\array_filter(
                     $this->lifecycleHooks,
-                    static fn (Lifecycle $registered): bool => ! $registered instanceof CacheInvalidator,
+                    static fn (Lifecycle $registered): bool => ! $registered instanceof Invalidator,
                 ));
                 $this->queryCacheInvalidator = $hook;
             } else {

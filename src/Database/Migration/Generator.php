@@ -2,11 +2,11 @@
 
 namespace Utopia\Database\Migration;
 
+use Utopia\Database\Schema\Change;
+use Utopia\Database\Schema\ChangeType;
 use Utopia\Database\Schema\DiffResult;
-use Utopia\Database\Schema\SchemaChange;
-use Utopia\Database\Schema\SchemaChangeType;
 
-class MigrationGenerator
+class Generator
 {
     public function generate(DiffResult $diff, string $className, string $namespace = 'App\\Migration'): string
     {
@@ -101,38 +101,38 @@ class MigrationGenerator
         return $className;
     }
 
-    private function generateUpStatement(SchemaChange $change): ?string
+    private function generateUpStatement(Change $change): ?string
     {
         return match ($change->type) {
-            SchemaChangeType::AddAttribute => $change->attribute !== null
+            ChangeType::AddAttribute => $change->attribute !== null
                 ? "\$db->createAttribute('{collectionId}', new \\Utopia\\Database\\Attribute(key: '{$change->attribute->key}', type: \\Utopia\\Query\\Schema\\ColumnType::" . \ucfirst($change->attribute->type->value) . ", size: {$change->attribute->size}));"
                 : null,
-            SchemaChangeType::DropAttribute => $change->attribute !== null
+            ChangeType::DropAttribute => $change->attribute !== null
                 ? "\$db->deleteAttribute('{collectionId}', '{$change->attribute->key}');"
                 : null,
-            SchemaChangeType::AddIndex => $change->index !== null
+            ChangeType::AddIndex => $change->index !== null
                 ? "\$db->createIndex('{collectionId}', new \\Utopia\\Database\\Index(key: '{$change->index->key}', type: \\Utopia\\Query\\Schema\\IndexType::" . \ucfirst($change->index->type->value) . ", attributes: " . \var_export($change->index->attributes, true) . '));\\'
                 : null,
-            SchemaChangeType::DropIndex => $change->index !== null
+            ChangeType::DropIndex => $change->index !== null
                 ? "\$db->deleteIndex('{collectionId}', '{$change->index->key}');"
                 : null,
             default => null,
         };
     }
 
-    private function generateDownStatement(SchemaChange $change): ?string
+    private function generateDownStatement(Change $change): ?string
     {
         return match ($change->type) {
-            SchemaChangeType::AddAttribute => $change->attribute !== null
+            ChangeType::AddAttribute => $change->attribute !== null
                 ? "\$db->deleteAttribute('{collectionId}', '{$change->attribute->key}');"
                 : null,
-            SchemaChangeType::DropAttribute => $change->attribute !== null
+            ChangeType::DropAttribute => $change->attribute !== null
                 ? "\$db->createAttribute('{collectionId}', new \\Utopia\\Database\\Attribute(key: '{$change->attribute->key}', type: \\Utopia\\Query\\Schema\\ColumnType::" . \ucfirst($change->attribute->type->value) . ", size: {$change->attribute->size}));"
                 : null,
-            SchemaChangeType::AddIndex => $change->index !== null
+            ChangeType::AddIndex => $change->index !== null
                 ? "\$db->deleteIndex('{collectionId}', '{$change->index->key}');"
                 : null,
-            SchemaChangeType::DropIndex => $change->index !== null
+            ChangeType::DropIndex => $change->index !== null
                 ? "\$db->createIndex('{collectionId}', new \\Utopia\\Database\\Index(key: '{$change->index->key}', type: \\Utopia\\Query\\Schema\\IndexType::" . \ucfirst($change->index->type->value) . ", attributes: " . \var_export($change->index->attributes, true) . '));\\'
                 : null,
             default => null,

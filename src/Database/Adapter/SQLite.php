@@ -34,6 +34,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\SQLite as SQLiteBuilder;
 use Utopia\Query\Method;
@@ -68,6 +69,10 @@ class SQLite extends SQL
 
     /** AFTER UPDATE trigger suffix on the parent collection. */
     private const FTS_TRIGGER_UPDATE = 'au';
+
+    private const string INDEX_1 = '_index_1';
+
+    private const string INDEX_2 = '_index_2';
 
     /**
      * Reject patterns over this size to bound ReDoS exposure — the UDF runs
@@ -509,28 +514,28 @@ class SQLite extends SQL
         // PRAGMA table_info echoes the exact string under emulation;
         // otherwise use INTEGER, the affinity-correct vanilla form.
         $tenantType = $this->emulateMySQL ? '"INT(11) UNSIGNED"' : 'INTEGER';
-        $tenantQuery = $this->sharedTables ? "`_tenant` {$tenantType} DEFAULT NULL," : '';
+        $tenantQuery = $this->sharedTables ? "{$this->quote(Storage::TENANT)} {$tenantType} DEFAULT NULL," : '';
 
         $collection = "
 			CREATE TABLE {$this->getSQLTable($id)} (
-				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
-				`_uid` VARCHAR(36) NOT NULL,
+				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
+				{$this->quote(Storage::UID)} VARCHAR(36) NOT NULL,
 				{$tenantQuery}
-				`_createdAt` DATETIME(3) DEFAULT NULL,
-				`_updatedAt` DATETIME(3) DEFAULT NULL,
-				`_permissions` MEDIUMTEXT DEFAULT NULL,
-				`_version` INTEGER DEFAULT 1".(! empty($attributes) ? ',' : '').'
+				{$this->quote(Storage::CREATED_AT)} DATETIME(3) DEFAULT NULL,
+				{$this->quote(Storage::UPDATED_AT)} DATETIME(3) DEFAULT NULL,
+				{$this->quote(Storage::PERMISSIONS)} MEDIUMTEXT DEFAULT NULL,
+				{$this->quote(Storage::VERSION)} INTEGER DEFAULT 1".(! empty($attributes) ? ',' : '').'
 				'.\substr(\implode(' ', $attributeStrings), 0, -2).'
 			)
 		';
 
         $permissions = "
-			CREATE TABLE {$this->getSQLTable($id.'_perms')} (
-				`_id` INTEGER PRIMARY KEY AUTOINCREMENT,
+			CREATE TABLE {$this->getSQLTable(Storage::permissionsTable($id))} (
+				{$this->quote(Storage::SEQUENCE)} INTEGER PRIMARY KEY AUTOINCREMENT,
 				{$tenantQuery}
-				`_type` VARCHAR(12) NOT NULL,
-				`_permission` VARCHAR(255) NOT NULL,
-				`_document` VARCHAR(255) NOT NULL
+				{$this->quote(Storage::PERM_TYPE)} VARCHAR(12) NOT NULL,
+				{$this->quote(Storage::PERM_PERMISSION)} VARCHAR(255) NOT NULL,
+				{$this->quote(Storage::PERM_DOCUMENT)} VARCHAR(255) NOT NULL
 			)
 		";
 
@@ -539,15 +544,15 @@ class SQLite extends SQL
 
             $this->execute($this->prepare($permissions, event: Event::CollectionCreate));
 
-            $this->createIndex($id, new Index(key: '_index1', type: IndexType::Unique, attributes: ['_uid']), event: Event::CollectionCreate);
-            $this->createIndex($id, new Index(key: '_created_at', type: IndexType::Key, attributes: ['_createdAt']), event: Event::CollectionCreate);
-            $this->createIndex($id, new Index(key: '_updated_at', type: IndexType::Key, attributes: ['_updatedAt']), event: Event::CollectionCreate);
+            $this->createIndex($id, new Index(key: Storage::INDEX_1, type: IndexType::Unique, attributes: [Storage::UID]), event: Event::CollectionCreate);
+            $this->createIndex($id, new Index(key: Storage::INDEX_CREATED_AT, type: IndexType::Key, attributes: [Storage::CREATED_AT]), event: Event::CollectionCreate);
+            $this->createIndex($id, new Index(key: Storage::INDEX_UPDATED_AT, type: IndexType::Key, attributes: [Storage::UPDATED_AT]), event: Event::CollectionCreate);
 
-            $this->createIndex("{$id}_perms", new Index(key: '_index_1', type: IndexType::Unique, attributes: ['_document', '_type', '_permission']), event: Event::CollectionCreate);
-            $this->createIndex("{$id}_perms", new Index(key: '_index_2', type: IndexType::Key, attributes: ['_permission', '_type']), event: Event::CollectionCreate);
+            $this->createIndex(Storage::permissionsTable($id), new Index(key: self::INDEX_1, type: IndexType::Unique, attributes: [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION]), event: Event::CollectionCreate);
+            $this->createIndex(Storage::permissionsTable($id), new Index(key: self::INDEX_2, type: IndexType::Key, attributes: [Storage::PERM_PERMISSION, Storage::PERM_TYPE]), event: Event::CollectionCreate);
 
             if ($this->sharedTables) {
-                $this->createIndex($id, new Index(key: '_tenant_id', type: IndexType::Key, attributes: ['_id']), event: Event::CollectionCreate);
+                $this->createIndex($id, new Index(key: Storage::INDEX_TENANT_ID, type: IndexType::Key, attributes: [Storage::SEQUENCE]), event: Event::CollectionCreate);
             }
 
             foreach ($indexes as $index) {
@@ -577,7 +582,7 @@ class SQLite extends SQL
         $collection = $this->filter($collection);
         $namespace = $this->getNamespace();
         $name = $namespace . '_' . $collection;
-        $permissions = $namespace . '_' . $collection . '_perms';
+        $permissions = $namespace . '_' . Storage::permissionsTable($collection);
         $ftsPrefix = $this->getFulltextTablePrefix($collection);
 
         // FTS5 storage lives in `<vtable>_data|_idx|_docsize|_config`
@@ -639,7 +644,7 @@ class SQLite extends SQL
 
         $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
-        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable($id.'_perms')}";
+        $sql = "DROP TABLE IF EXISTS {$this->getSQLTable(Storage::permissionsTable($id))}";
 
         $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
@@ -674,7 +679,7 @@ class SQLite extends SQL
             // tenants; scoping the scan by `_tenant` keeps tenant A's
             // resize from being blocked (and tenant A's metadata from
             // leaking) by an oversized value owned by tenant B.
-            $tenantClause = $this->sharedTables ? ' AND `_tenant` = :_tenant' : '';
+            $tenantClause = $this->sharedTables ? ' AND '.$this->quote(Storage::TENANT).' = :_tenant' : '';
             $sql = "SELECT 1 FROM {$this->getSQLTable($name)} WHERE LENGTH(`{$column}`) > :max{$tenantClause} LIMIT 1";
 
             $stmt = $this->prepare($sql, event: Event::AttributeUpdate);
@@ -708,7 +713,7 @@ class SQLite extends SQL
     {
         $name = $this->filter($collection);
         $id = $this->filter($id);
-        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $name);
 
         if ($collection->isEmpty()) {
@@ -722,7 +727,7 @@ class SQLite extends SQL
         foreach ($indexes as $index) {
             /** @var array<string, mixed> $index */
             $attributes = $index['attributes'] ?? [];
-            $indexId = \is_string($index['$id'] ?? null) ? (string) $index['$id'] : '';
+            $indexId = \is_string($index[Document::ID] ?? null) ? (string) $index[Document::ID] : '';
             $indexType = \is_string($index['type'] ?? null) ? (string) $index['type'] : '';
             if ($attributes === [$id]) {
                 $this->deleteIndex($name, $indexId, Event::AttributeDelete);
@@ -835,22 +840,22 @@ class SQLite extends SQL
         // literal — otherwise tenant A's vtable accumulates tenant B's
         // tokenized content. The same applies to the initial backfill.
         $tenantLiteral = $this->sharedTables ? $this->getTenantSqlLiteral() : null;
-        $insertWhen = $tenantLiteral !== null ? " WHEN NEW.`_tenant` IS {$tenantLiteral}" : '';
-        $deleteWhen = $tenantLiteral !== null ? " WHEN OLD.`_tenant` IS {$tenantLiteral}" : '';
+        $insertWhen = $tenantLiteral !== null ? " WHEN NEW.{$this->quote(Storage::TENANT)} IS {$tenantLiteral}" : '';
+        $deleteWhen = $tenantLiteral !== null ? " WHEN OLD.{$this->quote(Storage::TENANT)} IS {$tenantLiteral}" : '';
         $updateWhen = $tenantLiteral !== null
-            ? " WHEN OLD.`_tenant` IS {$tenantLiteral} OR NEW.`_tenant` IS {$tenantLiteral}"
+            ? " WHEN OLD.{$this->quote(Storage::TENANT)} IS {$tenantLiteral} OR NEW.{$this->quote(Storage::TENANT)} IS {$tenantLiteral}"
             : '';
-        $backfillWhere = $tenantLiteral !== null ? " WHERE `_tenant` IS {$tenantLiteral}" : '';
+        $backfillWhere = $tenantLiteral !== null ? " WHERE {$this->quote(Storage::TENANT)} IS {$tenantLiteral}" : '';
 
         $this->startTransaction();
         try {
-            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"_id\")";
+            $createSql = "CREATE VIRTUAL TABLE `{$ftsTable}` USING fts5({$ftsColumnList}, content=\"{$parentTable}\", content_rowid=\"".Storage::SEQUENCE.'")';
             $this->execute($this->prepare($createSql, event: $event));
 
             $insertSuffix = self::FTS_TRIGGER_INSERT;
             $insertTrigger = "
                 CREATE TRIGGER `{$ftsTable}_{$insertSuffix}` AFTER INSERT ON `{$parentTable}`{$insertWhen} BEGIN
-                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.{$this->quote(Storage::SEQUENCE)}, {$newColumnList});
                 END
             ";
             $this->execute($this->prepare($insertTrigger, event: $event));
@@ -858,7 +863,7 @@ class SQLite extends SQL
             $deleteSuffix = self::FTS_TRIGGER_DELETE;
             $deleteTrigger = "
                 CREATE TRIGGER `{$ftsTable}_{$deleteSuffix}` AFTER DELETE ON `{$parentTable}`{$deleteWhen} BEGIN
-                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
+                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.{$this->quote(Storage::SEQUENCE)}, {$oldColumnList});
                 END
             ";
             $this->execute($this->prepare($deleteTrigger, event: $event));
@@ -867,13 +872,13 @@ class SQLite extends SQL
             // OF <cols>: skip re-tokenise when only timestamps/permissions change.
             $updateTrigger = "
                 CREATE TRIGGER `{$ftsTable}_{$updateSuffix}` AFTER UPDATE OF {$columnList} ON `{$parentTable}`{$updateWhen} BEGIN
-                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.`_id`, {$oldColumnList});
-                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.`_id`, {$newColumnList});
+                    INSERT INTO `{$ftsTable}` (`{$ftsTable}`, rowid, {$columnList}) VALUES ('delete', OLD.{$this->quote(Storage::SEQUENCE)}, {$oldColumnList});
+                    INSERT INTO `{$ftsTable}` (rowid, {$columnList}) VALUES (NEW.{$this->quote(Storage::SEQUENCE)}, {$newColumnList});
                 END
             ";
             $this->execute($this->prepare($updateTrigger, event: $event));
 
-            $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT `_id`, {$columnList} FROM `{$parentTable}`{$backfillWhere}";
+            $backfill = "INSERT INTO `{$ftsTable}` (rowid, {$columnList}) SELECT {$this->quote(Storage::SEQUENCE)}, {$columnList} FROM `{$parentTable}`{$backfillWhere}";
             $this->execute($this->prepare($backfill, event: $event));
 
             $this->commitTransaction();
@@ -1008,7 +1013,7 @@ class SQLite extends SQL
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
         $collection = $this->getDocument($metadataCollection, $collection);
 
         if ($collection->isEmpty()) {
@@ -1120,7 +1125,7 @@ class SQLite extends SQL
     protected function resolveFulltextTableById(string $collection, string $id, array $candidates): ?string
     {
         try {
-            $metadataCollection = new Document(['$id' => Database::METADATA]);
+            $metadataCollection = new Document([Document::ID => Database::METADATA]);
             $collectionDoc = $this->getDocument($metadataCollection, $collection);
         } catch (NotFoundException) {
             // Metadata not yet seeded (collection drop during bootstrap).
@@ -1144,7 +1149,7 @@ class SQLite extends SQL
         foreach ($indexes as $index) {
             $indexId = $index instanceof Document
                 ? $index->getId()
-                : (\is_array($index) ? ($index['$id'] ?? null) : null);
+                : (\is_array($index) ? ($index[Document::ID] ?? null) : null);
 
             if (! \is_scalar($indexId)) {
                 continue;
@@ -1229,22 +1234,22 @@ class SQLite extends SQL
 
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = json_encode($document->getPermissions());
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
-                $attributes['_version'] = $version;
+                $attributes[Storage::VERSION] = $version;
             }
 
             $name = $this->filter($collection);
 
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
-            $row = ['_uid' => $document->getId()];
+            $row = [Storage::UID => $document->getId()];
 
             if (! empty($document->getSequence())) {
-                $row['_id'] = $document->getSequence();
+                $row[Storage::SEQUENCE] = $document->getSequence();
             }
 
             foreach ($attributes as $attr => $value) {
@@ -1270,7 +1275,7 @@ class SQLite extends SQL
 
             if (\is_array($last)) {
                 /** @var array<string, mixed> $last */
-                $document['$sequence'] = $last['id'] ?? null;
+                $document[Document::SEQUENCE] = $last['id'] ?? null;
             }
 
             $ctx = $this->buildWriteContext($name);
@@ -1297,13 +1302,13 @@ class SQLite extends SQL
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = json_encode($document->getPermissions());
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
-                $attributes['_version'] = $version;
+                $attributes[Storage::VERSION] = $version;
             }
 
             $name = $this->filter($collection);
@@ -1316,7 +1321,7 @@ class SQLite extends SQL
             }
 
             $builder = $this->newBuilder($name);
-            $regularRow = ['_uid' => $document->getId()];
+            $regularRow = [Storage::UID => $document->getId()];
 
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
@@ -1343,7 +1348,7 @@ class SQLite extends SQL
             }
 
             $builder->set($regularRow);
-            $builder->filter([BaseQuery::equal('_uid', [$id])]);
+            $builder->filter([BaseQuery::equal(Storage::UID, [$id])]);
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
@@ -1628,9 +1633,9 @@ class SQLite extends SQL
         };
 
         $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => ID::custom('_uid'),
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
+            Document::ID => ID::custom(Storage::UID),
+            Document::CREATED_AT => Storage::CREATED_AT,
+            Document::UPDATED_AT => Storage::UPDATED_AT,
             default => $attribute
         }, $attributes);
 
@@ -1644,7 +1649,7 @@ class SQLite extends SQL
         $attributes = implode(', ', $attributes);
 
         if ($this->sharedTables) {
-            $attributes = "`_tenant` {$postfix}, {$attributes}";
+            $attributes = "{$this->quote(Storage::TENANT)} {$postfix}, {$attributes}";
         }
 
         return "CREATE {$sqlType} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";
@@ -1759,7 +1764,7 @@ class SQLite extends SQL
             ];
         }
 
-        $subquery = "{$aliasQuoted}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
+        $subquery = "{$aliasQuoted}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
 
         return [
             'expression' => $method === Method::Search ? $subquery : "NOT ({$subquery})",
@@ -1800,7 +1805,7 @@ class SQLite extends SQL
                 stripos($message, 'duplicate') !== false
             ) {
                 $columns = $this->getViolatedColumns($message);
-                if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
+                if ($columns !== null && $columns !== [Storage::UID] && $columns !== [Storage::TENANT, Storage::UID]) {
                     return new UniqueException('Unique index violation', $e->getCode(), $e);
                 }
 
@@ -2295,7 +2300,7 @@ class SQLite extends SQL
     {
         $quoted = $this->quote($this->filter($column));
 
-        return "CASE WHEN _tenant = excluded._tenant THEN excluded.{$quoted} ELSE {$quoted} END";
+        return 'CASE WHEN '.Storage::TENANT.' = excluded.'.Storage::TENANT." THEN excluded.{$quoted} ELSE {$quoted} END";
     }
 
     /**
@@ -2315,7 +2320,7 @@ class SQLite extends SQL
     {
         $quoted = $this->quote($this->filter($column));
 
-        return "CASE WHEN _tenant = excluded._tenant THEN {$quoted} + excluded.{$quoted} ELSE {$quoted} END";
+        return 'CASE WHEN '.Storage::TENANT.' = excluded.'.Storage::TENANT." THEN {$quoted} + excluded.{$quoted} ELSE {$quoted} END";
     }
 
     /**
@@ -2362,29 +2367,29 @@ class SQLite extends SQL
                     }
                 }
 
-                $currentRegularAttributes['_uid'] = $document->getId();
-                $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
-                $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
+                $currentRegularAttributes[Storage::UID] = $document->getId();
+                $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
+                $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
             } else {
                 $currentRegularAttributes = $document->getAttributes();
-                $currentRegularAttributes['_uid'] = $document->getId();
-                $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? DatabaseDateTime::setTimezone($document->getCreatedAt()) : null;
-                $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? DatabaseDateTime::setTimezone($document->getUpdatedAt()) : null;
+                $currentRegularAttributes[Storage::UID] = $document->getId();
+                $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? DatabaseDateTime::setTimezone($document->getCreatedAt()) : null;
+                $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? DatabaseDateTime::setTimezone($document->getUpdatedAt()) : null;
             }
 
-            $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
+            $currentRegularAttributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
-                $currentRegularAttributes['_version'] = $version;
+                $currentRegularAttributes[Storage::VERSION] = $version;
             }
 
             if (! empty($document->getSequence())) {
-                $currentRegularAttributes['_id'] = $document->getSequence();
+                $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();
             }
 
             if ($this->sharedTables) {
-                $currentRegularAttributes['_tenant'] = $document->getTenant();
+                $currentRegularAttributes[Storage::TENANT] = $document->getTenant();
             }
 
             foreach (\array_keys($currentRegularAttributes) as $colName) {
@@ -2453,7 +2458,7 @@ class SQLite extends SQL
             }
 
             if ($this->sharedTables) {
-                return "{$attribute} = CASE WHEN _tenant = excluded._tenant THEN {$new} ELSE {$attribute} END";
+                return "{$attribute} = CASE WHEN ".Storage::TENANT.' = excluded.'.Storage::TENANT." THEN {$new} ELSE {$attribute} END";
             }
 
             return "{$attribute} = {$new}";
@@ -2465,7 +2470,7 @@ class SQLite extends SQL
         if (! empty($attribute)) {
             $updateColumns = [
                 $getUpdateClause($attribute, increment: true),
-                $getUpdateClause('_updatedAt'),
+                $getUpdateClause(Storage::UPDATED_AT),
             ];
         } else {
             foreach (\array_keys($regularAttributes) as $attr) {
@@ -2478,7 +2483,7 @@ class SQLite extends SQL
                         $updateColumns[] = $operatorSQL;
                     }
                 } else {
-                    if (! in_array($attr, ['_uid', '_id', '_createdAt', '_tenant'])) {
+                    if (! in_array($attr, [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::TENANT])) {
                         $updateColumns[] = $getUpdateClause($filteredAttr);
                     }
                 }
@@ -2489,7 +2494,9 @@ class SQLite extends SQL
         // under shared tables, so the actual UNIQUE on the documents
         // table is (_tenant, _uid). SQLite's ON CONFLICT clause needs
         // the same column order to match a UNIQUE constraint.
-        $conflictKeys = $this->sharedTables ? '(_tenant, _uid)' : '(_uid)';
+        $conflictKeys = $this->sharedTables
+            ? '('.Storage::TENANT.', '.Storage::UID.')'
+            : '('.Storage::UID.')';
 
         $stmt = $this->prepare(
             "INSERT INTO {$this->getSQLTable($name)} {$columns}
@@ -2648,7 +2655,7 @@ class SQLite extends SQL
                 }
                 break;
             case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $metadataCollection = new Document([Document::ID => Database::METADATA]);
                 $collectionDoc = $this->getDocument($metadataCollection, $collection);
                 $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
 
@@ -2710,7 +2717,7 @@ class SQLite extends SQL
                     : "ALTER TABLE {$relatedTable} DROP COLUMN `{$twoWayKey}`";
                 break;
             case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $metadataCollection = new Document([Document::ID => Database::METADATA]);
                 $collectionDoc = $this->getDocument($metadataCollection, $collection);
                 $relatedCollectionDoc = $this->getDocument($metadataCollection, $relatedCollection);
 
@@ -2719,7 +2726,7 @@ class SQLite extends SQL
                     : '_' . $relatedCollectionDoc->getSequence() . '_' . $collectionDoc->getSequence();
 
                 $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase)}";
-                $statements[] = "DROP TABLE {$this->getSQLTable($junctionBase . '_perms')}";
+                $statements[] = "DROP TABLE {$this->getSQLTable(Storage::permissionsTable($junctionBase))}";
                 break;
         }
 
@@ -2758,7 +2765,7 @@ class SQLite extends SQL
             $name = \is_scalar($row['name'] ?? null) ? (string) $row['name'] : '';
 
             $results[] = new Document([
-                '$id' => $name,
+                Document::ID => $name,
                 'columnDefault' => $row['dflt_value'] ?? null,
                 'isNullable' => empty($row['notnull']) ? 'YES' : 'NO',
                 'dataType' => $parsed['dataType'],
@@ -2826,7 +2833,7 @@ class SQLite extends SQL
             }
 
             $results[] = new Document([
-                '$id' => $name,
+                Document::ID => $name,
                 'indexName' => $name,
                 'indexType' => 'BTREE',
                 'nonUnique' => $unique ? 0 : 1,
@@ -2867,7 +2874,7 @@ class SQLite extends SQL
 
         $hashToId = [];
         try {
-            $metadataCollection = new Document(['$id' => Database::METADATA]);
+            $metadataCollection = new Document([Document::ID => Database::METADATA]);
             $collectionDoc = $this->getDocument($metadataCollection, $collection);
             if (! $collectionDoc->isEmpty()) {
                 $indexes = $collectionDoc->getAttribute('indexes', []);
@@ -2878,7 +2885,7 @@ class SQLite extends SQL
                             $type = $index->getAttribute('type');
                             $attributes = $index->getAttribute('attributes', []);
                         } elseif (\is_array($index)) {
-                            $indexId = $index['$id'] ?? null;
+                            $indexId = $index[Document::ID] ?? null;
                             $type = $index['type'] ?? null;
                             $attributes = $index['attributes'] ?? [];
                         } else {
@@ -2922,7 +2929,7 @@ class SQLite extends SQL
             $id = $hashToId[$ftsTable] ?? $ftsTable;
 
             $entries[] = [
-                '$id' => $id,
+                Document::ID => $id,
                 'indexName' => $id,
                 'indexType' => 'FULLTEXT',
                 'nonUnique' => 1,
@@ -3147,7 +3154,7 @@ class SQLite extends SQL
 
         $binds[":{$placeholder}_0"] = $ftsValue;
 
-        $subquery = "{$alias}.`_id` IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
+        $subquery = "{$alias}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
 
         return $method === Method::Search ? $subquery : "NOT ({$subquery})";
     }

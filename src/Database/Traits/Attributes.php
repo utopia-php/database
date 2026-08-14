@@ -119,7 +119,9 @@ trait Attributes
             // If it matches we can skip column creation. If not, drop the
             // orphaned column so it gets recreated with the correct type.
             $typesMatch = true;
-            $expectedColumnType = $this->adapter->getColumnType($type->value, $size, $signed, $array, $required);
+            $expectedColumnType = $this->adapter instanceof Feature\ColumnTypes
+                ? $this->adapter->getColumnType($type->value, $size, $signed, $array, $required)
+                : '';
             if ($expectedColumnType !== '') {
                 $filteredId = $this->adapter->filter($id);
                 foreach ($schemaAttributes as $schemaAttr) {
@@ -260,13 +262,15 @@ trait Attributes
                 }
 
                 // Schema-only orphan — check type match
-                $expectedColumnType = $this->adapter->getColumnType(
-                    $attribute->type->value,
-                    $attribute->size,
-                    $attribute->signed,
-                    $attribute->array,
-                    $attribute->required
-                );
+                $expectedColumnType = $this->adapter instanceof Feature\ColumnTypes
+                    ? $this->adapter->getColumnType(
+                        $attribute->type->value,
+                        $attribute->size,
+                        $attribute->signed,
+                        $attribute->array,
+                        $attribute->required
+                    )
+                    : '';
                 if ($expectedColumnType !== '') {
                     $filteredId = $this->adapter->filter($attribute->key);
                     foreach ($schemaAttributes as $schemaAttr) {

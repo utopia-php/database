@@ -8,6 +8,7 @@ use Generator;
 use InvalidArgumentException;
 use Throwable;
 use Utopia\Console;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -426,7 +427,7 @@ trait Documents
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
-        $document = $this->adapter->castingAfter($collection, $document);
+        $document = $this->castingAfter($collection, $document);
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
@@ -650,7 +651,7 @@ trait Documents
             }
         }
 
-        $document = $this->adapter->castingBefore($collection, $document);
+        $document = $this->castingBefore($collection, $document);
 
         $cacheTarget = $collection->getId() === self::METADATA ? $document : $collection->getId();
         $document = $this->withMutation(Event::DocumentCreate, $cacheTarget, function () use ($collection, $document) {
@@ -675,7 +676,7 @@ trait Documents
             $document = $documents[0];
         }
 
-        $document = $this->adapter->castingAfter($collection, $document);
+        $document = $this->castingAfter($collection, $document);
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document);
 
@@ -795,7 +796,7 @@ trait Documents
                 $document = $this->silent(fn () => $this->relationshipHook->afterDocumentCreate($collection, $document));
             }
 
-            $document = $this->adapter->castingBefore($collection, $document);
+            $document = $this->castingBefore($collection, $document);
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
@@ -834,7 +835,7 @@ trait Documents
                     $collection,
                     $this->casting(
                         $collection,
-                        $this->adapter->castingAfter($collection, $document)
+                        $this->castingAfter($collection, $document)
                     )
                 ),
                 $batch
@@ -1104,11 +1105,11 @@ trait Documents
                 }
             }
 
-            $document = $this->adapter->castingBefore($collection, $document);
+            $document = $this->castingBefore($collection, $document);
 
             $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate));
 
-            $document = $this->adapter->castingAfter($collection, $document);
+            $document = $this->castingAfter($collection, $document);
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
@@ -1270,7 +1271,7 @@ trait Documents
             $adapterData[$key] = $value;
         }
         $selections = $this->validateSelections($collection, $grouped['selections']);
-        $adapterUpdates = $this->adapter->castingBefore($collection, new Document($adapterData));
+        $adapterUpdates = $this->castingBefore($collection, new Document($adapterData));
 
         $originalLimit = $limit;
         $last = $cursor;
@@ -1354,7 +1355,7 @@ trait Documents
                     }
 
                     $encoded = $this->encode($collection, $document);
-                    $batch[$index] = $this->adapter->castingBefore($collection, $encoded);
+                    $batch[$index] = $this->castingBefore($collection, $encoded);
                 }
 
                 $this->adapter->updateDocuments(
@@ -1380,7 +1381,7 @@ trait Documents
                 fn (Document $doc) =>
                 $this->decode(
                     $collection,
-                    $this->adapter->castingAfter($collection, $doc),
+                    $this->castingAfter($collection, $doc),
                     $selections
                 ),
                 $batch
@@ -1502,6 +1503,10 @@ trait Documents
         ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
+        if (! ($this->adapter instanceof Feature\Upserts)) {
+            throw new DatabaseException('Adapter does not support upserts');
+        }
+
         if (
             $this->adapter->getSharedTables()
             && ! $this->adapter->getTenantPerDocument()
@@ -1728,8 +1733,8 @@ trait Documents
             if (! empty($operators)) {
                 $operatorIds[$identity] = true;
             }
-            $old = $this->adapter->castingBefore($collection, $old);
-            $document = $this->adapter->castingBefore($collection, $document);
+            $old = $this->castingBefore($collection, $old);
+            $document = $this->castingBefore($collection, $document);
 
             $documents[$key] = new Change(
                 old: $old,
@@ -1761,7 +1766,12 @@ trait Documents
                 Event::DocumentsUpsert,
                 $cacheTarget,
                 function () use ($collection, $attribute, $chunk): array {
-                    $batch = $this->authorization->skip(fn () => $this->adapter->upsertDocuments(
+                    if (! ($this->adapter instanceof Feature\Upserts)) {
+                        throw new DatabaseException('Adapter does not support upserts');
+                    }
+
+                    $adapter = $this->adapter;
+                    $batch = $this->authorization->skip(fn () => $adapter->upsertDocuments(
                         $collection,
                         $attribute,
                         $chunk
@@ -1800,8 +1810,8 @@ trait Documents
             /** @var array<Document> $batch */
             $batch = \array_map(
                 fn (Document $doc) => $hasOperators
-                ? $this->adapter->castingAfter($collection, $doc)
-                : $this->decode($collection, $this->adapter->castingAfter($collection, $doc)),
+                ? $this->castingAfter($collection, $doc)
+                : $this->decode($collection, $this->castingAfter($collection, $doc)),
                 $batch
             );
 
@@ -1811,7 +1821,7 @@ trait Documents
                 $old = $chunk[$index]->getOld();
 
                 if (! $old->isEmpty()) {
-                    $old = $this->adapter->castingAfter($collection, $old);
+                    $old = $this->castingAfter($collection, $old);
                 }
 
                 try {
@@ -2809,7 +2819,7 @@ trait Documents
 
         if (! empty($cursor)) {
             $cursor = $this->encode($collection, $cursor);
-            $cursor = $this->adapter->castingBefore($collection, $cursor);
+            $cursor = $this->castingBefore($collection, $cursor);
             $cursor = $cursor->getArrayCopy();
         } else {
             $cursor = [];
@@ -2971,7 +2981,7 @@ trait Documents
         $hasCustomType = isset($this->documentTypes[$collectionId]);
 
         foreach ($results as $index => $node) {
-            $node = $this->adapter->castingAfter($collection, $node);
+            $node = $this->castingAfter($collection, $node);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
 
@@ -3005,6 +3015,10 @@ trait Documents
      */
     public function rawQuery(string $query, array $bindings = []): array
     {
+        if (! ($this->adapter instanceof Feature\RawQuery)) {
+            throw new DatabaseException('Raw queries are not supported by this adapter');
+        }
+
         return $this->adapter->rawQuery($query, $bindings);
     }
 
@@ -3364,5 +3378,23 @@ trait Documents
                 $this->checkQueryTypes($query->getValues());
             }
         }
+    }
+
+    private function castingBefore(Document $collection, Document $document): Document
+    {
+        if ($this->adapter instanceof Feature\InternalCasting) {
+            return $this->adapter->castingBefore($collection, $document);
+        }
+
+        return $document;
+    }
+
+    private function castingAfter(Document $collection, Document $document): Document
+    {
+        if ($this->adapter instanceof Feature\InternalCasting) {
+            return $this->adapter->castingAfter($collection, $document);
+        }
+
+        return $document;
     }
 }

@@ -747,6 +747,10 @@ class Database
      */
     public function from(string $collection): \Utopia\Query\Builder
     {
+        if (! ($this->adapter instanceof Feature\QueryBuilder)) {
+            throw new DatabaseException('Query builder is not supported by this adapter');
+        }
+
         $builder = $this->adapter->getBuilder($collection);
         $builder->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
 
@@ -758,6 +762,10 @@ class Database
      */
     public function schema(): \Utopia\Query\Schema
     {
+        if (! ($this->adapter instanceof Feature\QueryBuilder)) {
+            throw new DatabaseException('Schema builder is not supported by this adapter');
+        }
+
         $schema = $this->adapter->getSchema();
         $schema->setExecutor(fn (\Utopia\Query\Builder\Statement $statement) => $this->execute($statement));
 
@@ -769,6 +777,10 @@ class Database
      */
     public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): array|int
     {
+        if (! ($this->adapter instanceof Feature\RawQuery)) {
+            throw new DatabaseException('Raw queries are not supported by this adapter');
+        }
+
         $result = $query instanceof \Utopia\Query\Builder\Statement ? $query : $query->build();
 
         if ($result->readOnly) {
@@ -995,6 +1007,10 @@ class Database
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
     {
+        if (! ($this->adapter instanceof Feature\Timeouts)) {
+            throw new DatabaseException('Adapter does not support timeouts');
+        }
+
         $this->adapter->setTimeout($milliseconds, $event);
 
         return $this;
@@ -1005,6 +1021,10 @@ class Database
      */
     public function clearTimeout(Event $event = Event::All): void
     {
+        if (! ($this->adapter instanceof Feature\Timeouts)) {
+            throw new DatabaseException('Adapter does not support timeouts');
+        }
+
         $this->adapter->clearTimeout($event);
     }
 
@@ -1928,6 +1948,10 @@ class Database
      */
     public function getConnectionId(): string
     {
+        if (! ($this->adapter instanceof Feature\ConnectionId)) {
+            throw new DatabaseException('Adapter does not support connection ids');
+        }
+
         return $this->adapter->getConnectionId();
     }
 
@@ -2190,6 +2214,10 @@ class Database
      */
     public function getSchemaAttributes(string $collection): array
     {
+        if (! ($this->adapter instanceof Feature\SchemaAttributes)) {
+            return [];
+        }
+
         return $this->adapter->getSchemaAttributes($collection);
     }
 
@@ -2201,6 +2229,10 @@ class Database
      */
     public function getSchemaIndexes(string $collection): array
     {
+        if (! ($this->adapter instanceof Feature\SchemaIndexes)) {
+            return [];
+        }
+
         return $this->adapter->getSchemaIndexes($collection);
     }
 

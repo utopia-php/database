@@ -68,7 +68,12 @@ class FindLogicTest extends TestCase
         $this->database->getAuthorization()->addRole(Role::any()->toString());
     }
 
-    private function collectionDoc(string $id, array $attributes = [], array $indexes = [], array $permissions = []): Document
+    /**
+     * @param  array<Document>  $attributes
+     * @param  array<Document>  $indexes
+     * @param  array<string>  $permissions
+     */
+    private function collectionDoc(string $id, array $attributes = [], array $indexes = [], array $permissions = [], bool $documentSecurity = true): Document
     {
         if (empty($permissions)) {
             $permissions = [
@@ -86,20 +91,29 @@ class FindLogicTest extends TestCase
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => $indexes,
-            'documentSecurity' => true,
+            'documentSecurity' => $documentSecurity,
         ]);
     }
 
-    private function setupCollectionLookup(string $id, array $attributes = [], array $indexes = [], array $permissions = []): void
+    /**
+     * @param  array<Document>  $attributes
+     * @param  array<Document>  $indexes
+     * @param  array<string>  $permissions
+     * @param  array<Document>  $collections
+     */
+    private function setupCollectionLookup(string $id, array $attributes = [], array $indexes = [], array $permissions = [], bool $documentSecurity = true, array $collections = []): void
     {
-        $collection = $this->collectionDoc($id, $attributes, $indexes, $permissions);
+        $map = [$id => $this->collectionDoc($id, $attributes, $indexes, $permissions, $documentSecurity)];
+        foreach ($collections as $collection) {
+            $map[$collection->getId()] = $collection;
+        }
         $this->adapter->method('getDocument')->willReturnCallback(
-            function (Document $col, string $docId) use ($id, $collection) {
-                if ($col->getId() === Database::METADATA && $docId === $id) {
-                    return $collection;
-                }
+            function (Document $col, string $docId) use ($map) {
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
                     return new Document(Database::COLLECTION);
+                }
+                if ($col->getId() === Database::METADATA && isset($map[$docId])) {
+                    return $map[$docId];
                 }
 
                 return new Document();
@@ -207,8 +221,8 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
-                $this->callback(function ($orderAttributes) {
-                    return in_array('$sequence', $orderAttributes);
+                $this->callback(function (array $orderAttributes) {
+                    return in_array('$sequence', $orderAttributes, true);
                 }),
                 $this->anything(),
                 $this->anything(),
@@ -230,9 +244,9 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
-                $this->callback(function ($orderAttributes) {
-                    return in_array('$id', $orderAttributes)
-                        && ! in_array('$sequence', $orderAttributes);
+                $this->callback(function (array $orderAttributes) {
+                    return in_array('$id', $orderAttributes, true)
+                        && ! in_array('$sequence', $orderAttributes, true);
                 }),
                 $this->anything(),
                 $this->anything(),
@@ -555,7 +569,7 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
-                $this->callback(function ($orderAttributes) {
+                $this->callback(function (array $orderAttributes) {
                     return ! \in_array(Document::SEQUENCE, $orderAttributes, true);
                 }),
                 $this->anything(),
@@ -568,6 +582,73 @@ class FindLogicTest extends TestCase
         $this->database->skipValidation(fn () => $this->database->find('testCol', [
             Query::distinct(),
         ]));
+    }
+
+    public function testFindKeepsAuthorizationWhenDocumentSecurityIsEnabled(): void
+    {
+        $this->setupCollectionLookup('testCol');
+        $this->adapter->method('find')->willReturnCallback(function () {
+            $this->assertTrue($this->database->getAuthorization()->getStatus());
+
+            return [];
+        });
+
+        $this->database->skipValidation(fn () => $this->database->find('testCol'));
+    }
+
+    public function testFindSkipsAuthorizationWithoutDocumentSecurity(): void
+    {
+        $this->setupCollectionLookup('testCol', documentSecurity: false);
+        $this->adapter->method('find')->willReturnCallback(function () {
+            $this->assertFalse($this->database->getAuthorization()->getStatus());
+
+            return [];
+        });
+
+        $this->database->skipValidation(fn () => $this->database->find('testCol'));
+    }
+
+    public function testFindKeepsAuthorizationWhenJoinedCollectionHasDocumentSecurity(): void
+    {
+        $authOnFind = null;
+        $db = null;
+        $db = $this->buildDbWithCapabilities([
+            Capability::Index,
+            Capability::IndexArray,
+            Capability::UniqueIndex,
+            Capability::DefinedAttributes,
+            Capability::Joins,
+        ], function (Adapter&MockObject $adapter, array &$collectionMap) use (&$authOnFind, &$db): void {
+            $collectionMap['testCol'] = new Document([
+                '$id' => 'testCol',
+                '$collection' => Database::METADATA,
+                '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any())],
+                'name' => 'testCol',
+                'attributes' => [],
+                'indexes' => [],
+                'documentSecurity' => false,
+            ]);
+            $collectionMap['other'] = new Document([
+                '$id' => 'other',
+                '$collection' => Database::METADATA,
+                '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any())],
+                'name' => 'other',
+                'attributes' => [],
+                'indexes' => [],
+                'documentSecurity' => true,
+            ]);
+            $adapter->method('find')->willReturnCallback(function () use (&$authOnFind, &$db) {
+                $authOnFind = $db?->getAuthorization()->getStatus();
+
+                return [];
+            });
+        });
+
+        $db->skipValidation(fn () => $db->find('testCol', [
+            Query::join('other', 'fk', '$id'),
+        ]));
+
+        $this->assertTrue($authOnFind);
     }
 
     public function testFindWithSelectFiltersResults(): void
@@ -807,10 +888,10 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
-                $this->callback(function ($orderAttributes) {
+                $this->callback(function (array $orderAttributes) {
                     return $orderAttributes[0] === 'name'
                         && $orderAttributes[1] === 'age'
-                        && in_array('$sequence', $orderAttributes);
+                        && in_array('$sequence', $orderAttributes, true);
                 }),
                 $this->anything(),
                 $this->anything(),
@@ -848,6 +929,9 @@ class FindLogicTest extends TestCase
         $this->database->sum('testCol', 'amount', [Query::equal('unknown_field', ['val'])]);
     }
 
+    /**
+     * @param  list<Capability>  $capabilities
+     */
     private function buildDbWithCapabilities(array $capabilities, ?callable $adapterSetup = null): Database
     {
         $adapter = $this->createMock(Adapter::class);
@@ -875,21 +959,23 @@ class FindLogicTest extends TestCase
             return in_array($cap, $capabilities);
         });
 
-        $collection = new Document([
-            '$id' => 'testCol',
-            '$collection' => Database::METADATA,
-            '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any())],
-            'name' => 'testCol',
-            'attributes' => [
-                new Document(['$id' => 'status', 'key' => 'status', 'type' => 'string', 'size' => 64, 'required' => false, 'array' => false]),
-            ],
-            'indexes' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionMap = [
+            'testCol' => new Document([
+                '$id' => 'testCol',
+                '$collection' => Database::METADATA,
+                '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any())],
+                'name' => 'testCol',
+                'attributes' => [
+                    new Document(['$id' => 'status', 'key' => 'status', 'type' => 'string', 'size' => 64, 'required' => false, 'array' => false]),
+                ],
+                'indexes' => [],
+                'documentSecurity' => true,
+            ]),
+        ];
         $adapter->method('getDocument')->willReturnCallback(
-            function (Document $col, string $docId) use ($collection) {
-                if ($col->getId() === Database::METADATA && $docId === 'testCol') {
-                    return $collection;
+            function (Document $col, string $docId) use (&$collectionMap) {
+                if ($col->getId() === Database::METADATA && isset($collectionMap[$docId])) {
+                    return $collectionMap[$docId];
                 }
 
                 return new Document();
@@ -897,7 +983,7 @@ class FindLogicTest extends TestCase
         );
 
         if ($adapterSetup) {
-            $adapterSetup($adapter);
+            $adapterSetup($adapter, $collectionMap);
         } else {
             $adapter->method('find')->willReturn([]);
         }

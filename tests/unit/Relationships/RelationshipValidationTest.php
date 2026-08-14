@@ -93,6 +93,9 @@ class RelationshipValidationTest extends TestCase
         }
 
         $adapter = self::createStub(RelationshipsAdapter::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            static fn (string $feature): bool => is_a(RelationshipsAdapter::class, $feature, true)
+        );
         $adapter->method('getSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getTenantPerDocument')->willReturn(false);

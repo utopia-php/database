@@ -24,6 +24,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\PermissionFilter;
+use Utopia\Database\Hook\PermissionJoinFilter;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\TenantFilter;
@@ -1396,13 +1397,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $docCol = $hasJoins ? $alias . '.' . Storage::UID : Storage::UID;
             $builder->addHook($this->newPermissionHook($name, $roles, $forPermission->value, $docCol));
 
-            // Permission subquery for each joined table
             foreach ($joinTablePrefixes as $joinTable => $joinAlias) {
-                $builder->addHook($this->newPermissionHook(
-                    $this->filter($joinTable),
-                    $roles,
-                    $forPermission->value,
-                    $joinAlias . '.' . Storage::UID
+                $builder->addHook(new PermissionJoinFilter(
+                    $this->newPermissionHook(
+                        $this->filter($joinTable),
+                        $roles,
+                        $forPermission->value,
+                        $joinAlias.'.'.Storage::UID
+                    ),
+                    $joinAlias
                 ));
             }
         }

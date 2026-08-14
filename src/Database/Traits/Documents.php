@@ -2723,11 +2723,13 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
+        $hasCollectionPermission = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
-        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $hasCollectionPermission && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
+
+        $skipAuth = $hasCollectionPermission && ! $documentSecurity;
 
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
@@ -2742,9 +2744,6 @@ trait Documents
         $groupByAttrs = $grouped['groupBy'];
         $having = $grouped['having'];
         $joins = $grouped['joins'];
-        if (! empty($joins)) {
-            $skipAuth = false;
-        }
         $distinct = $grouped['distinct'];
         $limit = $grouped['limit'];
         $offset = $grouped['offset'];
@@ -2775,6 +2774,10 @@ trait Documents
 
                 if (! $this->authorization->isValid(new Input($forPermission, $joinCollection->getPermissionsByType($forPermission)))) {
                     throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
+                }
+
+                if ($joinCollection->getAttribute('documentSecurity', false)) {
+                    $skipAuth = false;
                 }
             }
         }

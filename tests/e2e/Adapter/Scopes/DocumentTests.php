@@ -7671,6 +7671,7 @@ trait DocumentTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+        $this->initDocumentsFixture();
 
         try {
             $database->findOne($this->getDocumentsCollection(), [

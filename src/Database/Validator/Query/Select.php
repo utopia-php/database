@@ -25,7 +25,7 @@ class Select extends Base
     {
         foreach ($attributes as $attribute) {
             /** @var string $attrKey */
-            $attrKey = $attribute->getAttribute('key', $attribute->getAttribute('$id'));
+            $attrKey = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
             $this->schema[$attrKey] = $attribute->getArrayCopy();
         }
     }

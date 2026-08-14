@@ -44,7 +44,7 @@ class Query extends BaseQuery
         $methodEnum = $method instanceof Method ? $method : Method::from($method);
 
         if ($attribute === '' && \in_array($methodEnum, [Method::OrderAsc, Method::OrderDesc])) {
-            $attribute = '$sequence';
+            $attribute = Document::SEQUENCE;
         }
 
         parent::__construct($methodEnum, $attribute, $values);

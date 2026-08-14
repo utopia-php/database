@@ -41,26 +41,26 @@ class Documents extends IndexedQueries
         bool $supportUnsignedBigInt = false
     ) {
         $attributes[] = new Document([
-            '$id' => '$id',
-            'key' => '$id',
+            Document::ID => Document::ID,
+            'key' => Document::ID,
             'type' => ColumnType::String->value,
             'array' => false,
         ]);
         $attributes[] = new Document([
-            '$id' => '$sequence',
-            'key' => '$sequence',
+            Document::ID => Document::SEQUENCE,
+            'key' => Document::SEQUENCE,
             'type' => ColumnType::Id->value,
             'array' => false,
         ]);
         $attributes[] = new Document([
-            '$id' => '$createdAt',
-            'key' => '$createdAt',
+            Document::ID => Document::CREATED_AT,
+            'key' => Document::CREATED_AT,
             'type' => ColumnType::Datetime->value,
             'array' => false,
         ]);
         $attributes[] = new Document([
-            '$id' => '$updatedAt',
-            'key' => '$updatedAt',
+            Document::ID => Document::UPDATED_AT,
+            'key' => Document::UPDATED_AT,
             'type' => ColumnType::Datetime->value,
             'array' => false,
         ]);

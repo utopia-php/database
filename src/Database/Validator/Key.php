@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Validator;
 
 /**
@@ -60,7 +61,7 @@ class Key extends Validator
         }
 
         if ($isInternal) {
-            $allowList = ['$id', '$createdAt', '$updatedAt'];
+            $allowList = [Document::ID, Document::CREATED_AT, Document::UPDATED_AT];
 
             // If exact match, no need for any further checks
             return \in_array($value, $allowList);

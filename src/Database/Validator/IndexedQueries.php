@@ -17,6 +17,12 @@ use Utopia\Query\Schema\IndexType;
  */
 class IndexedQueries extends Queries
 {
+    private const string UID_INDEX = '_uid_';
+
+    private const string CREATED_AT_INDEX = '_created_at_';
+
+    private const string UPDATED_AT_INDEX = '_updated_at_';
+
     /**
      * @var array<AttributeVO>
      */
@@ -44,9 +50,9 @@ class IndexedQueries extends Queries
             $this->attributes[] = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
         }
 
-        $this->indexes[] = new IndexVO(key: '_uid_', type: IndexType::Unique, attributes: ['$id']);
-        $this->indexes[] = new IndexVO(key: '_created_at_', type: IndexType::Key, attributes: ['$createdAt']);
-        $this->indexes[] = new IndexVO(key: '_updated_at_', type: IndexType::Key, attributes: ['$updatedAt']);
+        $this->indexes[] = new IndexVO(key: self::UID_INDEX, type: IndexType::Unique, attributes: [Document::ID]);
+        $this->indexes[] = new IndexVO(key: self::CREATED_AT_INDEX, type: IndexType::Key, attributes: [Document::CREATED_AT]);
+        $this->indexes[] = new IndexVO(key: self::UPDATED_AT_INDEX, type: IndexType::Key, attributes: [Document::UPDATED_AT]);
 
         foreach ($indexes as $index) {
             $this->indexes[] = $index instanceof IndexVO ? $index : IndexVO::fromDocument($index);

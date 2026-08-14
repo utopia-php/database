@@ -21,20 +21,20 @@ class Document extends Queries
     public function __construct(array $attributes, bool $supportForAttributes = true)
     {
         $attributes[] = new BaseDocument([
-            '$id' => '$id',
-            'key' => '$id',
+            BaseDocument::ID => BaseDocument::ID,
+            'key' => BaseDocument::ID,
             'type' => ColumnType::String->value,
             'array' => false,
         ]);
         $attributes[] = new BaseDocument([
-            '$id' => '$createdAt',
-            'key' => '$createdAt',
+            BaseDocument::ID => BaseDocument::CREATED_AT,
+            'key' => BaseDocument::CREATED_AT,
             'type' => ColumnType::Datetime->value,
             'array' => false,
         ]);
         $attributes[] = new BaseDocument([
-            '$id' => '$updatedAt',
-            'key' => '$updatedAt',
+            BaseDocument::ID => BaseDocument::UPDATED_AT,
+            'key' => BaseDocument::UPDATED_AT,
             'type' => ColumnType::Datetime->value,
             'array' => false,
         ]);

@@ -41,14 +41,14 @@ class PartialStructure extends Structure
         foreach ($attributes as $attribute) {
             /** @var array<string, mixed> $attribute */
             /** @var string $name */
-            $name = $attribute['$id'] ?? '';
+            $name = $attribute[Document::ID] ?? '';
             $keys[$name] = $attribute;
         }
         $requiredAttributes = [];
         foreach ($this->attributes as $attribute) {
             /** @var array<string, mixed> $attribute */
             /** @var string $attrId */
-            $attrId = $attribute['$id'] ?? '';
+            $attrId = $attribute[Document::ID] ?? '';
             if ($attribute['required'] === true && $document->offsetExists($attrId)) {
                 $requiredAttributes[] = $attribute;
             }

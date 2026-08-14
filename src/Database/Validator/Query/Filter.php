@@ -157,7 +157,7 @@ class Filter extends Base
 
             switch ($attributeType) {
                 case ColumnType::Id:
-                    $validator = new Sequence($this->idAttributeType, $attribute === '$sequence');
+                    $validator = new Sequence($this->idAttributeType, $attribute === Document::SEQUENCE);
                     break;
 
                 case ColumnType::String:

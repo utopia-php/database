@@ -30,7 +30,7 @@ class Structure extends Validator
      */
     protected array $attributes = [
         [
-            '$id' => '$id',
+            Document::ID => Document::ID,
             'type' => 'string',
             'size' => 255,
             'required' => false,
@@ -39,7 +39,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$sequence',
+            Document::ID => Document::SEQUENCE,
             'type' => 'id',
             'size' => 0,
             'required' => false,
@@ -48,7 +48,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$collection',
+            Document::ID => Document::COLLECTION,
             'type' => 'string',
             'size' => 255,
             'required' => true,
@@ -57,7 +57,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$tenant',
+            Document::ID => Document::TENANT,
             'type' => 'id',
             'size' => 0,
             'required' => false,
@@ -67,7 +67,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$permissions',
+            Document::ID => Document::PERMISSIONS,
             'type' => 'string',
             'size' => 67000,
             'required' => false,
@@ -76,7 +76,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$createdAt',
+            Document::ID => Document::CREATED_AT,
             'type' => 'datetime',
             'size' => 0,
             'required' => true,
@@ -85,7 +85,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$updatedAt',
+            Document::ID => Document::UPDATED_AT,
             'type' => 'datetime',
             'size' => 0,
             'required' => true,
@@ -94,7 +94,7 @@ class Structure extends Validator
             'filters' => [],
         ],
         [
-            '$id' => '$version',
+            Document::ID => Document::VERSION,
             'type' => 'integer',
             'size' => 0,
             'required' => false,
@@ -284,7 +284,7 @@ class Structure extends Validator
         foreach ($attributes as $attribute) { // Check all required attributes are set
             /** @var array<string, mixed> $attribute */
             /** @var string $name */
-            $name = $attribute['$id'] ?? '';
+            $name = $attribute[Document::ID] ?? '';
             $required = $attribute['required'] ?? false;
 
             $keys[$name] = $attribute; // List of allowed attributes to help find unknown ones
@@ -384,7 +384,7 @@ class Structure extends Validator
 
             switch ($columnType) {
                 case ColumnType::Id:
-                    $validators[] = new Sequence($this->idAttributeType, ($attribute['$id'] ?? '') === '$sequence');
+                    $validators[] = new Sequence($this->idAttributeType, ($attribute[Document::ID] ?? '') === Document::SEQUENCE);
                     break;
 
                 case ColumnType::Text:

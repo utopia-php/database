@@ -11,6 +11,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -252,6 +253,46 @@ class CollectionValidationTest extends TestCase
         ]);
 
         $this->assertSame('users', $collection->getId());
+    }
+
+    public function testCreateCollectionAcceptsCollectionModel(): void
+    {
+        $database = new Database(new Memory(), new Cache(new None()));
+        $database
+            ->setDatabase('testing')
+            ->setNamespace('collections')
+            ->enableValidation();
+        $database->create();
+
+        $collection = $database->createCollection(new Collection(
+            id: 'users',
+            name: 'Users',
+            attributes: [Attribute::string(key: 'name', required: true)],
+        ));
+
+        $this->assertSame('users', $collection->getId());
+        $this->assertSame('Users', $collection->getAttribute('name'));
+
+        $attributes = $collection->getAttribute('attributes');
+        $this->assertSame(1, \count($attributes));
+        $this->assertSame('name', $attributes[0]->getAttribute('key'));
+        $this->assertSame('string', $attributes[0]->getAttribute('type'));
+    }
+
+    public function testCreateCollectionEmptyPermissionsUsesDefault(): void
+    {
+        $database = new Database(new Memory(), new Cache(new None()));
+        $database
+            ->setDatabase('testing')
+            ->setNamespace('collections')
+            ->enableValidation();
+        $database->create();
+
+        $anon = $database->createCollection(new Collection(id: 'anon'));
+        $control = $database->createCollection('control');
+
+        $this->assertSame($control->getPermissions(), $anon->getPermissions());
+        $this->assertSame([Permission::create(Role::any())], $anon->getPermissions());
     }
 
     public function testCreateCollectionWithIndexLimits(): void

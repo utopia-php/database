@@ -19,36 +19,50 @@ class TenantFilter implements Filter, JoinFilter
      * @param int|string $tenant The current tenant identifier
      * @param string $metadataCollection The metadata collection name; metadata tables allow NULL tenants
      * @param string $collection The actual collection/table name being queried (not the alias)
+     * @param string $allowNullColumn When set, unmatched outer-join rows keep a NULL tenant
      */
     public function __construct(
         private int|string $tenant,
         private string $metadataCollection = '',
-        private string $collection = ''
+        private string $collection = '',
+        private string $allowNullColumn = '',
+        private string $quoteChar = '`',
     ) {
     }
 
     public function filter(string $table): Condition
     {
-        // Only qualify with table/alias when it looks like a simple alias (no dots/backticks)
-        // This avoids breaking subqueries where $table is a fully-qualified raw table name
         $prefix = (!\str_contains($table, '.') && !\str_contains($table, '`')) ? "{$table}." : '';
 
-        // Check the actual collection name against the metadata collection, not the alias
         $name = $this->collection !== '' ? $this->collection : $table;
 
         if (! empty($this->metadataCollection) && $name === $this->metadataCollection) {
-            return new Condition("({$prefix}".Storage::TENANT." IN (?) OR {$prefix}".Storage::TENANT." IS NULL)", [$this->tenant]);
+            $condition = new Condition("({$prefix}".Storage::TENANT." IN (?) OR {$prefix}".Storage::TENANT." IS NULL)", [$this->tenant]);
+        } else {
+            $condition = new Condition("{$prefix}".Storage::TENANT." IN (?)", [$this->tenant]);
         }
 
-        return new Condition("{$prefix}".Storage::TENANT." IN (?)", [$this->tenant]);
+        if ($this->allowNullColumn === '') {
+            return $condition;
+        }
+
+        return AllowNullColumn::wrap($condition, $this->allowNullColumn, $this->quoteChar);
     }
 
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
         $condition = new Condition("{$table}.".Storage::TENANT." IN (?)", [$this->tenant]);
 
+        if ($joinType === JoinType::FullOuter) {
+            $condition = AllowNullColumn::wrap(
+                $condition,
+                $table.'.'.Storage::TENANT,
+                $this->quoteChar,
+            );
+        }
+
         $placement = match ($joinType) {
-            JoinType::Left, JoinType::Right => Placement::On,
+            JoinType::Left => Placement::On,
             default => Placement::Where,
         };
 

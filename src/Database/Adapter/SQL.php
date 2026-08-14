@@ -1295,7 +1295,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $queries = \array_map(static fn ($query) => clone $query, $queries);
         }
 
-        $builder = $this->newBuilder($name, $alias);
+        $hasPreservingOuterJoin = false;
+        if ($hasJoins) {
+            foreach ($queries as $query) {
+                $method = $query->getMethod();
+                if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
+                    $hasPreservingOuterJoin = true;
+                    break;
+                }
+            }
+        }
+
+        $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
 
         $hasSelectionProjection = false;
         if (! $hasAggregation) {
@@ -1308,7 +1319,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $joinTablePrefixes = [];
         $joinIndex = 0;
-        $allowNullPrimaryUid = false;
 
         if ($hasJoins) {
             foreach ($queries as $query) {
@@ -1321,10 +1331,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     && ! $builder instanceof FullOuterJoinsFeature
                 ) {
                     throw new QueryException('Full outer joins are not supported');
-                }
-
-                if ($query->getMethod() === Method::RightJoin || $query->getMethod() === Method::FullOuterJoin) {
-                    $allowNullPrimaryUid = true;
                 }
 
                 $joinTable = $query->getAttribute();
@@ -1417,7 +1423,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($this->authorization->getStatus()) {
             $docCol = $hasJoins ? $alias . '.' . Storage::UID : Storage::UID;
             $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
-            if ($allowNullPrimaryUid) {
+            if ($hasPreservingOuterJoin) {
                 $permissionHook = new PermissionAllowNullUid(
                     $permissionHook,
                     $docCol,
@@ -1434,7 +1440,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                         $forPermission->value,
                         $join['alias'].'.'.Storage::UID
                     ),
-                    $join['alias']
+                    $join['alias'],
+                    $this->getIdentifierQuoteChar(),
                 ));
             }
         }
@@ -3028,7 +3035,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    protected function newBuilder(string $table, string $alias = ''): SQLBuilder
+    protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false): SQLBuilder
     {
         $builder = $this->createBuilder()->from($this->getSQLTableRaw($table), $alias);
 
@@ -3037,7 +3044,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
         $builder->addHook($this->attributeMap);
         if ($this->sharedTables && $this->tenant !== null) {
-            $builder->addHook(new TenantFilter($this->tenant, Database::METADATA, $table));
+            $allowNullColumn = '';
+            if ($allowNullTenant) {
+                $allowNullColumn = ($alias !== '' ? $alias : $table).'.'.Storage::TENANT;
+            }
+            $builder->addHook(new TenantFilter(
+                $this->tenant,
+                Database::METADATA,
+                $table,
+                $allowNullColumn,
+                $this->getIdentifierQuoteChar(),
+            ));
         }
 
         return $builder;
@@ -3089,7 +3106,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             permDocumentColumn: Storage::PERM_DOCUMENT,
             permRoleColumn: Storage::PERM_PERMISSION,
             permTypeColumn: Storage::PERM_TYPE,
-            subqueryFilter: $this->hasTenantHook() ? new TenantFilter($this->getTenantHook()->getTenant()) : null,
+            subqueryFilter: ($this->sharedTables && $this->tenant !== null) ? new TenantFilter($this->tenant) : null,
             quoteChar: $this->getIdentifierQuoteChar(),
         );
     }

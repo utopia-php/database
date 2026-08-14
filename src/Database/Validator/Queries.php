@@ -6,6 +6,7 @@ use Throwable;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
 use Utopia\Validator;
 
@@ -71,6 +72,9 @@ class Queries extends Validator
             if ($validator instanceof Order) {
                 $validator->resetAggregationAliases();
             }
+            if ($validator instanceof Select) {
+                $validator->resetJoinAliases();
+            }
         }
 
         // Parse raw query strings once. Both the alias pre-pass and the main
@@ -107,6 +111,29 @@ class Queries extends Validator
             foreach ($this->validators as $validator) {
                 if ($validator instanceof Order) {
                     $validator->addAggregationAliases($aggregationAliases);
+                }
+            }
+        }
+
+        $joinAliases = [];
+        foreach ($parsedQueries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+            $values = $query->getValues();
+            $method = $query->getMethod();
+            $alias = match ($method) {
+                Method::CrossJoin, Method::NaturalJoin => $values[0] ?? '',
+                default => $values[3] ?? '',
+            };
+            if (\is_string($alias) && $alias !== '') {
+                $joinAliases[] = $alias;
+            }
+        }
+        if (! empty($joinAliases)) {
+            foreach ($this->validators as $validator) {
+                if ($validator instanceof Select) {
+                    $validator->allowJoinAliases($joinAliases);
                 }
             }
         }

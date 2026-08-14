@@ -123,8 +123,12 @@ class Document extends ArrayObject
      */
     public static function fromRow(array $row): self
     {
-        if (array_key_exists(self::ID, $row) && ! \is_string($row[self::ID])) {
-            throw new StructureException(self::ID.' must be of type string');
+        if (array_key_exists(self::ID, $row)) {
+            if ($row[self::ID] === null) {
+                $row[self::ID] = '';
+            } elseif (! \is_string($row[self::ID])) {
+                throw new StructureException(self::ID.' must be of type string');
+            }
         }
 
         if (array_key_exists(self::PERMISSIONS, $row)) {

@@ -3,6 +3,7 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 
 /**
  * Validates join query methods ensuring a target table name is specified.
@@ -29,6 +30,12 @@ class Join extends Base
     {
         if (! $value instanceof Query) {
             $this->message = 'Value must be a Query';
+
+            return false;
+        }
+
+        if ($value->getMethod() === Method::NaturalJoin) {
+            $this->message = 'Natural joins are not supported';
 
             return false;
         }

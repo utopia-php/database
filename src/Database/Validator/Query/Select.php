@@ -19,6 +19,11 @@ class Select extends Base
     protected array $schema = [];
 
     /**
+     * @var array<string, true>
+     */
+    protected array $joinAliases = [];
+
+    /**
      * @param  array<Document>  $attributes
      */
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
@@ -85,9 +90,17 @@ class Select extends Base
                     continue;
                 }
 
+                $dot = \strpos($attribute, '.');
+                $alias = \substr($attribute, 0, $dot);
+                $column = \substr($attribute, $dot + 1);
+
+                if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
+                    continue;
+                }
+
                 // For relationships, just validate the top level.
                 // Will validate each nested level during the recursive calls.
-                $attribute = \explode('.', $attribute)[0];
+                $attribute = $alias;
             }
 
             // Skip internal attributes
@@ -103,6 +116,28 @@ class Select extends Base
         }
 
         return true;
+    }
+
+    /**
+     * @param array<string> $aliases
+     */
+    public function allowJoinAliases(array $aliases): void
+    {
+        foreach ($aliases as $alias) {
+            if (\is_string($alias) && $alias !== '') {
+                $this->joinAliases[$alias] = true;
+            }
+        }
+    }
+
+    public function resetJoinAliases(): void
+    {
+        $this->joinAliases = [];
+    }
+
+    private function isAllowedJoinColumn(string $column): bool
+    {
+        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
     }
 
     /**

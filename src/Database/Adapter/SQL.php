@@ -40,11 +40,13 @@ use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
+use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
 use Utopia\Query\CursorDirection;
+use Utopia\Query\Exception\UnsupportedException;
 use Utopia\Query\Exception\ValidationException;
 use Utopia\Query\Hook\Attribute\Map as AttributeMap;
 use Utopia\Query\Method;
@@ -1308,30 +1310,43 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if ($hasJoins) {
             foreach ($queries as $query) {
-                if ($query->getMethod()->isJoin()) {
-                    $joinTable = $query->getAttribute();
-                    $resolvedTable = $this->getSQLTableRaw($this->filter($joinTable));
-                    $joinAlias = 'j' . $joinIndex++;
-                    $query->setAttribute($resolvedTable);
-
-                    $values = $query->getValues();
-                    if (count($values) >= 3) {
-                        /** @var string $leftCol */
-                        $leftCol = $values[0];
-                        /** @var string $rightCol */
-                        $rightCol = $values[2];
-
-                        $leftInternal = $this->getInternalKeyForAttribute($leftCol);
-                        $rightInternal = $this->getInternalKeyForAttribute($rightCol);
-
-                        $values[0] = $alias . '.' . $leftInternal;
-                        $values[2] = $joinAlias . '.' . $rightInternal;
-                        $values[3] = $joinAlias;
-                        $query->setValues($values);
-
-                        $joinTablePrefixes[$joinTable] = $joinAlias;
-                    }
+                if (! $query->getMethod()->isJoin()) {
+                    continue;
                 }
+
+                if (
+                    $query->getMethod() === Method::FullOuterJoin
+                    && ! $builder instanceof FullOuterJoinsFeature
+                ) {
+                    throw new QueryException('Full outer joins are not supported');
+                }
+
+                $joinTable = $query->getAttribute();
+                $resolvedTable = $this->getSQLTableRaw($this->filter($joinTable));
+                $query->setAttribute($resolvedTable);
+
+                $values = $query->getValues();
+                $method = $query->getMethod();
+                $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
+                $joinAlias = $this->sanitizeJoinAlias(
+                    \is_string($values[$aliasIndex] ?? null) ? $values[$aliasIndex] : ''
+                );
+                if ($joinAlias === '') {
+                    $joinAlias = 'j'.$joinIndex;
+                }
+                $joinIndex++;
+
+                if ($aliasIndex === 3 && \count($values) >= 3) {
+                    $values[0] = $this->qualifyJoinColumn((string) $values[0], $alias);
+                    $values[2] = $this->qualifyJoinColumn((string) $values[2], $joinAlias);
+                    $values[3] = $joinAlias;
+                    $query->setValues($values);
+                } elseif ($aliasIndex === 0) {
+                    $values[0] = $joinAlias;
+                    $query->setValues($values);
+                }
+
+                $joinTablePrefixes[$joinTable] = $joinAlias;
             }
         }
 
@@ -1601,7 +1616,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         try {
             $result = $builder->build();
-        } catch (ValidationException $e) {
+        } catch (ValidationException|UnsupportedException $e) {
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
 
@@ -3412,7 +3427,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $columns = [];
         foreach ($selections as $selection) {
-            $columns[] = $this->filter($selection);
+            if (\is_string($selection) && \str_contains($selection, '.')) {
+                $dot = \strpos($selection, '.');
+                $prefix = \substr($selection, 0, $dot);
+                $name = \substr($selection, $dot + 1);
+                $columns[] = $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
+
+                continue;
+            }
+            $columns[] = $this->filter((string) $selection);
         }
 
         return $columns;
@@ -3511,6 +3534,28 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $table->vector($name, $size);
+    }
+
+    private function sanitizeJoinAlias(string $alias): string
+    {
+        if ($alias !== '' && \preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $alias) === 1) {
+            return $alias;
+        }
+
+        return '';
+    }
+
+    private function qualifyJoinColumn(string $column, string $defaultAlias): string
+    {
+        if (\str_contains($column, '.')) {
+            $dot = \strpos($column, '.');
+            $prefix = \substr($column, 0, $dot);
+            $name = \substr($column, $dot + 1);
+
+            return $prefix.'.'.$this->getInternalKeyForAttribute($name);
+        }
+
+        return $defaultAlias.'.'.$this->getInternalKeyForAttribute($column);
     }
 
     /**

@@ -8,6 +8,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -35,7 +36,7 @@ trait Collections
     /**
      * Create Collection
      *
-     * @param  string  $id  The collection identifier
+     * @param  string|Collection  $id  The collection identifier, or a Collection whose fields take precedence
      * @param  array<Attribute|Document>  $attributes  Initial attributes for the collection
      * @param  array<Index|Document>  $indexes  Initial indexes for the collection
      * @param  array<string>|null  $permissions  Permission strings, defaults to allow any create
@@ -47,8 +48,19 @@ trait Collections
      * @throws DuplicateException
      * @throws LimitException
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, array $metadata = []): Document
+    public function createCollection(string|Collection $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, array $metadata = []): Document
     {
+        if ($id instanceof Collection) {
+            $name = $id->name !== '' ? $id->name : $id->id;
+            $attributes = $id->attributes;
+            $indexes = $id->indexes;
+            $permissions = $id->permissions !== [] ? $id->permissions : $permissions;
+            $documentSecurity = $id->documentSecurity;
+            $id = $id->id;
+        } else {
+            $name = $id;
+        }
+
         $attributes = array_map(fn ($attr): Attribute => $attr instanceof Attribute ? $attr : Attribute::fromDocument($attr), $attributes);
         $indexes = array_map(fn ($idx): Index => $idx instanceof Index ? $idx : Index::fromDocument($idx), $indexes);
 
@@ -129,7 +141,7 @@ trait Collections
         $collection = new Document(\array_merge([
             Document::ID => ID::custom($id),
             Document::PERMISSIONS => $permissions,
-            'name' => $id,
+            'name' => $name,
             'attributes' => $attributeDocs,
             'indexes' => $indexDocs,
             'documentSecurity' => $documentSecurity,

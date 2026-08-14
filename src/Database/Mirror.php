@@ -295,8 +295,10 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, array $metadata = []): Document
+    public function createCollection(string|Collection $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, array $metadata = []): Document
     {
+        $collectionId = $id instanceof Collection ? $id->id : $id;
+
         $result = $this->source->createCollection(
             $id,
             $attributes,
@@ -315,7 +317,7 @@ class Mirror extends Database
                 $filtered = $filter->beforeCreateCollection(
                     source: $this->source,
                     destination: $this->destination,
-                    collectionId: $id,
+                    collectionId: $collectionId,
                     collection: $result,
                 );
                 if ($filtered !== null) {
@@ -332,12 +334,12 @@ class Mirror extends Database
                 $metadata
             );
 
-            $this->silent(function () use ($id) {
+            $this->silent(function () use ($collectionId) {
                 $this->createUpgrades();
 
                 $this->source->createDocument('upgrades', new Document([
-                    Document::ID => $id,
-                    'collectionId' => $id,
+                    Document::ID => $collectionId,
+                    'collectionId' => $collectionId,
                     'status' => 'upgraded',
                 ]));
             });

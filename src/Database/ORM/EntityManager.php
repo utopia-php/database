@@ -140,13 +140,7 @@ class EntityManager
         /** @var array<\Utopia\Database\Relationship> $relationships */
         $relationships = $defs['relationships'];
 
-        $doc = $this->db->createCollection(
-            id: $collection->id,
-            attributes: $collection->attributes,
-            indexes: $collection->indexes,
-            permissions: $collection->permissions !== [] ? $collection->permissions : null,
-            documentSecurity: $collection->documentSecurity,
-        );
+        $doc = $this->db->createCollection($collection);
 
         foreach ($relationships as $relationship) {
             $this->db->createRelationship($relationship);

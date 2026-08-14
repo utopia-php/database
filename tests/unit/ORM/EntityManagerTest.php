@@ -4,6 +4,7 @@ namespace Tests\Unit\ORM;
 
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\ORM\EntityManager;
@@ -321,13 +322,11 @@ class EntityManagerTest extends TestCase
     {
         $this->db->expects($this->once())
             ->method('createCollection')
-            ->with(
-                $this->equalTo('users'),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->equalTo(true),
-            )
+            ->with($this->callback(function (mixed $collection): bool {
+                return $collection instanceof Collection
+                    && $collection->id === 'users'
+                    && $collection->documentSecurity === true;
+            }))
             ->willReturn(new Document(['$id' => 'users']));
 
         $this->db->expects($this->once())

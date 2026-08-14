@@ -336,7 +336,7 @@ class Mirror extends Database
                 $this->createUpgrades();
 
                 $this->source->createDocument('upgrades', new Document([
-                    '$id' => $id,
+                    Document::ID => $id,
                     'collectionId' => $id,
                     'status' => 'upgraded',
                 ]));

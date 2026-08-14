@@ -75,7 +75,7 @@ class MigrationTracker
         $this->setup();
 
         $this->db->createDocument(self::COLLECTION, new Document([
-            '$id' => ID::unique(),
+            Document::ID => ID::unique(),
             'version' => $version,
             'name' => $name,
             'batch' => $batch,

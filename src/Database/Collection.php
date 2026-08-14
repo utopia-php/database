@@ -32,11 +32,11 @@ class Collection
     public function toDocument(): Document
     {
         return new Document([
-            '$id' => ID::custom($this->id),
+            Document::ID => ID::custom($this->id),
             'name' => $this->name ?: $this->id,
             'attributes' => \array_map(fn (Attribute $attr) => $attr->toDocument(), $this->attributes),
             'indexes' => \array_map(fn (Index $idx) => $idx->toDocument(), $this->indexes),
-            '$permissions' => $this->permissions,
+            Document::PERMISSIONS => $this->permissions,
             'documentSecurity' => $this->documentSecurity,
         ]);
     }

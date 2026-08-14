@@ -18,7 +18,7 @@ class LazyProxy extends Document
 
     public function __construct(BatchLoader $batchLoader, string $targetCollection, string $targetId)
     {
-        parent::__construct(['$id' => $targetId]);
+        parent::__construct([Document::ID => $targetId]);
         $this->batchLoader = $batchLoader;
         $this->targetCollection = $targetCollection;
         $this->targetId = $targetId;

@@ -33,7 +33,7 @@ class Index
     public function toDocument(): Document
     {
         return new Document([
-            '$id' => ID::custom($this->key),
+            Document::ID => ID::custom($this->key),
             'key' => $this->key,
             'type' => $this->type->value,
             'attributes' => $this->attributes,
@@ -60,7 +60,7 @@ class Index
         $type = $data['type'] ?? 'key';
 
         return new self(
-            key: $data['$id'] ?? $data['key'] ?? '',
+            key: $data[Document::ID] ?? $data['key'] ?? '',
             type: $type instanceof IndexType ? $type : IndexType::from((string) $type),
             attributes: $data['attributes'] ?? [],
             lengths: $data['lengths'] ?? [],

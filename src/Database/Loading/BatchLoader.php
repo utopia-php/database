@@ -36,7 +36,7 @@ class BatchLoader
         }
 
         $documents = $this->db->find($collection, [
-            Query::equal('$id', $ids),
+            Query::equal(Document::ID, $ids),
             Query::limit(\count($ids)),
         ]);
 

@@ -48,27 +48,27 @@ class EntityMapper
         $data = [];
 
         if ($metadata->idProperty !== null) {
-            $data['$id'] = $this->getPropertyValue($entity, $metadata->idProperty);
+            $data[Document::ID] = $this->getPropertyValue($entity, $metadata->idProperty);
         }
 
         if ($metadata->versionProperty !== null) {
-            $data['$version'] = $this->getPropertyValue($entity, $metadata->versionProperty);
+            $data[Document::VERSION] = $this->getPropertyValue($entity, $metadata->versionProperty);
         }
 
         if ($metadata->createdAtProperty !== null) {
-            $data['$createdAt'] = $this->getPropertyValue($entity, $metadata->createdAtProperty);
+            $data[Document::CREATED_AT] = $this->getPropertyValue($entity, $metadata->createdAtProperty);
         }
 
         if ($metadata->updatedAtProperty !== null) {
-            $data['$updatedAt'] = $this->getPropertyValue($entity, $metadata->updatedAtProperty);
+            $data[Document::UPDATED_AT] = $this->getPropertyValue($entity, $metadata->updatedAtProperty);
         }
 
         if ($metadata->tenantProperty !== null) {
-            $data['$tenant'] = $this->getPropertyValue($entity, $metadata->tenantProperty);
+            $data[Document::TENANT] = $this->getPropertyValue($entity, $metadata->tenantProperty);
         }
 
         if ($metadata->permissionsProperty !== null) {
-            $data['$permissions'] = $this->getPropertyValue($entity, $metadata->permissionsProperty) ?? [];
+            $data[Document::PERMISSIONS] = $this->getPropertyValue($entity, $metadata->permissionsProperty) ?? [];
         }
 
         foreach ($metadata->columns as $mapping) {
@@ -142,19 +142,19 @@ class EntityMapper
         }
 
         if ($metadata->versionProperty !== null) {
-            $this->setPropertyValue($entity, $metadata->versionProperty, $document->getAttribute('$version'));
+            $this->setPropertyValue($entity, $metadata->versionProperty, $document->getAttribute(Document::VERSION));
         }
 
         if ($metadata->createdAtProperty !== null) {
-            $this->setPropertyValue($entity, $metadata->createdAtProperty, $document->getAttribute('$createdAt'));
+            $this->setPropertyValue($entity, $metadata->createdAtProperty, $document->getAttribute(Document::CREATED_AT));
         }
 
         if ($metadata->updatedAtProperty !== null) {
-            $this->setPropertyValue($entity, $metadata->updatedAtProperty, $document->getAttribute('$updatedAt'));
+            $this->setPropertyValue($entity, $metadata->updatedAtProperty, $document->getAttribute(Document::UPDATED_AT));
         }
 
         if ($metadata->tenantProperty !== null) {
-            $this->setPropertyValue($entity, $metadata->tenantProperty, $document->getAttribute('$tenant'));
+            $this->setPropertyValue($entity, $metadata->tenantProperty, $document->getAttribute(Document::TENANT));
         }
 
         if ($metadata->permissionsProperty !== null) {
@@ -216,15 +216,15 @@ class EntityMapper
         }
 
         if ($metadata->versionProperty !== null) {
-            $this->setPropertyValue($entity, $metadata->versionProperty, $document->getAttribute('$version'));
+            $this->setPropertyValue($entity, $metadata->versionProperty, $document->getAttribute(Document::VERSION));
         }
 
         if ($metadata->createdAtProperty !== null) {
-            $this->setPropertyValue($entity, $metadata->createdAtProperty, $document->getAttribute('$createdAt'));
+            $this->setPropertyValue($entity, $metadata->createdAtProperty, $document->getAttribute(Document::CREATED_AT));
         }
 
         if ($metadata->updatedAtProperty !== null) {
-            $this->setPropertyValue($entity, $metadata->updatedAtProperty, $document->getAttribute('$updatedAt'));
+            $this->setPropertyValue($entity, $metadata->updatedAtProperty, $document->getAttribute(Document::UPDATED_AT));
         }
     }
 
@@ -236,7 +236,7 @@ class EntityMapper
         $snapshot = [];
 
         if ($metadata->idProperty !== null) {
-            $snapshot['$id'] = $this->getPropertyValue($entity, $metadata->idProperty);
+            $snapshot[Document::ID] = $this->getPropertyValue($entity, $metadata->idProperty);
         }
 
         foreach ($metadata->columns as $mapping) {

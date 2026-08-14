@@ -37,7 +37,7 @@ class ExpandContract
                 $newValue = $transform($oldValue);
 
                 $db->updateDocument($collection, $doc->getId(), new Document([
-                    '$id' => $doc->getId(),
+                    Document::ID => $doc->getId(),
                     $newKey => $newValue,
                 ]));
 

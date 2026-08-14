@@ -113,7 +113,7 @@ class Attribute
     public function toDocument(): Document
     {
         $data = [
-            '$id' => ID::custom($this->key),
+            Document::ID => ID::custom($this->key),
             'key' => $this->key,
             'type' => $this->type->value,
             'size' => $this->size,
@@ -214,7 +214,7 @@ class Attribute
         $type = $data['type'] ?? 'string';
 
         /** @var string $key */
-        $key = $data['$id'] ?? $data['key'] ?? '';
+        $key = $data[Document::ID] ?? $data['key'] ?? '';
         /** @var int $size */
         $size = $data['size'] ?? 0;
         /** @var bool $required */

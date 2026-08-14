@@ -154,16 +154,16 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     /**
      * Override to use lowercase catalog names for Postgres case sensitivity.
      */
+    #[\Override]
     public function exists(string $database, ?string $collection = null): bool
     {
         $database = $this->filter($database);
 
         if ($collection !== null) {
-            $collection = $this->filter($collection);
             $sql = 'SELECT "table_name" FROM information_schema.tables WHERE "table_schema" = ? AND "table_name" = ?';
             $stmt = $this->prepareStatement($sql, Event::CollectionRead);
             $stmt->bindValue(1, $database);
-            $stmt->bindValue(2, "{$this->getNamespace()}_{$collection}");
+            $stmt->bindValue(2, $this->getPhysicalTableName($collection));
         } else {
             $sql = 'SELECT "schema_name" FROM information_schema.schemata WHERE "schema_name" = ?';
             $stmt = $this->prepareStatement($sql, Event::DatabaseList);
@@ -2365,12 +2365,21 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return substr($hash, 0, self::MAX_IDENTIFIER_NAME);
     }
 
+    protected function getPhysicalTableName(string $name): string
+    {
+        return $this->getShortKey("{$this->getNamespace()}_{$this->filter($name)}");
+    }
+
+    #[\Override]
     protected function getSQLTable(string $name): string
     {
-        $table = "{$this->getNamespace()}_{$this->filter($name)}";
-        $table = $this->getShortKey($table);
+        return "{$this->quote($this->getDatabase())}.{$this->quote($this->getPhysicalTableName($name))}";
+    }
 
-        return "{$this->quote($this->getDatabase())}.{$this->quote($table)}";
+    #[\Override]
+    protected function getSQLTableRaw(string $name): string
+    {
+        return $this->getDatabase().'.'.$this->getPhysicalTableName($name);
     }
 
     protected function buildJsonbPath(string $path, bool $asText = false): string

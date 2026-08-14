@@ -6,8 +6,13 @@ use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
+use Utopia\Query\Schema\ColumnType;
 
 class PostgresTest extends Base
 {
@@ -76,5 +81,42 @@ class PostgresTest extends Base
         self::$pdo->exec($sql);
 
         return true;
+    }
+
+    public function testCreateCollectionWithMongoSequenceShapedId(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'database_507f1f77bcf86cd799439012_collection_507f1f77bcf86cd799439013';
+
+        $this->assertGreaterThan(
+            Postgres::MAX_IDENTIFIER_NAME,
+            \strlen($database->getNamespace().'_'.$collection)
+        );
+
+        $database->createCollection($collection, [
+            new Attribute(
+                key: 'name',
+                type: ColumnType::String,
+                size: 128,
+                required: true,
+            ),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'vector-doc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'embeddings',
+        ]));
+
+        $this->assertSame('vector-doc', $document->getId());
+        $this->assertSame('embeddings', $database->getDocument($collection, 'vector-doc')->getAttribute('name'));
+        $this->assertTrue($database->exists($database->getDatabase(), $collection));
+        $this->assertTrue($database->deleteCollection($collection));
     }
 }

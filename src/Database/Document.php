@@ -13,6 +13,30 @@ use Utopia\Database\Exception\Structure as StructureException;
  */
 class Document extends ArrayObject
 {
+    public const string ID = '$id';
+
+    public const string SEQUENCE = '$sequence';
+
+    public const string COLLECTION = '$collection';
+
+    public const string CREATED_AT = '$createdAt';
+
+    public const string UPDATED_AT = '$updatedAt';
+
+    public const string PERMISSIONS = '$permissions';
+
+    public const string TENANT = '$tenant';
+
+    public const string VERSION = '$version';
+
+    public const string DISTANCE = '$distance';
+
+    public const string DELETED_AT = '$deletedAt';
+
+    public const string SKIP_PERMISSIONS_UPDATE = '$skipPermissionsUpdate';
+
+    public const string INTERNAL_ID = '$internalId';
+
     /** @var array<string, true>|null */
     private static ?array $internalKeySet = null;
 
@@ -41,16 +65,16 @@ class Document extends ArrayObject
      */
     public function __construct(array $input = [])
     {
-        if (array_key_exists('$id', $input) && ! \is_string($input['$id'])) {
-            throw new StructureException('$id must be of type string');
+        if (array_key_exists(self::ID, $input) && ! \is_string($input[self::ID])) {
+            throw new StructureException(self::ID.' must be of type string');
         }
 
-        if (array_key_exists('$permissions', $input) && ! is_array($input['$permissions'])) {
-            throw new StructureException('$permissions must be of type array');
+        if (array_key_exists(self::PERMISSIONS, $input) && ! is_array($input[self::PERMISSIONS])) {
+            throw new StructureException(self::PERMISSIONS.' must be of type array');
         }
 
-        if (array_key_exists('$permissions', $input) && is_array($input['$permissions'])) {
-            $input['$permissions'] = \array_values(\array_unique($input['$permissions']));
+        if (array_key_exists(self::PERMISSIONS, $input) && is_array($input[self::PERMISSIONS])) {
+            $input[self::PERMISSIONS] = \array_values(\array_unique($input[self::PERMISSIONS]));
         }
 
         foreach ($input as $key => $value) {
@@ -58,7 +82,7 @@ class Document extends ArrayObject
                 continue;
             }
 
-            if (isset($value['$id']) || isset($value['$collection'])) {
+            if (isset($value[self::ID]) || isset($value[self::COLLECTION])) {
                 /** @var array<string, mixed> $value */
                 $input[$key] = new self($value);
 
@@ -70,7 +94,7 @@ class Document extends ArrayObject
                 // plain items (dates, numbers, strings): wrap the former, leave the latter.
                 // is_array() tells them apart and avoids array-accessing a non-array
                 // value (e.g. a UTCDateTime), which would otherwise fatal.
-                if (\is_array($child) && (isset($child['$id']) || isset($child['$collection']))) {
+                if (\is_array($child) && (isset($child[self::ID]) || isset($child[self::COLLECTION]))) {
                     /** @var array<string, mixed> $child */
                     $value[$childKey] = new self($child);
                 }
@@ -99,15 +123,15 @@ class Document extends ArrayObject
      */
     public static function fromRow(array $row): self
     {
-        if (array_key_exists('$id', $row) && ! \is_string($row['$id'])) {
-            throw new StructureException('$id must be of type string');
+        if (array_key_exists(self::ID, $row) && ! \is_string($row[self::ID])) {
+            throw new StructureException(self::ID.' must be of type string');
         }
 
-        if (array_key_exists('$permissions', $row)) {
-            if (! \is_array($row['$permissions'])) {
-                throw new StructureException('$permissions must be of type array');
+        if (array_key_exists(self::PERMISSIONS, $row)) {
+            if (! \is_array($row[self::PERMISSIONS])) {
+                throw new StructureException(self::PERMISSIONS.' must be of type array');
             }
-            $row['$permissions'] = \array_values(\array_unique($row['$permissions']));
+            $row[self::PERMISSIONS] = \array_values(\array_unique($row[self::PERMISSIONS]));
         }
 
         $document = new self();
@@ -124,7 +148,7 @@ class Document extends ArrayObject
     public function getId(): string
     {
         /** @var string $id */
-        $id = $this->getAttribute('$id', '');
+        $id = $this->getAttribute(self::ID, '');
         return $id;
     }
 
@@ -135,7 +159,7 @@ class Document extends ArrayObject
      */
     public function getSequence(): ?string
     {
-        $sequence = $this->getAttribute('$sequence');
+        $sequence = $this->getAttribute(self::SEQUENCE);
 
         if ($sequence === null) {
             return null;
@@ -153,7 +177,7 @@ class Document extends ArrayObject
     public function getCollection(): string
     {
         /** @var string $collection */
-        $collection = $this->getAttribute('$collection', '');
+        $collection = $this->getAttribute(self::COLLECTION, '');
         return $collection;
     }
 
@@ -165,7 +189,7 @@ class Document extends ArrayObject
     public function getPermissions(): array
     {
         /** @var array<string> $permissions */
-        $permissions = $this->getAttribute('$permissions', []);
+        $permissions = $this->getAttribute(self::PERMISSIONS, []);
         return $permissions;
     }
 
@@ -226,7 +250,7 @@ class Document extends ArrayObject
     /**
      * Get roles for a specific permission type from this document's permissions.
      *
-     * @param string $type The permission type (e.g., 'read', 'create', 'update', 'delete').
+     * @param PermissionType $type The permission type.
      * @return array<string>
      */
     public function getPermissionsByType(PermissionType $type): array
@@ -234,9 +258,10 @@ class Document extends ArrayObject
         if ($this->parsedPermissions === null) {
             $this->parsedPermissions = [];
             foreach ($this->getPermissions() as $permission) {
-                foreach (['read', 'create', 'update', 'delete', 'write'] as $t) {
+                foreach (PermissionType::cases() as $permissionType) {
+                    $t = $permissionType->value;
                     if (\str_starts_with($permission, $t)) {
-                        $this->parsedPermissions[$t][] = \str_replace([$t . '(', ')', '"', ' '], '', $permission);
+                        $this->parsedPermissions[$t][] = \str_replace([$t.'(', ')', '"', ' '], '', $permission);
                         break;
                     }
                 }
@@ -256,7 +281,7 @@ class Document extends ArrayObject
     public function getCreatedAt(): ?string
     {
         /** @var string|null $createdAt */
-        $createdAt = $this->getAttribute('$createdAt');
+        $createdAt = $this->getAttribute(self::CREATED_AT);
         return $createdAt;
     }
 
@@ -268,7 +293,7 @@ class Document extends ArrayObject
     public function getUpdatedAt(): ?string
     {
         /** @var string|null $updatedAt */
-        $updatedAt = $this->getAttribute('$updatedAt');
+        $updatedAt = $this->getAttribute(self::UPDATED_AT);
         return $updatedAt;
     }
 
@@ -282,7 +307,7 @@ class Document extends ArrayObject
      */
     public function getTenant(): int|string|null
     {
-        $tenant = $this->getAttribute('$tenant');
+        $tenant = $this->getAttribute(self::TENANT);
 
         if (\is_string($tenant) && \ctype_digit($tenant)) {
             return (int) $tenant;
@@ -298,7 +323,7 @@ class Document extends ArrayObject
      */
     public function getVersion(): ?int
     {
-        $version = $this->getAttribute('$version');
+        $version = $this->getAttribute(self::VERSION);
 
         if ($version === null) {
             return null;
@@ -363,7 +388,7 @@ class Document extends ArrayObject
             };
         }
 
-        if ($key === '$permissions') {
+        if ($key === self::PERMISSIONS) {
             if (\is_array($this[$key])) {
                 $this[$key] = \array_values(\array_unique($this[$key]));
             }

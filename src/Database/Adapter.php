@@ -1025,6 +1025,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     abstract public function getInternalIndexesKeys(): array;
 
+    protected function getInternalKeyForAttribute(string $attribute): string
+    {
+        return Storage::column($attribute);
+    }
+
     /**
      * Get the physical schema attributes for a collection from the database engine.
      *

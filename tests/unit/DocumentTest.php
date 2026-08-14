@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -27,9 +28,9 @@ class DocumentTest extends TestCase
         $this->collection = uniqid();
 
         $this->document = new Document([
-            '$id' => ID::custom($this->id),
-            '$collection' => ID::custom($this->collection),
-            '$permissions' => [
+            Document::ID => ID::custom($this->id),
+            Document::COLLECTION => ID::custom($this->collection),
+            Document::PERMISSIONS => [
                 Permission::read(Role::user(ID::custom('123'))),
                 Permission::read(Role::team(ID::custom('123'))),
                 Permission::create(Role::any()),
@@ -79,6 +80,27 @@ class DocumentTest extends TestCase
     {
         $this->assertEquals($this->id, $this->document->getId());
         $this->assertEquals(null, $this->empty->getId());
+    }
+
+    public function test_non_string_id_throws(): void
+    {
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage(Document::ID.' must be of type string');
+
+        new Document([
+            Document::ID => 123,
+        ]);
+    }
+
+    public function test_id_and_collection_accessors(): void
+    {
+        $document = new Document([
+            Document::ID => 'doc-1',
+            Document::COLLECTION => 'users',
+        ]);
+
+        $this->assertSame('doc-1', $document->getId());
+        $this->assertSame('users', $document->getCollection());
     }
 
     public function test_collection(): void

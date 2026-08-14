@@ -55,7 +55,7 @@ class Database
 
     public const MAX_VECTOR_DIMENSIONS = 16000;
 
-    public const string VECTOR_DISTANCE = '$distance';
+    public const string VECTOR_DISTANCE = Document::DISTANCE;
 
     public const MAX_ARRAY_INDEX_LENGTH = 255;
 
@@ -78,7 +78,7 @@ class Database
 
     public const RELATION_QUERY_CHUNK_SIZE = 5000;
 
-    public const METADATA = '_metadata';
+    public const string METADATA = '_metadata';
 
     // Lengths
     public const LENGTH_KEY = 255;
@@ -99,8 +99,8 @@ class Database
      */
     public const INTERNAL_ATTRIBUTES = [
         [
-            '$id' => '$id',
-            'type' => 'string',
+            Document::ID => Document::ID,
+            'type' => ColumnType::String->value,
             'size' => Database::LENGTH_KEY,
             'required' => true,
             'signed' => true,
@@ -108,8 +108,8 @@ class Database
             'filters' => [],
         ],
         [
-            '$id' => '$sequence',
-            'type' => 'id',
+            Document::ID => Document::SEQUENCE,
+            'type' => ColumnType::Id->value,
             'size' => 0,
             'required' => true,
             'signed' => true,
@@ -117,8 +117,8 @@ class Database
             'filters' => [],
         ],
         [
-            '$id' => '$collection',
-            'type' => 'string',
+            Document::ID => Document::COLLECTION,
+            'type' => ColumnType::String->value,
             'size' => Database::LENGTH_KEY,
             'required' => true,
             'signed' => true,
@@ -126,8 +126,8 @@ class Database
             'filters' => [],
         ],
         [
-            '$id' => '$tenant',
-            'type' => 'id',
+            Document::ID => Document::TENANT,
+            'type' => ColumnType::Id->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -136,8 +136,8 @@ class Database
             'filters' => [],
         ],
         [
-            '$id' => '$createdAt',
-            'type' => 'datetime',
+            Document::ID => Document::CREATED_AT,
+            'type' => ColumnType::Datetime->value,
             'format' => '',
             'size' => 0,
             'signed' => false,
@@ -147,8 +147,8 @@ class Database
             'filters' => ['datetime'],
         ],
         [
-            '$id' => '$updatedAt',
-            'type' => 'datetime',
+            Document::ID => Document::UPDATED_AT,
+            'type' => ColumnType::Datetime->value,
             'format' => '',
             'size' => 0,
             'signed' => false,
@@ -158,8 +158,8 @@ class Database
             'filters' => ['datetime'],
         ],
         [
-            '$id' => '$permissions',
-            'type' => 'string',
+            Document::ID => Document::PERMISSIONS,
+            'type' => ColumnType::String->value,
             'size' => 1_000_000,
             'signed' => true,
             'required' => false,
@@ -168,8 +168,8 @@ class Database
             'filters' => ['json'],
         ],
         [
-            '$id' => '$version',
-            'type' => 'integer',
+            Document::ID => Document::VERSION,
+            'type' => ColumnType::Integer->value,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -180,20 +180,20 @@ class Database
     ];
 
     public const INTERNAL_ATTRIBUTE_KEYS = [
-        '_uid',
-        '_createdAt',
-        '_updatedAt',
-        '_permissions',
-        '_version',
+        Storage::UID,
+        Storage::CREATED_AT,
+        Storage::UPDATED_AT,
+        Storage::PERMISSIONS,
+        Storage::VERSION,
     ];
 
     public const INTERNAL_INDEXES = [
-        '_id',
-        '_uid',
-        '_createdAt',
-        '_updatedAt',
-        '_permissions_id',
-        '_permissions',
+        Storage::SEQUENCE,
+        Storage::UID,
+        Storage::CREATED_AT,
+        Storage::UPDATED_AT,
+        Storage::INDEX_PERMISSIONS_ID,
+        Storage::PERMISSIONS,
     ];
 
     /**
@@ -2170,7 +2170,7 @@ class Database
             $withTenant = self::INTERNAL_ATTRIBUTES;
             $withoutTenant = \array_values(\array_filter(
                 self::INTERNAL_ATTRIBUTES,
-                static fn (array $attribute): bool => $attribute['$id'] !== '$tenant',
+                static fn (array $attribute): bool => $attribute[Document::ID] !== Document::TENANT,
             ));
             self::$internalAttributeArrays = [
                 0 => $withoutTenant,

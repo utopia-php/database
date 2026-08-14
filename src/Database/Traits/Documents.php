@@ -2371,12 +2371,7 @@ trait Documents
     private function advanceDocumentCacheEpoch(string $collectionKey): bool
     {
         $epochKey = $collectionKey.'#epoch';
-        $existing = $this->cache->load($epochKey, self::TTL);
-
-        if ($existing !== false && $existing !== null && ! $this->cache->purge($epochKey)) {
-            throw new DatabaseException("Failed to purge document cache epoch '{$epochKey}'");
-        }
-
+        $this->cache->purge($epochKey);
         $this->cache->save($epochKey, \bin2hex(\random_bytes(16)));
 
         return true;

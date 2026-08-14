@@ -28,7 +28,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = $this->getDatabase();
         $collectionName = 'test_spatial_Col';
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -103,7 +103,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -257,7 +257,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships) || ! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -356,7 +356,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -405,7 +405,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Relationships) || ! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -511,7 +511,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Relationships) || ! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -610,7 +610,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Relationships) || ! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -709,7 +709,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -917,7 +917,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1348,7 +1348,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1480,7 +1480,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1527,7 +1527,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1839,7 +1839,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1928,7 +1928,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2026,7 +2026,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2098,7 +2098,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2261,7 +2261,7 @@ trait SpatialTests
 
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2304,7 +2304,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2342,7 +2342,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2378,7 +2378,7 @@ trait SpatialTests
     {
         /** @var Database $database */
         $database = $this->getDatabase();
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -2420,7 +2420,7 @@ trait SpatialTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Spatial)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
             $this->expectNotToPerformAssertions();
 
             return;

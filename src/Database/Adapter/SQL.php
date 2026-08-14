@@ -4169,6 +4169,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $placeholder = ID::unique();
 
         if ($query->isSpatialAttribute()) {
+            if (! ($this instanceof Feature\Spatial)) {
+                throw new QueryException('Spatial queries not supported');
+            }
+
             return $this->handleSpatialQueries($query, $binds, $attribute, $query->getAttributeType(), $alias, $placeholder);
         }
 

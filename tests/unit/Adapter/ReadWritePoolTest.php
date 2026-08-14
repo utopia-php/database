@@ -92,6 +92,7 @@ class ReadWritePoolTest extends TestCase
             'getInternalIndexesKeys',
             'supports',
             'capabilities',
+            'hasFeature',
         ];
 
         foreach ($readMethods as $method) {
@@ -319,7 +320,7 @@ class ReadWritePoolTest extends TestCase
             'getLimitForString', 'getLimitForInt', 'getLimitForBigInt',
             'getLimitForAttributes', 'getLimitForIndexes', 'getMaxIndexLength',
             'getMaxVarcharLength', 'getMaxUIDLength' => 0,
-            'exists', 'ping', 'supports' => true,
+            'exists', 'ping', 'supports', 'hasFeature' => true,
             'getConnectionId', 'getIdAttributeType' => 'string',
             'getMinDateTime' => new \DateTime(),
             'getSchemaAttributes', 'getSchemaIndexes', 'getKeywords',
@@ -359,6 +360,7 @@ class ReadWritePoolTest extends TestCase
             'getMinDateTime' => [],
             'getIdAttributeType' => [],
             'supports' => [\Utopia\Database\Capability::Index],
+            'hasFeature' => [Feature\Spatial::class],
             'getSchemaAttributes', 'getSchemaIndexes', 'getBuilder' => ['collection'],
             'rawQuery' => ['SELECT 1', []],
             'getColumnType' => ['string', 255, true, false, false],

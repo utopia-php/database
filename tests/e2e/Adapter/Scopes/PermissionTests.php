@@ -294,7 +294,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationships(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -974,7 +974,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsCountWorks(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1015,7 +1015,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsCreateThrowsException(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1042,7 +1042,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsDeleteThrowsException(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1067,7 +1067,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsCreateWorks(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1125,7 +1125,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsDeleteWorks(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1148,7 +1148,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsFindWorks(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1204,7 +1204,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsGetThrowsException(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1229,7 +1229,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsGetWorks(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1272,7 +1272,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsUpdateThrowsException(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1301,7 +1301,7 @@ trait PermissionTests
 
     public function testCollectionPermissionsRelationshipsUpdateWorks(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1475,7 +1475,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!($database->getAdapter() instanceof Feature\Relationships)) {
+        if (!($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }

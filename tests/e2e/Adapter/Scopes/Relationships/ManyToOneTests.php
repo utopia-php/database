@@ -26,7 +26,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -375,7 +375,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -863,7 +863,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -952,7 +952,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1051,7 +1051,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1142,7 +1142,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1203,7 +1203,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1272,7 +1272,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1313,7 +1313,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1356,7 +1356,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1399,7 +1399,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1442,7 +1442,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1485,7 +1485,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1566,7 +1566,7 @@ trait ManyToOneTests
         $database = $this->getDatabase();
 
         if (
-            ! ($database->getAdapter() instanceof Feature\Relationships) ||
+            ! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) ||
             ! $database->getAdapter()->supports(Capability::BatchOperations)
         ) {
             $this->expectNotToPerformAssertions();
@@ -1644,7 +1644,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1700,7 +1700,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1772,7 +1772,7 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;

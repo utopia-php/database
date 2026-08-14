@@ -81,9 +81,18 @@ final class PoolTest extends TestCase
     public function testMemoryPoolPingDoesNotRequireTimeouts(): void
     {
         $pool = $this->createPool(new Memory());
-        $pool->setTimeout(1000);
 
         $this->assertTrue($pool->ping());
+    }
+
+    public function testMemoryPoolSetTimeoutThrows(): void
+    {
+        $pool = $this->createPool(new Memory());
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Adapter does not support timeouts');
+
+        $pool->setTimeout(1000);
     }
 
     public function testMissingFeatureThrows(): void

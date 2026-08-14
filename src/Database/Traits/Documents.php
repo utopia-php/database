@@ -1503,7 +1503,7 @@ trait Documents
         ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE
     ): int {
-        if (! ($this->adapter instanceof Feature\Upserts)) {
+        if (! $this->adapter->hasFeature(Feature\Upserts::class)) {
             throw new DatabaseException('Adapter does not support upserts');
         }
 
@@ -1766,7 +1766,7 @@ trait Documents
                 Event::DocumentsUpsert,
                 $cacheTarget,
                 function () use ($collection, $attribute, $chunk): array {
-                    if (! ($this->adapter instanceof Feature\Upserts)) {
+                    if (! $this->adapter->hasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');
                     }
 
@@ -3015,7 +3015,7 @@ trait Documents
      */
     public function rawQuery(string $query, array $bindings = []): array
     {
-        if (! ($this->adapter instanceof Feature\RawQuery)) {
+        if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
 
@@ -3382,7 +3382,7 @@ trait Documents
 
     private function castingBefore(Document $collection, Document $document): Document
     {
-        if ($this->adapter instanceof Feature\InternalCasting) {
+        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingBefore($collection, $document);
         }
 
@@ -3391,7 +3391,7 @@ trait Documents
 
     private function castingAfter(Document $collection, Document $document): Document
     {
-        if ($this->adapter instanceof Feature\InternalCasting) {
+        if ($this->adapter->hasFeature(Feature\InternalCasting::class)) {
             return $this->adapter->castingAfter($collection, $document);
         }
 

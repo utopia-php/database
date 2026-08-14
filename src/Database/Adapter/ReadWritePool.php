@@ -47,6 +47,7 @@ class ReadWritePool extends Pool
         'getInternalIndexesKeys',
         'supports',
         'capabilities',
+        'hasFeature',
     ];
 
     /**

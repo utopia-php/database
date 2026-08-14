@@ -73,7 +73,7 @@ trait Attributes
 
         $existsInSchema = false;
 
-        $schemaAttributes = $this->adapter instanceof Feature\SchemaAttributes
+        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -119,7 +119,7 @@ trait Attributes
             // If it matches we can skip column creation. If not, drop the
             // orphaned column so it gets recreated with the correct type.
             $typesMatch = true;
-            $expectedColumnType = $this->adapter instanceof Feature\ColumnTypes
+            $expectedColumnType = $this->adapter->hasFeature(Feature\ColumnTypes::class)
                 ? $this->adapter->getColumnType($type->value, $size, $signed, $array, $required)
                 : '';
             if ($expectedColumnType !== '') {
@@ -216,7 +216,7 @@ trait Attributes
             throw new NotFoundException('Collection not found');
         }
 
-        $schemaAttributes = $this->adapter instanceof Feature\SchemaAttributes
+        $schemaAttributes = $this->adapter->hasFeature(Feature\SchemaAttributes::class)
             ? $this->getSchemaAttributes($collection->getId())
             : [];
 
@@ -262,7 +262,7 @@ trait Attributes
                 }
 
                 // Schema-only orphan — check type match
-                $expectedColumnType = $this->adapter instanceof Feature\ColumnTypes
+                $expectedColumnType = $this->adapter->hasFeature(Feature\ColumnTypes::class)
                     ? $this->adapter->getColumnType(
                         $attribute->type->value,
                         $attribute->size,
@@ -401,7 +401,7 @@ trait Attributes
         $existingAttributes = $collection->getAttribute('attributes', []);
         $typedExistingAttrs = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $existingAttributes);
 
-        $resolvedSchemaAttributes = $schemaAttributes ?? ($this->adapter instanceof Feature\SchemaAttributes
+        $resolvedSchemaAttributes = $schemaAttributes ?? ($this->adapter->hasFeature(Feature\SchemaAttributes::class)
             ? $this->getSchemaAttributes($collection->getId())
             : []);
         $typedSchemaAttrs = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $resolvedSchemaAttributes);
@@ -415,9 +415,9 @@ trait Attributes
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
             maxBigIntLength: $this->adapter->getLimitForBigInt(),
-            supportForSchemaAttributes: $this->adapter instanceof Feature\SchemaAttributes,
+            supportForSchemaAttributes: $this->adapter->hasFeature(Feature\SchemaAttributes::class),
             supportForVectors: $this->adapter->supports(Capability::Vectors),
-            supportForSpatialAttributes: $this->adapter instanceof Feature\Spatial,
+            supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
             supportForObject: $this->adapter->supports(Capability::Objects),
             supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
             attributeCountCallback: fn (Document $attrDoc) => $this->adapter->getCountOfAttributes($collectionClone),
@@ -537,7 +537,7 @@ trait Attributes
                 if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = ColumnType::Vector->value;
                 }
-                if ($this->adapter instanceof Feature\Spatial) {
+                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
                     \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
                 }
                 throw new DatabaseException('Unknown attribute type: '.$type->value.'. Must be one of '.implode(', ', $supportedTypes));
@@ -863,7 +863,7 @@ trait Attributes
             case ColumnType::Point->value:
             case ColumnType::Linestring->value:
             case ColumnType::Polygon->value:
-                if (! ($this->adapter instanceof Feature\Spatial)) {
+                if (! $this->adapter->hasFeature(Feature\Spatial::class)) {
                     throw new DatabaseException('Spatial attributes are not supported');
                 }
                 if (! empty($size)) {
@@ -918,7 +918,7 @@ trait Attributes
                 if ($this->adapter->supports(Capability::Vectors)) {
                     $supportedTypes[] = ColumnType::Vector->value;
                 }
-                if ($this->adapter instanceof Feature\Spatial) {
+                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
                     \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
                 }
                 throw new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes));
@@ -1049,7 +1049,7 @@ trait Attributes
                     $this->adapter->supports(Capability::IdenticalIndexes),
                     $this->adapter->supports(Capability::ObjectIndexes),
                     $this->adapter->supports(Capability::TrigramIndex),
-                    $this->adapter instanceof Feature\Spatial,
+                    $this->adapter->hasFeature(Feature\Spatial::class),
                     $this->adapter->supports(Capability::Index),
                     $this->adapter->supports(Capability::UniqueIndex),
                     $this->adapter->supports(Capability::Fulltext),
@@ -1354,7 +1354,7 @@ trait Attributes
             // partial failure where rename succeeded but metadata update failed).
             // We verified $new doesn't exist in metadata (above), so if $new
             // exists in schema, it must be from a prior rename.
-            if ($this->adapter instanceof Feature\SchemaAttributes) {
+            if ($this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
                 $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                 $filteredNew = $this->adapter->filter($new);
                 $newExistsInSchema = false;

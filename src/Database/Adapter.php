@@ -96,6 +96,18 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * @template T of object
+     *
+     * @param  class-string<T>  $feature
+     *
+     * @phpstan-assert-if-true T $this
+     */
+    public function hasFeature(string $feature): bool
+    {
+        return $this instanceof $feature;
+    }
+
+    /**
      * Get the list of capabilities this adapter supports.
      *
      * @return array<Capability>

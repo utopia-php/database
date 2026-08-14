@@ -492,7 +492,7 @@ class Database
                 if ($value === null) {
                     return null;
                 }
-                if ($this->adapter instanceof Feature\Spatial) {
+                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
                     return $this->adapter->decodePoint($value);
                 }
 
@@ -522,7 +522,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($this->adapter instanceof Feature\Spatial) {
+                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
                     return $this->adapter->decodeLinestring($value);
                 }
 
@@ -552,7 +552,7 @@ class Database
                 if (is_null($value)) {
                     return null;
                 }
-                if ($this->adapter instanceof Feature\Spatial) {
+                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
                     return $this->adapter->decodePolygon($value);
                 }
 
@@ -747,7 +747,7 @@ class Database
      */
     public function from(string $collection): \Utopia\Query\Builder
     {
-        if (! ($this->adapter instanceof Feature\QueryBuilder)) {
+        if (! $this->adapter->hasFeature(Feature\QueryBuilder::class)) {
             throw new DatabaseException('Query builder is not supported by this adapter');
         }
 
@@ -762,7 +762,7 @@ class Database
      */
     public function schema(): \Utopia\Query\Schema
     {
-        if (! ($this->adapter instanceof Feature\QueryBuilder)) {
+        if (! $this->adapter->hasFeature(Feature\QueryBuilder::class)) {
             throw new DatabaseException('Schema builder is not supported by this adapter');
         }
 
@@ -777,7 +777,7 @@ class Database
      */
     public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): array|int
     {
-        if (! ($this->adapter instanceof Feature\RawQuery)) {
+        if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
 
@@ -1007,7 +1007,7 @@ class Database
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): static
     {
-        if (! ($this->adapter instanceof Feature\Timeouts)) {
+        if (! $this->adapter->hasFeature(Feature\Timeouts::class)) {
             throw new DatabaseException('Adapter does not support timeouts');
         }
 
@@ -1021,7 +1021,7 @@ class Database
      */
     public function clearTimeout(Event $event = Event::All): void
     {
-        if (! ($this->adapter instanceof Feature\Timeouts)) {
+        if (! $this->adapter->hasFeature(Feature\Timeouts::class)) {
             throw new DatabaseException('Adapter does not support timeouts');
         }
 
@@ -1948,7 +1948,7 @@ class Database
      */
     public function getConnectionId(): string
     {
-        if (! ($this->adapter instanceof Feature\ConnectionId)) {
+        if (! $this->adapter->hasFeature(Feature\ConnectionId::class)) {
             throw new DatabaseException('Adapter does not support connection ids');
         }
 
@@ -2109,7 +2109,7 @@ class Database
                 foreach ($values as $valueIndex => $value) {
                     try {
                         /** @var string $value */
-                        $values[$valueIndex] = $this->adapter instanceof Feature\UTCCasting
+                        $values[$valueIndex] = $this->adapter->hasFeature(Feature\UTCCasting::class)
                             ? $this->adapter->setUTCDatetime($value)
                             : DateTime::setTimezone($value);
                     } catch (Throwable $e) {
@@ -2214,7 +2214,7 @@ class Database
      */
     public function getSchemaAttributes(string $collection): array
     {
-        if (! ($this->adapter instanceof Feature\SchemaAttributes)) {
+        if (! $this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
             return [];
         }
 
@@ -2229,7 +2229,7 @@ class Database
      */
     public function getSchemaIndexes(string $collection): array
     {
-        if (! ($this->adapter instanceof Feature\SchemaIndexes)) {
+        if (! $this->adapter->hasFeature(Feature\SchemaIndexes::class)) {
             return [];
         }
 

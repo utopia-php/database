@@ -97,13 +97,6 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             throw new DatabaseException($this->unsupportedFeatureMessage($feature));
         }
 
-        if (
-            ($method === 'setTimeout' || $method === 'clearTimeout')
-            && ! $adapter instanceof Feature\Timeouts
-        ) {
-            return null;
-        }
-
         if ($this->skipDuplicates) {
             return $adapter->skipDuplicates(
                 fn () => $adapter->{$method}(...$args)
@@ -130,6 +123,7 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
             Feature\UTCCasting::class => 'Adapter does not support UTC casting',
             Feature\ConnectionId::class => 'Adapter does not support connection id',
             Feature\Relationships::class => 'Adapter does not support relationships',
+            Feature\Timeouts::class => 'Adapter does not support timeouts',
             default => 'Adapter does not support '.$feature,
         };
     }
@@ -191,6 +185,17 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     }
 
     /**
+     * @param  class-string  $feature
+     */
+    public function hasFeature(string $feature): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate('hasFeature', [$feature]);
+
+        return $result;
+    }
+
+    /**
      * Register a named query transform hook on the pooled adapter.
      *
      * @param string $name The transform name
@@ -227,13 +232,13 @@ class Pool extends Adapter implements Feature\ConnectionId, Feature\InternalCast
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
         $this->setTimeoutState($milliseconds, $event);
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegateFeature(Feature\Timeouts::class, __FUNCTION__, \func_get_args());
     }
 
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->clearTimeoutState($event);
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->delegateFeature(Feature\Timeouts::class, __FUNCTION__, \func_get_args());
     }
 
     /**

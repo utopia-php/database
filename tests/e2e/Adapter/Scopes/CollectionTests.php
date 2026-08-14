@@ -324,7 +324,7 @@ trait CollectionTests
 
     public function testSchemaAttributes(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\SchemaAttributes)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\SchemaAttributes::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -433,7 +433,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\ConnectionId)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\ConnectionId::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -545,7 +545,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -582,7 +582,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
 
             return;

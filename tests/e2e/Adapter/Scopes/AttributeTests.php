@@ -299,7 +299,7 @@ trait AttributeTests
 
     public function testAttributeNamesWithDots(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Relationships)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }

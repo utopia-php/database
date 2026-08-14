@@ -105,7 +105,7 @@ trait Relationships
         int $maxAttempts = 3
     ): void {
         $adapter = $this->adapter;
-        if (! ($adapter instanceof Feature\Relationships)) {
+        if (! $adapter->hasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
 
@@ -142,7 +142,7 @@ trait Relationships
     public function createRelationship(
         Relationship $relationship
     ): bool {
-        if (! ($this->adapter instanceof Feature\Relationships)) {
+        if (! $this->adapter->hasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
 
@@ -449,7 +449,7 @@ trait Relationships
         ?bool $twoWay = null,
         ?ForeignKeyAction $onDelete = null
     ): bool {
-        if (! ($this->adapter instanceof Feature\Relationships)) {
+        if (! $this->adapter->hasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
 
@@ -532,7 +532,7 @@ trait Relationships
                 // Check if the rename already happened in schema (orphan from prior
                 // partial failure where adapter succeeded but metadata+rollback failed).
                 // If the new column names already exist, the prior rename completed.
-                if ($this->adapter instanceof Feature\SchemaAttributes) {
+                if ($this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
                     $schemaAttributes = $this->getSchemaAttributes($collection->getId());
                     $filteredNewKey = $this->adapter->filter($actualNewKey);
                     $newKeyExists = false;
@@ -744,7 +744,7 @@ trait Relationships
             }
 
             // Reverse adapter update
-            if ($adapterUpdated && $this->adapter instanceof Feature\Relationships) {
+            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
                 try {
                     $reverseRelModel2 = new Relationship(
                         collection: $collection->getId(),
@@ -789,7 +789,7 @@ trait Relationships
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
-        if (! ($this->adapter instanceof Feature\Relationships)) {
+        if (! $this->adapter->hasFeature(Feature\Relationships::class)) {
             throw new DatabaseException('Adapter does not support relationships');
         }
 

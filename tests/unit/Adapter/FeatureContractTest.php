@@ -2,13 +2,18 @@
 
 namespace Tests\Unit\Adapter;
 
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Pools\Pool as UtopiaPool;
 
 final class FeatureContractTest extends TestCase
 {
@@ -39,6 +44,31 @@ final class FeatureContractTest extends TestCase
 
         $this->assertSame(true, $adapter instanceof Feature\Relationships);
         $this->assertSame(false, $adapter instanceof Feature\Upserts);
+    }
+
+    public function testMemoryHasFeatureReportsRelationshipsButNotSpatial(): void
+    {
+        $adapter = $this->instance(new Memory());
+
+        $this->assertSame(false, $adapter->hasFeature(Feature\Spatial::class));
+        $this->assertSame(true, $adapter->hasFeature(Feature\Relationships::class));
+    }
+
+    public function testMemoryPoolHasFeatureDelegatesToInnerAdapter(): void
+    {
+        $adapter = new Memory();
+
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($adapter),
+        );
+
+        $pool = new Pool($connections);
+        $pool->setAuthorization(new Authorization());
+
+        $this->assertSame(false, $pool->hasFeature(Feature\Spatial::class));
+        $this->assertSame(true, $pool->hasFeature(Feature\Relationships::class));
     }
 
     public function testRedisAdvertisesUpsertsConnectionIdAndRelationships(): void
@@ -115,7 +145,7 @@ final class FeatureContractTest extends TestCase
         return $implements === false ? [] : $implements;
     }
 
-    private function instance(object $adapter): object
+    private function instance(Adapter $adapter): Adapter
     {
         return $adapter;
     }

@@ -33,7 +33,7 @@ trait GeneralTests
      */
     public function testQueryTimeout(): void
     {
-        if (! ($this->getDatabase()->getAdapter() instanceof Feature\Timeouts)) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Timeouts::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -222,7 +222,7 @@ trait GeneralTests
         $this->assertEquals(1, \count($docs));
         $this->assertEquals($doc1Id, $docs[0]->getId());
 
-        if ($database->getAdapter() instanceof Feature\Upserts) {
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
             // Test upsert with tenant per doc
             $doc3Id = ID::unique();
             $database

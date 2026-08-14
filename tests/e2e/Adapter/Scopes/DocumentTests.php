@@ -1050,7 +1050,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Upserts)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1289,7 +1289,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Upserts)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1362,7 +1362,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Upserts)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1450,7 +1450,7 @@ trait DocumentTests
     public function testUpsertMixedPermissionDelta(): void
     {
         $db = $this->getDatabase();
-        if (! ($db->getAdapter() instanceof Feature\Upserts)) {
+        if (! ($db->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3139,7 +3139,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Upserts)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -3407,7 +3407,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (! ($database->getAdapter() instanceof Feature\Upserts)) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -4380,7 +4380,7 @@ trait DocumentTests
     //            '(.*)+b',      // Generic nested quantifiers
     //        ];
     //
-    //        $supportsTimeout = ($database->getAdapter() instanceof Feature\Timeouts);
+    //        $supportsTimeout = ($database->getAdapter()->hasFeature(Feature\Timeouts::class));
     //
     //        if ($supportsTimeout) {
     //            $database->setTimeout(2000);
@@ -4598,7 +4598,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!($database->getAdapter() instanceof Feature\Upserts)) {
+        if (!($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4666,7 +4666,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!($database->getAdapter() instanceof Feature\Upserts)) {
+        if (!($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4780,7 +4780,7 @@ trait DocumentTests
 
     public function testUpsertDocumentsNoop(): void
     {
-        if (!($this->getDatabase()->getAdapter() instanceof Feature\Upserts)) {
+        if (!($this->getDatabase()->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4810,7 +4810,7 @@ trait DocumentTests
     public function testUpsertDuplicateIds(): void
     {
         $db = $this->getDatabase();
-        if (!($db->getAdapter() instanceof Feature\Upserts)) {
+        if (!($db->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -4834,7 +4834,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!($database->getAdapter() instanceof Feature\Upserts)) {
+        if (!($database->getAdapter()->hasFeature(Feature\Upserts::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -8198,7 +8198,7 @@ trait DocumentTests
         }
 
         // 4) upsertDocumentsWithIncrease with null required should fail when validation enabled, pass when disabled
-        if ($database->getAdapter() instanceof Feature\Upserts) {
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
             try {
                 $database->upsertDocumentsWithIncrease(
                     collection: $collection,

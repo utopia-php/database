@@ -8,7 +8,6 @@ use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -190,16 +189,6 @@ class Memory extends Adapter implements Feature\Relationships
         }
 
         return null;
-    }
-
-    public function setTimeout(int $milliseconds, Event $event = Event::All): void
-    {
-        // No-op: nothing to time out in-memory
-    }
-
-    public function clearTimeout(Event $event = Event::All): void
-    {
-        // No-op
     }
 
     public function ping(): bool
@@ -1608,11 +1597,6 @@ class Memory extends Adapter implements Feature\Relationships
         return \count($prepared);
     }
 
-    public function upsertDocuments(Document $collection, string $attribute, array $changes): array
-    {
-        throw new DatabaseException('Upsert is not implemented in the Memory adapter');
-    }
-
     public function getSequences(string $collection, array $documents): array
     {
         $key = $this->key($collection);
@@ -1946,210 +1930,11 @@ class Memory extends Adapter implements Feature\Relationships
         return ColumnType::Integer->value;
     }
 
-    public function getSupportForSchemas(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForAttributes(): bool
-    {
-        return $this->supportForAttributes;
-    }
-
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;
 
         return $this->supportForAttributes;
-    }
-
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForIndexArray(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCastIndexArray(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUniqueIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForFulltextIndex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCasting(): bool
-    {
-        // Memory stores native PHP types where possible but JSON-encodes array
-        // attributes on write. Returning true asks the Database layer's
-        // `casting` step to JSON-decode array columns and coerce scalar types
-        // — same behaviour as the SQL adapters.
-        return true;
-    }
-
-    public function getSupportForQueryContains(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForTimeouts(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForRelationships(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForUpdateLock(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBatchOperations(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForAttributeResizing(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForGetConnectionId(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpserts(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUpsertOnUniqueIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForVectors(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCacheSkipOnFailure(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForCaching(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForReconnection(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForHostname(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBatchCreateAttributes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSpatialAttributes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForObject(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForObjectIndexes(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForOperators(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForMultipleFulltextIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForIdenticalIndexes(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForOrderRandom(): bool
-    {
-        return true;
     }
 
     public function getCountOfAttributes(Document $collection): int
@@ -2196,22 +1981,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $selections;
     }
 
-    public function getConnectionId(): string
-    {
-        return '0';
-    }
-
     public function getInternalIndexesKeys(): array
-    {
-        return [];
-    }
-
-    public function getSchemaAttributes(string $collection): array
-    {
-        return [];
-    }
-
-    public function getSchemaIndexes(string $collection): array
     {
         return [];
     }
@@ -2231,31 +2001,6 @@ class Memory extends Adapter implements Feature\Relationships
         return '"'.$string.'"';
     }
 
-    public function decodePoint(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Memory adapter');
-    }
-
-    public function decodeLinestring(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Memory adapter');
-    }
-
-    public function decodePolygon(string $wkb): array
-    {
-        throw new DatabaseException('Spatial types are not implemented in the Memory adapter');
-    }
-
-    public function castingBefore(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
-    public function castingAfter(Document $collection, Document $document): Document
-    {
-        return $document;
-    }
-
     /**
      * Get max BIGINT limit
      *
@@ -2266,31 +2011,6 @@ class Memory extends Adapter implements Feature\Relationships
         return Database::MAX_BIG_INT;
     }
 
-    public function getSupportForInternalCasting(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForUTCCasting(): bool
-    {
-        return false;
-    }
-
-    public function setUTCDatetime(string $value): mixed
-    {
-        return $value;
-    }
-
-    public function getSupportForIntegerBooleans(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForAlterLocks(): bool
-    {
-        return false;
-    }
-
     public function getSupportNonUtfCharacters(): bool
     {
         // Memory is a pass-through PHP array, so it does NOT actively reject
@@ -2298,35 +2018,6 @@ class Memory extends Adapter implements Feature\Relationships
         // non-UTF-character scope test that asserts adapter rejection.
         return false;
     }
-
-    public function getSupportForTrigramIndex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForPCRERegex(): bool
-    {
-        return true;
-    }
-
-    public function getSupportForPOSIXRegex(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForTransactionRetries(): bool
-    {
-        return false;
-    }
-
-    public function getSupportForNestedTransactions(): bool
-    {
-        return true;
-    }
-
-    // -----------------------------------------------------------------
-    // Internal helpers
-    // -----------------------------------------------------------------
 
     /**
      * @return array<string, mixed>

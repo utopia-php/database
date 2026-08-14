@@ -11,7 +11,6 @@ use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
-use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
@@ -102,14 +101,6 @@ class Redis extends Adapter implements
             Capability::PCRE,
             Capability::Regex,
         ]);
-    }
-
-    public function setTimeout(int $milliseconds, Event $event = Event::All): void
-    {
-    }
-
-    public function clearTimeout(Event $event = Event::All): void
-    {
     }
 
     public function ping(): bool

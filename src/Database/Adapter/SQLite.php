@@ -1363,11 +1363,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return $document;
     }
 
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return true;
-    }
-
     /**
      * Get list of keywords that cannot be used
      *  Refference: https://www.sqlite.org/lang_keywords.html

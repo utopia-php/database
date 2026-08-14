@@ -1876,11 +1876,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         ];
     }
 
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return false;
-    }
-
     protected function processException(PDOException $e): Exception
     {
         // Timeout

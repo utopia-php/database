@@ -1523,11 +1523,6 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         ];
     }
 
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return true;
-    }
-
     public function getSchemaIndexes(string $collection): array
     {
         $schema = $this->getDatabase();

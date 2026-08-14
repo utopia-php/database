@@ -2952,11 +2952,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return ['$in' => $values];
     }
 
-    public function getSupportForCaching(): bool
-    {
-        return true;
-    }
-
     /**
      * Returns the document after casting to
      *

@@ -653,7 +653,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             foreach ($attributes as $attr => $value) {
                 $column = $this->filter($attr);
 
-                if (isset($spatialMap[$attr])) {
+                if (isset($spatialMap[$attr]) || $this->isSpatialWkt($value)) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
@@ -759,7 +759,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                         $opResult = $this->getOperatorBuilderExpression($column, $op);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
-                } elseif (isset($spatialMap[$attribute])) {
+                } elseif (isset($spatialMap[$attribute]) || $this->isSpatialWkt($value)) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }

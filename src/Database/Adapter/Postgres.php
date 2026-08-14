@@ -765,11 +765,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             foreach ($attributes as $attr => $value) {
                 $column = $this->filter($attr);
 
-                if (isset($spatialMap[$attr])) {
+                if (isset($spatialMap[$attr]) || $this->isSpatialWkt($value)) {
                     if (\is_array($value)) {
                         $value = $this->convertArrayToWKT($value);
                     }
                     $row[$column] = $value;
+                    $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
                 } else {
                     if (\is_array($value)) {
                         $value = \json_encode($value);

@@ -856,7 +856,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            if (isset($spatialMap[$attribute])) {
+            if (isset($spatialMap[$attribute]) || $this->isSpatialWkt($value)) {
                 if (\is_array($value)) {
                     $value = $this->convertArrayToWKT($value);
                 }
@@ -2877,6 +2877,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
+    protected function isSpatialWkt(mixed $value): bool
+    {
+        return \is_string($value) && \preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value) === 1;
+    }
+
     protected function convertArrayToWKT(array $geometry): string
     {
         // point [x, y]

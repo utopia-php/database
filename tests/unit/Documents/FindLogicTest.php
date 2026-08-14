@@ -545,6 +545,43 @@ class FindLogicTest extends TestCase
         $this->database->skipValidation(fn () => $this->database->find('testCol', [Query::distinct()]));
     }
 
+    public function testFindDistinctDoesNotAppendSequenceOrder(): void
+    {
+        $this->setupCollectionLookup('testCol');
+        $this->adapter->expects($this->once())
+            ->method('find')
+            ->with(
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->callback(function ($orderAttributes) {
+                    return ! \in_array(Document::SEQUENCE, $orderAttributes, true);
+                }),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything()
+            )
+            ->willReturn([]);
+
+        $this->database->skipValidation(fn () => $this->database->find('testCol', [
+            Query::distinct(),
+        ]));
+    }
+
+    public function testFindKeepsAuthorizationWhenDocumentSecurityIsEnabled(): void
+    {
+        $this->setupCollectionLookup('testCol');
+        $this->adapter->method('find')->willReturnCallback(function () {
+            $this->assertTrue($this->database->getAuthorization()->getStatus());
+
+            return [];
+        });
+
+        $this->database->skipValidation(fn () => $this->database->find('testCol'));
+    }
+
     public function testFindWithSelectFiltersResults(): void
     {
         $attributes = [

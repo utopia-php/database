@@ -37,6 +37,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
@@ -64,19 +65,6 @@ use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
 abstract class SQL extends Adapter
 {
     protected object $pdo;
-
-    private const array COLUMN_RENAME_MAP = [
-        '_uid' => '$id',
-        '_id' => '$sequence',
-        '_tenant' => '$tenant',
-        '_createdAt' => '$createdAt',
-        '_updatedAt' => '$updatedAt',
-        '_version' => '$version',
-    ];
-
-    private const string VECTOR_DISTANCE_ATTRIBUTE = '$distance';
-
-    private const string VECTOR_DISTANCE_COLUMN = '_distance';
 
     /**
      * Controls how many fractional digits are used when binding float parameters.
@@ -634,7 +622,7 @@ abstract class SQL extends Adapter
         ) {
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
-            $uidQuoted = $this->quote('_uid');
+            $uidQuoted = $this->quote(Storage::UID);
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = :_uid";
             $stmt = null;
             $row = false;
@@ -677,7 +665,7 @@ abstract class SQL extends Adapter
             $builder->select($this->mapSelectionsToColumns($selections));
         }
 
-        $builder->filter([BaseQuery::equal('_uid', [$id])]);
+        $builder->filter([BaseQuery::equal(Storage::UID, [$id])]);
 
         if ($forUpdate && $this->supports(Capability::UpdateLock)) {
             $builder->forUpdate();
@@ -765,7 +753,7 @@ abstract class SQL extends Adapter
             $attributeKeys = \array_keys($attributeKeySet);
 
             if ($hasSequence) {
-                $attributeKeys[] = '_id';
+                $attributeKeys[] = Storage::SEQUENCE;
             }
 
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
@@ -831,15 +819,15 @@ abstract class SQL extends Adapter
         $attributes = $updates->getAttributes();
 
         if (! empty($updates->getUpdatedAt())) {
-            $attributes['_updatedAt'] = $updates->getUpdatedAt();
+            $attributes[Storage::UPDATED_AT] = $updates->getUpdatedAt();
         }
 
         if (! empty($updates->getCreatedAt())) {
-            $attributes['_createdAt'] = $updates->getCreatedAt();
+            $attributes[Storage::CREATED_AT] = $updates->getCreatedAt();
         }
 
-        if ($updates->offsetExists('$permissions')) {
-            $attributes['_permissions'] = json_encode($updates->getPermissions());
+        if ($updates->offsetExists(Document::PERMISSIONS)) {
+            $attributes[Storage::PERMISSIONS] = json_encode($updates->getPermissions());
         }
 
         if (empty($attributes)) {
@@ -906,11 +894,11 @@ abstract class SQL extends Adapter
             $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
         }
 
-        $builder->setRaw('_version', $this->quote('_version') . ' + 1', []);
+        $builder->setRaw(Storage::VERSION, $this->quote(Storage::VERSION) . ' + 1', []);
 
         // WHERE _id IN (sequence values)
         $sequences = \array_map(fn ($document) => $document->getSequence(), $documents);
-        $builder->filter([BaseQuery::equal('_id', \array_values($sequences))]);
+        $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
 
         $result = $builder->update();
         $stmt = $this->executeResult($result, Event::DocumentsUpdate);
@@ -952,7 +940,7 @@ abstract class SQL extends Adapter
             $collAttrs = $collection->getAttribute('attributes', []);
             foreach ($collAttrs as $attr) {
                 /** @var array<string, mixed> $attr */
-                $attrIdRaw = $attr['$id'] ?? '';
+                $attrIdRaw = $attr[Document::ID] ?? '';
                 $attrId = \is_scalar($attrIdRaw) ? (string) $attrIdRaw : '';
                 $attributeDefaults[$attrId] = $attr['default'] ?? null;
             }
@@ -1044,7 +1032,7 @@ abstract class SQL extends Adapter
 
             // Delete documents
             $builder = $this->newBuilder($name);
-            $builder->filter([BaseQuery::equal('_id', \array_values($sequences))]);
+            $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
             $result = $builder->delete();
             $stmt = $this->executeResult($result, Event::DocumentsDelete);
 
@@ -1084,8 +1072,8 @@ abstract class SQL extends Adapter
         }
 
         $builder = $this->newBuilder($collection);
-        $builder->select(['_uid', '_id']);
-        $builder->filter([BaseQuery::equal('_uid', $documentIds)]);
+        $builder->select([Storage::UID, Storage::SEQUENCE]);
+        $builder->filter([BaseQuery::equal(Storage::UID, $documentIds)]);
 
         $result = $builder->build();
         $stmt = $this->executeResult($result, Event::DocumentRead);
@@ -1096,7 +1084,7 @@ abstract class SQL extends Adapter
 
         foreach ($documents as $document) {
             if (isset($sequences[$document->getId()])) {
-                $document['$sequence'] = $sequences[$document->getId()];
+                $document[Document::SEQUENCE] = $sequences[$document->getId()];
             }
         }
 
@@ -1117,9 +1105,9 @@ abstract class SQL extends Adapter
 
         $builder = $this->newBuilder($name);
         $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
-        $builder->set(['_updatedAt' => $updatedAt]);
+        $builder->set([Storage::UPDATED_AT => $updatedAt]);
 
-        $filters = [BaseQuery::equal('_uid', [$id])];
+        $filters = [BaseQuery::equal(Storage::UID, [$id])];
         if ($max !== null) {
             $filters[] = BaseQuery::lessThanEqual($attribute, $max);
         }
@@ -1149,7 +1137,7 @@ abstract class SQL extends Adapter
             $name = $this->filter($collection);
 
             $builder = $this->newBuilder($name);
-            $builder->filter([BaseQuery::equal('_uid', [$id])]);
+            $builder->filter([BaseQuery::equal(Storage::UID, [$id])]);
             $result = $builder->delete();
             $stmt = $this->executeResult($result, Event::DocumentDelete);
 
@@ -1200,11 +1188,11 @@ abstract class SQL extends Adapter
             && ! $this->authorization->getStatus()
             && ! ($this->sharedTables && $this->tenant !== null)
             && (count($orderAttributes) === 1)
-            && ($orderAttributes[0] === '$sequence')
+            && ($orderAttributes[0] === Document::SEQUENCE)
             && (empty($orderTypes) || ($orderTypes[0] ?? OrderDirection::Asc) === OrderDirection::Asc)
             && $cursorDirection === CursorDirection::After
         ) {
-            $internalOrder = $this->quote($this->getInternalKeyForAttribute('$sequence'));
+            $internalOrder = $this->quote($this->getInternalKeyForAttribute(Document::SEQUENCE));
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
             $limitClause = $limit !== null ? " LIMIT {$limit}" : '';
@@ -1398,7 +1386,7 @@ abstract class SQL extends Adapter
 
         // Permission subquery for primary table
         if ($this->authorization->getStatus()) {
-            $docCol = $hasJoins ? $alias . '._uid' : '_uid';
+            $docCol = $hasJoins ? $alias . '.' . Storage::UID : Storage::UID;
             $builder->addHook($this->newPermissionHook($name, $roles, $forPermission->value, $docCol));
 
             // Permission subquery for each joined table
@@ -1407,7 +1395,7 @@ abstract class SQL extends Adapter
                     $this->filter($joinTable),
                     $roles,
                     $forPermission->value,
-                    $joinAlias . '._uid'
+                    $joinAlias . '.' . Storage::UID
                 ));
             }
         }
@@ -1435,7 +1423,7 @@ abstract class SQL extends Adapter
 
         // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
         if (! empty($cursor) && $vectorDistance !== null) {
-            $distance = $cursor[self::VECTOR_DISTANCE_ATTRIBUTE] ?? null;
+            $distance = $cursor[Document::DISTANCE] ?? null;
             if (! \is_numeric($distance)) {
                 throw new QueryException('Vector cursor is missing its distance');
             }
@@ -1476,7 +1464,7 @@ abstract class SQL extends Adapter
                 $internalAttr = $resolveInternalKey($originalAttribute);
 
                 // Special case: single attribute on unique primary key
-                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === '$sequence') {
+                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === Document::SEQUENCE) {
                     /** @var bool|float|int|string $cursorVal */
                     $cursorVal = $cursor[$originalAttribute];
                     if ($direction === OrderDirection::Desc) {
@@ -1536,7 +1524,7 @@ abstract class SQL extends Adapter
                 $builder->select(['*']);
             }
             $builder->selectRaw(
-                $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(self::VECTOR_DISTANCE_COLUMN),
+                $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
                 $vectorDistance['bindings']
             );
         }
@@ -1545,15 +1533,15 @@ abstract class SQL extends Adapter
         //
         // Skip the second MATCH compilation (and its ORDER BY) when the caller
         // already asked for an explicit order. The Documents trait auto-appends
-        // '$sequence' as a tiebreaker, so a `$orderAttributes === ['$sequence']`
+        // the sequence attribute as a tiebreaker, so a single sequence-only
         // signal — with no entries before it — means "caller did not specify
         // an order" and is the only case where we should auto-order by
         // relevance. Anything else (multiple entries, or a leading attribute
-        // other than $sequence) means the caller has an explicit order and
+        // other than sequence) means the caller has an explicit order and
         // relevance ordering would silently override it.
         $shouldAutoOrderByRelevance = (
             count($orderAttributes) === 0
-            || (count($orderAttributes) === 1 && $orderAttributes[0] === '$sequence')
+            || (count($orderAttributes) === 1 && $orderAttributes[0] === Document::SEQUENCE)
         );
 
         if (! empty($searchQueries) && $shouldAutoOrderByRelevance) {
@@ -2447,7 +2435,7 @@ abstract class SQL extends Adapter
      */
     public function getInternalIndexesKeys(): array
     {
-        return ['primary', '_created_at', '_updated_at', '_tenant_id'];
+        return [Storage::INDEX_PRIMARY, Storage::INDEX_CREATED_AT, Storage::INDEX_UPDATED_AT, Storage::INDEX_TENANT_ID];
     }
 
     /**
@@ -2497,7 +2485,7 @@ abstract class SQL extends Adapter
 
         $schema = $this->createSchemaBuilder();
         $mainResult = $schema->table($this->getSQLTableRaw($id))->drop();
-        $permsResult = $schema->table($this->getSQLTableRaw($id . '_perms'))->drop();
+        $permsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->drop();
 
         $sql = $mainResult->query . '; ' . $permsResult->query;
 
@@ -2616,7 +2604,7 @@ abstract class SQL extends Adapter
                 }
                 break;
             case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $metadataCollection = new Document([Document::ID => Database::METADATA]);
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
@@ -2697,7 +2685,7 @@ abstract class SQL extends Adapter
                 }
                 break;
             case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $metadataCollection = new Document([Document::ID => Database::METADATA]);
                 $collection = $this->getDocument($metadataCollection, $collection);
                 $relatedCollection = $this->getDocument($metadataCollection, $relatedCollection);
 
@@ -2706,7 +2694,7 @@ abstract class SQL extends Adapter
                     : '_' . $relatedCollection->getSequence() . '_' . $collection->getSequence();
 
                 $junctionResult = $schema->table($this->getSQLTableRaw($junctionName))->drop();
-                $permsResult = $schema->table($this->getSQLTableRaw($junctionName . '_perms'))->drop();
+                $permsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($junctionName)))->drop();
 
                 $sql = $junctionResult->query . '; ' . $permsResult->query;
                 break;
@@ -3198,16 +3186,7 @@ abstract class SQL extends Adapter
 
         // AttributeMap is a readonly stateless config object — share one
         // instance across builders to avoid allocating it on every read.
-        $this->attributeMap ??= new AttributeMap([
-            '$id' => '_uid',
-            '$sequence' => '_id',
-            '$collection' => '_collection',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            '$deletedAt' => '_deletedAt',
-            '$permissions' => '_permissions',
-        ]);
+        $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
         $builder->addHook($this->attributeMap);
         if ($this->sharedTables && $this->tenant !== null) {
             $builder->addHook(new TenantFilter($this->tenant, Database::METADATA, $table));
@@ -3252,16 +3231,16 @@ abstract class SQL extends Adapter
     /**
      * @param  array<string>  $roles
      */
-    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = '_uid'): PermissionFilter
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): PermissionFilter
     {
         return new PermissionFilter(
             roles: \array_values($roles),
-            permissionsTable: fn (string $table) => $this->getSQLTableRaw($collection.'_perms'),
+            permissionsTable: fn (string $table) => $this->getSQLTableRaw(Storage::permissionsTable($collection)),
             type: $type,
             documentColumn: $documentColumn,
-            permDocumentColumn: '_document',
-            permRoleColumn: '_permission',
-            permTypeColumn: '_type',
+            permDocumentColumn: Storage::PERM_DOCUMENT,
+            permRoleColumn: Storage::PERM_PERMISSION,
+            permTypeColumn: Storage::PERM_TYPE,
             subqueryFilter: $this->hasTenantHook() ? new TenantFilter($this->getTenantHook()->getTenant()) : null,
             quoteChar: $this->getIdentifierQuoteChar(),
         );
@@ -3455,29 +3434,29 @@ abstract class SQL extends Adapter
                     }
                 }
 
-                $currentRegularAttributes['_uid'] = $document->getId();
-                $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
-                $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
+                $currentRegularAttributes[Storage::UID] = $document->getId();
+                $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? $document->getCreatedAt() : null;
+                $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? $document->getUpdatedAt() : null;
             } else {
                 $currentRegularAttributes = $document->getAttributes();
-                $currentRegularAttributes['_uid'] = $document->getId();
-                $currentRegularAttributes['_createdAt'] = $document->getCreatedAt() ? DateTime::setTimezone($document->getCreatedAt()) : null;
-                $currentRegularAttributes['_updatedAt'] = $document->getUpdatedAt() ? DateTime::setTimezone($document->getUpdatedAt()) : null;
+                $currentRegularAttributes[Storage::UID] = $document->getId();
+                $currentRegularAttributes[Storage::CREATED_AT] = $document->getCreatedAt() ? DateTime::setTimezone($document->getCreatedAt()) : null;
+                $currentRegularAttributes[Storage::UPDATED_AT] = $document->getUpdatedAt() ? DateTime::setTimezone($document->getUpdatedAt()) : null;
             }
 
-            $currentRegularAttributes['_permissions'] = \json_encode($document->getPermissions());
+            $currentRegularAttributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
-                $currentRegularAttributes['_version'] = $version;
+                $currentRegularAttributes[Storage::VERSION] = $version;
             }
 
             if (! empty($document->getSequence())) {
-                $currentRegularAttributes['_id'] = $document->getSequence();
+                $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();
             }
 
             if ($this->sharedTables) {
-                $currentRegularAttributes['_tenant'] = $document->getTenant();
+                $currentRegularAttributes[Storage::TENANT] = $document->getTenant();
             }
 
             foreach (\array_keys($currentRegularAttributes) as $colName) {
@@ -3517,14 +3496,14 @@ abstract class SQL extends Adapter
         }
 
         // Determine conflict keys
-        $conflictKeys = $this->sharedTables ? ['_uid', '_tenant'] : ['_uid'];
+        $conflictKeys = $this->sharedTables ? [Storage::UID, Storage::TENANT] : [Storage::UID];
 
         // Determine which columns to update on conflict
-        $skipColumns = ['_uid', '_id', '_createdAt', '_tenant'];
+        $skipColumns = [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::TENANT];
 
         if (! empty($attribute)) {
             // Increment mode: only update the increment column and _updatedAt
-            $updateColumns = [$this->filter($attribute), '_updatedAt'];
+            $updateColumns = [$this->filter($attribute), Storage::UPDATED_AT];
         } else {
             // Normal mode: update all columns except the skip set
             $updateColumns = \array_values(\array_filter(
@@ -3543,7 +3522,7 @@ abstract class SQL extends Adapter
             $filteredAttr = $this->filter($attribute);
             if ($this->sharedTables) {
                 $builder->conflictSetRaw($filteredAttr, $this->getConflictTenantIncrementExpression($filteredAttr));
-                $builder->conflictSetRaw('_updatedAt', $this->getConflictTenantExpression('_updatedAt'));
+                $builder->conflictSetRaw(Storage::UPDATED_AT, $this->getConflictTenantExpression(Storage::UPDATED_AT));
             } else {
                 $builder->conflictSetRaw($filteredAttr, $this->getConflictIncrementExpression($filteredAttr));
             }
@@ -3591,14 +3570,14 @@ abstract class SQL extends Adapter
     protected function mapSelectionsToColumns(array $selections): array
     {
         $internalKeys = [
-            '$id',
-            '$sequence',
-            '$permissions',
-            '$createdAt',
-            '$updatedAt',
+            Document::ID,
+            Document::SEQUENCE,
+            Document::PERMISSIONS,
+            Document::CREATED_AT,
+            Document::UPDATED_AT,
         ];
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+        $selections = \array_diff($selections, [...$internalKeys, Document::COLLECTION]);
 
         foreach ($internalKeys as $internalKey) {
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
@@ -3712,20 +3691,23 @@ abstract class SQL extends Adapter
      */
     private function remapRow(array &$row): void
     {
-        foreach (self::COLUMN_RENAME_MAP as $internal => $public) {
+        foreach (Storage::columnMap() as $internal => $public) {
+            if ($internal === Storage::PERMISSIONS || $internal === Storage::DISTANCE) {
+                continue;
+            }
             if (\array_key_exists($internal, $row)) {
                 $row[$public] = $row[$internal];
                 unset($row[$internal]);
             }
         }
-        if (\array_key_exists('_permissions', $row)) {
-            $row['$permissions'] = \json_decode(\is_string($row['_permissions']) ? $row['_permissions'] : '[]', true);
-            unset($row['_permissions']);
+        if (\array_key_exists(Storage::PERMISSIONS, $row)) {
+            $row[Document::PERMISSIONS] = \json_decode(\is_string($row[Storage::PERMISSIONS]) ? $row[Storage::PERMISSIONS] : '[]', true);
+            unset($row[Storage::PERMISSIONS]);
         }
-        if (\array_key_exists(self::VECTOR_DISTANCE_COLUMN, $row)) {
-            $distance = $row[self::VECTOR_DISTANCE_COLUMN];
-            $row[self::VECTOR_DISTANCE_ATTRIBUTE] = \is_numeric($distance) ? (float) $distance : null;
-            unset($row[self::VECTOR_DISTANCE_COLUMN]);
+        if (\array_key_exists(Storage::DISTANCE, $row)) {
+            $distance = $row[Storage::DISTANCE];
+            $row[Document::DISTANCE] = \is_numeric($distance) ? (float) $distance : null;
+            unset($row[Storage::DISTANCE]);
         }
     }
 
@@ -3746,19 +3728,19 @@ abstract class SQL extends Adapter
     {
         $attributes = $document->getAttributes();
         $row = [
-            '_uid' => $document->getId(),
-            '_createdAt' => $document->getCreatedAt(),
-            '_updatedAt' => $document->getUpdatedAt(),
-            '_permissions' => \json_encode($document->getPermissions()),
+            Storage::UID => $document->getId(),
+            Storage::CREATED_AT => $document->getCreatedAt(),
+            Storage::UPDATED_AT => $document->getUpdatedAt(),
+            Storage::PERMISSIONS => \json_encode($document->getPermissions()),
         ];
 
         $version = $document->getVersion();
         if ($version !== null) {
-            $row['_version'] = $version;
+            $row[Storage::VERSION] = $version;
         }
 
         if (! empty($document->getSequence())) {
-            $row['_id'] = $document->getSequence();
+            $row[Storage::SEQUENCE] = $document->getSequence();
         }
 
         $intBools ??= $this->supports(Capability::IntegerBooleans);
@@ -4728,12 +4710,13 @@ abstract class SQL extends Adapter
         }
         $bindings = \implode(',', $bindings);
 
+        $tenant = Storage::TENANT;
         $orIsNull = '';
         if ($collection === Database::METADATA) {
-            $orIsNull = " OR {$alias}{$dot}_tenant IS NULL";
+            $orIsNull = " OR {$alias}{$dot}{$tenant} IS NULL";
         }
 
-        return "{$condition} ({$alias}{$dot}_tenant IN ({$bindings}) {$orIsNull})";
+        return "{$condition} ({$alias}{$dot}{$tenant} IN ({$bindings}) {$orIsNull})";
     }
 
     /**
@@ -4751,14 +4734,14 @@ abstract class SQL extends Adapter
 
         // Handle specific selections with spatial conversion where needed
         $internalKeys = [
-            '$id',
-            '$sequence',
-            '$permissions',
-            '$createdAt',
-            '$updatedAt',
+            Document::ID,
+            Document::SEQUENCE,
+            Document::PERMISSIONS,
+            Document::CREATED_AT,
+            Document::UPDATED_AT,
         ];
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+        $selections = \array_diff($selections, [...$internalKeys, Document::COLLECTION]);
 
         foreach ($internalKeys as $internalKey) {
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
@@ -4772,21 +4755,6 @@ abstract class SQL extends Adapter
         }
 
         return \implode(',', $projections);
-    }
-
-    protected function getInternalKeyForAttribute(string $attribute): string
-    {
-        return match ($attribute) {
-            '$id' => '_uid',
-            '$sequence' => '_id',
-            '$collection' => '_collection',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            '$permissions' => '_permissions',
-            '$version' => '_version',
-            default => $attribute
-        };
     }
 
     protected function escapeWildcards(string $value): string

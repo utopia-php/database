@@ -12,6 +12,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 
 final class SQLGetDocumentTest extends TestCase
 {
@@ -24,7 +25,7 @@ final class SQLGetDocumentTest extends TestCase
             ->getMock();
         $statement->expects($this->once())
             ->method('bindValue')
-            ->with(':_uid', 'document', \PDO::PARAM_STR)
+            ->with(':'.Storage::UID, 'document', \PDO::PARAM_STR)
             ->willReturn(true);
         $statement->expects($this->once())
             ->method('execute')
@@ -47,7 +48,7 @@ final class SQLGetDocumentTest extends TestCase
             ->getMock();
         $statement->expects($this->once())
             ->method('bindValue')
-            ->with(':_uid', 'document', \PDO::PARAM_STR)
+            ->with(':'.Storage::UID, 'document', \PDO::PARAM_STR)
             ->willReturn(true);
         $statement->expects($this->once())
             ->method('execute')
@@ -69,7 +70,7 @@ final class SQLGetDocumentTest extends TestCase
             ->getMock();
         $statement->expects($this->once())
             ->method('bindValue')
-            ->with(':_uid', 'document', \PDO::PARAM_STR)
+            ->with(':'.Storage::UID, 'document', \PDO::PARAM_STR)
             ->willReturn(true);
         $statement->expects($this->once())
             ->method('execute')
@@ -102,7 +103,7 @@ final class SQLGetDocumentTest extends TestCase
         $adapter->setTimeout(25);
 
         $document = $adapter->getDocument(
-            new Document(['$id' => 'collection']),
+            new Document([Document::ID => 'collection']),
             'document'
         );
 
@@ -140,7 +141,7 @@ final class SQLGetDocumentTest extends TestCase
 
         try {
             $adapter->getDocument(
-                new Document(['$id' => 'collection']),
+                new Document([Document::ID => 'collection']),
                 'document',
                 [Query::select(['title'])]
             );
@@ -190,7 +191,7 @@ final class SQLGetDocumentTest extends TestCase
         $adapter->setDatabase('database');
         $adapter->setNamespace('namespace');
         $adapter->addTransform('test', $transform);
-        $collection = new Document(['$id' => 'collection']);
+        $collection = new Document([Document::ID => 'collection']);
 
         $adapter->getDocument($collection, 'fast');
         $adapter->getDocument($collection, 'builder', [Query::select(['title'])]);
@@ -207,7 +208,7 @@ final class SQLGetDocumentTest extends TestCase
     {
         try {
             $adapter->getDocument(
-                new Document(['$id' => 'collection']),
+                new Document([Document::ID => 'collection']),
                 'document'
             );
         } catch (TimeoutException $timeout) {

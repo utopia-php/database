@@ -10,6 +10,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Tenancy;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -26,7 +27,7 @@ final class PoolTest extends TestCase
 
         $this->assertTrue($pool->ping());
         $this->assertSame([$hook], $adapter->getWriteHooks());
-        $this->assertSame(['_tenant' => 'new'], $adapter->getTenantHook()?->decorateRow([]));
+        $this->assertSame([Storage::TENANT => 'new'], $adapter->getTenantHook()?->decorateRow([]));
     }
 
     public function testTransactionReplacesStatefulWriteHookOnReusedAdapter(): void

@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\OrderDirection;
@@ -21,12 +22,12 @@ final class PostgresQueryBehaviorTest extends TestCase
     {
         $adapter = new Postgres($this->pdo());
         $hookFactory = new ReflectionMethod($adapter, 'newPermissionHook');
-        $hook = $hookFactory->invoke($adapter, 'movies', ['any', 'user:1'], 'read', 'document._uid');
+        $hook = $hookFactory->invoke($adapter, 'movies', ['any', 'user:1'], 'read', 'document.'.Storage::UID);
         $this->assertInstanceOf(PermissionFilter::class, $hook);
         $condition = $hook->filter('ignored');
 
         $this->assertSame(
-            '("document"."_permissions" @> ?::jsonb OR "document"."_permissions" @> ?::jsonb)',
+            '("document"."'.Storage::PERMISSIONS.'" @> ?::jsonb OR "document"."'.Storage::PERMISSIONS.'" @> ?::jsonb)',
             $condition->expression
         );
         $this->assertSame(['["read(\\"any\\")"]', '["read(\\"user:1\\")"]'], $condition->bindings);
@@ -72,8 +73,8 @@ final class PostgresQueryBehaviorTest extends TestCase
         $adapter->setAuthorization($authorization);
 
         $this->assertTrue($adapter->createCollection('movies'));
-        $this->assertStringContainsString('"_permissions" JSONB', $queries[0]);
-        $this->assertStringContainsString('USING GIN ("_permissions")', $queries[0]);
+        $this->assertStringContainsString('"'.Storage::PERMISSIONS.'" JSONB', $queries[0]);
+        $this->assertStringContainsString('USING GIN ("'.Storage::PERMISSIONS.'")', $queries[0]);
     }
 
     public function testVectorDistanceIsProjectedHydratedAndOrderedBeforeTieBreaker(): void
@@ -91,10 +92,10 @@ final class PostgresQueryBehaviorTest extends TestCase
             });
         $statement->expects($this->once())->method('execute')->willReturn(true);
         $statement->expects($this->once())->method('fetchAll')->willReturn([[
-            '_uid' => 'movie',
-            '_id' => 1,
-            '_permissions' => '[]',
-            '_distance' => '0.25',
+            Storage::UID => 'movie',
+            Storage::SEQUENCE => 1,
+            Storage::PERMISSIONS => '[]',
+            Storage::DISTANCE => '0.25',
         ]]);
         $statement->expects($this->once())->method('closeCursor')->willReturn(true);
 
@@ -118,17 +119,17 @@ final class PostgresQueryBehaviorTest extends TestCase
         $adapter->setAuthorization($authorization);
 
         $documents = $adapter->find(
-            new Document(['$id' => 'movies']),
+            new Document([Document::ID => 'movies']),
             [Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
-            orderAttributes: ['$sequence'],
+            orderAttributes: [Document::SEQUENCE],
             orderTypes: [OrderDirection::Asc]
         );
 
         $this->assertCount(1, $documents);
-        $this->assertSame(0.25, $documents[0]->getAttribute('$distance'));
-        $this->assertMatchesRegularExpression('/SELECT \*, .*::text AS "_distance"/', $sql);
+        $this->assertSame(0.25, $documents[0]->getAttribute(Document::DISTANCE));
+        $this->assertMatchesRegularExpression('/SELECT \*, .*::text AS "'.Storage::DISTANCE.'"/', $sql);
         $this->assertStringContainsString('WHERE "table_main"."embedding" IS NOT NULL', $sql);
-        $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "_id" ASC/', $sql);
+        $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "'.Storage::SEQUENCE.'" ASC/', $sql);
         $this->assertSame([
             [1, '[1,0,0]', \PDO::PARAM_STR],
             [2, '[1,0,0]', \PDO::PARAM_STR],
@@ -172,18 +173,18 @@ final class PostgresQueryBehaviorTest extends TestCase
         $adapter->setAuthorization($authorization);
 
         $adapter->find(
-            new Document(['$id' => 'movies']),
+            new Document([Document::ID => 'movies']),
             [Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
-            orderAttributes: ['$sequence'],
+            orderAttributes: [Document::SEQUENCE],
             orderTypes: [OrderDirection::Asc],
-            cursor: ['$distance' => 0.25, '$sequence' => 17],
+            cursor: [Document::DISTANCE => 0.25, Document::SEQUENCE => 17],
         );
 
         $this->assertStringContainsString(
-            '"table_main"."embedding" IS NOT NULL AND ((("table_main"."embedding" <=> ?::vector)) > ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."_id" > ?))',
+            '"table_main"."embedding" IS NOT NULL AND ((("table_main"."embedding" <=> ?::vector)) > ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."'.Storage::SEQUENCE.'" > ?))',
             $sql,
         );
-        $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "_id" ASC/', $sql);
+        $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\), "'.Storage::SEQUENCE.'" ASC/', $sql);
         $this->assertSame([
             [1, '[1,0,0]', \PDO::PARAM_STR],
             [2, '[1,0,0]', \PDO::PARAM_STR],
@@ -233,19 +234,19 @@ final class PostgresQueryBehaviorTest extends TestCase
 
         $distance = 0.015216441182063223;
         $adapter->find(
-            new Document(['$id' => 'movies']),
+            new Document([Document::ID => 'movies']),
             [Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
-            orderAttributes: ['$sequence'],
+            orderAttributes: [Document::SEQUENCE],
             orderTypes: [OrderDirection::Asc],
-            cursor: ['$distance' => $distance, '$sequence' => 17],
+            cursor: [Document::DISTANCE => $distance, Document::SEQUENCE => 17],
             cursorDirection: CursorDirection::Before,
         );
 
         $this->assertStringContainsString(
-            '"table_main"."embedding" IS NOT NULL AND ((("table_main"."embedding" <=> ?::vector)) < ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."_id" < ?))',
+            '"table_main"."embedding" IS NOT NULL AND ((("table_main"."embedding" <=> ?::vector)) < ? OR ((("table_main"."embedding" <=> ?::vector)) = ? AND "table_main"."'.Storage::SEQUENCE.'" < ?))',
             $sql,
         );
-        $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\) DESC, "_id" DESC/', $sql);
+        $this->assertMatchesRegularExpression('/ORDER BY .*<=>.*\) DESC, "'.Storage::SEQUENCE.'" DESC/', $sql);
         $this->assertSame(\json_encode($distance, JSON_THROW_ON_ERROR), $bindings[2][1]);
         $this->assertSame(\json_encode($distance, JSON_THROW_ON_ERROR), $bindings[4][1]);
     }

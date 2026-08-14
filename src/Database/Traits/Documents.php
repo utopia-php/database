@@ -586,12 +586,7 @@ trait Documents
             throw new DatabaseException('Shared tables must be enabled if tenant per document is enabled.');
         }
 
-        $collectionId = $collection;
-        $collection = $this->silent(fn () => $this->getCollection($collectionId));
-
-        if ($collection->isEmpty() && $collectionId !== self::METADATA) {
-            throw new NotFoundException('Collection not found: '.$collectionId);
-        }
+        $collection = $this->silent(fn () => $this->getCollection($collection));
 
         if ($collection->getId() !== self::METADATA) {
             $isValid = $this->authorization->isValid(new Input(PermissionType::Create, $collection->getCreate()));

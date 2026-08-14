@@ -186,8 +186,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;
+        $this->capabilitySet = null;
 
         return $this->supportForAttributes;
+    }
+
+    public function supports(Capability $feature): bool
+    {
+        if ($feature === Capability::DefinedAttributes) {
+            return $this->supportForAttributes;
+        }
+
+        return parent::supports($feature);
     }
 
     protected function syncWriteHooks(): void

@@ -32,7 +32,7 @@ class Query extends BaseQuery
      *
      * @var list<Method>
      */
-    public const array LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch, Method::Having];
+    public const array LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch];
 
     public const TYPE_ELEM_MATCH = 'elemMatch';
 
@@ -215,7 +215,7 @@ class Query extends BaseQuery
             $array['attribute'] = $this->attribute;
         }
 
-        if (\in_array($this->method, self::LOGICAL_TYPES, true)) {
+        if (\in_array($this->method, self::LOGICAL_TYPES, true) || $this->method === Method::Having) {
             foreach ($this->values as $index => $value) {
                 if (! $value instanceof self) {
                     throw new QueryException(

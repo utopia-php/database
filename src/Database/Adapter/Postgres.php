@@ -245,21 +245,21 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $indexStatements = [];
 
         if ($this->sharedTables) {
-            $uidIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_uid");
+            $uidIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}".Storage::UID);
             $createdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_created");
             $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
-            $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
-            $permissionsIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permissions");
+            $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}".Storage::INDEX_TENANT_ID);
+            $permissionsIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}".Storage::PERMISSIONS);
             $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, [Storage::UID, Storage::TENANT], unique: true, collations: [Storage::UID => 'utf8_ci_ai'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, [Storage::TENANT, Storage::CREATED_AT])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, [Storage::TENANT, Storage::UPDATED_AT])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $tenantIdIndex, [Storage::TENANT, Storage::SEQUENCE])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, [Storage::PERMISSIONS], method: 'gin')->query;
         } else {
-            $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
+            $uidIndex = $this->getShortKey("{$namespace}_{$id}".Storage::UID);
             $createdIndex = $this->getShortKey("{$namespace}_{$id}_created");
             $updatedIndex = $this->getShortKey("{$namespace}_{$id}_updated");
-            $permissionsIndex = $this->getShortKey("{$namespace}_{$id}_permissions");
+            $permissionsIndex = $this->getShortKey("{$namespace}_{$id}".Storage::PERMISSIONS);
             $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, [Storage::UID], unique: true, collations: [Storage::UID => 'utf8_ci_ai'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, [Storage::CREATED_AT])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, [Storage::UPDATED_AT])->query;

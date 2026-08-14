@@ -875,8 +875,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
     protected function getConflictTenantExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+        $tenant = Storage::TENANT;
 
-        return "IF(_tenant = VALUES(_tenant), VALUES({$quoted}), {$quoted})";
+        return "IF({$tenant} = VALUES({$tenant}), VALUES({$quoted}), {$quoted})";
     }
 
     /**
@@ -895,8 +896,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
     protected function getConflictTenantIncrementExpression(string $column): string
     {
         $quoted = $this->quote($this->filter($column));
+        $tenant = Storage::TENANT;
 
-        return "IF(_tenant = VALUES(_tenant), {$quoted} + VALUES({$quoted}), {$quoted})";
+        return "IF({$tenant} = VALUES({$tenant}), {$quoted} + VALUES({$quoted}), {$quoted})";
     }
 
     /**
@@ -1004,7 +1006,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\Relationships
         try {
             $stmt = $this->prepareStatement('
                 SELECT
-                COLUMN_NAME as _id,
+                COLUMN_NAME as '.Storage::SEQUENCE.',
                 COLUMN_DEFAULT as columnDefault,
                 IS_NULLABLE as isNullable,
                 DATA_TYPE as dataType,

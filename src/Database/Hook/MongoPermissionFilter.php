@@ -4,6 +4,7 @@ namespace Utopia\Database\Hook;
 
 use MongoDB\BSON\Regex;
 use Utopia\Database\Database;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
 /**
@@ -45,11 +46,11 @@ class MongoPermissionFilter implements Read
 
         $roles = \implode('|', $this->authorization->getRoles());
         /** @var array<string, mixed> $permissionsFilter */
-        $permissionsFilter = isset($filters['_permissions']) && \is_array($filters['_permissions'])
-            ? $filters['_permissions']
+        $permissionsFilter = isset($filters[Storage::PERMISSIONS]) && \is_array($filters[Storage::PERMISSIONS])
+            ? $filters[Storage::PERMISSIONS]
             : [];
         $permissionsFilter['$in'] = [new Regex("{$forPermission}\\(\"(?:{$roles})\"\\)", 'i')];
-        $filters['_permissions'] = $permissionsFilter;
+        $filters[Storage::PERMISSIONS] = $permissionsFilter;
 
         return $filters;
     }

@@ -265,12 +265,6 @@ parameters:
 			path: src/Database/Document.php
 
 		-
-			message: '#^PHPDoc tag @param for parameter \$type with type string is incompatible with native type Utopia\\Database\\PermissionType\.$#'
-			identifier: parameter.phpDocType
-			count: 1
-			path: src/Database/Document.php
-
-		-
 			message: '#^Parameter \#1 \$array of function array_unique expects an array of values castable to string, array\<mixed, mixed\> given\.$#'
 			identifier: argument.type
 			count: 3

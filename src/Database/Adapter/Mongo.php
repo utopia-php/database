@@ -41,6 +41,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
@@ -621,8 +622,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $internalIndex = [
             [
-                'key' => ['_uid' => $this->getOrder(OrderDirection::Asc)],
-                'name' => '_uid',
+                'key' => [Storage::UID => $this->getOrder(OrderDirection::Asc)],
+                'name' => Storage::UID,
                 'unique' => true,
                 'collation' => [
                     'locale' => 'en',
@@ -630,22 +631,22 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 ],
             ],
             [
-                'key' => ['_createdAt' => $this->getOrder(OrderDirection::Asc)],
-                'name' => '_createdAt',
+                'key' => [Storage::CREATED_AT => $this->getOrder(OrderDirection::Asc)],
+                'name' => Storage::CREATED_AT,
             ],
             [
-                'key' => ['_updatedAt' => $this->getOrder(OrderDirection::Asc)],
-                'name' => '_updatedAt',
+                'key' => [Storage::UPDATED_AT => $this->getOrder(OrderDirection::Asc)],
+                'name' => Storage::UPDATED_AT,
             ],
             [
-                'key' => ['_permissions' => $this->getOrder(OrderDirection::Asc)],
-                'name' => '_permissions',
+                'key' => [Storage::PERMISSIONS => $this->getOrder(OrderDirection::Asc)],
+                'name' => Storage::PERMISSIONS,
             ],
         ];
 
         if ($this->sharedTables) {
             foreach ($internalIndex as &$index) {
-                $index['key'] = array_merge(['_tenant' => $this->getOrder(OrderDirection::Asc)], $index['key']);
+                $index['key'] = array_merge([Storage::TENANT => $this->getOrder(OrderDirection::Asc)], $index['key']);
             }
             unset($index);
         }
@@ -682,7 +683,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 // If sharedTables, always add _tenant as the first key
                 if ($this->shouldAddTenantToIndex($index)) {
-                    $key['_tenant'] = $this->getOrder(OrderDirection::Asc);
+                    $key[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
                 }
 
                 foreach ($attributes as $j => $attribute) {
@@ -958,7 +959,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 }
                 break;
             case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $metadataCollection = new Document([Document::ID => Database::METADATA]);
                 $collectionDoc = $this->getDocument($metadataCollection, $relationship->collection);
                 $relatedCollectionDoc = $this->getDocument($metadataCollection, $relationship->relatedCollection);
 
@@ -1025,7 +1026,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 }
                 break;
             case RelationType::ManyToMany:
-                $metadataCollection = new Document(['$id' => Database::METADATA]);
+                $metadataCollection = new Document([Document::ID => Database::METADATA]);
                 $collectionDoc = $this->getDocument($metadataCollection, $relationship->collection);
                 $relatedCollectionDoc = $this->getDocument($metadataCollection, $relationship->relatedCollection);
 
@@ -1072,7 +1073,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         // If sharedTables, always add _tenant as the first key
         if ($this->shouldAddTenantToIndex($type)) {
-            $indexKey['_tenant'] = $this->getOrder(OrderDirection::Asc);
+            $indexKey[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
         }
 
         foreach ($attributes as $i => $attribute) {
@@ -1230,7 +1231,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
-        $metadataCollection = new Document(['$id' => Database::METADATA]);
+        $metadataCollection = new Document([Document::ID => Database::METADATA]);
         $collectionDocument = $this->getDocument($metadataCollection, $collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
@@ -1242,7 +1243,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         foreach ($indexes as $node) {
             /** @var array<string, mixed> $node */
-            $nodeId = $node['$id'] ?? $node['key'] ?? '';
+            $nodeId = $node[Document::ID] ?? $node['key'] ?? '';
             $nodeIdStr = \is_string($nodeId) ? $nodeId : (\is_scalar($nodeId) ? (string) $nodeId : '');
             if ($nodeIdStr === $old) {
                 $index = $node;
@@ -1320,7 +1321,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
-        $filters = ['_uid' => $id];
+        $filters = [Storage::UID => $id];
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection->getId());
@@ -1376,7 +1377,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $sequence = $document->getSequence();
 
-        $document->removeAttribute('$sequence');
+        $document->removeAttribute(Document::SEQUENCE);
 
         /** @var array<string, mixed> $documentArray */
         $documentArray = (array) $document;
@@ -1385,7 +1386,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         // Insert manual id if set
         if (! empty($sequence)) {
-            $record['_id'] = $sequence;
+            $record[Storage::SEQUENCE] = $sequence;
         }
         $options = $this->getTransactionOptions();
         $result = $this->insertDocument($name, $this->removeNullKeys($record), $options);
@@ -1433,7 +1434,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $record = $this->decorateRow($record, $this->documentMetadata($document));
 
             if (! empty($sequence)) {
-                $record['_id'] = $sequence;
+                $record[Storage::SEQUENCE] = $sequence;
             }
 
             $records[] = $record;
@@ -1447,14 +1448,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             $operations = [];
             foreach ($records as $record) {
-                $filter = ['_uid' => $record['_uid'] ?? ''];
+                $filter = [Storage::UID => $record[Storage::UID] ?? ''];
                 if ($this->sharedTables) {
-                    $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
+                    $filter[Storage::TENANT] = $record[Storage::TENANT] ?? $this->getTenant();
                 }
 
                 // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
                 $setOnInsert = $record;
-                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+                unset($setOnInsert[Storage::UID], $setOnInsert[Storage::TENANT]);
 
                 if (empty($setOnInsert)) {
                     continue;
@@ -1504,13 +1505,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $record = $document->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-        $filters = ['_uid' => $id];
+        $filters = [Storage::UID => $id];
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection->getId());
 
         try {
-            unset($record['_id']); // Don't update _id
+            unset($record[Storage::SEQUENCE]); // Don't update _id
 
             $options = $this->getTransactionOptions();
 
@@ -1545,7 +1546,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $options = $this->getTransactionOptions();
         $queries = [
-            Query::equal('$sequence', \array_map(fn ($document) => $document->getSequence(), $documents)),
+            Query::equal(Document::SEQUENCE, \array_map(fn ($document) => $document->getSequence(), $documents)),
         ];
 
         /** @var array<string, mixed> $filters */
@@ -1556,13 +1557,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
-        unset($record['_version']);
+        unset($record[Storage::VERSION]);
 
         try {
             $pipeline = $this->buildOperatorPipeline($record);
             if ($pipeline !== null) {
-                $pipeline[0]['$set']['_version'] = [
-                    '$add' => [['$ifNull' => ['$_version', 0]], 1],
+                $pipeline[0]['$set'][Storage::VERSION] = [
+                    '$add' => [['$ifNull' => ['$' . Storage::VERSION, 0]], 1],
                 ];
 
                 return $this->updateWithPipeline($name, $filters, $pipeline, $options, multi: true);
@@ -1570,7 +1571,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             $updateQuery = [
                 '$set' => $record,
-                '$inc' => ['_version' => 1],
+                '$inc' => [Storage::VERSION => 1],
             ];
 
             return $this->client->update(
@@ -1923,23 +1924,23 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $oldDocument = $change->getOld();
                 /** @var array<string, mixed> $attributes */
                 $attributes = $document->getAttributes();
-                $attributes['_uid'] = $document->getId();
-                $attributes['_createdAt'] = $document['$createdAt'];
-                $attributes['_updatedAt'] = $document['$updatedAt'];
-                $attributes['_permissions'] = $document->getPermissions();
+                $attributes[Storage::UID] = $document->getId();
+                $attributes[Storage::CREATED_AT] = $document[Document::CREATED_AT];
+                $attributes[Storage::UPDATED_AT] = $document[Document::UPDATED_AT];
+                $attributes[Storage::PERMISSIONS] = $document->getPermissions();
 
                 if (! empty($document->getSequence())) {
-                    $attributes['_id'] = $document->getSequence();
+                    $attributes[Storage::SEQUENCE] = $document->getSequence();
                 }
 
                 $record = $this->replaceChars('$', '_', $attributes);
                 $record = $this->decorateRow($record, $this->documentMetadata($document));
 
                 // Build filter for upsert
-                $filters = ['_uid' => $document->getId()];
+                $filters = [Storage::UID => $document->getId()];
                 $filters = $this->applyReadFilters($filters, $collection->getId());
 
-                unset($record['_id']); // Don't update _id
+                unset($record[Storage::SEQUENCE]); // Don't update _id
 
                 // Get fields to unset for schemaless mode
                 $unsetFields = $this->getUpsertAttributeRemovals($oldDocument, $document, $record);
@@ -1969,7 +1970,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     if ($pipeline !== null) {
                         $set = $pipeline[0]['$set'];
                         if (empty($document->getSequence())) {
-                            $set['_id'] = ['$ifNull' => ['$_id', $this->client->createUuid()]];
+                            $set[Storage::SEQUENCE] = ['$ifNull' => ['$' . Storage::SEQUENCE, $this->client->createUuid()]];
                         }
 
                         $update = [['$set' => $set]];
@@ -1988,7 +1989,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                         if (empty($document->getSequence())) {
                             $update['$setOnInsert'] = [
-                                '_id' => $this->client->createUuid(),
+                                Storage::SEQUENCE => $this->client->createUuid(),
                             ];
                         }
                     }
@@ -2028,7 +2029,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
 
-        $filters = ['_uid' => $id];
+        $filters = [Storage::UID => $id];
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
@@ -2056,7 +2057,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         /** @var array<string, mixed> $filters */
-        $filters = $this->buildFilters([new Query(Method::Equal, '_id', $sequences)]);
+        $filters = $this->buildFilters([new Query(Method::Equal, Storage::SEQUENCE, $sequences)]);
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
@@ -2091,7 +2092,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $max = $max === null ? null : $this->normalizeAtomicNumber($max, 'maximum');
 
         $attribute = $this->filter($attribute);
-        $filters = ['_uid' => $id];
+        $filters = [Storage::UID => $id];
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
@@ -2115,7 +2116,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $filters,
                 [
                     '$inc' => [$attribute => $value],
-                    '$set' => ['_updatedAt' => $this->toMongoDatetime($updatedAt)],
+                    '$set' => [Storage::UPDATED_AT => $this->toMongoDatetime($updatedAt)],
                 ],
                 options: $options
             );
@@ -2231,7 +2232,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 $tmp = $cursor[$originalAttribute];
 
-                if ($originalAttribute === '$sequence') {
+                if ($originalAttribute === Document::SEQUENCE) {
                     /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
                     if (count($orderAttributes) === 1) {
                         $filters[$attribute] = [
@@ -2425,7 +2426,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             // When limit is specified, use $group and $sum to count limited documents
             $pipeline[] = [
                 '$group' => [
-                    '_id' => null,
+                    Storage::SEQUENCE => null,
                     'total' => ['$sum' => 1]],
             ];
         } else {
@@ -2505,7 +2506,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
         $pipeline[] = [
             '$group' => [
-                '_id' => null,
+                Storage::SEQUENCE => null,
                 'total' => ['$sum' => '$'.$attribute],
             ],
         ];
@@ -2576,15 +2577,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $sequences = [];
         $name = $this->getNamespace().'_'.$this->filter($collection);
 
-        $filters = ['_uid' => ['$in' => $documentIds]];
+        $filters = [Storage::UID => ['$in' => $documentIds]];
 
         if ($this->sharedTables) {
-            $filters['_tenant'] = $this->getTenantFilters($collection, $documentTenants);
+            $filters[Storage::TENANT] = $this->getTenantFilters($collection, $documentTenants);
         }
         try {
             // Use cursor paging for large result sets
             $options = [
-                'projection' => ['_uid' => 1, '_id' => 1],
+                'projection' => [Storage::UID => 1, Storage::SEQUENCE => 1],
                 'batchSize' => self::DEFAULT_BATCH_SIZE,
             ];
 
@@ -2599,9 +2600,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             foreach ($results as $result) {
                 /** @var \stdClass $result */
                 /** @var mixed $uid */
-                $uid = $result->_uid;
+                $uid = $result->{Storage::UID};
                 /** @var mixed $oid */
-                $oid = $result->_id;
+                $oid = $result->{Storage::SEQUENCE};
                 $uidStr = \is_string($uid) ? $uid : (\is_scalar($uid) ? (string) $uid : '');
                 $oidStr = \is_string($oid) ? $oid : (\is_scalar($oid) ? (string) $oid : '');
                 $sequences[$uidStr] = $oidStr;
@@ -2634,9 +2635,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 foreach ($moreResults as $result) {
                     /** @var \stdClass $result */
                     /** @var mixed $uid */
-                    $uid = $result->_uid;
+                    $uid = $result->{Storage::UID};
                     /** @var mixed $oid */
-                    $oid = $result->_id;
+                    $oid = $result->{Storage::SEQUENCE};
                     $uidStr = \is_string($uid) ? $uid : (\is_scalar($uid) ? (string) $uid : '');
                     $oidStr = \is_string($oid) ? $oid : (\is_scalar($oid) ? (string) $oid : '');
                     $sequences[$uidStr] = $oidStr;
@@ -2660,7 +2661,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         foreach ($documents as $document) {
             if (isset($sequences[$document->getId()])) {
-                $document['$sequence'] = $sequences[$document->getId()];
+                $document[Document::SEQUENCE] = $sequences[$document->getId()];
             }
         }
 
@@ -2970,7 +2971,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $cbAttributes = \is_array($rawCbAttributes) ? $rawCbAttributes : [];
 
         $internalCbAttributeArrays = \array_map(
-            fn (Attribute $a) => ['$id' => $a->key, 'type' => $a->type, 'array' => $a->array],
+            fn (Attribute $a) => [Document::ID => $a->key, 'type' => $a->type, 'array' => $a->array],
             Database::internalAttributes()
         );
 
@@ -2979,7 +2980,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         foreach ($attributes as $attribute) {
             /** @var array<string, mixed> $attribute */
-            $rawCbId = $attribute['$id'] ?? null;
+            $rawCbId = $attribute[Document::ID] ?? null;
             $key = \is_string($rawCbId) ? $rawCbId : '';
             $rawCbType = $attribute['type'] ?? null;
             $type = $rawCbType instanceof ColumnType
@@ -3096,7 +3097,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $collectionAttributes = \is_array($rawCollectionAttributes) ? $rawCollectionAttributes : [];
 
         $internalAttributeArrays = \array_map(
-            fn (Attribute $a) => ['$id' => $a->key, 'type' => $a->type, 'array' => $a->array],
+            fn (Attribute $a) => [Document::ID => $a->key, 'type' => $a->type, 'array' => $a->array],
             Database::internalAttributes()
         );
 
@@ -3105,7 +3106,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         foreach ($attributes as $attribute) {
             /** @var array<string, mixed> $attribute */
-            $rawId = $attribute['$id'] ?? null;
+            $rawId = $attribute[Document::ID] ?? null;
             $key = \is_string($rawId) ? $rawId : '';
             $rawType = $attribute['type'] ?? null;
             $type = $rawType instanceof ColumnType
@@ -3230,25 +3231,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * TODO Consider moving this to adapter.php
-     */
-    protected function getInternalKeyForAttribute(string $attribute): string
-    {
-        return match ($attribute) {
-            '$id' => '_uid',
-            '$sequence' => '_id',
-            '$collection' => '_collection',
-            '$tenant' => '_tenant',
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            '$deletedAt' => '_deletedAt',
-            '$permissions' => '_permissions',
-            '$version' => '_version',
-            default => $attribute
-        };
-    }
-
-    /**
      * Escape a field name for MongoDB storage.
      * MongoDB field names cannot start with $ or contain dots.
      */
@@ -3279,7 +3261,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $dotAttributes = [];
         foreach ($attributes as $attribute) {
             /** @var array<string, mixed> $attribute */
-            $rawKey = $attribute['$id'] ?? null;
+            $rawKey = $attribute[Document::ID] ?? null;
             $key = \is_string($rawKey) ? $rawKey : (\is_scalar($rawKey) ? (string) $rawKey : '');
             if (\str_contains($key, '.') || \str_starts_with($key, '$')) {
                 $dotAttributes[$key] = $this->escapeMongoFieldName($key);
@@ -3309,7 +3291,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $attributes = \is_array($rawEnsureAttrs) ? $rawEnsureAttrs : [];
         foreach ($attributes as $attribute) {
             /** @var array<string, mixed> $attribute */
-            $rawEnsureKey = $attribute['$id'] ?? null;
+            $rawEnsureKey = $attribute[Document::ID] ?? null;
             $key = \is_string($rawEnsureKey) ? $rawEnsureKey : (\is_scalar($rawEnsureKey) ? (string) $rawEnsureKey : '');
             $rawEnsureType = $attribute['type'] ?? null;
             $type = \is_string($rawEnsureType) ? $rawEnsureType : (\is_scalar($rawEnsureType) ? (string) $rawEnsureType : '');
@@ -3371,7 +3353,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $clean_key = str_replace($from, '', $k);
             if (in_array($clean_key, $filter)) {
                 $newKey = str_replace($from, $to, $k);
-            } elseif (\str_starts_with($k, $from) && ! in_array($k, ['$id', '$sequence', '$tenant', '_uid', '_id', '_tenant'])) {
+            } elseif (\str_starts_with($k, $from) && ! in_array($k, [Document::ID, Document::SEQUENCE, Document::TENANT, Storage::UID, Storage::SEQUENCE, Storage::TENANT])) {
                 // Handle any other key starting with the 'from' char (e.g. user-defined $-prefixed keys)
                 $newKey = $to.\substr($k, \strlen($from));
             }
@@ -3395,32 +3377,32 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         // Handle special attribute mappings
         if ($from === '_') {
-            if (isset($array['_id'])) {
+            if (isset($array[Storage::SEQUENCE])) {
                 /** @var mixed $idVal */
-                $idVal = $array['_id'];
-                $array['$sequence'] = \is_string($idVal) ? $idVal : (\is_scalar($idVal) ? (string) $idVal : '');
-                unset($array['_id']);
+                $idVal = $array[Storage::SEQUENCE];
+                $array[Document::SEQUENCE] = \is_string($idVal) ? $idVal : (\is_scalar($idVal) ? (string) $idVal : '');
+                unset($array[Storage::SEQUENCE]);
             }
-            if (isset($array['_uid'])) {
-                $array['$id'] = $array['_uid'];
-                unset($array['_uid']);
+            if (isset($array[Storage::UID])) {
+                $array[Document::ID] = $array[Storage::UID];
+                unset($array[Storage::UID]);
             }
-            if (isset($array['_tenant'])) {
-                $array['$tenant'] = $array['_tenant'];
-                unset($array['_tenant']);
+            if (isset($array[Storage::TENANT])) {
+                $array[Document::TENANT] = $array[Storage::TENANT];
+                unset($array[Storage::TENANT]);
             }
         } elseif ($from === '$') {
-            if (isset($array['$id'])) {
-                $array['_uid'] = $array['$id'];
-                unset($array['$id']);
+            if (isset($array[Document::ID])) {
+                $array[Storage::UID] = $array[Document::ID];
+                unset($array[Document::ID]);
             }
-            if (isset($array['$sequence'])) {
-                $array['_id'] = $array['$sequence'];
-                unset($array['$sequence']);
+            if (isset($array[Document::SEQUENCE])) {
+                $array[Storage::SEQUENCE] = $array[Document::SEQUENCE];
+                unset($array[Document::SEQUENCE]);
             }
-            if (isset($array['$tenant'])) {
-                $array['_tenant'] = $array['$tenant'];
-                unset($array['$tenant']);
+            if (isset($array[Document::TENANT])) {
+                $array[Storage::TENANT] = $array[Document::TENANT];
+                unset($array[Document::TENANT]);
             }
         }
 
@@ -3475,7 +3457,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         // Normalize extended ISO 8601 datetime strings in query values to UTCDateTime
         // so they can be correctly compared against datetime fields stored in MongoDB.
-        if (! $this->supports(Capability::DefinedAttributes) || \in_array($query->getAttribute(), ['$createdAt', '$updatedAt'], true)) {
+        if (! $this->supports(Capability::DefinedAttributes) || \in_array($query->getAttribute(), [Document::CREATED_AT, Document::UPDATED_AT], true)) {
             $values = $query->getValues();
             foreach ($values as $k => $value) {
                 if (is_string($value) && $this->isExtendedISODatetime($value)) {
@@ -3489,19 +3471,19 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $query->setValues($values);
         }
 
-        if ($query->getAttribute() === '$id') {
-            $query->setAttribute('_uid');
-        } elseif ($query->getAttribute() === '$sequence') {
-            $query->setAttribute('_id');
+        if ($query->getAttribute() === Document::ID) {
+            $query->setAttribute(Storage::UID);
+        } elseif ($query->getAttribute() === Document::SEQUENCE) {
+            $query->setAttribute(Storage::SEQUENCE);
             $values = $query->getValues();
             foreach ($values as $k => $v) {
                 $values[$k] = $v;
             }
             $query->setValues($values);
-        } elseif ($query->getAttribute() === '$createdAt') {
-            $query->setAttribute('_createdAt');
-        } elseif ($query->getAttribute() === '$updatedAt') {
-            $query->setAttribute('_updatedAt');
+        } elseif ($query->getAttribute() === Document::CREATED_AT) {
+            $query->setAttribute(Storage::CREATED_AT);
+        } elseif ($query->getAttribute() === Document::UPDATED_AT) {
+            $query->setAttribute(Storage::UPDATED_AT);
         } elseif (\str_starts_with($query->getAttribute(), '$')) {
             // Escape $ prefix and dots in user-defined $-prefixed attribute names for MongoDB
             $query->setAttribute($this->escapeMongoFieldName($query->getAttribute()));
@@ -3747,11 +3729,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $projection[$selection] = 1;
         }
 
-        $projection['_uid'] = 1;
-        $projection['_id'] = 1;
-        $projection['_createdAt'] = 1;
-        $projection['_updatedAt'] = 1;
-        $projection['_permissions'] = 1;
+        $projection[Storage::UID] = 1;
+        $projection[Storage::SEQUENCE] = 1;
+        $projection[Storage::CREATED_AT] = 1;
+        $projection[Storage::UPDATED_AT] = 1;
+        $projection[Storage::PERMISSIONS] = 1;
 
         return $projection;
     }
@@ -3807,7 +3789,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // Duplicate key error
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
             $index = $this->getViolatedIndex($e->getMessage());
-            if ($index !== null && $index !== '_uid' && $index !== '_id_') {
+            if ($index !== null && $index !== Storage::UID && $index !== '_id_') {
                 return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
 
@@ -4036,7 +4018,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         try {
             $this->client->insert($name, $document, $options);
-            $filters = ['_uid' => $document['_uid']];
+            $filters = [Storage::UID => $document[Storage::UID]];
 
             try {
                 $findResult = $this->client->find(
@@ -4247,7 +4229,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $oldUserAttributes = $oldDocument->getAttributes();
         $newUserAttributes = $newDocument->getAttributes();
 
-        $protectedFields = ['_uid', '_id', '_createdAt', '_updatedAt', '_permissions', '_tenant', '_version'];
+        $protectedFields = [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::UPDATED_AT, Storage::PERMISSIONS, Storage::TENANT, Storage::VERSION];
 
         foreach ($oldUserAttributes as $originalKey => $originalValue) {
             if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {

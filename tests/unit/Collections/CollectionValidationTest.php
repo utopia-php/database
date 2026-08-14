@@ -273,6 +273,7 @@ class CollectionValidationTest extends TestCase
         $this->assertSame('users', $collection->getId());
         $this->assertSame('Users', $collection->getAttribute('name'));
 
+        /** @var array<int, Document> $attributes */
         $attributes = $collection->getAttribute('attributes');
         $this->assertSame(1, \count($attributes));
         $this->assertSame('name', $attributes[0]->getAttribute('key'));

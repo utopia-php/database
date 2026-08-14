@@ -122,6 +122,16 @@ class FilterTest extends TestCase
         $this->assertEquals('Equal queries require at least one value.', $this->validator->getDescription());
     }
 
+    public function testIsEmptyHandlesNonZeroIndexedValues(): void
+    {
+        // Sparse / associative arrays must not trigger "Undefined array key 0".
+        $sparse = new Query(Query::TYPE_EQUAL, 'string', [1 => 'super']);
+        $this->assertTrue($this->validator->isValid($sparse));
+
+        $assoc = new Query(Query::TYPE_CONTAINS, 'string_array', ['foo' => 'super']);
+        $this->assertTrue($this->validator->isValid($assoc));
+    }
+
     public function testMaxValuesCount(): void
     {
         $max = $this->validator->getMaxValuesCount();

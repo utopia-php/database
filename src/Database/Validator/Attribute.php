@@ -465,8 +465,14 @@ class Attribute extends Validator
             throw new DatabaseException($this->message);
         }
 
-        // Reject array defaults for non-array attributes (except vectors, spatial types, and objects which use arrays internally)
-        if (\is_array($default) && ! $attribute->array && ! \in_array($type, [ColumnType::Vector, ColumnType::Object, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+        // Reject array defaults for non-array attributes. Vectors, spatial types,
+        // objects, and json-filtered strings store structured values as arrays.
+        if (
+            \is_array($default)
+            && ! $attribute->array
+            && ! \in_array($type, [ColumnType::Vector, ColumnType::Object, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)
+            && ! \in_array('json', $attribute->filters, true)
+        ) {
             $this->message = 'Cannot set an array default value for a non-array attribute';
             throw new DatabaseException($this->message);
         }

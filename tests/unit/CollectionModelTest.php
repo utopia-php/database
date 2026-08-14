@@ -4,12 +4,14 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
+use Utopia\Database\Attribute\Boolean;
+use Utopia\Database\Attribute\Integer;
+use Utopia\Database\Attribute\StringType;
 use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 class CollectionModelTest extends TestCase
@@ -28,7 +30,7 @@ class CollectionModelTest extends TestCase
 
     public function testConstructorWithValues(): void
     {
-        $attr = new Attribute(key: 'title', type: ColumnType::String, size: 128);
+        $attr = Attribute::string(key: 'title', size: 128);
         $idx = new Index(key: 'idx_title', type: IndexType::Key, attributes: ['title']);
 
         $collection = new Collection(
@@ -50,7 +52,7 @@ class CollectionModelTest extends TestCase
 
     public function testToDocumentProducesCorrectStructure(): void
     {
-        $attr = new Attribute(key: 'email', type: ColumnType::String, size: 256, required: true);
+        $attr = Attribute::string(key: 'email', size: 256, required: true);
         $idx = new Index(key: 'idx_email', type: IndexType::Unique, attributes: ['email']);
 
         $collection = new Collection(
@@ -91,7 +93,7 @@ class CollectionModelTest extends TestCase
 
     public function testFromDocumentRoundtrip(): void
     {
-        $attr = new Attribute(key: 'status', type: ColumnType::String, size: 32, required: false, default: 'active');
+        $attr = Attribute::string(key: 'status', size: 32, required: false, default: 'active');
         $idx = new Index(key: 'idx_status', type: IndexType::Key, attributes: ['status']);
 
         $original = new Collection(
@@ -113,6 +115,7 @@ class CollectionModelTest extends TestCase
         $this->assertCount(count($original->indexes), $restored->indexes);
         $this->assertSame($original->attributes[0]->key, $restored->attributes[0]->key);
         $this->assertSame($original->indexes[0]->key, $restored->indexes[0]->key);
+        $this->assertInstanceOf(StringType::class, $restored->attributes[0]);
     }
 
     public function testFromDocumentWithEmptyDocument(): void
@@ -131,10 +134,10 @@ class CollectionModelTest extends TestCase
     public function testWithMultipleAttributes(): void
     {
         $attrs = [
-            new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true),
-            new Attribute(key: 'email', type: ColumnType::String, size: 256, required: true),
-            new Attribute(key: 'age', type: ColumnType::Integer, size: 0, required: false, default: 0),
-            new Attribute(key: 'active', type: ColumnType::Boolean),
+            Attribute::string(key: 'name', size: 128, required: true),
+            Attribute::string(key: 'email', size: 256, required: true),
+            new Integer(key: 'age', required: false, default: 0),
+            new Boolean(key: 'active'),
         ];
 
         $collection = new Collection(id: 'users', attributes: $attrs);
@@ -147,6 +150,10 @@ class CollectionModelTest extends TestCase
         $this->assertCount(4, $restored->attributes);
         $this->assertSame('name', $restored->attributes[0]->key);
         $this->assertSame('active', $restored->attributes[3]->key);
+        $this->assertInstanceOf(StringType::class, $restored->attributes[0]);
+        $this->assertInstanceOf(StringType::class, $restored->attributes[1]);
+        $this->assertInstanceOf(Integer::class, $restored->attributes[2]);
+        $this->assertInstanceOf(Boolean::class, $restored->attributes[3]);
     }
 
     public function testWithMultipleIndexes(): void
@@ -221,7 +228,7 @@ class CollectionModelTest extends TestCase
 
     public function testAttributeDocumentsAreProperDocuments(): void
     {
-        $attr = new Attribute(key: 'title', type: ColumnType::String, size: 64);
+        $attr = Attribute::string(key: 'title', size: 64);
         $collection = new Collection(id: 'articles', attributes: [$attr]);
 
         $doc = $collection->toDocument();

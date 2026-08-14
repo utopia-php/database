@@ -3560,12 +3560,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         /** @var array<mixed> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         $spatialAttributes = [];
+        $spatialTypes = [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value];
         foreach ($collectionAttributes as $attr) {
             if ($attr instanceof Document) {
                 $attributeType = $attr->getAttribute('type');
-                if (in_array($attributeType, [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value])) {
-                    $spatialAttributes[] = $attr->getId();
-                }
+                $attributeKey = $attr->getAttribute('key', $attr->getId());
+            } elseif (\is_array($attr)) {
+                $attributeType = $attr['type'] ?? null;
+                $attributeKey = $attr['key'] ?? $attr[Document::ID] ?? null;
+            } else {
+                continue;
+            }
+
+            if (\is_string($attributeKey) && \in_array($attributeType, $spatialTypes, true)) {
+                $spatialAttributes[] = $attributeKey;
             }
         }
 

@@ -3,6 +3,7 @@
 namespace Utopia\Database\Hook;
 
 use Closure;
+use Utopia\Database\Storage;
 
 /**
  * MongoDB read hook that injects tenant isolation filters into queries for shared-table configurations.
@@ -40,7 +41,7 @@ class MongoTenantFilter implements Read
             return $filters;
         }
 
-        $filters['_tenant'] = ($this->getTenantFilters)($collection);
+        $filters[Storage::TENANT] = ($this->getTenantFilters)($collection);
 
         return $filters;
     }

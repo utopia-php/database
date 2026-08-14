@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Hook;
 
+use Utopia\Database\Storage;
+
 /**
  * Tenant hook that handles both read-side query filtering and write-side row decoration.
  *
@@ -16,7 +18,7 @@ class Tenancy extends Interceptor
      */
     public function __construct(
         private int|string $tenant,
-        private string $column = '_tenant',
+        private string $column = Storage::TENANT,
     ) {
     }
 

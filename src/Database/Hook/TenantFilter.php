@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Hook;
 
+use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Filter;
@@ -36,15 +37,15 @@ class TenantFilter implements Filter, JoinFilter
         $name = $this->collection !== '' ? $this->collection : $table;
 
         if (! empty($this->metadataCollection) && $name === $this->metadataCollection) {
-            return new Condition("({$prefix}_tenant IN (?) OR {$prefix}_tenant IS NULL)", [$this->tenant]);
+            return new Condition("({$prefix}".Storage::TENANT." IN (?) OR {$prefix}".Storage::TENANT." IS NULL)", [$this->tenant]);
         }
 
-        return new Condition("{$prefix}_tenant IN (?)", [$this->tenant]);
+        return new Condition("{$prefix}".Storage::TENANT." IN (?)", [$this->tenant]);
     }
 
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
-        $condition = new Condition("{$table}._tenant IN (?)", [$this->tenant]);
+        $condition = new Condition("{$table}.".Storage::TENANT." IN (?)", [$this->tenant]);
 
         $placement = match ($joinType) {
             JoinType::Left, JoinType::Right => Placement::On,

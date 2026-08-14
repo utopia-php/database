@@ -32,6 +32,7 @@ use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
@@ -193,20 +194,20 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
         $tableRaw = $this->getSQLTableRaw($id);
-        $permsTableRaw = $this->getSQLTableRaw($id.'_perms');
+        $permsTableRaw = $this->getSQLTableRaw(Storage::permissionsTable($id));
 
         $schema = $this->createSchemaBuilder();
 
         $table = $schema->table($tableRaw);
-        $table->id('_id');
-        $table->string('_uid', 255);
+        $table->id(Storage::SEQUENCE);
+        $table->string(Storage::UID, 255);
 
         if ($this->sharedTables) {
-            $table->integer('_tenant')->nullable()->default(null);
+            $table->integer(Storage::TENANT)->nullable()->default(null);
         }
 
-        $table->datetime('_createdAt', 3)->nullable()->default(null);
-        $table->datetime('_updatedAt', 3)->nullable()->default(null);
+        $table->datetime(Storage::CREATED_AT, 3)->nullable()->default(null);
+        $table->datetime(Storage::UPDATED_AT, 3)->nullable()->default(null);
 
         foreach ($attributes as $attribute) {
             if ($attribute->type === ColumnType::Relationship) {
@@ -236,8 +237,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             );
         }
 
-        $table->json('_permissions')->nullable()->default(null);
-        $table->integer('_version')->nullable()->default(1);
+        $table->json(Storage::PERMISSIONS)->nullable()->default(null);
+        $table->integer(Storage::VERSION)->nullable()->default(1);
         $collectionResult = $table->create();
 
         // Build default indexes using schema builder
@@ -249,30 +250,30 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
             $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_tenant_id");
             $permissionsIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permissions");
-            $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, ['_uid', '_tenant'], unique: true, collations: ['_uid' => 'utf8_ci_ai'])->query;
-            $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, ['_tenant', '_createdAt'])->query;
-            $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, ['_tenant', '_updatedAt'])->query;
-            $indexStatements[] = $schema->createIndex($tableRaw, $tenantIdIndex, ['_tenant', '_id'])->query;
-            $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, ['_permissions'], method: 'gin')->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, [Storage::UID, Storage::TENANT], unique: true, collations: [Storage::UID => 'utf8_ci_ai'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, [Storage::TENANT, Storage::CREATED_AT])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, [Storage::TENANT, Storage::UPDATED_AT])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $tenantIdIndex, [Storage::TENANT, Storage::SEQUENCE])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, [Storage::PERMISSIONS], method: 'gin')->query;
         } else {
             $uidIndex = $this->getShortKey("{$namespace}_{$id}_uid");
             $createdIndex = $this->getShortKey("{$namespace}_{$id}_created");
             $updatedIndex = $this->getShortKey("{$namespace}_{$id}_updated");
             $permissionsIndex = $this->getShortKey("{$namespace}_{$id}_permissions");
-            $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, ['_uid'], unique: true, collations: ['_uid' => 'utf8_ci_ai'])->query;
-            $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, ['_createdAt'])->query;
-            $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, ['_updatedAt'])->query;
-            $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, ['_permissions'], method: 'gin')->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, [Storage::UID], unique: true, collations: [Storage::UID => 'utf8_ci_ai'])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, [Storage::CREATED_AT])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, [Storage::UPDATED_AT])->query;
+            $indexStatements[] = $schema->createIndex($tableRaw, $permissionsIndex, [Storage::PERMISSIONS], method: 'gin')->query;
         }
 
         $collectionSql = $collectionResult->query.'; '.implode('; ', $indexStatements);
 
         $permsTable = $schema->table($permsTableRaw);
-        $permsTable->id('_id');
-        $permsTable->integer('_tenant')->nullable()->default(null);
-        $permsTable->string('_type', 12);
-        $permsTable->string('_permission', 255);
-        $permsTable->string('_document', 255);
+        $permsTable->id(Storage::SEQUENCE);
+        $permsTable->integer(Storage::TENANT)->nullable()->default(null);
+        $permsTable->string(Storage::PERM_TYPE, 12);
+        $permsTable->string(Storage::PERM_PERMISSION, 255);
+        $permsTable->string(Storage::PERM_DOCUMENT, 255);
         $permsResult = $permsTable->create();
 
         // Build permission indexes using schema builder
@@ -281,13 +282,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         if ($this->sharedTables) {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, ['_tenant', '_document', '_type', '_permission'], unique: true, method: 'btree')->query;
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, ['_tenant', '_permission', '_type'], method: 'btree')->query;
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, [Storage::TENANT, Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree')->query;
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, [Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
         } else {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, ['_document', '_type', '_permission'], unique: true, method: 'btree', collations: ['_document' => 'utf8_ci_ai'])->query;
-            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, ['_permission', '_type'], method: 'btree')->query;
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree', collations: [Storage::PERM_DOCUMENT => 'utf8_ci_ai'])->query;
+            $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, [Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
         }
 
         $permsSql = $permsResult->query.'; '.implode('; ', $permsIndexStatements);
@@ -352,7 +353,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     {
         $collection = $this->filter($collection);
         $name = $this->getSQLTable($collection);
-        $permissions = $this->getSQLTable($collection.'_perms');
+        $permissions = $this->getSQLTable(Storage::permissionsTable($collection));
 
         $builder = $this->createBuilder();
 
@@ -391,7 +392,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     {
         $collection = $this->filter($collection);
         $name = $this->getSQLTable($collection);
-        $permissions = $this->getSQLTable($collection.'_perms');
+        $permissions = $this->getSQLTable(Storage::permissionsTable($collection));
 
         $builder = $this->createBuilder();
 
@@ -630,12 +631,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             if ($isNestedPath) {
                 $rawExpressions[] = $this->buildJsonbPath($attr, true).($order ? " {$order}" : '');
             } else {
-                $attr = match ($attr) {
-                    '$id' => '_uid',
-                    '$createdAt' => '_createdAt',
-                    '$updatedAt' => '_updatedAt',
-                    default => $this->filter($attr),
-                };
+                $attr = $this->filter($this->getInternalKeyForAttribute($attr));
                 $columnNames[] = $attr;
                 if (! empty($order)) {
                     $columnOrders[$attr] = $order;
@@ -644,7 +640,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         }
 
         if ($this->sharedTables && \in_array($type, [IndexType::Key, IndexType::Unique])) {
-            \array_unshift($columnNames, '_tenant');
+            \array_unshift($columnNames, Storage::TENANT);
         }
 
         $unique = $type === IndexType::Unique;
@@ -742,22 +738,22 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = \json_encode($document->getPermissions());
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
-                $attributes['_version'] = $version;
+                $attributes[Storage::VERSION] = $version;
             }
 
             $name = $this->filter($collection);
 
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
 
-            $row = ['_uid' => $document->getId()];
+            $row = [Storage::UID => $document->getId()];
             if (! empty($document->getSequence())) {
-                $row['_id'] = $document->getSequence();
+                $row[Storage::SEQUENCE] = $document->getSequence();
             }
 
             foreach ($spatialAttributes as $spatialCol) {
@@ -789,7 +785,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
 
             $this->execute($stmt);
             $lastInsertedId = $this->getPDO()->lastInsertId();
-            $document['$sequence'] ??= $lastInsertedId;
+            $document[Document::SEQUENCE] ??= $lastInsertedId;
 
             $ctx = $this->buildWriteContext($name);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, [$document], $ctx));
@@ -815,13 +811,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
-            $attributes['_createdAt'] = $document->getCreatedAt();
-            $attributes['_updatedAt'] = $document->getUpdatedAt();
-            $attributes['_permissions'] = \json_encode($document->getPermissions());
+            $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
+            $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
+            $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
 
             $version = $document->getVersion();
             if ($version !== null) {
-                $attributes['_version'] = $version;
+                $attributes[Storage::VERSION] = $version;
             }
 
             $name = $this->filter($collection);
@@ -834,7 +830,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             }
 
             $builder = $this->newBuilder($name);
-            $row = ['_uid' => $document->getId()];
+            $row = [Storage::UID => $document->getId()];
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
@@ -861,7 +857,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             }
 
             $builder->set($row);
-            $builder->filter([BaseQuery::equal('_id', [$document->getSequence()])]);
+            $builder->filter([BaseQuery::equal(Storage::SEQUENCE, [$document->getSequence()])]);
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
@@ -1222,7 +1218,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     {
         $quoted = $this->quote($this->filter($column));
 
-        return "CASE WHEN target._tenant = EXCLUDED._tenant THEN EXCLUDED.{$quoted} ELSE target.{$quoted} END";
+        return 'CASE WHEN target.'.Storage::TENANT.' = EXCLUDED.'.Storage::TENANT." THEN EXCLUDED.{$quoted} ELSE target.{$quoted} END";
     }
 
     /**
@@ -1242,7 +1238,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
     {
         $quoted = $this->quote($this->filter($column));
 
-        return "CASE WHEN target._tenant = EXCLUDED._tenant THEN target.{$quoted} + EXCLUDED.{$quoted} ELSE target.{$quoted} END";
+        return 'CASE WHEN target.'.Storage::TENANT.' = EXCLUDED.'.Storage::TENANT." THEN target.{$quoted} + EXCLUDED.{$quoted} ELSE target.{$quoted} END";
     }
 
     /**
@@ -1806,7 +1802,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
      * @param  array<string>  $roles
      */
     #[\Override]
-    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = '_uid'): PermissionFilter
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): PermissionFilter
     {
         return new class (\array_values($roles), $type, $documentColumn) extends PermissionFilter {
             /**
@@ -1831,7 +1827,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
                 }
 
                 $parts = \explode('.', $this->documentColumn);
-                $parts[\array_key_last($parts)] = '_permissions';
+                $parts[\array_key_last($parts)] = Storage::PERMISSIONS;
                 $column = \implode('.', \array_map(
                     static fn (string $part): string => '"'.\str_replace('"', '""', $part).'"',
                     $parts
@@ -1897,7 +1893,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         // Duplicate row
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             $columns = $this->getViolatedColumns($e->getMessage());
-            if ($columns !== null && $columns !== ['_uid'] && $columns !== ['_tenant', '_uid']) {
+            if ($columns !== null && $columns !== [Storage::UID] && $columns !== [Storage::TENANT, Storage::UID]) {
                 return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
 
@@ -1974,7 +1970,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
             return '';
         }
 
-        $conflictTarget = $this->sharedTables ? '("_uid", "_tenant")' : '("_uid")';
+        $conflictTarget = $this->sharedTables
+            ? '("'.Storage::UID.'", "'.Storage::TENANT.'")'
+            : '("'.Storage::UID.'")';
 
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
@@ -1986,8 +1984,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Relationship
         }
 
         $conflictTarget = $this->sharedTables
-            ? '("_type", "_permission", "_document", "_tenant")'
-            : '("_type", "_permission", "_document")';
+            ? '("'.Storage::PERM_TYPE.'", "'.Storage::PERM_PERMISSION.'", "'.Storage::PERM_DOCUMENT.'", "'.Storage::TENANT.'")'
+            : '("'.Storage::PERM_TYPE.'", "'.Storage::PERM_PERMISSION.'", "'.Storage::PERM_DOCUMENT.'")';
 
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }

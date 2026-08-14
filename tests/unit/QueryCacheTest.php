@@ -14,6 +14,8 @@ use Utopia\Database\Query;
 
 class QueryCacheTest extends TestCase
 {
+    use QueryCacheTestHelpers;
+
     /**
      * @param array<string, array{encode: callable, decode: callable}> $filters
      */
@@ -46,8 +48,8 @@ class QueryCacheTest extends TestCase
         }
 
         $collectionDocument = $database->getCollection($collection);
-        $cacheKey = $database->getQueryCacheKey($collectionDocument->getId(), $namespace);
-        $cacheHash = $database->getQueryCacheField($collectionDocument, $queries);
+        $cacheKey = $this->getQueryCacheKey($database, $collectionDocument->getId(), $namespace);
+        $cacheHash = $this->getQueryCacheField($database, $collectionDocument, $queries);
 
         return $database->withCache(
             key: $cacheKey,
@@ -326,8 +328,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
         $collection = $database->getCollection('wafRules');
-        $key = $database->getQueryCacheKey($collection->getId(), '_39');
-        $hash = $database->getQueryCacheField($collection, field: 'document');
+        $key = $this->getQueryCacheKey($database, $collection->getId(), '_39');
+        $hash = $this->getQueryCacheField($database, $collection, field: 'document');
 
         $first = $database->withCache(
             key: $key,
@@ -361,8 +363,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
         $collection = $database->getCollection('wafRules');
-        $key = $database->getQueryCacheKey($collection->getId(), '_39');
-        $hash = $database->getQueryCacheField($collection, field: 'count');
+        $key = $this->getQueryCacheKey($database, $collection->getId(), '_39');
+        $hash = $this->getQueryCacheField($database, $collection, field: 'count');
 
         $first = $database->withCache(
             key: $key,
@@ -429,7 +431,7 @@ class QueryCacheTest extends TestCase
         $this->assertCount(1, $cached);
         $this->assertSame('rule-a', $cached[0]->getId());
 
-        $this->assertTrue($database->purgeCachedQueries('wafRules', '_39'));
+        $this->assertTrue($this->purgeCachedQueries($database, 'wafRules', '_39'));
 
         $fresh = $this->findWithCache($database, 'wafRules', $queries, '_39');
         $this->assertCount(2, $fresh);
@@ -659,7 +661,7 @@ class QueryCacheTest extends TestCase
 
         $this->assertCount(1, $cached);
 
-        $this->assertTrue($database->purgeCachedQueries('secureRules', '_39'));
+        $this->assertTrue($this->purgeCachedQueries($database, 'secureRules', '_39'));
 
         $fresh = $this->findWithCache($database, 'secureRules', $queries, '_39');
         $this->assertSame([], $fresh);
@@ -678,8 +680,8 @@ class QueryCacheTest extends TestCase
         $database->getAuthorization()->addRole(Role::user('user-1')->toString());
 
         $collection = $database->getCollection('secureRules');
-        $key = $database->getQueryCacheKey($collection->getId(), '_39');
-        $hash = $database->getQueryCacheField($collection);
+        $key = $this->getQueryCacheKey($database, $collection->getId(), '_39');
+        $hash = $this->getQueryCacheField($database, $collection);
         $database->getCache()->save($key, [
             'collection' => $collection->getId(),
             'type' => 'documents',
@@ -725,7 +727,7 @@ class QueryCacheTest extends TestCase
 
         $collection = $database->getCollection('parents');
         $cache->save(
-            $database->getQueryCacheKey($collection->getId(), '_39'),
+            $this->getQueryCacheKey($database, $collection->getId(), '_39'),
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
@@ -740,7 +742,7 @@ class QueryCacheTest extends TestCase
                     ],
                 ],
             ],
-            $database->getQueryCacheField($collection, $queries),
+            $this->getQueryCacheField($database, $collection, $queries),
         );
 
         $parents = $this->findWithCache($database, 'parents', $queries, '_39');
@@ -782,13 +784,13 @@ class QueryCacheTest extends TestCase
 
         $collection = $database->getCollection('wafRules');
         $cache->save(
-            $database->getQueryCacheKey($collection->getId(), '_39'),
+            $this->getQueryCacheKey($database, $collection->getId(), '_39'),
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
                 'value' => 'invalid',
             ],
-            $database->getQueryCacheField($collection, $queries),
+            $this->getQueryCacheField($database, $collection, $queries),
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
@@ -833,7 +835,7 @@ class QueryCacheTest extends TestCase
 
         $collection = $database->getCollection('wafRules');
         $cache->save(
-            $database->getQueryCacheKey($collection->getId(), '_39'),
+            $this->getQueryCacheKey($database, $collection->getId(), '_39'),
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
@@ -845,7 +847,7 @@ class QueryCacheTest extends TestCase
                     'invalid',
                 ],
             ],
-            $database->getQueryCacheField($collection, $queries),
+            $this->getQueryCacheField($database, $collection, $queries),
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');

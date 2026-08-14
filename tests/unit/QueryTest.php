@@ -393,6 +393,13 @@ class QueryTest extends TestCase
         $this->assertEquals(Method::OrderRandom, $query->getMethod());
         $this->assertEquals('', $query->getAttribute());
         $this->assertEquals([], $query->getValues());
+
+        $query = Query::parse(Query::having([Query::greaterThanEqual('total', 1)])->toString());
+        $this->assertSame(Method::Having, $query->getMethod());
+        $this->assertCount(1, $query->getValues());
+        $this->assertInstanceOf(Query::class, $query->getValues()[0]);
+        $this->assertSame(Method::GreaterThanEqual, $query->getValues()[0]->getMethod());
+        $this->assertSame('total', $query->getValues()[0]->getAttribute());
     }
 
     public function test_is_method(): void

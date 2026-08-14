@@ -32,7 +32,7 @@ class Query extends BaseQuery
      *
      * @var list<Method>
      */
-    public const array LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch];
+    public const array LOGICAL_TYPES = [Method::And, Method::Or, Method::ElemMatch, Method::Having];
 
     public const TYPE_ELEM_MATCH = 'elemMatch';
 

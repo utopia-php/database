@@ -262,7 +262,7 @@ class AttributeValidationTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::COLLECTION);
+                    return new Document(Database::collectionDefinition());
                 }
 
                 return new Document();
@@ -327,7 +327,7 @@ class AttributeValidationTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::COLLECTION);
+                    return new Document(Database::collectionDefinition());
                 }
 
                 return new Document();

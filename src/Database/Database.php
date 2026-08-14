@@ -196,72 +196,6 @@ class Database
         Storage::PERMISSIONS,
     ];
 
-    /**
-     * Parent Collection
-     * Defines the structure for both system and custom collections
-     *
-     * @var array<string, mixed>
-     */
-    protected const COLLECTION = [
-        Document::ID => self::METADATA,
-        Document::COLLECTION => self::METADATA,
-        'name' => 'collections',
-        'attributes' => [
-            [
-                Document::ID => 'name',
-                'key' => 'name',
-                'type' => 'string',
-                'size' => 256,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-            [
-                Document::ID => 'attributes',
-                'key' => 'attributes',
-                'type' => 'string',
-                'size' => 1000000,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => ['json'],
-            ],
-            [
-                Document::ID => 'indexes',
-                'key' => 'indexes',
-                'type' => 'string',
-                'size' => 1000000,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => ['json'],
-            ],
-            [
-                Document::ID => 'documentSecurity',
-                'key' => 'documentSecurity',
-                'type' => 'boolean',
-                'size' => 0,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-            [
-                Document::ID => 'externalId',
-                'key' => 'externalId',
-                'type' => 'string',
-                'size' => 255,
-                'required' => false,
-                'default' => null,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ],
-        ],
-        'indexes' => [],
-    ];
-
     protected Adapter $adapter;
 
     protected Cache $cache;
@@ -2130,16 +2064,36 @@ class Database
     }
 
     /**
-     * @return array<array<string, mixed>>
+     * Parent collection definition used for system and custom collections.
+     *
+     * @return array<string, mixed>
      */
+    public static function collectionDefinition(): array
+    {
+        $data = (new Collection(
+            id: self::METADATA,
+            name: 'collections',
+            documentSecurity: false,
+            attributes: [
+                Attribute::string(key: 'name', size: 256, required: true),
+                Attribute::string(key: 'attributes', size: 1_000_000, filters: ['json']),
+                Attribute::string(key: 'indexes', size: 1_000_000, filters: ['json']),
+                Attribute::boolean(key: 'documentSecurity', required: true),
+            ],
+        ))->toDocument()->getArrayCopy();
+        $data[Document::COLLECTION] = self::METADATA;
+
+        return $data;
+    }
+
     /**
      * @return array<string, mixed>
      */
     protected static function collectionMeta(): array
     {
-        $collection = self::COLLECTION;
+        $collection = self::collectionDefinition();
         $collection['attributes'] = \array_map(
-            fn (array $attr) => new Document($attr),
+            fn (mixed $attr) => $attr instanceof Document ? $attr : new Document($attr),
             $collection['attributes']
         );
 

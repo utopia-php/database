@@ -93,7 +93,7 @@ class SkipPermissionsTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::COLLECTION);
+                    return new Document(Database::collectionDefinition());
                 }
                 if ($col->getId() === 'secret' && $docId === 'doc1') {
                     return $restrictedDoc;
@@ -148,7 +148,7 @@ class SkipPermissionsTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::COLLECTION);
+                    return new Document(Database::collectionDefinition());
                 }
 
                 return new Document();

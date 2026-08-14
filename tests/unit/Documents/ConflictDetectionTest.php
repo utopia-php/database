@@ -99,7 +99,7 @@ class ConflictDetectionTest extends TestCase
                     return $collection;
                 }
                 if ($col->getId() === Database::METADATA && $docId === Database::METADATA) {
-                    return new Document(Database::COLLECTION);
+                    return new Document(Database::collectionDefinition());
                 }
                 if ($col->getId() === $collectionId && $docId === $existingDoc->getId()) {
                     return $existingDoc;

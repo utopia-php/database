@@ -2,7 +2,10 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
+use ReflectionParameter;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Query\Schema\IndexType;
@@ -189,5 +192,88 @@ class IndexModelTest extends TestCase
         $this->assertCount(3, $restored->attributes);
         $this->assertCount(3, $restored->lengths);
         $this->assertCount(3, $restored->orders);
+    }
+
+    /**
+     * @return array<string, array{string, IndexType}>
+     */
+    public static function factories(): array
+    {
+        return [
+            'key' => ['key', IndexType::Key],
+            'index' => ['index', IndexType::Index],
+            'unique' => ['unique', IndexType::Unique],
+            'fullText' => ['fullText', IndexType::Fulltext],
+            'spatial' => ['spatial', IndexType::Spatial],
+            'object' => ['object', IndexType::Object],
+            'hnswEuclidean' => ['hnswEuclidean', IndexType::HnswEuclidean],
+            'hnswCosine' => ['hnswCosine', IndexType::HnswCosine],
+            'hnswDot' => ['hnswDot', IndexType::HnswDot],
+            'trigram' => ['trigram', IndexType::Trigram],
+            'ttl' => ['ttl', IndexType::Ttl],
+        ];
+    }
+
+    #[DataProvider('factories')]
+    public function testFactorySetsTypeAndDefaults(string $factory, IndexType $type): void
+    {
+        $index = Index::{$factory}(key: 'idx');
+
+        $this->assertInstanceOf(Index::class, $index);
+        $this->assertSame('idx', $index->key);
+        $this->assertSame($type, $index->type);
+        $this->assertSame([], $index->attributes);
+        $this->assertSame([], $index->lengths);
+        $this->assertSame([], $index->orders);
+        $this->assertSame(1, $index->ttl);
+    }
+
+    public function testFactoryOmitsTypeParameter(): void
+    {
+        $names = array_map(
+            static fn (ReflectionParameter $parameter): string => $parameter->getName(),
+            (new ReflectionMethod(Index::class, 'key'))->getParameters(),
+        );
+
+        $this->assertSame(false, in_array('type', $names, true));
+    }
+
+    public function testFactoryForwardsOptionalArguments(): void
+    {
+        $index = Index::key(
+            key: 'idx',
+            attributes: ['name', 'email'],
+            lengths: [128, 256],
+            orders: ['ASC', 'DESC'],
+            ttl: 3600,
+        );
+
+        $this->assertInstanceOf(Index::class, $index);
+        $this->assertSame('idx', $index->key);
+        $this->assertSame(IndexType::Key, $index->type);
+        $this->assertSame(['name', 'email'], $index->attributes);
+        $this->assertSame([128, 256], $index->lengths);
+        $this->assertSame(['ASC', 'DESC'], $index->orders);
+        $this->assertSame(3600, $index->ttl);
+    }
+
+    public function testKeyFactory(): void
+    {
+        $index = Index::key('idx_name', ['name']);
+
+        $this->assertInstanceOf(Index::class, $index);
+        $this->assertSame('idx_name', $index->key);
+        $this->assertSame(IndexType::Key, $index->type);
+        $this->assertSame(['name'], $index->attributes);
+    }
+
+    public function testFullTextFactory(): void
+    {
+        $index = Index::fullText('idx_body', ['body']);
+
+        $this->assertInstanceOf(Index::class, $index);
+        $this->assertSame('idx_body', $index->key);
+        $this->assertSame(IndexType::Fulltext, $index->type);
+        $this->assertSame(['body'], $index->attributes);
     }
 }

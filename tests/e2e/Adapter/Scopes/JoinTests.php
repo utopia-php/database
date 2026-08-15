@@ -3852,8 +3852,8 @@ trait JoinTests
 
         $database->getDocument($pCol, 'p1');
         $document = $database->getDocument($pCol, 'p1', [
-            Query::leftJoin($rCol, '$id', 'prod_uid'),
-            Query::select(['score']),
+            Query::leftJoin($rCol, '$id', 'prod_uid', '=', 'rev'),
+            Query::select(['rev.score']),
         ]);
 
         $this->assertSame(false, $document->isEmpty());
@@ -3996,9 +3996,10 @@ trait JoinTests
         ]);
 
         $identity = static function (Document $document): string {
+            $name = $document->getAttribute('name');
             $score = $document->getAttribute('score');
 
-            return $document->getId().':'.(string) $document->getAttribute('name').':'.(string) $score;
+            return $document->getId().':'.(\is_scalar($name) ? (string) $name : '').':'.(\is_scalar($score) ? (string) $score : '');
         };
 
         $this->assertSame(2, \count($sliced));

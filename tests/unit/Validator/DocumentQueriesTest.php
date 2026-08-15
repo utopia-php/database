@@ -95,6 +95,27 @@ class DocumentQueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
+    public function testSelectUnprefixedJoinAttributeIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([
+            Query::select(['score']),
+            Query::leftJoin('reviews', '$id', 'prod_uid'),
+        ]));
+        $this->assertSame('Invalid query: Attribute not found in schema: score', $validator->getDescription());
+    }
+
+    public function testSelectWithLeftJoinAliasIsValid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(true, $validator->isValid([
+            Query::select(['rev.score']),
+            Query::leftJoin('reviews', '$id', 'prod_uid', '=', 'rev'),
+        ]), $validator->getDescription());
+    }
+
     public function testCountIsInvalid(): void
     {
         $validator = new DocumentQueries($this->documentAttributes());

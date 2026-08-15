@@ -5,6 +5,7 @@ namespace Utopia\Database\Validator\Queries;
 use Exception;
 use Utopia\Database\Document as BaseDocument;
 use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Schema\ColumnType;
 
@@ -41,6 +42,7 @@ class Document extends Queries
 
         $validators = [
             new Select($attributes, $supportForAttributes),
+            new Join(),
         ];
 
         parent::__construct($validators);

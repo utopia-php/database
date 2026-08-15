@@ -1308,15 +1308,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
 
-        $hasSelectionProjection = false;
-        if (! $hasAggregation) {
-            $selections = $this->getAttributeSelections($queries);
-            if (! empty($selections) && ! \in_array('*', $selections)) {
-                $builder->select($this->mapSelectionsToColumns($selections, includeInternal: ! $hasDistinct));
-                $hasSelectionProjection = true;
-            }
-        }
-
         $joinTablePrefixes = [];
         $joinIndex = 0;
 
@@ -1359,6 +1350,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 }
 
                 $joinTablePrefixes[] = ['table' => $joinTable, 'alias' => $joinAlias];
+            }
+        }
+
+        $hasSelectionProjection = false;
+        if (! $hasAggregation) {
+            $selections = $this->getAttributeSelections($queries);
+            if (! empty($selections) && ! \in_array('*', $selections)) {
+                $builder->select($this->mapSelectionsToColumns(
+                    $selections,
+                    includeInternal: ! $hasDistinct,
+                    joinAliases: \array_column($joinTablePrefixes, 'alias'),
+                ));
+                $hasSelectionProjection = true;
             }
         }
 
@@ -3436,9 +3440,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * are always included.
      *
      * @param  array<string>  $selections
+     * @param  array<string>  $joinAliases
      * @return array<string>
      */
-    protected function mapSelectionsToColumns(array $selections, bool $includeInternal = true): array
+    protected function mapSelectionsToColumns(array $selections, bool $includeInternal = true, array $joinAliases = []): array
     {
         $internalKeys = [
             Document::ID,
@@ -3456,15 +3461,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
+        $aliasSet = \array_fill_keys($joinAliases, true);
         $columns = [];
         foreach ($selections as $selection) {
             if (\is_string($selection) && \str_contains($selection, '.')) {
                 $dot = \strpos($selection, '.');
                 $prefix = \substr($selection, 0, $dot);
-                $name = \substr($selection, $dot + 1);
-                $columns[] = $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
+                if (isset($aliasSet[$prefix])) {
+                    $name = \substr($selection, $dot + 1);
+                    $columns[] = $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
 
-                continue;
+                    continue;
+                }
             }
             $columns[] = $this->filter((string) $selection);
         }

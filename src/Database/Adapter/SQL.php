@@ -3940,9 +3940,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private function remapRow(array &$row): void
     {
         foreach (\array_keys($row) as $key) {
-            if (! \is_string($key)) {
-                continue;
-            }
             if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
                 unset($row[$key]);
 

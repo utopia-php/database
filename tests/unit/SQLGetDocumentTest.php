@@ -204,6 +204,47 @@ final class SQLGetDocumentTest extends TestCase
         $this->assertStringEndsWith('/* transformed */', $queries[1]);
     }
 
+    public function testJoinSkipsFastPath(): void
+    {
+        $statement = $this->getMockBuilder(\PDOStatement::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $statement->method('bindValue')->willReturn(true);
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetch')->willReturn(false);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdo->expects($this->once())
+            ->method('prepare')
+            ->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+                $sql = $query;
+
+                return $statement;
+            });
+
+        $adapter = new MySQL($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+
+        $adapter->getDocument(
+            new Document([Document::ID => 'collection']),
+            'document',
+            [Query::leftJoin('orders', '$id', 'customerId')]
+        );
+
+        $this->assertNotSame('', $sql);
+        $this->assertStringContainsString('JOIN', $sql);
+        $this->assertDoesNotMatchRegularExpression(
+            '/WHERE\s+`_uid`\s*=\s*:_uid\s*$/',
+            $sql
+        );
+    }
+
     private function assertTimeout(MySQL $adapter, PDOException $exception): void
     {
         try {

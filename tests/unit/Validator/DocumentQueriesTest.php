@@ -75,4 +75,92 @@ class DocumentQueriesTest extends TestCase
         $queries = [Query::limit(1)];
         $this->assertEquals(false, $validator->isValid($queries));
     }
+
+    public function testJoinIsValid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(true, $validator->isValid([
+            Query::join('orders', '$id', 'customerId'),
+        ]), $validator->getDescription());
+    }
+
+    public function testSelectWithJoinAliasIsValid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(true, $validator->isValid([
+            Query::select(['ord.amount']),
+            Query::join('orders', '$id', 'customerId', '=', 'ord'),
+        ]), $validator->getDescription());
+    }
+
+    public function testCountIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([Query::count('*', 'cnt')]));
+        $this->assertStringContainsString('Invalid query method', $validator->getDescription());
+    }
+
+    public function testGroupByIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([Query::groupBy(['name'])]));
+        $this->assertStringContainsString('Invalid query method', $validator->getDescription());
+    }
+
+    public function testHavingIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([
+            Query::having([Query::greaterThan('amount', 1)]),
+        ]));
+        $this->assertStringContainsString('Invalid query method', $validator->getDescription());
+    }
+
+    public function testDistinctIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([Query::distinct()]));
+        $this->assertStringContainsString('Invalid query method', $validator->getDescription());
+    }
+
+    public function testUnionIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([
+            Query::union([Query::equal('name', ['x'])]),
+        ]));
+        $this->assertStringContainsString('Invalid query method', $validator->getDescription());
+    }
+
+    public function testNaturalJoinIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([Query::naturalJoin('orders')]));
+        $this->assertStringContainsString('Natural joins are not supported', $validator->getDescription());
+    }
+
+    /**
+     * @return array<Document>
+     */
+    private function documentAttributes(): array
+    {
+        return [
+            new Document([
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+            ]),
+            new Document([
+                'key' => 'amount',
+                'type' => ColumnType::Integer->value,
+            ]),
+        ];
+    }
 }

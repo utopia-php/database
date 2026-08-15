@@ -68,6 +68,53 @@ final class SQLFindTest extends TestCase
         yield 'builder path' => [false];
     }
 
+    public function testEmulatesFullOuterJoinWithOuterLimit(): void
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdo->expects($this->once())
+            ->method('prepare')
+            ->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+                $sql = $query;
+
+                return $statement;
+            });
+
+        $adapter = new MySQL($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(
+            new Document(['$id' => 'collection']),
+            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            limit: 2,
+        );
+
+        $this->assertNotSame('', $sql);
+        $this->assertStringContainsString('UNION', $sql);
+        $this->assertStringContainsString('LEFT JOIN', $sql);
+        $this->assertStringContainsString('RIGHT JOIN', $sql);
+        $this->assertStringContainsString('IS NULL', $sql);
+        $this->assertStringNotContainsString('FULL OUTER JOIN', $sql);
+
+        $unionPosition = stripos($sql, 'UNION');
+        $this->assertNotFalse($unionPosition);
+
+        $limitMatches = preg_match_all('/\bLIMIT\s+(?:2|\?)\b/i', $sql, $matches, PREG_OFFSET_CAPTURE);
+        $this->assertSame(1, $limitMatches, $sql);
+        $this->assertGreaterThan($unionPosition, $matches[0][0][1], $sql);
+    }
+
     private function find(MySQL $adapter, bool $fast): void
     {
         $adapter->find(

@@ -612,6 +612,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
+        $collectionDoc = $collection;
         $collection = $collection->getId();
 
         $name = $this->filter($collection);
@@ -619,13 +620,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $alias = Query::DEFAULT_ALIAS;
 
         // Fast path: single-row lookup by primary key with no projection,
-        // no shared-tenant filter, and no row lock. This is by far the most
-        // common shape (metadata fetch, primary cache miss, etc.); skip the
-        // builder pipeline and go directly to a parameterised SELECT.
+        // no shared-tenant filter, no joins, and no row lock. This is by far
+        // the most common shape (metadata fetch, primary cache miss, etc.);
+        // skip the builder pipeline and go directly to a parameterised SELECT.
         if (
             empty($selections)
             && ! $forUpdate
             && ! ($this->sharedTables && $this->tenant !== null)
+            && ! $this->queriesHaveJoins($queries)
         ) {
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
@@ -666,44 +668,101 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return Document::fromRow($row);
         }
 
-        $builder = $this->newBuilder($name, $alias);
+        if ($this->queriesHaveJoins($queries)) {
+            if ($forUpdate) {
+                throw new QueryException('Cannot lock a document for update when join queries are present');
+            }
 
-        if (! empty($selections) && ! \in_array('*', $selections)) {
-            $builder->select($this->mapSelectionsToColumns($selections));
-        }
+            $roles = $this->authorization->getRoles();
+            $queries = \array_map(static fn ($query) => clone $query, $queries);
+            $joinTablePrefixes = $this->remapJoinQueries($queries);
 
-        $builder->filter([BaseQuery::equal(Storage::UID, [$id])]);
-
-        if ($forUpdate && $this->supports(Capability::UpdateLock)) {
-            $builder->forUpdate();
-        }
-
-        $result = $builder->build();
-
-        $stmt = null;
-        $rows = [];
-        $exception = null;
-
-        try {
-            $stmt = $this->executeResult($result, Event::DocumentRead);
-            $this->execute($stmt);
-            /** @var array<int, array<string, mixed>> $rows */
-            $rows = $stmt->fetchAll();
-        } catch (PDOException $e) {
-            $exception = $e;
-        } finally {
-            if ($stmt !== null) {
-                try {
-                    $stmt->closeCursor();
-                } catch (PDOException $e) {
-                    $exception ??= $e;
+            $hasPreservingOuterJoin = false;
+            foreach ($queries as $query) {
+                $method = $query->getMethod();
+                if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
+                    $hasPreservingOuterJoin = true;
+                    break;
                 }
+            }
+
+            if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
+                $uid = $alias.'.'.Storage::UID;
+                $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
+                $leftQueries[] = BaseQuery::equal($uid, [$id]);
+                $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
+                $rightQueries[] = BaseQuery::isNull($uid);
+                $rightQueries[] = BaseQuery::equal($uid, [$id]);
+
+                $left = $this->newBuilder($name, $alias, false);
+                $this->configureFindBuilder(
+                    $left,
+                    $collectionDoc,
+                    $leftQueries,
+                    $joinTablePrefixes,
+                    false,
+                    false,
+                    [],
+                    $name,
+                    $alias,
+                    $roles,
+                    PermissionType::Read,
+                    false,
+                );
+
+                $right = $this->newBuilder($name, $alias, true);
+                $this->configureFindBuilder(
+                    $right,
+                    $collectionDoc,
+                    $rightQueries,
+                    $joinTablePrefixes,
+                    false,
+                    false,
+                    [],
+                    $name,
+                    $alias,
+                    $roles,
+                    PermissionType::Read,
+                    true,
+                );
+
+                $left->union($right);
+                $this->applyFindPage($left, [], [], 1, null, afterUnion: true);
+                $builder = $left;
+            } else {
+                $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
+                $this->configureFindBuilder(
+                    $builder,
+                    $collectionDoc,
+                    $queries,
+                    $joinTablePrefixes,
+                    false,
+                    false,
+                    [],
+                    $name,
+                    $alias,
+                    $roles,
+                    PermissionType::Read,
+                    $hasPreservingOuterJoin,
+                );
+                $builder->filter([BaseQuery::equal($alias.'.'.Storage::UID, [$id])]);
+                $builder->limit(1);
+            }
+        } else {
+            $builder = $this->newBuilder($name, $alias);
+
+            if (! empty($selections) && ! \in_array('*', $selections)) {
+                $builder->select($this->mapSelectionsToColumns($selections, joinAliases: []));
+            }
+
+            $builder->filter([BaseQuery::equal(Storage::UID, [$id])]);
+
+            if ($forUpdate && $this->supports(Capability::UpdateLock)) {
+                $builder->forUpdate();
             }
         }
 
-        if ($exception !== null) {
-            throw $this->processException($exception);
-        }
+        $rows = $this->executeSelect($builder, Event::DocumentRead);
 
         if (empty($rows)) {
             return new Document([]);
@@ -1295,6 +1354,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $queries = \array_map(static fn ($query) => clone $query, $queries);
         }
 
+        $joinTablePrefixes = [];
+        if ($hasJoins) {
+            $joinTablePrefixes = $this->remapJoinQueries($queries);
+        }
+
         $hasPreservingOuterJoin = false;
         if ($hasJoins) {
             foreach ($queries as $query) {
@@ -1306,372 +1370,220 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
-        $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
+        if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
+            $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
+            $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
+            $rightQueries[] = BaseQuery::isNull($alias.'.'.Storage::UID);
 
-        $joinTablePrefixes = [];
-        $joinIndex = 0;
-
-        if ($hasJoins) {
-            foreach ($queries as $query) {
-                if (! $query->getMethod()->isJoin()) {
-                    continue;
-                }
-
-                if (
-                    $query->getMethod() === Method::FullOuterJoin
-                    && ! $builder instanceof FullOuterJoinsFeature
-                ) {
-                    throw new QueryException('Full outer joins are not supported');
-                }
-
-                $joinTable = $query->getAttribute();
-                $resolvedTable = $this->getSQLTableRaw($this->filter($joinTable));
-                $query->setAttribute($resolvedTable);
-
-                $values = $query->getValues();
-                $method = $query->getMethod();
-                $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
-                $joinAlias = $this->sanitizeJoinAlias(
-                    \is_string($values[$aliasIndex] ?? null) ? $values[$aliasIndex] : ''
-                );
-                if ($joinAlias === '') {
-                    $joinAlias = 'j'.$joinIndex;
-                }
-                $joinIndex++;
-
-                if ($aliasIndex === 3 && \count($values) >= 3) {
-                    $left = $values[0] ?? null;
-                    $right = $values[2] ?? null;
-                    if (! \is_string($left) || ! \is_string($right)) {
-                        throw new QueryException('Join columns must be strings');
-                    }
-                    $values[0] = $this->qualifyJoinColumn($left, $alias);
-                    $values[2] = $this->qualifyJoinColumn($right, $joinAlias);
-                    $values[3] = $joinAlias;
-                    $query->setValues($values);
-                } elseif ($aliasIndex === 0) {
-                    $values[0] = $joinAlias;
-                    $query->setValues($values);
-                }
-
-                $joinTablePrefixes[] = ['table' => $joinTable, 'alias' => $joinAlias];
-            }
-        }
-
-        $hasSelectionProjection = false;
-        if (! $hasAggregation) {
-            $selections = $this->getAttributeSelections($queries);
-            if (! empty($selections) && ! \in_array('*', $selections)) {
-                $builder->select($this->mapSelectionsToColumns(
-                    $selections,
-                    includeInternal: ! $hasDistinct,
-                    joinAliases: \array_column($joinTablePrefixes, 'alias'),
-                ));
-                $hasSelectionProjection = true;
-            }
-        }
-
-        if ($hasAggregation && ! empty($joinTablePrefixes)) {
-            /** @var array<Document> $collectionAttrs */
-            $collectionAttrs = $collectionDoc->getAttribute('attributes', []);
-            $mainAttributeSet = [];
-            foreach ($collectionAttrs as $attr) {
-                $mainAttributeSet[$attr->getId()] = true;
-            }
-            $defaultJoinPrefix = $joinTablePrefixes[0]['alias'];
-
-            foreach ($queries as $query) {
-                if ($query->getMethod()->isAggregate()) {
-                    $attr = $query->getAttribute();
-                    if ($attr !== '*' && $attr !== '' && ! \str_contains($attr, '.') && ! isset($mainAttributeSet[$attr])) {
-                        $internalAttr = $this->getInternalKeyForAttribute($attr);
-                        $query->setAttribute($defaultJoinPrefix . '.' . $internalAttr);
-                    }
-                } elseif ($query->getMethod() === Method::GroupBy) {
-                    $values = $query->getValues();
-                    $qualified = false;
-                    foreach ($values as $i => $col) {
-                        if (\is_string($col) && ! \str_contains($col, '.') && ! isset($mainAttributeSet[$col])) {
-                            $internalCol = $this->getInternalKeyForAttribute($col);
-                            $values[$i] = $defaultJoinPrefix . '.' . $internalCol;
-                            $qualified = true;
-                        }
-                    }
-                    if ($qualified) {
-                        $query->setValues($values);
-                    }
-                }
-            }
-        }
-
-        if ($hasAggregation) {
-            foreach ($queries as $query) {
-                if ($query->getMethod() === Method::GroupBy) {
-                    /** @var array<string> $groupCols */
-                    $groupCols = $query->getValues();
-                    $builder->select(\array_map(
-                        fn (string $col) => \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col)),
-                        $groupCols
-                    ));
-                }
-            }
-        }
-
-        // Pass all queries (filters, aggregations, joins, groupBy, having) to the builder
-        $builder->filter($queries);
-
-        // Adapter-specific filters (e.g. SQLite FTS5) compiled to raw WHERE.
-        foreach ($adapterFilterQueries as $query) {
-            $compiled = $this->compileAdapterFilter($query, $name, $alias);
-            if ($compiled !== null) {
-                $builder->whereRaw($compiled['expression'], $compiled['bindings']);
-            }
-        }
-
-        // Permission subquery for primary table
-        if ($this->authorization->getStatus()) {
-            $docCol = $hasJoins ? $alias . '.' . Storage::UID : Storage::UID;
-            $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
-            if ($hasPreservingOuterJoin) {
-                $permissionHook = new PermissionAllowNullUid(
-                    $permissionHook,
-                    $docCol,
-                    $this->getIdentifierQuoteChar(),
-                );
-            }
-            $builder->addHook($permissionHook);
-
-            foreach ($joinTablePrefixes as $join) {
-                $builder->addHook(new PermissionJoinFilter(
-                    $this->newPermissionHook(
-                        $this->filter($join['table']),
-                        $roles,
-                        $forPermission->value,
-                        $join['alias'].'.'.Storage::UID
-                    ),
-                    $join['alias'],
-                    $this->getIdentifierQuoteChar(),
-                ));
-            }
-        }
-
-        // Memoize internal-key resolution for the duration of this find().
-        // Cursor pagination and order-by both walk $orderAttributes; without
-        // this, every order column passes through filter()+
-        // getInternalKeyForAttribute() multiple times.
-        $internalKeyCache = [];
-        $resolveInternalKey = function (string $attribute) use (&$internalKeyCache): string {
-            return $internalKeyCache[$attribute]
-                ??= $this->filter($this->getInternalKeyForAttribute($attribute));
-        };
-
-        $vectorDistance = null;
-        $vectorQuery = $vectorQueries[0] ?? null;
-        if ($vectorQuery !== null) {
-            $vectorDistance = $this->getVectorOrderRaw($vectorQuery, $alias);
-        }
-
-        if ($vectorDistance !== null && $vectorQuery !== null) {
-            $vectorAttribute = $this->quote($this->filter($vectorQuery->getAttribute()));
-            $builder->whereRaw($this->quote($alias).".{$vectorAttribute} IS NOT NULL");
-        }
-
-        // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
-        if (! empty($cursor) && $vectorDistance !== null) {
-            $distance = $cursor[Document::DISTANCE] ?? null;
-            if (! \is_numeric($distance)) {
-                throw new QueryException('Vector cursor is missing its distance');
-            }
-            if (empty($orderAttributes)) {
-                throw new QueryException('Vector cursor requires a unique order attribute');
-            }
-
-            $vectorCursor = $this->getVectorCursorCondition(
-                $vectorDistance,
-                (float) $distance,
-                \array_values($orderAttributes),
-                \array_values($orderTypes),
-                $cursor,
-                $cursorDirection,
+            $left = $this->newBuilder($name, $alias, false);
+            $this->configureFindBuilder(
+                $left,
+                $collectionDoc,
+                $leftQueries,
+                $joinTablePrefixes,
+                $hasAggregation,
+                $hasDistinct,
+                $adapterFilterQueries,
+                $name,
                 $alias,
-                $resolveInternalKey,
+                $roles,
+                $forPermission,
+                false,
             );
-            $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
-        }
 
-        if (! empty($cursor) && $vectorDistance === null) {
-            $cursorConditions = [];
+            $right = $this->newBuilder($name, $alias, true);
+            $this->configureFindBuilder(
+                $right,
+                $collectionDoc,
+                $rightQueries,
+                $joinTablePrefixes,
+                $hasAggregation,
+                $hasDistinct,
+                $adapterFilterQueries,
+                $name,
+                $alias,
+                $roles,
+                $forPermission,
+                true,
+            );
 
-            foreach ($orderAttributes as $i => $originalAttribute) {
-                $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
-                if ($orderType === OrderDirection::Random) {
-                    continue;
+            $left->union($right);
+            $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
+            $results = $this->executeSelect($left, Event::DocumentFind);
+        } else {
+            $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
+            $hasSelectionProjection = $this->configureFindBuilder(
+                $builder,
+                $collectionDoc,
+                $queries,
+                $joinTablePrefixes,
+                $hasAggregation,
+                $hasDistinct,
+                $adapterFilterQueries,
+                $name,
+                $alias,
+                $roles,
+                $forPermission,
+                $hasPreservingOuterJoin,
+            );
+
+            // Memoize internal-key resolution for the duration of this find().
+            // Cursor pagination and order-by both walk $orderAttributes; without
+            // this, every order column passes through filter()+
+            // getInternalKeyForAttribute() multiple times.
+            $internalKeyCache = [];
+            $resolveInternalKey = function (string $attribute) use (&$internalKeyCache): string {
+                return $internalKeyCache[$attribute]
+                    ??= $this->filter($this->getInternalKeyForAttribute($attribute));
+            };
+
+            $vectorDistance = null;
+            $vectorQuery = $vectorQueries[0] ?? null;
+            if ($vectorQuery !== null) {
+                $vectorDistance = $this->getVectorOrderRaw($vectorQuery, $alias);
+            }
+
+            if ($vectorDistance !== null && $vectorQuery !== null) {
+                $vectorAttribute = $this->quote($this->filter($vectorQuery->getAttribute()));
+                $builder->whereRaw($this->quote($alias).".{$vectorAttribute} IS NOT NULL");
+            }
+
+            // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
+            if (! empty($cursor) && $vectorDistance !== null) {
+                $distance = $cursor[Document::DISTANCE] ?? null;
+                if (! \is_numeric($distance)) {
+                    throw new QueryException('Vector cursor is missing its distance');
+                }
+                if (empty($orderAttributes)) {
+                    throw new QueryException('Vector cursor requires a unique order attribute');
                 }
 
-                $direction = $orderType;
+                $vectorCursor = $this->getVectorCursorCondition(
+                    $vectorDistance,
+                    (float) $distance,
+                    \array_values($orderAttributes),
+                    \array_values($orderTypes),
+                    $cursor,
+                    $cursorDirection,
+                    $alias,
+                    $resolveInternalKey,
+                );
+                $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
+            }
 
-                if ($cursorDirection === CursorDirection::Before) {
-                    $direction = ($direction === OrderDirection::Asc)
-                        ? OrderDirection::Desc
-                        : OrderDirection::Asc;
-                }
+            if (! empty($cursor) && $vectorDistance === null) {
+                $cursorConditions = [];
 
-                $internalAttr = $resolveInternalKey($originalAttribute);
-
-                // Special case: single attribute on unique primary key
-                if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === Document::SEQUENCE) {
-                    /** @var bool|float|int|string $cursorVal */
-                    $cursorVal = $cursor[$originalAttribute];
-                    if ($direction === OrderDirection::Desc) {
-                        $cursorConditions[] = BaseQuery::lessThan($internalAttr, $cursorVal);
-                    } else {
-                        $cursorConditions[] = BaseQuery::greaterThan($internalAttr, $cursorVal);
+                foreach ($orderAttributes as $i => $originalAttribute) {
+                    $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
+                    if ($orderType === OrderDirection::Random) {
+                        continue;
                     }
-                    break;
+
+                    $direction = $orderType;
+
+                    if ($cursorDirection === CursorDirection::Before) {
+                        $direction = ($direction === OrderDirection::Asc)
+                            ? OrderDirection::Desc
+                            : OrderDirection::Asc;
+                    }
+
+                    $internalAttr = $resolveInternalKey($originalAttribute);
+
+                    // Special case: single attribute on unique primary key
+                    if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === Document::SEQUENCE) {
+                        /** @var bool|float|int|string $cursorVal */
+                        $cursorVal = $cursor[$originalAttribute];
+                        if ($direction === OrderDirection::Desc) {
+                            $cursorConditions[] = BaseQuery::lessThan($internalAttr, $cursorVal);
+                        } else {
+                            $cursorConditions[] = BaseQuery::greaterThan($internalAttr, $cursorVal);
+                        }
+                        break;
+                    }
+
+                    // Multi-attribute cursor: (prev_attrs equal) AND (current_attr > or < cursor)
+                    $andConditions = [];
+
+                    for ($j = 0; $j < $i; $j++) {
+                        $prevOriginal = $orderAttributes[$j];
+                        $prevAttr = $resolveInternalKey($prevOriginal);
+                        /** @var array<array<mixed>|bool|float|int|string|null> $prevCursorVals */
+                        $prevCursorVals = [$cursor[$prevOriginal]];
+                        $andConditions[] = BaseQuery::equal($prevAttr, $prevCursorVals);
+                    }
+
+                    /** @var bool|float|int|string $cursorAttrVal */
+                    $cursorAttrVal = $cursor[$originalAttribute];
+                    if ($direction === OrderDirection::Desc) {
+                        $andConditions[] = BaseQuery::lessThan($internalAttr, $cursorAttrVal);
+                    } else {
+                        $andConditions[] = BaseQuery::greaterThan($internalAttr, $cursorAttrVal);
+                    }
+
+                    if (count($andConditions) === 1) {
+                        $cursorConditions[] = $andConditions[0];
+                    } else {
+                        $cursorConditions[] = BaseQuery::and($andConditions);
+                    }
                 }
 
-                // Multi-attribute cursor: (prev_attrs equal) AND (current_attr > or < cursor)
-                $andConditions = [];
-
-                for ($j = 0; $j < $i; $j++) {
-                    $prevOriginal = $orderAttributes[$j];
-                    $prevAttr = $resolveInternalKey($prevOriginal);
-                    /** @var array<array<mixed>|bool|float|int|string|null> $prevCursorVals */
-                    $prevCursorVals = [$cursor[$prevOriginal]];
-                    $andConditions[] = BaseQuery::equal($prevAttr, $prevCursorVals);
-                }
-
-                /** @var bool|float|int|string $cursorAttrVal */
-                $cursorAttrVal = $cursor[$originalAttribute];
-                if ($direction === OrderDirection::Desc) {
-                    $andConditions[] = BaseQuery::lessThan($internalAttr, $cursorAttrVal);
-                } else {
-                    $andConditions[] = BaseQuery::greaterThan($internalAttr, $cursorAttrVal);
-                }
-
-                if (count($andConditions) === 1) {
-                    $cursorConditions[] = $andConditions[0];
-                } else {
-                    $cursorConditions[] = BaseQuery::and($andConditions);
+                if (! empty($cursorConditions)) {
+                    if (count($cursorConditions) === 1) {
+                        $builder->filter($cursorConditions);
+                    } else {
+                        $builder->filter([BaseQuery::or($cursorConditions)]);
+                    }
                 }
             }
 
-            if (! empty($cursorConditions)) {
-                if (count($cursorConditions) === 1) {
-                    $builder->filter($cursorConditions);
-                } else {
-                    $builder->filter([BaseQuery::or($cursorConditions)]);
+            // Vector ordering (comes first for similarity search)
+            if ($vectorDistance !== null) {
+                $vectorOrder = $vectorDistance['expression'];
+                if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
+                    $vectorOrder .= ' DESC';
                 }
+                $builder->orderByRaw($vectorOrder, $vectorDistance['bindings']);
             }
-        }
 
-        // Vector ordering (comes first for similarity search)
-        if ($vectorDistance !== null) {
-            $vectorOrder = $vectorDistance['expression'];
-            if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
-                $vectorOrder .= ' DESC';
+            if ($vectorDistance !== null && ! $hasAggregation) {
+                if (! $hasSelectionProjection) {
+                    $builder->select(['*']);
+                }
+                $builder->selectRaw(
+                    $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
+                    $vectorDistance['bindings']
+                );
             }
-            $builder->orderByRaw($vectorOrder, $vectorDistance['bindings']);
-        }
 
-        if ($vectorDistance !== null && ! $hasAggregation) {
-            if (! $hasSelectionProjection) {
-                $builder->select(['*']);
-            }
-            $builder->selectRaw(
-                $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
-                $vectorDistance['bindings']
+            // Full-text search relevance scoring.
+            //
+            // Skip the second MATCH compilation (and its ORDER BY) when the caller
+            // already asked for an explicit order. The Documents trait auto-appends
+            // the sequence attribute as a tiebreaker, so a single sequence-only
+            // signal — with no entries before it — means "caller did not specify
+            // an order" and is the only case where we should auto-order by
+            // relevance. Anything else (multiple entries, or a leading attribute
+            // other than sequence) means the caller has an explicit order and
+            // relevance ordering would silently override it.
+            $shouldAutoOrderByRelevance = (
+                count($orderAttributes) === 0
+                || (count($orderAttributes) === 1 && $orderAttributes[0] === Document::SEQUENCE)
             );
-        }
 
-        // Full-text search relevance scoring.
-        //
-        // Skip the second MATCH compilation (and its ORDER BY) when the caller
-        // already asked for an explicit order. The Documents trait auto-appends
-        // the sequence attribute as a tiebreaker, so a single sequence-only
-        // signal — with no entries before it — means "caller did not specify
-        // an order" and is the only case where we should auto-order by
-        // relevance. Anything else (multiple entries, or a leading attribute
-        // other than sequence) means the caller has an explicit order and
-        // relevance ordering would silently override it.
-        $shouldAutoOrderByRelevance = (
-            count($orderAttributes) === 0
-            || (count($orderAttributes) === 1 && $orderAttributes[0] === Document::SEQUENCE)
-        );
-
-        if (! empty($searchQueries) && $shouldAutoOrderByRelevance) {
-            $builder->select(['*']);
-            foreach ($searchQueries as $searchQuery) {
-                $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);
-                if ($relevanceRaw !== null) {
-                    $builder->selectRaw($relevanceRaw['expression'], $relevanceRaw['bindings']);
-                    $builder->orderByRaw($relevanceRaw['order']);
+            if (! empty($searchQueries) && $shouldAutoOrderByRelevance) {
+                $builder->select(['*']);
+                foreach ($searchQueries as $searchQuery) {
+                    $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);
+                    if ($relevanceRaw !== null) {
+                        $builder->selectRaw($relevanceRaw['expression'], $relevanceRaw['bindings']);
+                        $builder->orderByRaw($relevanceRaw['order']);
+                    }
                 }
             }
-        }
 
-        // Regular ordering
-        foreach ($orderAttributes as $i => $originalAttribute) {
-            $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
-
-            if ($orderType === OrderDirection::Random) {
-                $builder->sortRandom();
-
-                continue;
-            }
-
-            $internalAttr = $resolveInternalKey($originalAttribute);
-            $direction = $orderType;
-
-            if ($cursorDirection === CursorDirection::Before) {
-                $direction = ($direction === OrderDirection::Asc)
-                    ? OrderDirection::Desc
-                    : OrderDirection::Asc;
-            }
-
-            if ($direction === OrderDirection::Desc) {
-                $builder->sortDesc($internalAttr);
-            } else {
-                $builder->sortAsc($internalAttr);
-            }
-        }
-
-        // Limit/offset
-        if (! \is_null($limit)) {
-            $builder->limit($limit);
-        }
-        if (! \is_null($offset)) {
-            $builder->offset($offset);
-        }
-
-        try {
-            $result = $builder->build();
-        } catch (ValidationException|UnsupportedException $e) {
-            throw new QueryException($e->getMessage(), $e->getCode(), $e);
-        }
-
-        $stmt = null;
-        $results = [];
-        $exception = null;
-        try {
-            $stmt = $this->executeResult($result, Event::DocumentFind);
-            $this->execute($stmt);
-            /** @var array<int, array<string, mixed>> $results */
-            $results = $stmt->fetchAll();
-        } catch (PDOException $e) {
-            $exception = $e;
-        } finally {
-            if ($stmt !== null) {
-                try {
-                    $stmt->closeCursor();
-                } catch (PDOException $e) {
-                    $exception ??= $e;
-                }
-            }
-        }
-
-        if ($exception !== null) {
-            throw $this->processException($exception);
+            $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection);
+            $results = $this->executeSelect($builder, Event::DocumentFind);
         }
 
         $documents = [];
@@ -3578,6 +3490,368 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $table->vector($name, $size);
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     */
+    private function queriesHaveJoins(array $queries): bool
+    {
+        foreach ($queries as $query) {
+            if ($query->getMethod()->isJoin()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     * @return list<array{table: string, alias: string}>
+     */
+    private function remapJoinQueries(array &$queries): array
+    {
+        $joinTablePrefixes = [];
+        $joinIndex = 0;
+        $alias = Query::DEFAULT_ALIAS;
+
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $joinTable = $query->getAttribute();
+            $resolvedTable = $this->getSQLTableRaw($this->filter($joinTable));
+            $query->setAttribute($resolvedTable);
+
+            $values = $query->getValues();
+            $method = $query->getMethod();
+            $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
+            $joinAlias = $this->sanitizeJoinAlias(
+                \is_string($values[$aliasIndex] ?? null) ? $values[$aliasIndex] : ''
+            );
+            if ($joinAlias === '') {
+                $joinAlias = 'j'.$joinIndex;
+            }
+            $joinIndex++;
+
+            if ($aliasIndex === 3 && \count($values) >= 3) {
+                $left = $values[0] ?? null;
+                $right = $values[2] ?? null;
+                if (! \is_string($left) || ! \is_string($right)) {
+                    throw new QueryException('Join columns must be strings');
+                }
+                $values[0] = $this->qualifyJoinColumn($left, $alias);
+                $values[2] = $this->qualifyJoinColumn($right, $joinAlias);
+                $values[3] = $joinAlias;
+                $query->setValues($values);
+            } elseif ($aliasIndex === 0) {
+                $values[0] = $joinAlias;
+                $query->setValues($values);
+            }
+
+            $joinTablePrefixes[] = ['table' => $joinTable, 'alias' => $joinAlias];
+        }
+
+        return $joinTablePrefixes;
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     */
+    private function needsFullOuterJoinEmulation(SQLBuilder $builder, array $queries): bool
+    {
+        if ($builder instanceof FullOuterJoinsFeature) {
+            return false;
+        }
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Method::FullOuterJoin) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     * @return array<BaseQuery>
+     */
+    private function rewriteFullOuterJoins(array $queries, Method $replacement): array
+    {
+        $rewritten = [];
+        foreach ($queries as $query) {
+            $clone = clone $query;
+            if ($clone->getMethod() === Method::FullOuterJoin) {
+                $clone->setMethod($replacement);
+            }
+            $rewritten[] = $clone;
+        }
+
+        return $rewritten;
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  array<Query>  $adapterFilterQueries
+     * @param  array<string>  $roles
+     */
+    private function configureFindBuilder(
+        SQLBuilder $builder,
+        Document $collection,
+        array $queries,
+        array $joinTablePrefixes,
+        bool $hasAggregation,
+        bool $hasDistinct,
+        array $adapterFilterQueries,
+        string $name,
+        string $alias,
+        array $roles,
+        PermissionType $forPermission,
+        bool $preservingOuter,
+    ): bool {
+        $hasSelectionProjection = false;
+        if (! $hasAggregation) {
+            $selections = [];
+            foreach ($queries as $query) {
+                if ($query->getMethod() === Method::Select) {
+                    foreach ($query->getValues() as $value) {
+                        /** @var string $value */
+                        $selections[] = $value;
+                    }
+                }
+            }
+            if (! empty($selections) && ! \in_array('*', $selections)) {
+                $builder->select($this->mapSelectionsToColumns(
+                    $selections,
+                    includeInternal: ! $hasDistinct,
+                    joinAliases: \array_column($joinTablePrefixes, 'alias'),
+                ));
+                $hasSelectionProjection = true;
+            }
+        }
+
+        if ($hasAggregation && ! empty($joinTablePrefixes)) {
+            /** @var array<Document> $collectionAttrs */
+            $collectionAttrs = $collection->getAttribute('attributes', []);
+            $mainAttributeSet = [];
+            foreach ($collectionAttrs as $attr) {
+                $mainAttributeSet[$attr->getId()] = true;
+            }
+            $defaultJoinPrefix = $joinTablePrefixes[0]['alias'];
+
+            foreach ($queries as $query) {
+                if ($query->getMethod()->isAggregate()) {
+                    $attr = $query->getAttribute();
+                    if ($attr !== '*' && $attr !== '' && ! \str_contains($attr, '.') && ! isset($mainAttributeSet[$attr])) {
+                        $internalAttr = $this->getInternalKeyForAttribute($attr);
+                        $query->setAttribute($defaultJoinPrefix.'.'.$internalAttr);
+                    }
+                } elseif ($query->getMethod() === Method::GroupBy) {
+                    $values = $query->getValues();
+                    $qualified = false;
+                    foreach ($values as $i => $col) {
+                        if (\is_string($col) && ! \str_contains($col, '.') && ! isset($mainAttributeSet[$col])) {
+                            $internalCol = $this->getInternalKeyForAttribute($col);
+                            $values[$i] = $defaultJoinPrefix.'.'.$internalCol;
+                            $qualified = true;
+                        }
+                    }
+                    if ($qualified) {
+                        $query->setValues($values);
+                    }
+                }
+            }
+        }
+
+        if ($hasAggregation) {
+            foreach ($queries as $query) {
+                if ($query->getMethod() === Method::GroupBy) {
+                    /** @var array<string> $groupCols */
+                    $groupCols = $query->getValues();
+                    $builder->select(\array_map(
+                        fn (string $col) => \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col)),
+                        $groupCols
+                    ));
+                }
+            }
+        }
+
+        $builder->filter($queries);
+
+        foreach ($adapterFilterQueries as $query) {
+            $compiled = $this->compileAdapterFilter($query, $name, $alias);
+            if ($compiled !== null) {
+                $builder->whereRaw($compiled['expression'], $compiled['bindings']);
+            }
+        }
+
+        if ($this->authorization->getStatus()) {
+            $hasJoins = ! empty($joinTablePrefixes);
+            $docCol = $hasJoins ? $alias.'.'.Storage::UID : Storage::UID;
+            $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
+            if ($preservingOuter) {
+                $permissionHook = new PermissionAllowNullUid(
+                    $permissionHook,
+                    $docCol,
+                    $this->getIdentifierQuoteChar(),
+                );
+            }
+            $builder->addHook($permissionHook);
+
+            foreach ($joinTablePrefixes as $join) {
+                $builder->addHook(new PermissionJoinFilter(
+                    $this->newPermissionHook(
+                        $this->filter($join['table']),
+                        $roles,
+                        $forPermission->value,
+                        $join['alias'].'.'.Storage::UID
+                    ),
+                    $join['alias'],
+                    $this->getIdentifierQuoteChar(),
+                ));
+            }
+        }
+
+        return $hasSelectionProjection;
+    }
+
+    /**
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     */
+    private function applyFindPage(
+        SQLBuilder $builder,
+        array $orderAttributes,
+        array $orderTypes,
+        ?int $limit,
+        ?int $offset,
+        CursorDirection $cursorDirection = CursorDirection::After,
+        bool $afterUnion = false,
+    ): void {
+        if ($afterUnion) {
+            $quote = $this->getIdentifierQuoteChar();
+            $builder->afterBuild(function (Statement $result) use (
+                $orderAttributes,
+                $orderTypes,
+                $limit,
+                $offset,
+                $cursorDirection,
+                $quote,
+            ): Statement {
+                $sql = $result->query;
+                $bindings = $result->bindings;
+
+                $orderParts = [];
+                foreach ($orderAttributes as $i => $originalAttribute) {
+                    $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
+                    if ($orderType === OrderDirection::Random) {
+                        $orderParts[] = $this->createBuilder()->compileOrder(BaseQuery::orderRandom());
+
+                        continue;
+                    }
+
+                    $internalAttr = $this->filter($this->getInternalKeyForAttribute($originalAttribute));
+                    $direction = $orderType;
+                    if ($cursorDirection === CursorDirection::Before) {
+                        $direction = ($direction === OrderDirection::Asc)
+                            ? OrderDirection::Desc
+                            : OrderDirection::Asc;
+                    }
+
+                    $orderParts[] = $quote.$internalAttr.$quote.($direction === OrderDirection::Desc ? ' DESC' : ' ASC');
+                }
+
+                if ($orderParts !== []) {
+                    $sql .= ' ORDER BY '.\implode(', ', $orderParts);
+                }
+                if (! \is_null($limit)) {
+                    $sql .= ' LIMIT ?';
+                    $bindings[] = $limit;
+                }
+                if (! \is_null($offset)) {
+                    $sql .= ' OFFSET ?';
+                    $bindings[] = $offset;
+                }
+
+                return new Statement($sql, $bindings, $result->readOnly);
+            });
+
+            return;
+        }
+
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
+
+            if ($orderType === OrderDirection::Random) {
+                $builder->sortRandom();
+
+                continue;
+            }
+
+            $internalAttr = $this->filter($this->getInternalKeyForAttribute($originalAttribute));
+            $direction = $orderType;
+
+            if ($cursorDirection === CursorDirection::Before) {
+                $direction = ($direction === OrderDirection::Asc)
+                    ? OrderDirection::Desc
+                    : OrderDirection::Asc;
+            }
+
+            if ($direction === OrderDirection::Desc) {
+                $builder->sortDesc($internalAttr);
+            } else {
+                $builder->sortAsc($internalAttr);
+            }
+        }
+
+        if (! \is_null($limit)) {
+            $builder->limit($limit);
+        }
+        if (! \is_null($offset)) {
+            $builder->offset($offset);
+        }
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function executeSelect(SQLBuilder $builder, Event $event): array
+    {
+        try {
+            $result = $builder->build();
+        } catch (ValidationException|UnsupportedException $e) {
+            throw new QueryException($e->getMessage(), $e->getCode(), $e);
+        }
+
+        $stmt = null;
+        $results = [];
+        $exception = null;
+        try {
+            $stmt = $this->executeResult($result, $event);
+            $this->execute($stmt);
+            /** @var array<int, array<string, mixed>> $results */
+            $results = $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $exception = $e;
+        } finally {
+            if ($stmt !== null) {
+                try {
+                    $stmt->closeCursor();
+                } catch (PDOException $e) {
+                    $exception ??= $e;
+                }
+            }
+        }
+
+        if ($exception !== null) {
+            throw $this->processException($exception);
+        }
+
+        return $results;
     }
 
     private function sanitizeJoinAlias(string $alias): string

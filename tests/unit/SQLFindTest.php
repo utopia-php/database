@@ -110,7 +110,7 @@ final class SQLFindTest extends TestCase
         $unionPosition = stripos($sql, 'UNION');
         $this->assertNotFalse($unionPosition);
 
-        $limitMatches = preg_match_all('/\bLIMIT\s+(?:2|\?)\b/i', $sql, $matches, PREG_OFFSET_CAPTURE);
+        $limitMatches = preg_match_all('/\bLIMIT\s+(?:2|\?)/i', $sql, $matches, PREG_OFFSET_CAPTURE);
         $this->assertSame(1, $limitMatches, $sql);
         $this->assertGreaterThan($unionPosition, $matches[0][0][1], $sql);
     }

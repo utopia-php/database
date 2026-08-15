@@ -321,7 +321,29 @@ trait Documents
             fn (Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        $selects = Query::groupForDatabase($queries)['selections'];
+        $grouped = Query::groupForDatabase($queries);
+        $selects = $grouped['selections'];
+        $joins = $grouped['joins'];
+
+        if (! empty($joins) && ! $this->adapter->supports(Capability::Joins)) {
+            throw new QueryException('Join queries are not supported by this adapter');
+        }
+
+        if (! empty($joins)) {
+            foreach ($joins as $joinQuery) {
+                $joinCollectionId = $joinQuery->getAttribute();
+                $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
+
+                if ($joinCollection->isEmpty()) {
+                    throw new QueryException("Joined collection '{$joinCollectionId}' not found");
+                }
+
+                if (! $this->authorization->isValid(new Input(PermissionType::Read, $joinCollection->getPermissionsByType(PermissionType::Read)))) {
+                    throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
+                }
+            }
+        }
+
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->relationshipHook?->processQueries($relationships, $queries) ?? [];
 
@@ -335,7 +357,8 @@ trait Documents
 
         $cacheable = ! $forUpdate
             && ! $this->adapter->inTransaction()
-            && $collection->getId() !== self::METADATA;
+            && $collection->getId() !== self::METADATA
+            && empty($joins);
         $physicalKey = '';
         if ($cacheable) {
             $epoch = $this->getDocumentCacheEpoch($collectionKey);
@@ -393,7 +416,8 @@ trait Documents
             }
         }
 
-        $skipAuth = $collection->getId() !== self::METADATA
+        $skipAuth = empty($joins)
+            && $collection->getId() !== self::METADATA
             && $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
 
         $getDocument = fn () => $this->adapter->getDocument(

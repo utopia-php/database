@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
+use Utopia\Database\Validator\Authorization;
 
 final class SQLGetDocumentTest extends TestCase
 {
@@ -230,6 +231,9 @@ final class SQLGetDocumentTest extends TestCase
         $adapter = new MySQL($pdo);
         $adapter->setDatabase('database');
         $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
 
         $adapter->getDocument(
             new Document([Document::ID => 'collection']),

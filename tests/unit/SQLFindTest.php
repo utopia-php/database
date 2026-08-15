@@ -242,7 +242,8 @@ final class SQLFindTest extends TestCase
 
     private function assertEmulatedFullOuterJoin(string $sql): void
     {
-        $this->assertStringContainsString('UNION', $sql);
+        $this->assertStringContainsString('UNION ALL', $sql);
+        $this->assertSame(0, \preg_match_all('/UNION(?! ALL)/i', $sql), $sql);
         $this->assertStringContainsString('LEFT JOIN', $sql);
         $this->assertStringContainsString('RIGHT JOIN', $sql);
         $this->assertStringContainsString('IS NULL', $sql);

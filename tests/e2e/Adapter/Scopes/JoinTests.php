@@ -2810,6 +2810,66 @@ trait JoinTests
         $this->cleanupAggCollections($database, $cols);
     }
 
+    public function testFullOuterJoinSelectDoesNotCollapseOneToMany(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $pCol = 't8_fo_1n_p';
+        $rCol = 't8_fo_1n_r';
+        $cols = [$pCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p1',
+            'name' => 'Product p1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p2',
+            'name' => 'Product p2',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            'prod_uid' => 'p1',
+            'score' => 5,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            'prod_uid' => 'p1',
+            'score' => 3,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            'prod_uid' => 'missing',
+            'score' => 9,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $results = $database->getAuthorization()->skip(fn () => $database->find($pCol, [
+            Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            Query::select(['name']),
+        ]));
+
+        $this->assertSame(4, \count($results));
+        $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
+        \sort($ids);
+        $this->assertSame(['', 'p1', 'p1', 'p2'], $ids);
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
     public function testNaturalJoinThrowsQueryException(): void
     {
         $database = static::getDatabase();

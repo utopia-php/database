@@ -728,7 +728,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     true,
                 );
 
-                $left->union($right);
+                $left->unionAll($right);
                 $this->applyFindPage($left, [], [], 1, null, afterUnion: true);
                 $builder = $left;
             } else {
@@ -1423,7 +1423,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $rightProjected,
             );
 
-            $left->union($right);
+            $left->unionAll($right);
             $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
             $results = $this->executeSelect($left, Event::DocumentFind);
         } else {

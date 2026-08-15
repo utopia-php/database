@@ -68,6 +68,8 @@ use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
  */
 abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBuilder, Feature\ColumnTypes, Feature\Relationships, Feature\Upserts
 {
+    private const string FOJ_ORDER_ALIAS_PREFIX = 'foj_ord_';
+
     protected object $pdo;
 
     /**
@@ -1376,7 +1378,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $rightQueries[] = BaseQuery::isNull($alias.'.'.Storage::UID);
 
             $left = $this->newBuilder($name, $alias, false);
-            $this->configureFindBuilder(
+            $leftProjected = $this->configureFindBuilder(
                 $left,
                 $collectionDoc,
                 $leftQueries,
@@ -1390,9 +1392,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $forPermission,
                 false,
             );
+            $this->applyFullOuterJoinOrderProjection(
+                $left,
+                $alias,
+                $orderAttributes,
+                $orderTypes,
+                $leftProjected,
+            );
 
             $right = $this->newBuilder($name, $alias, true);
-            $this->configureFindBuilder(
+            $rightProjected = $this->configureFindBuilder(
                 $right,
                 $collectionDoc,
                 $rightQueries,
@@ -1405,6 +1414,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $roles,
                 $forPermission,
                 true,
+            );
+            $this->applyFullOuterJoinOrderProjection(
+                $right,
+                $alias,
+                $orderAttributes,
+                $orderTypes,
+                $rightProjected,
             );
 
             $left->union($right);
@@ -3723,6 +3739,49 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      */
+    private function applyFullOuterJoinOrderProjection(
+        SQLBuilder $builder,
+        string $alias,
+        array $orderAttributes,
+        array $orderTypes,
+        bool $hasSelectionProjection,
+    ): void {
+        $hasOrderColumns = false;
+        foreach (\array_keys($orderAttributes) as $i) {
+            $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
+            if ($orderType !== OrderDirection::Random) {
+                $hasOrderColumns = true;
+                break;
+            }
+        }
+
+        if (! $hasOrderColumns) {
+            return;
+        }
+
+        if (! $hasSelectionProjection) {
+            $builder->select(['*']);
+        }
+
+        $quote = $this->getIdentifierQuoteChar();
+        foreach ($orderAttributes as $i => $attribute) {
+            $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
+            if ($orderType === OrderDirection::Random) {
+                continue;
+            }
+
+            $column = $this->filter($this->getInternalKeyForAttribute($attribute));
+            $output = self::FOJ_ORDER_ALIAS_PREFIX.$i;
+            $builder->selectRaw(
+                $quote.$alias.$quote.'.'.$quote.$column.$quote.' AS '.$quote.$output.$quote
+            );
+        }
+    }
+
+    /**
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     */
     private function applyFindPage(
         SQLBuilder $builder,
         array $orderAttributes,
@@ -3746,7 +3805,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $bindings = $result->bindings;
 
                 $orderParts = [];
-                foreach ($orderAttributes as $i => $originalAttribute) {
+                foreach (\array_keys($orderAttributes) as $i) {
                     $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
                     if ($orderType === OrderDirection::Random) {
                         $orderParts[] = $this->createBuilder()->compileOrder(BaseQuery::orderRandom());
@@ -3754,7 +3813,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                         continue;
                     }
 
-                    $internalAttr = $this->filter($this->getInternalKeyForAttribute($originalAttribute));
                     $direction = $orderType;
                     if ($cursorDirection === CursorDirection::Before) {
                         $direction = ($direction === OrderDirection::Asc)
@@ -3762,7 +3820,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                             : OrderDirection::Asc;
                     }
 
-                    $orderParts[] = $quote.$internalAttr.$quote.($direction === OrderDirection::Desc ? ' DESC' : ' ASC');
+                    $orderParts[] = $quote.self::FOJ_ORDER_ALIAS_PREFIX.$i.$quote.($direction === OrderDirection::Desc ? ' DESC' : ' ASC');
                 }
 
                 if ($orderParts !== []) {
@@ -3881,6 +3939,25 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     private function remapRow(array &$row): void
     {
+        foreach (\array_keys($row) as $key) {
+            if (! \is_string($key)) {
+                continue;
+            }
+            if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
+                unset($row[$key]);
+
+                continue;
+            }
+            if (! \str_contains($key, '.')) {
+                continue;
+            }
+            $bare = \trim(\substr($key, \strrpos($key, '.') + 1), '`"');
+            if ($bare !== '' && ! \array_key_exists($bare, $row)) {
+                $row[$bare] = $row[$key];
+            }
+            unset($row[$key]);
+        }
+
         foreach (Storage::columnMap() as $internal => $public) {
             if ($internal === Storage::PERMISSIONS || $internal === Storage::DISTANCE) {
                 continue;

@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use Exception;
 use PDOException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -15,6 +16,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SQLFindTest extends TestCase
 {
     #[DataProvider('paths')]
@@ -70,6 +72,137 @@ final class SQLFindTest extends TestCase
 
     public function testEmulatesFullOuterJoinWithOuterLimit(): void
     {
+        $sql = $this->captureFindSql(
+            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            limit: 2,
+        );
+
+        $this->assertEmulatedFullOuterJoin($sql);
+        $this->assertSame(1, $this->countLimitsAfterUnion($sql), $sql);
+    }
+
+    public function testEmulatesFullOuterJoinOrderByIsUnambiguousAfterUnion(): void
+    {
+        $sql = $this->captureFindSql(
+            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            limit: 2,
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+        );
+
+        $this->assertEmulatedFullOuterJoin($sql);
+        $this->assertSame(1, $this->countLimitsAfterUnion($sql), $sql);
+        $this->assertUnambiguousUnionOrderBy($sql);
+    }
+
+    public function testEmulatesFullOuterJoinOrderByMatchesProjectedUnionOutput(): void
+    {
+        $sql = $this->captureFindSql(
+            [
+                Query::fullOuterJoin('orders', '$id', 'customerId'),
+                Query::select(['name']),
+            ],
+            limit: 2,
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+        );
+
+        $this->assertEmulatedFullOuterJoin($sql);
+        $this->assertSame(1, $this->countLimitsAfterUnion($sql), $sql);
+        $this->assertUnambiguousUnionOrderBy($sql);
+    }
+
+    public function testEmulatesFullOuterJoinOrderByHandlesMultipleAttributes(): void
+    {
+        $sql = $this->captureFindSql(
+            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            limit: 2,
+            orderAttributes: ['name', Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
+        );
+
+        $this->assertEmulatedFullOuterJoin($sql);
+        $this->assertSame(1, $this->countLimitsAfterUnion($sql), $sql);
+        $this->assertUnambiguousUnionOrderBy($sql, expectedTerms: 2);
+    }
+
+    public function testEmulatesFullOuterJoinStripsOrderAliasesFromDocuments(): void
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([
+            [
+                '_uid' => 'doc1',
+                '_id' => 1,
+                '_permissions' => '[]',
+                '_createdAt' => '2020-01-01 00:00:00.000',
+                '_updatedAt' => '2020-01-01 00:00:00.000',
+                'name' => 'Alice',
+                'foj_ord_0' => 1,
+            ],
+        ]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $results = $this->adapter($statement)->find(
+            new Document(['$id' => 'collection']),
+            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            limit: 1,
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+        );
+
+        $this->assertSame(1, \count($results));
+        $this->assertSame('doc1', $results[0]->getId());
+        $this->assertSame(false, $results[0]->isSet('foj_ord_0'));
+    }
+
+    public function testEmulatesFullOuterJoinRemapsQualifiedUnionColumns(): void
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([
+            [
+                'table_main._uid' => 'doc1',
+                'table_main._id' => '1',
+                'table_main._permissions' => '[]',
+                'table_main._createdAt' => '2020-01-01 00:00:00.000',
+                'table_main._updatedAt' => '2020-01-01 00:00:00.000',
+                'table_main.name' => 'Alice',
+                'foj_ord_0' => 1,
+            ],
+        ]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $results = $this->adapter($statement)->find(
+            new Document(['$id' => 'collection']),
+            [
+                Query::fullOuterJoin('orders', '$id', 'customerId'),
+                Query::select(['name']),
+            ],
+            limit: 1,
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+        );
+
+        $this->assertSame(1, \count($results));
+        $this->assertSame('doc1', $results[0]->getId());
+        $this->assertSame('1', $results[0]->getSequence());
+        $this->assertSame('Alice', $results[0]->getAttribute('name'));
+        $this->assertSame(false, $results[0]->isSet('foj_ord_0'));
+        $this->assertSame(false, $results[0]->isSet('table_main._uid'));
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     */
+    private function captureFindSql(
+        array $queries,
+        ?int $limit = 25,
+        array $orderAttributes = [],
+        array $orderTypes = [],
+    ): string {
         $statement = $this->statement();
         $statement->method('execute')->willReturn(true);
         $statement->method('fetchAll')->willReturn([]);
@@ -96,23 +229,78 @@ final class SQLFindTest extends TestCase
 
         $adapter->find(
             new Document(['$id' => 'collection']),
-            [Query::fullOuterJoin('orders', '$id', 'customerId')],
-            limit: 2,
+            $queries,
+            limit: $limit,
+            orderAttributes: $orderAttributes,
+            orderTypes: $orderTypes,
         );
 
         $this->assertNotSame('', $sql);
+
+        return $sql;
+    }
+
+    private function assertEmulatedFullOuterJoin(string $sql): void
+    {
         $this->assertStringContainsString('UNION', $sql);
         $this->assertStringContainsString('LEFT JOIN', $sql);
         $this->assertStringContainsString('RIGHT JOIN', $sql);
         $this->assertStringContainsString('IS NULL', $sql);
         $this->assertStringNotContainsString('FULL OUTER JOIN', $sql);
+        $this->assertDoesNotMatchRegularExpression('/FROM\s*\(\s*SELECT\s+\*/i', $sql);
+    }
 
-        $unionPosition = stripos($sql, 'UNION');
+    private function countLimitsAfterUnion(string $sql): int
+    {
+        $unionPosition = \stripos($sql, 'UNION');
         $this->assertNotFalse($unionPosition);
 
-        $limitMatches = preg_match_all('/\bLIMIT\s+(?:2|\?)/i', $sql, $matches, PREG_OFFSET_CAPTURE);
-        $this->assertSame(1, $limitMatches, $sql);
-        $this->assertGreaterThan($unionPosition, $matches[0][0][1], $sql);
+        $limitMatches = \preg_match_all('/\bLIMIT\s+(?:2|\?)/i', $sql, $matches, PREG_OFFSET_CAPTURE);
+        $this->assertNotFalse($limitMatches);
+        foreach ($matches[0] as $match) {
+            $this->assertGreaterThan($unionPosition, $match[1], $sql);
+        }
+
+        return $limitMatches;
+    }
+
+    private function assertUnambiguousUnionOrderBy(string $sql, int $expectedTerms = 1): void
+    {
+        $unionPosition = \stripos($sql, 'UNION');
+        $this->assertNotFalse($unionPosition);
+
+        $afterUnion = \substr($sql, $unionPosition);
+        $this->assertMatchesRegularExpression('/ORDER BY/i', $afterUnion, $sql);
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/ORDER BY\s+`_id`\b/i',
+            $afterUnion,
+            $sql,
+        );
+
+        $aliasMatches = \preg_match_all('/`foj_ord_\d+`/', $afterUnion);
+        $positionalMatches = \preg_match_all('/ORDER BY\s+\d+/i', $afterUnion);
+
+        $this->assertTrue(
+            $aliasMatches >= $expectedTerms || $positionalMatches === 1,
+            $sql,
+        );
+
+        if ($aliasMatches >= $expectedTerms) {
+            $orderByPosition = \stripos($afterUnion, 'ORDER BY');
+            $this->assertNotFalse($orderByPosition);
+            $selectSql = \substr($sql, 0, $unionPosition + $orderByPosition);
+            for ($index = 0; $index < $expectedTerms; $index++) {
+                $this->assertStringContainsString('foj_ord_'.$index, $selectSql, $sql);
+                $this->assertStringContainsString('`foj_ord_'.$index.'`', $afterUnion, $sql);
+            }
+        }
+
+        $this->assertDoesNotMatchRegularExpression(
+            '/ORDER BY\s+`table_main`\.`_id`/i',
+            $afterUnion,
+            $sql,
+        );
     }
 
     private function find(MySQL $adapter, bool $fast): void

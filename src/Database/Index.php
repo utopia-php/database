@@ -26,6 +26,248 @@ class Index
     }
 
     /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function key(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Key,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function index(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Index,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function unique(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Unique,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function fullText(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Fulltext,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function spatial(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Spatial,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function object(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Object,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function hnswEuclidean(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::HnswEuclidean,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function hnswCosine(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::HnswCosine,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function hnswDot(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::HnswDot,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function trigram(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Trigram,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    public static function ttl(
+        string $key,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
+    ): self {
+        return new self(
+            key: $key,
+            type: IndexType::Ttl,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
+        );
+    }
+
+    /**
      * Convert this index to a Document representation.
      *
      * @return Document
@@ -43,12 +285,6 @@ class Index
         ]);
     }
 
-    /**
-     * Create an Index instance from a Document.
-     *
-     * @param Document $document The document to convert
-     * @return self
-     */
     /**
      * Create from an associative array (used by collection config files).
      *

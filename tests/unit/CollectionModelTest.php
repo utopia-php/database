@@ -31,7 +31,7 @@ class CollectionModelTest extends TestCase
     public function testConstructorWithValues(): void
     {
         $attr = Attribute::string(key: 'title', size: 128);
-        $idx = new Index(key: 'idx_title', type: IndexType::Key, attributes: ['title']);
+        $idx = Index::key(key: 'idx_title', attributes: ['title']);
 
         $collection = new Collection(
             id: 'users',
@@ -53,7 +53,7 @@ class CollectionModelTest extends TestCase
     public function testToDocumentProducesCorrectStructure(): void
     {
         $attr = Attribute::string(key: 'email', size: 256, required: true);
-        $idx = new Index(key: 'idx_email', type: IndexType::Unique, attributes: ['email']);
+        $idx = Index::unique(key: 'idx_email', attributes: ['email']);
 
         $collection = new Collection(
             id: 'accounts',
@@ -159,9 +159,9 @@ class CollectionModelTest extends TestCase
     public function testWithMultipleIndexes(): void
     {
         $indexes = [
-            new Index(key: 'idx_name', type: IndexType::Key, attributes: ['name']),
-            new Index(key: 'idx_email', type: IndexType::Unique, attributes: ['email']),
-            new Index(key: 'idx_compound', type: IndexType::Key, attributes: ['name', 'email']),
+            Index::key(key: 'idx_name', attributes: ['name']),
+            Index::unique(key: 'idx_email', attributes: ['email']),
+            Index::key(key: 'idx_compound', attributes: ['name', 'email']),
         ];
 
         $collection = new Collection(id: 'users', indexes: $indexes);
@@ -241,7 +241,7 @@ class CollectionModelTest extends TestCase
 
     public function testIndexDocumentsAreProperDocuments(): void
     {
-        $idx = new Index(key: 'idx_test', type: IndexType::Fulltext, attributes: ['body']);
+        $idx = Index::fullText(key: 'idx_test', attributes: ['body']);
         $collection = new Collection(id: 'articles', indexes: [$idx]);
 
         $doc = $collection->toDocument();

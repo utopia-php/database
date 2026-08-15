@@ -84,13 +84,13 @@ class Select extends Base
         foreach ($value->getValues() as $attributeValue) {
             /** @var string $attribute */
             $attribute = $attributeValue;
-            if (\str_contains($attribute, '.')) {
+            $dot = \strpos($attribute, '.');
+            if ($dot !== false) {
                 // special symbols with `dots`
                 if (isset($this->schema[$attribute])) {
                     continue;
                 }
 
-                $dot = \strpos($attribute, '.');
                 $alias = \substr($attribute, 0, $dot);
                 $column = \substr($attribute, $dot + 1);
 
@@ -124,7 +124,7 @@ class Select extends Base
     public function allowJoinAliases(array $aliases): void
     {
         foreach ($aliases as $alias) {
-            if (\is_string($alias) && $alias !== '') {
+            if ($alias !== '') {
                 $this->joinAliases[$alias] = true;
             }
         }

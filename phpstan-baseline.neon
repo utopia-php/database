@@ -151,12 +151,6 @@ parameters:
 			path: src/Database/Adapter/SQL.php
 
 		-
-			message: '#^Cannot call method getTenant\(\) on Utopia\\Database\\Hook\\Tenancy\|null\.$#'
-			identifier: method.nonObject
-			count: 1
-			path: src/Database/Adapter/SQL.php
-
-		-
 			message: '#^Method Utopia\\Database\\Adapter\\SQL\:\:commitTransaction\(\) should return bool but returns mixed\.$#'
 			identifier: return.type
 			count: 1
@@ -1483,12 +1477,6 @@ parameters:
 			path: tests/e2e/Adapter/Base.php
 
 		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 2
-			path: tests/unit/Attributes/AttributeValidationTest.php
-
-		-
 			message: '#^Method Tests\\Unit\\Attributes\\AttributeValidationTest\:\:setupCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
@@ -1579,22 +1567,10 @@ parameters:
 			path: tests/unit/Documents/AggregationErrorTest.php
 
 		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 1
-			path: tests/unit/Documents/ConflictDetectionTest.php
-
-		-
 			message: '#^Method Tests\\Unit\\Documents\\ConflictDetectionTest\:\:setupCollectionAndDocument\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: tests/unit/Documents/ConflictDetectionTest.php
-
-		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 1
-			path: tests/unit/Documents/CreateDocumentLogicTest.php
 
 		-
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertIsArray\(\) with array\<string\> will always evaluate to true\.$#'
@@ -1613,12 +1589,6 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: tests/unit/Documents/CreateDocumentLogicTest.php
-
-		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 1
-			path: tests/unit/Documents/FindLogicTest.php
 
 		-
 			message: '#^Argument of an invalid type mixed supplied for foreach, only iterables are supported\.$#'
@@ -1687,28 +1657,10 @@ parameters:
 			path: tests/unit/Documents/FindLogicTest.php
 
 		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 1
-			path: tests/unit/Documents/IncreaseDecreaseTest.php
-
-		-
 			message: '#^Method Tests\\Unit\\Documents\\IncreaseDecreaseTest\:\:setupCollectionWithDocument\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: tests/unit/Documents/IncreaseDecreaseTest.php
-
-		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 2
-			path: tests/unit/Documents/SkipPermissionsTest.php
-
-		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 1
-			path: tests/unit/Documents/UpdateDocumentLogicTest.php
 
 		-
 			message: '#^Method Tests\\Unit\\Documents\\UpdateDocumentLogicTest\:\:setupCollectionAndDocument\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
@@ -1721,12 +1673,6 @@ parameters:
 			identifier: missingType.iterableValue
 			count: 1
 			path: tests/unit/Documents/UpdateDocumentLogicTest.php
-
-		-
-			message: '#^Access to protected constant COLLECTION of class Utopia\\Database\\Database\.$#'
-			identifier: classConstant.protected
-			count: 1
-			path: tests/unit/Indexes/IndexValidationTest.php
 
 		-
 			message: '#^Method Tests\\Unit\\Indexes\\IndexValidationTest\:\:setupCollection\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'

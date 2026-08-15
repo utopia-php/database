@@ -2070,6 +2070,7 @@ class Database
      */
     public static function collectionDefinition(): array
     {
+        /** @var array<string, mixed> $data */
         $data = (new Collection(
             id: self::METADATA,
             name: 'collections',
@@ -2082,6 +2083,8 @@ class Database
             ],
         ))->toDocument()->getArrayCopy();
         $data[Document::COLLECTION] = self::METADATA;
+        $data['attributes'] = self::documentArrays($data['attributes'] ?? []);
+        $data['indexes'] = self::documentArrays($data['indexes'] ?? []);
 
         return $data;
     }
@@ -2092,12 +2095,44 @@ class Database
     protected static function collectionMeta(): array
     {
         $collection = self::collectionDefinition();
-        $collection['attributes'] = \array_map(
-            fn (mixed $attr) => $attr instanceof Document ? $attr : new Document($attr),
-            $collection['attributes']
-        );
+        $documents = [];
+        foreach (self::documentArrays($collection['attributes'] ?? []) as $attribute) {
+            $documents[] = new Document($attribute);
+        }
+        $collection['attributes'] = $documents;
 
         return $collection;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private static function documentArrays(mixed $values): array
+    {
+        if (! \is_array($values)) {
+            return [];
+        }
+
+        $arrays = [];
+        foreach ($values as $value) {
+            if ($value instanceof Document) {
+                $arrays[] = $value->getArrayCopy();
+                continue;
+            }
+            if (! \is_array($value)) {
+                continue;
+            }
+
+            $typed = [];
+            foreach ($value as $key => $item) {
+                if (\is_string($key)) {
+                    $typed[$key] = $item;
+                }
+            }
+            $arrays[] = $typed;
+        }
+
+        return $arrays;
     }
 
     /**

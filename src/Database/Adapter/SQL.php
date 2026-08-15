@@ -1340,8 +1340,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $joinIndex++;
 
                 if ($aliasIndex === 3 && \count($values) >= 3) {
-                    $values[0] = $this->qualifyJoinColumn((string) $values[0], $alias);
-                    $values[2] = $this->qualifyJoinColumn((string) $values[2], $joinAlias);
+                    $left = $values[0] ?? null;
+                    $right = $values[2] ?? null;
+                    if (! \is_string($left) || ! \is_string($right)) {
+                        throw new QueryException('Join columns must be strings');
+                    }
+                    $values[0] = $this->qualifyJoinColumn($left, $alias);
+                    $values[2] = $this->qualifyJoinColumn($right, $joinAlias);
                     $values[3] = $joinAlias;
                     $query->setValues($values);
                 } elseif ($aliasIndex === 0) {
@@ -3464,8 +3469,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aliasSet = \array_fill_keys($joinAliases, true);
         $columns = [];
         foreach ($selections as $selection) {
-            if (\is_string($selection) && \str_contains($selection, '.')) {
-                $dot = \strpos($selection, '.');
+            $dot = \strpos($selection, '.');
+            if ($dot !== false) {
                 $prefix = \substr($selection, 0, $dot);
                 if (isset($aliasSet[$prefix])) {
                     $name = \substr($selection, $dot + 1);
@@ -3474,7 +3479,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     continue;
                 }
             }
-            $columns[] = $this->filter((string) $selection);
+            $columns[] = $this->filter($selection);
         }
 
         return $columns;
@@ -3586,15 +3591,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private function qualifyJoinColumn(string $column, string $defaultAlias): string
     {
-        if (\str_contains($column, '.')) {
-            $dot = \strpos($column, '.');
-            $prefix = \substr($column, 0, $dot);
-            $name = \substr($column, $dot + 1);
-
-            return $prefix.'.'.$this->getInternalKeyForAttribute($name);
+        $dot = \strpos($column, '.');
+        if ($dot === false) {
+            return $defaultAlias.'.'.$this->getInternalKeyForAttribute($column);
         }
 
-        return $defaultAlias.'.'.$this->getInternalKeyForAttribute($column);
+        $prefix = \substr($column, 0, $dot);
+        $name = \substr($column, $dot + 1);
+
+        return $prefix.'.'.$this->getInternalKeyForAttribute($name);
     }
 
     /**

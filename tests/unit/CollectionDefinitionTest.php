@@ -6,8 +6,6 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
-use Utopia\Database\Attribute;
-use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 
@@ -32,18 +30,14 @@ final class CollectionDefinitionTest extends TestCase
         $def = Database::collectionDefinition();
         [$definition, $attributes] = $this->resolve($def);
 
-        $id = $definition[Document::ID] ?? ($def instanceof Collection ? $def->id : null);
-        $collection = $definition[Document::COLLECTION] ?? ($def instanceof Collection ? $def->id : null);
-        $name = $definition['name'] ?? ($def instanceof Collection ? $def->name : null);
-
         $keys = [];
         foreach ($attributes as $attribute) {
             $keys[] = $this->fields($attribute)['key'];
         }
 
-        $this->assertSame(Database::METADATA, $id);
-        $this->assertSame(Database::METADATA, $collection);
-        $this->assertSame('collections', $name);
+        $this->assertSame(Database::METADATA, $definition[Document::ID]);
+        $this->assertSame(Database::METADATA, $definition[Document::COLLECTION]);
+        $this->assertSame('collections', $definition['name']);
         $this->assertSame(['name', 'attributes', 'indexes', 'documentSecurity'], $keys);
     }
 
@@ -82,6 +76,7 @@ final class CollectionDefinitionTest extends TestCase
 
         $meta = $db->getCollection(Database::METADATA);
         $attributes = $meta->getAttribute('attributes', []);
+        $this->assertIsArray($attributes);
 
         $keys = [];
         foreach ($attributes as $attribute) {
@@ -92,18 +87,17 @@ final class CollectionDefinitionTest extends TestCase
     }
 
     /**
-     * @param  Collection|array<string, mixed>  $definition
+     * @param  array<string, mixed>  $definition
      * @return array{0: array<string, mixed>, 1: list<mixed>}
      */
-    private function resolve(Collection|array $definition): array
+    private function resolve(array $definition): array
     {
-        if ($definition instanceof Collection) {
-            $document = $definition->toDocument();
-
-            return [$document->getArrayCopy(), $document->getAttribute('attributes')];
+        $attributes = $definition['attributes'] ?? [];
+        if (! \is_array($attributes)) {
+            $attributes = [];
         }
 
-        return [$definition, $definition['attributes'] ?? []];
+        return [$definition, \array_values($attributes)];
     }
 
     /**
@@ -111,38 +105,44 @@ final class CollectionDefinitionTest extends TestCase
      */
     private function fields(mixed $attribute): array
     {
-        if ($attribute instanceof Attribute) {
-            $type = $attribute->type;
-
-            return [
-                'key' => $attribute->key,
-                'type' => $type instanceof \BackedEnum ? $type->value : (string) $type,
-                'size' => $attribute->size,
-                'required' => $attribute->required,
-                'filters' => $attribute->filters,
-            ];
-        }
-
         if ($attribute instanceof Document) {
-            $type = $attribute->getAttribute('type');
-
-            return [
-                'key' => (string) $attribute->getAttribute('key', $attribute->getId()),
-                'type' => $type instanceof \BackedEnum ? $type->value : (string) $type,
-                'size' => (int) $attribute->getAttribute('size', 0),
-                'required' => (bool) $attribute->getAttribute('required', false),
-                'filters' => $attribute->getAttribute('filters', []),
-            ];
+            $key = $attribute->getAttribute('key', $attribute->getId());
+            $type = $attribute->getAttribute('type', '');
+            $size = $attribute->getAttribute('size', 0);
+            $required = $attribute->getAttribute('required', false);
+            $filters = $attribute->getAttribute('filters', []);
+        } elseif (\is_array($attribute)) {
+            $key = $attribute['key'] ?? $attribute[Document::ID] ?? '';
+            $type = $attribute['type'] ?? '';
+            $size = $attribute['size'] ?? 0;
+            $required = $attribute['required'] ?? false;
+            $filters = $attribute['filters'] ?? [];
+        } else {
+            $this->fail('Attribute must be a Document or array');
         }
 
-        $type = $attribute['type'] ?? '';
+        if ($type instanceof \BackedEnum) {
+            $type = (string) $type->value;
+        }
+
+        $this->assertIsString($key);
+        $this->assertIsString($type);
+        $this->assertIsInt($size);
+        $this->assertIsBool($required);
+        $this->assertIsArray($filters);
+
+        $typedFilters = [];
+        foreach ($filters as $filter) {
+            $this->assertIsString($filter);
+            $typedFilters[] = $filter;
+        }
 
         return [
-            'key' => (string) ($attribute['key'] ?? $attribute[Document::ID] ?? ''),
-            'type' => $type instanceof \BackedEnum ? $type->value : (string) $type,
-            'size' => (int) ($attribute['size'] ?? 0),
-            'required' => (bool) ($attribute['required'] ?? false),
-            'filters' => $attribute['filters'] ?? [],
+            'key' => $key,
+            'type' => $type,
+            'size' => $size,
+            'required' => $required,
+            'filters' => $typedFilters,
         ];
     }
 }

@@ -344,7 +344,9 @@ trait JoinTests
 
         $this->assertCount(1, $results);
         $this->assertEquals('c2', $results[0]->getAttribute('cust_uid'));
-        $this->assertEqualsWithDelta(550.0, (float) $results[0]->getAttribute('avg_amt'), 0.1);
+        $avgAmt = $results[0]->getAttribute('avg_amt');
+        $this->assertIsNumeric($avgAmt);
+        $this->assertEqualsWithDelta(550.0, (float) $avgAmt, 0.1);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -1297,13 +1299,17 @@ trait JoinTests
 
         $this->assertEquals(3, $mapped['c1']->getAttribute('cnt'));
         $this->assertEquals(600, $mapped['c1']->getAttribute('total'));
-        $this->assertEqualsWithDelta(200.0, (float) $mapped['c1']->getAttribute('avg_amt'), 0.1);
+        $c1Avg = $mapped['c1']->getAttribute('avg_amt');
+        $this->assertIsNumeric($c1Avg);
+        $this->assertEqualsWithDelta(200.0, (float) $c1Avg, 0.1);
         $this->assertEquals(100, $mapped['c1']->getAttribute('min_amt'));
         $this->assertEquals(300, $mapped['c1']->getAttribute('max_amt'));
 
         $this->assertEquals(2, $mapped['c2']->getAttribute('cnt'));
         $this->assertEquals(200, $mapped['c2']->getAttribute('total'));
-        $this->assertEqualsWithDelta(100.0, (float) $mapped['c2']->getAttribute('avg_amt'), 0.1);
+        $c2Avg = $mapped['c2']->getAttribute('avg_amt');
+        $this->assertIsNumeric($c2Avg);
+        $this->assertEqualsWithDelta(100.0, (float) $c2Avg, 0.1);
         $this->assertEquals(50, $mapped['c2']->getAttribute('min_amt'));
         $this->assertEquals(150, $mapped['c2']->getAttribute('max_amt'));
 
@@ -1493,7 +1499,9 @@ trait JoinTests
 
         $this->assertCount(1, $results);
         if ($aggMethod === 'avg') {
-            $this->assertEqualsWithDelta($expected, (float) $results[0]->getAttribute('result'), 0.1);
+            $result = $results[0]->getAttribute('result');
+            $this->assertIsNumeric($result);
+            $this->assertEqualsWithDelta($expected, (float) $result, 0.1);
         } else {
             $this->assertEquals($expected, $results[0]->getAttribute('result'));
         }
@@ -2529,7 +2537,12 @@ trait JoinTests
         ]);
 
         $this->assertCount(3, $results);
-        $counts = array_map(fn ($d) => (int) $d->getAttribute('order_cnt'), $results);
+        $counts = [];
+        foreach ($results as $document) {
+            $count = $document->getAttribute('order_cnt');
+            $this->assertIsNumeric($count);
+            $counts[] = (int) $count;
+        }
         $this->assertEquals([5, 4, 3], $counts);
 
         $this->cleanupAggCollections($database, $cols);
@@ -2634,9 +2647,13 @@ trait JoinTests
 
         $this->assertCount(2, $results);
         $this->assertEquals('c1', $results[0]->getAttribute('cust_uid'));
-        $this->assertEquals(100, (int) $results[0]->getAttribute('total'));
+        $c1Total = $results[0]->getAttribute('total');
+        $this->assertIsNumeric($c1Total);
+        $this->assertEquals(100, (int) $c1Total);
         $this->assertEquals('c2', $results[1]->getAttribute('cust_uid'));
-        $this->assertEquals(200, (int) $results[1]->getAttribute('total'));
+        $c2Total = $results[1]->getAttribute('total');
+        $this->assertIsNumeric($c2Total);
+        $this->assertEquals(200, (int) $c2Total);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -2924,7 +2941,9 @@ trait JoinTests
         $this->assertCount(1, $results);
         $this->assertSame('c1', $results[0]->getId());
         $this->assertSame('Customer 1', $results[0]->getAttribute('name'));
-        $this->assertSame(150, (int) $results[0]->getAttribute('amount'));
+        $amount = $results[0]->getAttribute('amount');
+        $this->assertIsNumeric($amount);
+        $this->assertSame(150, (int) $amount);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -2980,7 +2999,9 @@ trait JoinTests
 
         $this->assertCount(1, $results);
         $this->assertSame('c1', $results[0]->getId());
-        $this->assertSame(150, (int) $results[0]->getAttribute('amount'));
+        $chainedAmount = $results[0]->getAttribute('amount');
+        $this->assertIsNumeric($chainedAmount);
+        $this->assertSame(150, (int) $chainedAmount);
         $this->assertSame('widget', $results[0]->getAttribute('sku'));
 
         $this->cleanupAggCollections($database, $cols);
@@ -3025,7 +3046,9 @@ trait JoinTests
 
         $this->assertCount(1, $results);
         $this->assertSame('Customer 1', $results[0]->getAttribute('name'));
-        $this->assertSame(275, (int) $results[0]->getAttribute('amount'));
+        $selectedAmount = $results[0]->getAttribute('amount');
+        $this->assertIsNumeric($selectedAmount);
+        $this->assertSame(275, (int) $selectedAmount);
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -3289,10 +3312,13 @@ trait JoinTests
             foreach ($results as $document) {
                 $this->assertNotSame('ord-secret', $document->getId());
                 $amount = $document->getAttribute('amount');
-                if ($amount !== null && $amount !== '') {
-                    $amounts[] = (int) $amount;
+                if (\is_numeric($amount)) {
+                    $amount = (int) $amount;
+                    $amounts[] = $amount;
+                    $this->assertNotSame(999, $amount);
+                } else {
+                    $this->assertNotSame(999, $amount);
                 }
-                $this->assertNotSame(999, (int) $amount);
             }
             $this->assertContains(10, $amounts);
         } finally {
@@ -3380,10 +3406,13 @@ trait JoinTests
             foreach ($results as $document) {
                 $this->assertNotSame('ord-secret', $document->getId());
                 $amount = $document->getAttribute('amount');
-                if ($amount !== null && $amount !== '') {
-                    $amounts[] = (int) $amount;
+                if (\is_numeric($amount)) {
+                    $amount = (int) $amount;
+                    $amounts[] = $amount;
+                    $this->assertNotSame(999, $amount);
+                } else {
+                    $this->assertNotSame(999, $amount);
                 }
-                $this->assertNotSame(999, (int) $amount);
             }
             $this->assertContains(10, $amounts);
         } finally {
@@ -3489,11 +3518,15 @@ trait JoinTests
                 $this->assertNotSame('r-other-tenant', $document->getId());
                 $this->assertNotSame('r-other-match', $document->getId());
                 $score = $document->getAttribute('score');
-                if ($score !== null && $score !== '') {
-                    $scores[] = (int) $score;
+                if (\is_numeric($score)) {
+                    $score = (int) $score;
+                    $scores[] = $score;
+                    $this->assertNotSame(77, $score);
+                    $this->assertNotSame(88, $score);
+                } else {
+                    $this->assertNotSame(77, $score);
+                    $this->assertNotSame(88, $score);
                 }
-                $this->assertNotSame(77, (int) $score);
-                $this->assertNotSame(88, (int) $score);
                 if ($document->getId() === '') {
                     $unmatched = $document;
                 }

@@ -678,6 +678,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $roles = $this->authorization->getRoles();
             $queries = \array_map(static fn ($query) => clone $query, $queries);
             $joinTablePrefixes = $this->remapJoinQueries($queries);
+            $queries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
 
             $hasPreservingOuterJoin = false;
             foreach ($queries as $query) {
@@ -1398,6 +1399,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $orderAttributes,
                 $orderTypes,
                 $leftProjected,
+                $joinTablePrefixes,
             );
 
             $right = $this->newBuilder($name, $alias, true);
@@ -1421,6 +1423,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $orderAttributes,
                 $orderTypes,
                 $rightProjected,
+                $joinTablePrefixes,
             );
 
             $left->unionAll($right);
@@ -3414,6 +3417,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @return list<string>
+     */
+    private function starProjection(array $joinTablePrefixes, string $alias): array
+    {
+        $columns = [];
+        foreach ($joinTablePrefixes as $join) {
+            $columns[] = $this->filter($join['alias']).'.*';
+        }
+        $columns[] = $this->filter($alias).'.*';
+
+        return $columns;
+    }
+
+    /**
      * Map Database type constants to Schema Table column definitions.
      *
      * @throws DatabaseException
@@ -3647,6 +3665,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     joinAliases: \array_column($joinTablePrefixes, 'alias'),
                 ));
                 $hasSelectionProjection = true;
+            } elseif (! empty($joinTablePrefixes)) {
+                $builder->select($this->starProjection($joinTablePrefixes, $alias));
             }
         }
 
@@ -3738,6 +3758,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
      */
     private function applyFullOuterJoinOrderProjection(
         SQLBuilder $builder,
@@ -3745,6 +3766,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         array $orderAttributes,
         array $orderTypes,
         bool $hasSelectionProjection,
+        array $joinTablePrefixes = [],
     ): void {
         $hasOrderColumns = false;
         foreach (\array_keys($orderAttributes) as $i) {
@@ -3760,7 +3782,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if (! $hasSelectionProjection) {
-            $builder->select(['*']);
+            $builder->select(
+                empty($joinTablePrefixes)
+                    ? ['*']
+                    : $this->starProjection($joinTablePrefixes, $alias)
+            );
         }
 
         $quote = $this->getIdentifierQuoteChar();

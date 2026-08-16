@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use Exception;
 use PDOException;
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
@@ -15,6 +16,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
+#[AllowMockObjectsWithoutExpectations]
 final class SQLGetDocumentTest extends TestCase
 {
     public function testTranslatesExecuteTimeoutClosesCursorAndPreservesOriginalWhenCleanupFails(): void
@@ -247,6 +249,91 @@ final class SQLGetDocumentTest extends TestCase
             '/WHERE\s+`_uid`\s*=\s*:_uid\s*$/',
             $sql
         );
+        $this->assertQualifiedJoinStars($sql);
+    }
+
+    public function testJoinWithoutSelectProjectsQualifiedStars(): void
+    {
+        $sql = $this->captureGetDocumentSql([
+            Query::leftJoin('orders', '$id', 'customerId'),
+        ]);
+
+        $this->assertQualifiedJoinStars($sql);
+        $this->assertStringContainsString('LEFT JOIN', $sql);
+    }
+
+    public function testJoinAliasWithoutSelectProjectsQualifiedStars(): void
+    {
+        $sql = $this->captureGetDocumentSql([
+            Query::join('orders', '$id', 'customerId', '=', 'rev'),
+        ]);
+
+        $this->assertQualifiedJoinStars($sql, joinAlias: 'rev');
+    }
+
+    public function testGetDocumentFullOuterJoinUsesLeftJoinOnPostgres(): void
+    {
+        $sql = $this->captureGetDocumentSql(
+            [Query::fullOuterJoin('orders', '$id', 'customerId')],
+            postgres: true,
+        );
+
+        $this->assertStringContainsString('LEFT JOIN', $sql);
+        $this->assertStringNotContainsString('FULL OUTER JOIN', $sql);
+        $this->assertStringNotContainsString('UNION ALL', $sql);
+        $this->assertQualifiedJoinStars($sql, '"');
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     */
+    private function captureGetDocumentSql(array $queries, bool $postgres = false): string
+    {
+        $statement = $this->getMockBuilder(\PDOStatement::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $statement->method('bindValue')->willReturn(true);
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetch')->willReturn(false);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdo->expects($this->once())
+            ->method('prepare')
+            ->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+                $sql = $query;
+
+                return $statement;
+            });
+
+        $adapter = $postgres ? new Postgres($pdo) : new MySQL($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $adapter->getDocument(
+            new Document([Document::ID => 'collection']),
+            'document',
+            $queries
+        );
+
+        $this->assertNotSame('', $sql);
+
+        return $sql;
+    }
+
+    private function assertQualifiedJoinStars(string $sql, string $quote = '`', string $joinAlias = 'j0'): void
+    {
+        $this->assertStringContainsString($quote.$joinAlias.$quote.'.*', $sql);
+        $this->assertStringContainsString($quote.'table_main'.$quote.'.*', $sql);
+        $this->assertDoesNotMatchRegularExpression('/SELECT\s+\*(?:\s|,|$)/i', $sql);
+        $this->assertDoesNotMatchRegularExpression('/FROM\s*\(\s*SELECT\s+\*/i', $sql);
     }
 
     private function assertTimeout(MySQL $adapter, PDOException $exception): void

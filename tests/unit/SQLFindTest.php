@@ -70,6 +70,16 @@ final class SQLFindTest extends TestCase
         yield 'builder path' => [false];
     }
 
+    public function testJoinWithoutSelectProjectsQualifiedStars(): void
+    {
+        $sql = $this->captureFindSql([
+            Query::leftJoin('orders', '$id', 'customerId'),
+        ]);
+
+        $this->assertQualifiedJoinStars($sql);
+        $this->assertStringContainsString('LEFT JOIN', $sql);
+    }
+
     public function testEmulatesFullOuterJoinWithOuterLimit(): void
     {
         $sql = $this->captureFindSql(
@@ -78,6 +88,7 @@ final class SQLFindTest extends TestCase
         );
 
         $this->assertEmulatedFullOuterJoin($sql);
+        $this->assertQualifiedJoinStars($sql);
         $this->assertSame(1, $this->countLimitsAfterUnion($sql), $sql);
     }
 
@@ -249,6 +260,13 @@ final class SQLFindTest extends TestCase
         $this->assertStringContainsString('IS NULL', $sql);
         $this->assertStringNotContainsString('FULL OUTER JOIN', $sql);
         $this->assertDoesNotMatchRegularExpression('/FROM\s*\(\s*SELECT\s+\*/i', $sql);
+    }
+
+    private function assertQualifiedJoinStars(string $sql, string $quote = '`', string $joinAlias = 'j0'): void
+    {
+        $this->assertStringContainsString($quote.$joinAlias.$quote.'.*', $sql);
+        $this->assertStringContainsString($quote.'table_main'.$quote.'.*', $sql);
+        $this->assertDoesNotMatchRegularExpression('/SELECT\s+\*(?:\s|,|$)/i', $sql);
     }
 
     private function countLimitsAfterUnion(string $sql): int

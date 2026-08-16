@@ -3917,9 +3917,69 @@ trait JoinTests
         ]);
 
         $this->assertSame(false, $document->isEmpty());
+        $this->assertSame('p1', $document->getId());
         $score = $document->getAttribute('score');
         $this->assertIsNumeric($score);
         $this->assertSame(5, (int) $score);
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testGetDocumentJoinKeepsMainDocumentId(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $pCol = 'gd_jmid_p';
+        $rCol = 'gd_jmid_r';
+        $cols = [$pCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p1',
+            'name' => 'Product p1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p2',
+            'name' => 'Product p2',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            '$id' => 'r1',
+            'prod_uid' => 'p1',
+            'score' => 5,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $inner = $database->getDocument($pCol, 'p1', [
+            Query::join($rCol, '$id', 'prod_uid'),
+        ]);
+        $this->assertSame(false, $inner->isEmpty());
+        $this->assertSame('p1', $inner->getId());
+
+        $left = $database->getDocument($pCol, 'p1', [
+            Query::leftJoin($rCol, '$id', 'prod_uid'),
+        ]);
+        $this->assertSame(false, $left->isEmpty());
+        $this->assertSame('p1', $left->getId());
+
+        $unmatched = $database->getDocument($pCol, 'p2', [
+            Query::leftJoin($rCol, '$id', 'prod_uid'),
+        ]);
+        $this->assertSame(false, $unmatched->isEmpty());
+        $this->assertSame('p2', $unmatched->getId());
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -3956,10 +4016,73 @@ trait JoinTests
         ]);
 
         $this->assertSame(false, $document->isEmpty());
+        $this->assertSame('p2', $document->getId());
         $score = $document->getAttribute('score');
         $this->assertTrue($score === null || $score === '');
 
         $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testGetDocumentFullOuterJoinUnauthorizedJoinStillReturnsMain(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $pCol = 'gd_fojua_p';
+        $rCol = 'gd_fojua_r';
+        $cols = [$pCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($pCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($rCol, new Attribute(key: 'prod_uid', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($rCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($pCol, new Document([
+            '$id' => 'p1',
+            'name' => 'Product p1',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($rCol, new Document([
+            '$id' => 'r-secret',
+            'prod_uid' => 'p1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('other'))],
+        ]));
+
+        $authorization = $database->getAuthorization();
+        $previousRoles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            $document = $database->getDocument($pCol, 'p1', [
+                Query::fullOuterJoin($rCol, '$id', 'prod_uid'),
+            ]);
+            $this->assertSame(false, $document->isEmpty());
+            $this->assertSame('p1', $document->getId());
+            $this->assertNotSame('r-secret', $document->getId());
+            $score = $document->getAttribute('score');
+            $this->assertTrue($score === null || $score === '' || (int) $score !== 999);
+
+            $left = $database->getDocument($pCol, 'p1', [
+                Query::leftJoin($rCol, '$id', 'prod_uid'),
+            ]);
+            $this->assertSame(false, $left->isEmpty());
+            $this->assertSame('p1', $left->getId());
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($previousRoles as $role) {
+                $authorization->addRole($role);
+            }
+            $this->cleanupAggCollections($database, $cols);
+        }
     }
 
     public function testFullOuterJoinLimitAppliesToOuterQuery(): void

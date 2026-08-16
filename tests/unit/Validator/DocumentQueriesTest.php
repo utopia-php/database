@@ -160,6 +160,16 @@ class DocumentQueriesTest extends TestCase
         $this->assertStringContainsString('Invalid query method', $validator->getDescription());
     }
 
+    public function testUnionAllIsInvalid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([
+            Query::unionAll([Query::equal('name', ['x'])]),
+        ]));
+        $this->assertStringContainsString('Invalid query method', $validator->getDescription());
+    }
+
     public function testNaturalJoinIsInvalid(): void
     {
         $validator = new DocumentQueries($this->documentAttributes());

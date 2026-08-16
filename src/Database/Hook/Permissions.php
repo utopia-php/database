@@ -85,7 +85,7 @@ class Permissions extends Interceptor
                 $removals[$type->value] = $removed;
             }
 
-            $added = \array_values(\array_diff($document->getPermissionsByType($type), $permissions[$type->value]));
+            $added = $this->uniqueAdditions($document->getPermissionsByType($type), $permissions[$type->value]);
             if (! empty($added)) {
                 $additions[$type->value] = $added;
             }
@@ -132,7 +132,7 @@ class Permissions extends Interceptor
         }
 
         foreach ($eligible as $document) {
-            $permissions = $permissionsMap[$document->getId()] ?? $this->emptyPermissions();
+            $permissions = $this->currentPermissions($permissionsMap, $document->getId());
 
             foreach (self::PERM_TYPES as $type) {
                 $diff = \array_diff($permissions[$type->value], $updatesByType[$type->value]);
@@ -147,7 +147,7 @@ class Permissions extends Interceptor
 
             $metadata = $this->documentMetadata($document);
             foreach (self::PERM_TYPES as $type) {
-                $diff = \array_diff($updatesByType[$type->value], $permissions[$type->value]);
+                $diff = $this->uniqueAdditions($updatesByType[$type->value], $permissions[$type->value]);
                 if (! empty($diff)) {
                     foreach ($diff as $permission) {
                         $row = ($context->decorateRow)([
@@ -212,7 +212,7 @@ class Permissions extends Interceptor
             }
 
             foreach (self::PERM_TYPES as $type) {
-                $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type->value]);
+                $toAdd = $this->uniqueAdditions($document->getPermissionsByType($type), $current[$type->value]);
                 foreach ($toAdd as $permission) {
                     $row = ($context->decorateRow)([
                         Storage::PERM_DOCUMENT => $document->getId(),
@@ -271,7 +271,7 @@ class Permissions extends Interceptor
     {
         $map = $this->readCurrentPermissionsBatch($collection, [$document], $context);
 
-        return $map[$document->getId()] ?? $this->emptyPermissions();
+        return $this->currentPermissions($map, $document->getId());
     }
 
     /**
@@ -303,25 +303,86 @@ class Permissions extends Interceptor
         $rows = (array) $readStmt->fetchAll();
         $readStmt->closeCursor();
 
+        return $this->groupPermissionRows($documentIds, $rows);
+    }
+
+    /**
+     * @param  list<string>  $documentIds
+     * @param  array<array<string, string>>  $rows
+     * @return array<string, array<string, list<string>>>
+     */
+    private function groupPermissionRows(array $documentIds, array $rows): array
+    {
         $result = [];
+        $requestedByLower = [];
         foreach ($documentIds as $id) {
             $result[$id] = $this->emptyPermissions();
+            $requestedByLower[\strtolower($id)][] = $id;
         }
 
         foreach ($rows as $row) {
-            $docId = $row[Storage::PERM_DOCUMENT] ?? null;
+            $storedId = $row[Storage::PERM_DOCUMENT] ?? null;
             $type = $row[Storage::PERM_TYPE] ?? null;
             $permission = $row[Storage::PERM_PERMISSION] ?? null;
-            if ($docId === null || $type === null || $permission === null) {
+            if ($storedId === null || $type === null || $permission === null) {
                 continue;
             }
-            if (! isset($result[$docId])) {
-                $result[$docId] = $this->emptyPermissions();
+
+            $key = $this->resolveStoredDocumentId($storedId, $result, $requestedByLower);
+            if (! isset($result[$key])) {
+                $result[$key] = $this->emptyPermissions();
             }
-            $result[$docId][$type][] = $permission;
+            $result[$key][$type][] = $permission;
         }
 
         return $result;
+    }
+
+    /**
+     * @param  array<string, array<string, list<string>>>  $result
+     * @param  array<string, list<string>>  $requestedByLower
+     */
+    private function resolveStoredDocumentId(string $storedId, array $result, array $requestedByLower): string
+    {
+        if (isset($result[$storedId])) {
+            return $storedId;
+        }
+
+        $candidates = $requestedByLower[\strtolower($storedId)] ?? [];
+        if (\count($candidates) === 1) {
+            return $candidates[0];
+        }
+
+        return $storedId;
+    }
+
+    /**
+     * @param  array<string, array<string, list<string>>>  $map
+     * @return array<string, list<string>>
+     */
+    private function currentPermissions(array $map, string $documentId): array
+    {
+        if (\array_key_exists($documentId, $map)) {
+            return $map[$documentId];
+        }
+
+        foreach ($map as $storedId => $permissions) {
+            if (\strcasecmp((string) $storedId, $documentId) === 0) {
+                return $permissions;
+            }
+        }
+
+        return $this->emptyPermissions();
+    }
+
+    /**
+     * @param  array<array-key, string>  $desired
+     * @param  array<array-key, string>  $current
+     * @return list<string>
+     */
+    private function uniqueAdditions(array $desired, array $current): array
+    {
+        return \array_values(\array_unique(\array_diff($desired, $current)));
     }
 
     /**
@@ -375,7 +436,7 @@ class Permissions extends Interceptor
         $metadata = $this->documentMetadata($document);
 
         foreach ($additions as $type => $perms) {
-            foreach ($perms as $permission) {
+            foreach (\array_values(\array_unique($perms)) as $permission) {
                 $row = ($context->decorateRow)([
                     Storage::PERM_DOCUMENT => $document->getId(),
                     Storage::PERM_TYPE => $type,

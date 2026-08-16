@@ -7200,7 +7200,7 @@ trait DocumentTests
     }
     public function testUpdateDocumentDuplicatePermissions(): void
     {
-        $document = $this->initDocumentsFixture();
+        $document = $this->initDocumentsFixture(__FUNCTION__);
 
         $new = $this->getDatabase()->updateDocument($document->getCollection(), $document->getId(), $document);
 
@@ -7216,6 +7216,34 @@ trait DocumentTests
 
         $this->assertContains('guests', $new->getRead());
         $this->assertContains('guests', $new->getCreate());
+
+        $database = $this->getDatabase();
+        $collection = 'dupCase';
+        $database->createCollection($collection);
+
+        $stored = $database->createDocument($collection, new Document([
+            '$id' => 'caseSensitive',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        $stored->setAttribute('$id', 'CaseSensitive');
+        $stored
+            ->setAttribute('$permissions', Permission::read(Role::guests()), SetType::Append)
+            ->setAttribute('$permissions', Permission::read(Role::guests()), SetType::Append)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), SetType::Append)
+            ->setAttribute('$permissions', Permission::create(Role::guests()), SetType::Append);
+
+        $database->updateDocument($collection, 'caseSensitive', $stored);
+
+        $updated = $database->getDocument($collection, 'caseSensitive');
+        $this->assertContains('guests', $updated->getRead());
+        $this->assertContains('guests', $updated->getCreate());
+        $this->assertContains('any', $updated->getCreate());
     }
 
     /**

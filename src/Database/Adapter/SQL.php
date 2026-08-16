@@ -3727,18 +3727,28 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if ($this->authorization->getStatus()) {
             $hasJoins = ! empty($joinTablePrefixes);
-            $docCol = $hasJoins ? $alias.'.'.Storage::UID : Storage::UID;
-            $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
-            if ($preservingOuter) {
-                $permissionHook = new PermissionAllowNullUid(
-                    $permissionHook,
-                    $docCol,
-                    $this->getIdentifierQuoteChar(),
-                );
+            if ((bool) $collection->getAttribute('documentSecurity', false)) {
+                $docCol = $hasJoins ? $alias.'.'.Storage::UID : Storage::UID;
+                $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
+                if ($preservingOuter) {
+                    $permissionHook = new PermissionAllowNullUid(
+                        $permissionHook,
+                        $docCol,
+                        $this->getIdentifierQuoteChar(),
+                    );
+                }
+                $builder->addHook($permissionHook);
             }
-            $builder->addHook($permissionHook);
+
+            $joinDocumentSecurity = $collection->getAttribute('joinDocumentSecurity', []);
+            /** @var array<string, mixed> $joinDocumentSecurity */
+            $joinDocumentSecurity = \is_array($joinDocumentSecurity) ? $joinDocumentSecurity : [];
 
             foreach ($joinTablePrefixes as $join) {
+                if (($joinDocumentSecurity[$join['table']] ?? true) === false) {
+                    continue;
+                }
+
                 $builder->addHook(new PermissionJoinFilter(
                     $this->newPermissionHook(
                         $this->filter($join['table']),

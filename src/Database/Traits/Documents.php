@@ -329,19 +329,9 @@ trait Documents
             throw new QueryException('Join queries are not supported by this adapter');
         }
 
+        $joinDocumentSecurity = [];
         if (! empty($joins)) {
-            foreach ($joins as $joinQuery) {
-                $joinCollectionId = $joinQuery->getAttribute();
-                $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
-
-                if ($joinCollection->isEmpty()) {
-                    throw new QueryException("Joined collection '{$joinCollectionId}' not found");
-                }
-
-                if (! $this->authorization->isValid(new Input(PermissionType::Read, $joinCollection->getPermissionsByType(PermissionType::Read)))) {
-                    throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
-                }
-            }
+            $joinDocumentSecurity = $this->authorizeJoins($joins, PermissionType::Read);
         }
 
         $selections = $this->validateSelections($collection, $selects);
@@ -421,7 +411,7 @@ trait Documents
             && $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
 
         $getDocument = fn () => $this->adapter->getDocument(
-            $collection,
+            $this->withJoinDocumentSecurity($collection, $joinDocumentSecurity),
             $id,
             $queries,
             $forUpdate
@@ -2787,20 +2777,9 @@ trait Documents
             throw new QueryException('Join queries are not supported by this adapter');
         }
 
-        // Enforce collection-level read permission on each joined collection
+        $joinDocumentSecurity = [];
         if (! empty($joins)) {
-            foreach ($joins as $joinQuery) {
-                $joinCollectionId = $joinQuery->getAttribute();
-                $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
-
-                if ($joinCollection->isEmpty()) {
-                    throw new QueryException("Joined collection '{$joinCollectionId}' not found");
-                }
-
-                if (! $this->authorization->isValid(new Input($forPermission, $joinCollection->getPermissionsByType($forPermission)))) {
-                    throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
-                }
-            }
+            $joinDocumentSecurity = $this->authorizeJoins($joins, $forPermission);
         }
 
         if (! $isAggregation && ! $distinct) {
@@ -2945,6 +2924,8 @@ trait Documents
             }
 
             if (! isset($results)) {
+                $adapterCollection = $this->withJoinDocumentSecurity($collection, $joinDocumentSecurity);
+
                 // Inline the auth-skip toggle to avoid the per-find Closure
                 // allocation that authorization->skip() requires. Mirrors
                 // Authorization::skip's restore semantics: the previous status
@@ -2955,7 +2936,7 @@ trait Documents
                     $this->authorization->disable();
                     try {
                         $results = $this->adapter->find(
-                            $collection,
+                            $adapterCollection,
                             $queries,
                             $limit ?? 25,
                             $offset ?? 0,
@@ -2970,7 +2951,7 @@ trait Documents
                     }
                 } else {
                     $results = $this->adapter->find(
-                        $collection,
+                        $adapterCollection,
                         $queries,
                         $limit ?? 25,
                         $offset ?? 0,
@@ -3318,6 +3299,47 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         return $this->find($collection, $queries);
+    }
+
+    /**
+     * @param  array<Query>  $joins
+     * @return array<string, bool>
+     */
+    private function authorizeJoins(array $joins, PermissionType $forPermission): array
+    {
+        $joinDocumentSecurity = [];
+
+        foreach ($joins as $joinQuery) {
+            $joinCollectionId = $joinQuery->getAttribute();
+            $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
+
+            if ($joinCollection->isEmpty()) {
+                throw new QueryException("Joined collection '{$joinCollectionId}' not found");
+            }
+
+            if (! $this->authorization->isValid(new Input($forPermission, $joinCollection->getPermissionsByType($forPermission)))) {
+                throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
+            }
+
+            $joinDocumentSecurity[$joinCollectionId] = (bool) $joinCollection->getAttribute('documentSecurity', false);
+        }
+
+        return $joinDocumentSecurity;
+    }
+
+    /**
+     * @param  array<string, bool>  $joinDocumentSecurity
+     */
+    private function withJoinDocumentSecurity(Document $collection, array $joinDocumentSecurity): Document
+    {
+        if ($joinDocumentSecurity === []) {
+            return $collection;
+        }
+
+        $adapterCollection = clone $collection;
+        $adapterCollection->setAttribute('joinDocumentSecurity', $joinDocumentSecurity);
+
+        return $adapterCollection;
     }
 
     /**

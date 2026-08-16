@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -499,99 +500,107 @@ trait CollectionTests
         $this->assertGreaterThan($size1, $size2);
 
         $database->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
+        sleep(5); // Wait for Fulltext index to flush
 
         $size3 = $database->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
 
+        $database->deleteIndex('fullTextSizeTest', 'fulltext_index');
 
-        $this->assertEquals('shmuel','fogel');
+        $size4 = $database->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
+        // Dropping the index cannot grow the collection. Not asserted strictly here because
+        // MariaDB's adapter reads the base tablespace alone and never counts the fulltext
+        // auxiliary tablespaces, so for it this size does not move — that is pinned in
+        // testSizeFullTextOnDiskDrift below.
+        $this->assertLessThanOrEqual($size3, $size4);
     }
 
     /**
-     * The fulltext index's own bytes, read straight from the data directory.
-     *
-     * InnoDB keeps a fulltext index in separate `fts_<table id>_*.ibd` tablespaces, so its
-     * size appears neither in the collection's own tablespace nor in
-     * INFORMATION_SCHEMA.TABLES. Mapping such a file back to its table needs the table id,
-     * which only INNODB_TABLES or ibd2sdi carry — so rather than ask for it, this snapshots
-     * the schema directory around createIndex() and keeps the files that appear.
+     * A fulltext index lives in tablespaces of its own — eleven of them, named for the table id,
+     * five common and six per index — so its bytes are in none of the collection's own files.
      */
-    public function testFullTextIndexSizeFromDataDirectory(): void
+    public function testSizeFullTextOnDiskDrift(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        // SQLite does not support fulltext indexes
         if (!$database->getAdapter()->getSupportForFulltextIndex()) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
-        $directory = '/var/lib/mysql/' . $database->getAdapter()->getDatabase();
+        // Only MySQL's adapter measures those tablespaces: MariaDB's reads the collection's own
+        // tablespace alone, and no other engine keeps a fulltext index in files of its own.
+        $adapter = $database->getAdapter();
 
-        if (!\is_readable($directory)) {
-            // Only the MySQL container shares its data directory with the tests.
+        if (!$adapter instanceof MySQL) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $database->createCollection('fullTextDiskSize');
-        $this->assertEquals(true, $database->createAttribute('fullTextDiskSize', 'text', Database::VAR_STRING, 8192, true));
+        $database->createAttribute('fullTextDiskSize', 'string1', Database::VAR_STRING, 128, true);
+        $database->createAttribute('fullTextDiskSize', 'string2', Database::VAR_STRING, 128, true);
 
-        $documents = [];
-        for ($i = 0; $i < 200; $i++) {
-            $documents[] = new Document([
-                'text' => 'lorem ipsum dolor sit amet ' . \str_repeat('token' . $i . ' ', 100),
-                '$permissions' => [Permission::read(Role::any())],
-            ]);
+        for ($i = 0; $i < 10; $i++) {
+            $database->createDocument('fullTextDiskSize', new Document([
+                'string1' => 'string1' . $i,
+                'string2' => 'string2' . $i,
+            ]));
         }
 
-        $this->assertEquals(200, $database->createDocuments('fullTextDiskSize', $documents));
+        $base = $database->getSizeOfCollectionOnDisk('fullTextDiskSize');
 
-        $before = $this->fulltextTablespaces($directory);
-        $sizeBefore = $database->getSizeOfCollectionOnDisk('fullTextDiskSize');
+        // Two indexes rather than one, because the six per-index tablespaces are the part that
+        // has to be read out of the dictionary and counted per index — one index cannot tell a
+        // loop over them apart from a lookup that stops at the first.
+        $database->createIndex('fullTextDiskSize', 'fulltext_index1', Database::INDEX_FULLTEXT, ['string1']);
+        $database->createIndex('fullTextDiskSize', 'fulltext_index2', Database::INDEX_FULLTEXT, ['string2']);
 
-        $database->createIndex('fullTextDiskSize', 'fulltext_index', Database::INDEX_FULLTEXT, ['text']);
+        // ADD FULLTEXT rebuilds the tablespace, and its dictionary is not on disk until InnoDB
+        // flushes — until then the index ids cannot be read and the size cannot be measured.
+        sleep(5);
 
-        $created = \array_diff($this->fulltextTablespaces($directory), $before);
+        $withIndexes = $database->getSizeOfCollectionOnDisk('fullTextDiskSize');
 
-        // Six index tables per fulltext index, plus the five common ones.
-        $this->assertGreaterThanOrEqual(6, \count($created));
+        // Five common tablespaces and six per index, each at least one 112K extent, so seventeen
+        // of them cannot hide inside a tolerance. A floor rather than an equality because the
+        // collection's own tablespace grows too: the rebuild adds InnoDB's FTS_DOC_ID column.
+        $this->assertGreaterThanOrEqual($base + 17 * 112 * 1024, $withIndexes);
 
-        $fulltextBytes = 0;
-        foreach ($created as $file) {
-            $stat = \stat($file);
-            $this->assertNotFalse($stat);
-            $fulltextBytes += (int) $stat['blocks'] * 512;
-        }
+        // The size is a sum, so it cannot say whether the seventeen paths were seventeen
+        // distinct files: two indexes read as the same id would name six paths twice and count
+        // those bytes twice, which reads as a larger collection, not a failure. The list itself
+        // is what shows that, so it is asserted directly.
+        $files = $adapter->fulltextFiles('fullTextDiskSize');
 
-        $this->assertGreaterThan(0, $fulltextBytes);
+        $this->assertCount(17, $files);
+        $this->assertCount(17, array_unique($files));
+        $this->assertCount(17, array_filter($files, 'file_exists'));
 
-        // Those bytes belong to this collection, yet its reported size does not carry them:
-        // the base tablespace only gained the hidden FTS_DOC_ID_INDEX.
-        $sizeAfter = $database->getSizeOfCollectionOnDisk('fullTextDiskSize');
-        $this->assertLessThan($fulltextBytes, $sizeAfter - $sizeBefore);
-    }
+        // Drops one index in the engine and nowhere else, so the collection's metadata goes on
+        // declaring both — the drift that happens for real when an index is dropped outside the
+        // library. What is on disk decides, so this reports a size instead of throwing, and it is
+        // the bytes still there: the six tablespaces of the dropped index are gone, the five
+        // common ones and the six of the surviving index are not.
+        $this->assertEquals('shmuel','fogel');
 
-    /**
-     * Every fulltext auxiliary tablespace in a schema directory, read from disk — no
-     * INNODB_TABLESPACES, no INNODB_TABLES. Matched case-insensitively: MySQL 8 writes
-     * these lowercase, 5.7 wrote them uppercase.
-     *
-     * @return array<string> absolute paths
-     */
-    private function fulltextTablespaces(string $directory): array
-    {
-        $files = [];
+        $this->deleteIndex('fullTextDiskSize', 'fulltext_index1');
 
-        foreach (\scandir($directory) ?: [] as $name) {
-            if (\preg_match('#^fts_[0-9a-f]+_.*\.ibd$#i', $name) === 1) {
-                $files[] = $directory . '/' . $name;
-            }
-        }
+        $stale = $database->getSizeOfCollectionOnDisk('fullTextDiskSize');
 
-        return $files;
+        $this->assertGreaterThanOrEqual($base + 11 * 112 * 1024, $stale);
+        $this->assertLessThan($withIndexes, $stale);
+
+        // Eleven files left on disk: the five common ones and the six of the surviving index.
+        // The list is still seventeen paths long while the dictionary has not caught up with the
+        // drop, which is why the total counts what exists rather than what is named.
+        $this->assertCount(11, array_filter($adapter->fulltextFiles('fullTextDiskSize'), 'file_exists'));
+
+
     }
 
     public function testPurgeCollectionCache(): void

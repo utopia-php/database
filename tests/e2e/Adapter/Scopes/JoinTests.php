@@ -5,7 +5,9 @@ namespace Tests\E2E\Adapter\Scopes;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -4069,7 +4071,12 @@ trait JoinTests
             $this->assertSame('p1', $document->getId());
             $this->assertNotSame('r-secret', $document->getId());
             $score = $document->getAttribute('score');
-            $this->assertTrue($score === null || $score === '' || (int) $score !== 999);
+            if (\is_numeric($score)) {
+                $score = (int) $score;
+                $this->assertNotSame(999, $score);
+            } else {
+                $this->assertNotSame(999, $score);
+            }
 
             $left = $database->getDocument($pCol, 'p1', [
                 Query::leftJoin($rCol, '$id', 'prod_uid'),
@@ -4192,5 +4199,992 @@ trait JoinTests
         );
 
         $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinCollectionAclRejectsUnauthorizedJoinedCollection(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_nocr_m';
+        $jCol = 'jp_nocr_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($mCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false);
+        $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($jCol, permissions: [Permission::create(Role::any())], documentSecurity: false);
+        $database->createAttribute($jCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($jCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Main',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $joins = [
+                Query::join($jCol, '$id', 'mainId'),
+                Query::leftJoin($jCol, '$id', 'mainId'),
+                Query::rightJoin($jCol, '$id', 'mainId'),
+                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+                Query::crossJoin($jCol),
+            ];
+
+            foreach ($joins as $join) {
+                try {
+                    $results = $database->find($mCol, [$join]);
+                    foreach ($results as $document) {
+                        $this->assertJoinAttributesAbsent($document);
+                        $this->assertSecretJoinHidden($document, 'j-secret', 999);
+                    }
+                } catch (AuthorizationException|QueryException $exception) {
+                    $this->assertNotSame('', $exception->getMessage());
+                }
+            }
+
+            try {
+                $document = $database->getDocument($mCol, 'm1', [
+                    Query::join($jCol, '$id', 'mainId'),
+                ]);
+                if (! $document->isEmpty()) {
+                    $this->assertJoinAttributesAbsent($document);
+                    $this->assertSecretJoinHidden($document, 'j-secret', 999);
+                }
+            } catch (AuthorizationException|QueryException $exception) {
+                $this->assertNotSame('', $exception->getMessage());
+            }
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinCollectionAclAllowsWhenDocumentSecurityOff(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_dsoff_m';
+        $jCol = 'jp_dsoff_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($mCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false);
+        $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($jCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false);
+        $database->createAttribute($jCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($jCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Main',
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j1',
+            'mainId' => 'm1',
+            'score' => 5,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+            $this->assertContains(5, $this->numericScores($results));
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testInnerJoinDoesNotLeakUnauthorizedJoinDocument(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_ij_m';
+        $jCol = 'jp_ij_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Main',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-public',
+            'mainId' => 'm1',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+            foreach ($results as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+            }
+            $this->assertContains(10, $this->numericScores($results));
+            $this->assertSame(false, \in_array(999, $this->numericScores($results), true));
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testLeftJoinUnauthorizedJoinAttributesAreNullish(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_lj_m';
+        $jCol = 'jp_lj_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Alice',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm2',
+            'name' => 'Bob',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::leftJoin($jCol, '$id', 'mainId'),
+            ]);
+
+            $this->assertGreaterThanOrEqual(2, \count($results));
+            $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
+            $this->assertContains('m1', $ids);
+            $this->assertContains('m2', $ids);
+
+            foreach ($results as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+                $this->assertNullishScore($document);
+            }
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testRightJoinDoesNotLeakUnauthorizedMainOrJoin(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_rj_m';
+        $jCol = 'jp_rj_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm-public',
+            'name' => 'Public Main',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm-secret',
+            'name' => 'Secret Main',
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-public',
+            'mainId' => 'm-public',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm-secret',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-unmatched',
+            'mainId' => 'missing',
+            'score' => 7,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-unmatched-secret',
+            'mainId' => 'missing-secret',
+            'score' => 888,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::rightJoin($jCol, '$id', 'mainId'),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+            $scores = $this->numericScores($results);
+            $this->assertContains(10, $scores);
+            $this->assertSame(false, \in_array(999, $scores, true));
+            $this->assertSame(false, \in_array(888, $scores, true));
+
+            foreach ($results as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+                $this->assertNotSame('m-secret', $document->getId());
+                $this->assertNotSame('j-unmatched-secret', $document->getId());
+                $name = $document->getAttribute('name');
+                $this->assertNotSame('Secret Main', $name);
+            }
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testFullOuterJoinFindPermissionMatrix(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_fo_m';
+        $jCol = 'jp_fo_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Matched',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm2',
+            'name' => 'Unmatched Left',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm-secret',
+            'name' => 'Secret Main',
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-public',
+            'mainId' => 'm1',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-unmatched',
+            'mainId' => 'missing',
+            'score' => 7,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-unmatched-secret',
+            'mainId' => 'missing-secret',
+            'score' => 888,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+            ]);
+
+            $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
+            $this->assertContains('m1', $ids);
+            $this->assertContains('m2', $ids);
+            $this->assertSame(false, \in_array('m-secret', $ids, true));
+            $this->assertSame(false, \in_array('j-secret', $ids, true));
+            $this->assertSame(false, \in_array('j-unmatched-secret', $ids, true));
+
+            $scores = $this->numericScores($results);
+            $this->assertContains(10, $scores);
+            $this->assertContains(7, $scores);
+            $this->assertSame(false, \in_array(999, $scores, true));
+            $this->assertSame(false, \in_array(888, $scores, true));
+
+            $unmatchedLeft = null;
+            $unmatchedRight = null;
+            foreach ($results as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+                $this->assertNotSame('Secret Main', $document->getAttribute('name'));
+                if ($document->getId() === 'm2') {
+                    $unmatchedLeft = $document;
+                }
+                if ($document->getId() === '') {
+                    $score = $document->getAttribute('score');
+                    if (\is_numeric($score) && (int) $score === 7) {
+                        $unmatchedRight = $document;
+                    }
+                }
+            }
+
+            $this->assertNotNull($unmatchedLeft);
+            $this->assertNullishScore($unmatchedLeft);
+            $this->assertNotNull($unmatchedRight);
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testCrossJoinDoesNotLeakUnauthorizedJoinDocuments(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_xj_m';
+        $jCol = 'jp_xj_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'A',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm2',
+            'name' => 'B',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-public',
+            'mainId' => 'm1',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::crossJoin($jCol),
+            ]);
+
+            $this->assertSame(2, \count($results));
+            foreach ($results as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+            }
+            $this->assertSame([10, 10], $this->numericScores($results));
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testGetDocumentJoinPermissionMatrix(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_gd_m';
+        $jCol = 'jp_gd_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Secret Match',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm2',
+            'name' => 'Public Match',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm3',
+            'name' => 'Unmatched',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-public',
+            'mainId' => 'm2',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $innerSecret = $database->getDocument($mCol, 'm1', [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(true, $innerSecret->isEmpty());
+
+            $innerPublic = $database->getDocument($mCol, 'm2', [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(false, $innerPublic->isEmpty());
+            $this->assertSame('m2', $innerPublic->getId());
+            $this->assertSecretJoinHidden($innerPublic, 'j-secret', 999);
+            $publicScore = $innerPublic->getAttribute('score');
+            $this->assertTrue(\is_numeric($publicScore));
+            $this->assertSame(10, (int) $publicScore);
+
+            $leftSecret = $database->getDocument($mCol, 'm1', [
+                Query::leftJoin($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(false, $leftSecret->isEmpty());
+            $this->assertSame('m1', $leftSecret->getId());
+            $this->assertNotSame('j-secret', $leftSecret->getId());
+            $this->assertSecretJoinHidden($leftSecret, 'j-secret', 999);
+            $this->assertNullishScore($leftSecret);
+
+            $leftPublic = $database->getDocument($mCol, 'm2', [
+                Query::leftJoin($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(false, $leftPublic->isEmpty());
+            $this->assertSame('m2', $leftPublic->getId());
+
+            $rightSecret = $database->getDocument($mCol, 'm1', [
+                Query::rightJoin($jCol, '$id', 'mainId'),
+            ]);
+            if (! $rightSecret->isEmpty()) {
+                $this->assertSame('m1', $rightSecret->getId());
+                $this->assertSecretJoinHidden($rightSecret, 'j-secret', 999);
+            }
+
+            $rightPublic = $database->getDocument($mCol, 'm2', [
+                Query::rightJoin($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(false, $rightPublic->isEmpty());
+            $this->assertSame('m2', $rightPublic->getId());
+            $this->assertSecretJoinHidden($rightPublic, 'j-secret', 999);
+
+            $fojSecret = $database->getDocument($mCol, 'm1', [
+                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(false, $fojSecret->isEmpty());
+            $this->assertSame('m1', $fojSecret->getId());
+            $this->assertNotSame('j-secret', $fojSecret->getId());
+            $this->assertSecretJoinHidden($fojSecret, 'j-secret', 999);
+            $this->assertNullishScore($fojSecret);
+
+            $fojPublic = $database->getDocument($mCol, 'm2', [
+                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(false, $fojPublic->isEmpty());
+            $this->assertSame('m2', $fojPublic->getId());
+            $this->assertSecretJoinHidden($fojPublic, 'j-secret', 999);
+
+            $fojUnmatched = $database->getDocument($mCol, 'm3', [
+                Query::fullOuterJoin($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertSame(false, $fojUnmatched->isEmpty());
+            $this->assertSame('m3', $fojUnmatched->getId());
+            $this->assertSecretJoinHidden($fojUnmatched, 'j-secret', 999);
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinSelectDoesNotReturnSecretScore(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_sel_m';
+        $jCol = 'jp_sel_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Main',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-public',
+            'mainId' => 'm1',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $finds = $database->find($mCol, [
+                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::select(['name', 'rev.score']),
+            ]);
+            foreach ($finds as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+            }
+            $this->assertContains(10, $this->numericScores($finds));
+            $this->assertSame(false, \in_array(999, $this->numericScores($finds), true));
+
+            $document = $database->getDocument($mCol, 'm1', [
+                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::select(['rev.score']),
+            ]);
+            $this->assertSame(false, $document->isEmpty());
+            $this->assertSame('m1', $document->getId());
+            $this->assertSecretJoinHidden($document, 'j-secret', 999);
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinDoesNotLeakOtherTenantRows(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $sharedTables = $database->getSharedTables();
+        $supportsSchemas = $database->getAdapter()->supports(Capability::Schemas);
+        if (! $sharedTables && ! $supportsSchemas) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
+        $createdDatabase = false;
+        $sharedTablesDb = 'sharedTablesJp_'.static::getTestToken();
+        $mCol = 'jp_tn_m';
+        $jCol = 'jp_tn_j';
+        $cols = [$mCol, $jCol];
+
+        try {
+            if ($supportsSchemas) {
+                if ($database->exists($sharedTablesDb)) {
+                    $database->setDatabase($sharedTablesDb)->delete();
+                }
+
+                $database
+                    ->setDatabase($sharedTablesDb)
+                    ->setNamespace('')
+                    ->setSharedTables(true)
+                    ->setTenant(null)
+                    ->create();
+                $createdDatabase = true;
+            } else {
+                $database->setTenant(null);
+            }
+
+            $this->cleanupAggCollections($database, $cols);
+            $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+            $database->setTenant(1);
+            $database->createDocument($mCol, new Document([
+                '$id' => 'm1',
+                'name' => 'Tenant One',
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($mCol, new Document([
+                '$id' => 'm2',
+                'name' => 'Unmatched Left',
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($jCol, new Document([
+                '$id' => 'j-match',
+                'mainId' => 'm1',
+                'score' => 5,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+
+            $database->setTenant(2);
+            $database->createDocument($jCol, new Document([
+                '$id' => 'j-other-match',
+                'mainId' => 'm1',
+                'score' => 88,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($jCol, new Document([
+                '$id' => 'j-other-unmatched',
+                'mainId' => 'missing',
+                'score' => 77,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+
+            $database->setTenant(1);
+            $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+                foreach ([
+                    [Query::join($jCol, '$id', 'mainId')],
+                    [Query::leftJoin($jCol, '$id', 'mainId')],
+                    [Query::fullOuterJoin($jCol, '$id', 'mainId')],
+                ] as $queries) {
+                    $results = $database->find($mCol, $queries);
+                    $this->assertGreaterThanOrEqual(1, \count($results));
+                    $scores = $this->numericScores($results);
+                    $this->assertSame(false, \in_array(88, $scores, true));
+                    $this->assertSame(false, \in_array(77, $scores, true));
+                    foreach ($results as $document) {
+                        $this->assertNotSame('j-other-match', $document->getId());
+                        $this->assertNotSame('j-other-unmatched', $document->getId());
+                        $this->assertSecretJoinHidden($document, 'j-other-match', 88);
+                    }
+                }
+            });
+        } finally {
+            if ($createdDatabase) {
+                $database->setTenant(null)->setSharedTables(false);
+                if ($database->exists($sharedTablesDb)) {
+                    $database->delete($sharedTablesDb);
+                }
+                $database
+                    ->setSharedTables($sharedTables)
+                    ->setTenant($tenant)
+                    ->setNamespace($namespace)
+                    ->setDatabase($schema);
+            } else {
+                $database->setTenant(null);
+                $this->cleanupAggCollections($database, $cols);
+                $database->setTenant($tenant);
+            }
+        }
+    }
+
+    public function testJoinSecretRowOnlyVisibleToMatchingRole(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_rl_m';
+        $jCol = 'jp_rl_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($mCol, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::read(Role::user('jp-acl')),
+            Permission::read(Role::guests()),
+        ], documentSecurity: true);
+        $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($jCol, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::read(Role::user('jp-acl')),
+            Permission::read(Role::guests()),
+        ], documentSecurity: true);
+        $database->createAttribute($jCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($jCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Main',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('jp-acl')),
+                Permission::read(Role::guests()),
+            ],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-any',
+            'mainId' => 'm1',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-guest',
+            'mainId' => 'm1',
+            'score' => 20,
+            '$permissions' => [Permission::read(Role::guests())],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+            $scores = $this->numericScores($results);
+            $this->assertContains(10, $scores);
+            $this->assertSame(false, \in_array(999, $scores, true));
+            $this->assertSame(false, \in_array(20, $scores, true));
+            foreach ($results as $document) {
+                $this->assertNotSame('j-secret', $document->getId());
+            }
+        });
+
+        $this->withAuthorizationRoles($database, [Role::user('jp-acl')->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+            $scores = $this->numericScores($results);
+            $this->assertContains(999, $scores);
+            $this->assertSame(false, \in_array(10, $scores, true));
+            $this->assertSame(false, \in_array(20, $scores, true));
+        });
+
+        $this->withAuthorizationRoles($database, [Role::guests()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+            $scores = $this->numericScores($results);
+            $this->assertContains(20, $scores);
+            $this->assertSame(false, \in_array(999, $scores, true));
+            $this->assertSame(false, \in_array(10, $scores, true));
+            foreach ($results as $document) {
+                $this->assertNotSame('j-secret', $document->getId());
+            }
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinSkipAuthDoesNotSkipJoinSideAcl(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jp_sa_m';
+        $jCol = 'jp_sa_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Main',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-public',
+            'mainId' => 'm1',
+            'score' => 10,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('jp-acl'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $withoutJoin = $database->find($mCol);
+            $this->assertSame(1, \count($withoutJoin));
+            $this->assertSame('m1', $withoutJoin[0]->getId());
+
+            $inner = $database->find($mCol, [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertContains(10, $this->numericScores($inner));
+            $this->assertSame(false, \in_array(999, $this->numericScores($inner), true));
+            foreach ($inner as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+            }
+
+            $left = $database->find($mCol, [
+                Query::leftJoin($jCol, '$id', 'mainId'),
+            ]);
+            $this->assertGreaterThanOrEqual(1, \count($left));
+            foreach ($left as $document) {
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+            }
+
+            $document = $database->getDocument($mCol, 'm1', [
+                Query::join($jCol, '$id', 'mainId'),
+            ]);
+            if (! $document->isEmpty()) {
+                $this->assertSame('m1', $document->getId());
+                $this->assertSecretJoinHidden($document, 'j-secret', 999);
+            }
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    /**
+     * @param list<string> $roles
+     * @param callable(): void $callback
+     */
+    private function withAuthorizationRoles(Database $database, array $roles, callable $callback): void
+    {
+        $authorization = $database->getAuthorization();
+        $previousRoles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        foreach ($roles as $role) {
+            $authorization->addRole($role);
+        }
+
+        try {
+            $callback();
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($previousRoles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+    }
+
+    private function createJoinPermissionCollections(Database $database, string $main, string $joined): void
+    {
+        $database->createCollection($main, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($main, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($joined, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
+        $database->createAttribute($joined, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($joined, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+    }
+
+    private function assertSecretJoinHidden(Document $document, string $secretId, int $secretScore): void
+    {
+        $this->assertNotSame($secretId, $document->getId());
+
+        $score = $document->getAttribute('score');
+        if (\is_numeric($score)) {
+            $this->assertNotSame($secretScore, (int) $score);
+        } else {
+            $this->assertNotSame($secretScore, $score);
+        }
+
+        $amount = $document->getAttribute('amount');
+        if (\is_numeric($amount)) {
+            $this->assertNotSame($secretScore, (int) $amount);
+        } else {
+            $this->assertNotSame($secretScore, $amount);
+        }
+
+        foreach ($document->getPermissions() as $permission) {
+            $this->assertSame(false, \str_contains($permission, $secretId));
+            $this->assertSame(false, \str_contains($permission, 'user:jp-acl'));
+        }
+    }
+
+    private function assertJoinAttributesAbsent(Document $document): void
+    {
+        $score = $document->getAttribute('score');
+        $this->assertTrue($score === null || $score === '');
+        $amount = $document->getAttribute('amount');
+        $this->assertTrue($amount === null || $amount === '');
+    }
+
+    private function assertNullishScore(Document $document): void
+    {
+        $score = $document->getAttribute('score');
+        $this->assertTrue($score === null || $score === '');
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return list<int>
+     */
+    private function numericScores(array $documents): array
+    {
+        $scores = [];
+        foreach ($documents as $document) {
+            $score = $document->getAttribute('score');
+            if (\is_numeric($score)) {
+                $scores[] = (int) $score;
+            }
+        }
+
+        return $scores;
     }
 }

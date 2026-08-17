@@ -1453,7 +1453,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $internalKeyCache = [];
             $resolveInternalKey = function (string $attribute) use (&$internalKeyCache): string {
                 return $internalKeyCache[$attribute]
-                    ??= $this->filter($this->getInternalKeyForAttribute($attribute));
+                    ??= $this->qualifyOrderAttribute($attribute);
             };
 
             $vectorDistance = null;
@@ -3888,7 +3888,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            $internalAttr = $this->filter($this->getInternalKeyForAttribute($originalAttribute));
+            $internalAttr = $this->qualifyOrderAttribute($originalAttribute);
             $direction = $orderType;
 
             if ($cursorDirection === CursorDirection::Before) {
@@ -3970,6 +3970,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $name = \substr($column, $dot + 1);
 
         return $prefix.'.'.$this->getInternalKeyForAttribute($name);
+    }
+
+    private function qualifyOrderAttribute(string $attribute): string
+    {
+        $dot = \strpos($attribute, '.');
+        if ($dot === false) {
+            return $this->filter($this->getInternalKeyForAttribute($attribute));
+        }
+
+        $prefix = \substr($attribute, 0, $dot);
+        $name = \substr($attribute, $dot + 1);
+
+        return $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
     }
 
     /**

@@ -638,6 +638,39 @@ class FindLogicTest extends TestCase
         $this->assertTrue($authOnFind);
     }
 
+    public function testGetDocumentKeepsAuthorizationEnabledOnJoins(): void
+    {
+        $authOnGet = null;
+        $db = null;
+        $db = $this->buildDbWithCapabilities([
+            Capability::Index,
+            Capability::IndexArray,
+            Capability::UniqueIndex,
+            Capability::DefinedAttributes,
+            Capability::Joins,
+        ], function (Adapter&MockObject $adapter, array &$collectionMap, ?callable &$getDocumentOverride) use (&$authOnGet, &$db): void {
+            $collectionMap['other'] = $this->collectionDoc('other');
+            $getDocumentOverride = function (Document $col, string $docId) use (&$authOnGet, &$db): ?Document {
+                if ($col->getId() === Database::METADATA) {
+                    return null;
+                }
+
+                $authOnGet = $db?->getAuthorization()->getStatus();
+
+                return new Document([
+                    '$id' => $docId,
+                    '$collection' => $col->getId(),
+                ]);
+            };
+        });
+
+        $db->skipValidation(fn () => $db->getDocument('testCol', 'doc1', [
+            Query::join('other', 'fk', '$id'),
+        ]));
+
+        $this->assertTrue($authOnGet);
+    }
+
     public function testFindWithSelectFiltersResults(): void
     {
         $attributes = [
@@ -918,6 +951,7 @@ class FindLogicTest extends TestCase
 
     /**
      * @param  list<Capability>  $capabilities
+     * @param  (callable(Adapter&MockObject, array<string, Document>, mixed): void)|null  $adapterSetup
      */
     private function buildDbWithCapabilities(array $capabilities, ?callable $adapterSetup = null): Database
     {
@@ -959,8 +993,21 @@ class FindLogicTest extends TestCase
                 'documentSecurity' => true,
             ]),
         ];
+        $getDocumentOverride = null;
+        if ($adapterSetup) {
+            $adapterSetup($adapter, $collectionMap, $getDocumentOverride);
+        } else {
+            $adapter->method('find')->willReturn([]);
+        }
+
         $adapter->method('getDocument')->willReturnCallback(
-            function (Document $col, string $docId) use (&$collectionMap) {
+            function (Document $col, string $docId) use (&$collectionMap, &$getDocumentOverride) {
+                if (\is_callable($getDocumentOverride)) {
+                    $override = $getDocumentOverride($col, $docId);
+                    if ($override instanceof Document) {
+                        return $override;
+                    }
+                }
                 if ($col->getId() === Database::METADATA && isset($collectionMap[$docId])) {
                     return $collectionMap[$docId];
                 }
@@ -968,12 +1015,6 @@ class FindLogicTest extends TestCase
                 return new Document();
             }
         );
-
-        if ($adapterSetup) {
-            $adapterSetup($adapter, $collectionMap);
-        } else {
-            $adapter->method('find')->willReturn([]);
-        }
 
         $cache = new Cache(new None());
         $db = new Database($adapter, $cache);

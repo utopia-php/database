@@ -8,6 +8,7 @@ use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Document;
 use Utopia\Database\Validator\Authorization;
@@ -245,6 +246,43 @@ class ReadWritePoolTest extends TestCase
 
         $result = $this->pool->delegate('ping', []);
         $this->assertTrue($result);
+    }
+
+    public function testPinnedAdapterResyncsTenantAndDatabaseBeforeDelegatedCall(): void
+    {
+        $writeAdapter = new Memory();
+        $writeAdapter->setDatabase('old_db');
+        $writeAdapter->setNamespace('old_ns');
+        $writeAdapter->setTenant(1);
+
+        $readAdapter = new Memory();
+
+        $writePool = self::createStub(UtopiaPool::class);
+        $writePool->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($writeAdapter),
+        );
+
+        $readPool = self::createStub(UtopiaPool::class);
+        $readPool->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($readAdapter),
+        );
+
+        $pool = new ReadWritePool($writePool, $readPool);
+        $pool->setAuthorization(new Authorization());
+        $pool->setDatabase('old_db');
+        $pool->setNamespace('old_ns');
+        $pool->setTenant(1);
+
+        $pool->withTransaction(function () use ($pool, $writeAdapter): void {
+            $pool->setDatabase('new_db');
+            $pool->setNamespace('new_ns');
+            $pool->setTenant(2);
+
+            $this->assertTrue($pool->ping());
+            $this->assertSame('new_db', $writeAdapter->getDatabase());
+            $this->assertSame('new_ns', $writeAdapter->getNamespace());
+            $this->assertSame(2, $writeAdapter->getTenant());
+        });
     }
 
     public function testReadAdapterClearsStaleTimeout(): void

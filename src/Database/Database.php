@@ -1917,6 +1917,7 @@ class Database
                 $committed = $this->silent(fn () => $this->getDocument(self::METADATA, $id, forUpdate: true));
 
                 if (!$committed->isEmpty()) {
+                    $this->purgeStaleCollectionCache($id);
                     throw new DuplicateException('Collection ' . $id . ' already exists');
                 }
 
@@ -1943,6 +1944,7 @@ class Database
             // A concurrent creator committed the metadata for this id first, so
             // the physical table is the one its metadata describes. Rolling back
             // here would drop a live collection out from under it.
+            $this->purgeStaleCollectionCache($id);
             throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
         } catch (\Throwable $e) {
             if ($createdPhysicalTable) {
@@ -3625,6 +3627,26 @@ class Database
         }
 
         return $errors;
+    }
+
+    /**
+     * Drop this instance's metadata cache for a collection a peer created.
+     *
+     * The entry records the collection as missing, from a read taken before the
+     * peer's insert committed. The peer's purge cannot reach it, so without this
+     * the collection stays invisible to this instance for the rest of the TTL.
+     * A failure to purge must not replace the caller's DuplicateException.
+     *
+     * @param string $collectionId The collection ID
+     * @return void
+     */
+    private function purgeStaleCollectionCache(string $collectionId): void
+    {
+        try {
+            $this->purgeCachedDocument(self::METADATA, $collectionId);
+        } catch (\Throwable $e) {
+            Console::warning("Failed to purge stale cache for collection '{$collectionId}': " . $e->getMessage());
+        }
     }
 
     /**

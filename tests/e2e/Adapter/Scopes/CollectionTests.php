@@ -1905,6 +1905,13 @@ trait CollectionTests
         $metadata = $peer->getCollection($collection);
         $this->assertFalse($metadata->isEmpty(), 'Peer collection metadata was destroyed by the losing creator');
 
-        $this->assertTrue($peer->deleteCollection($collection));
+        // The loser's cache still held the collection as missing from the read
+        // it took before the peer committed, and the peer's purge cannot reach
+        // this instance. Losing the race has to clear it, or the collection
+        // stays invisible here until the entry expires.
+        $this->assertFalse($database->getCollection($collection)->isEmpty(), 'Losing creator kept a stale empty collection cached');
+        $this->assertSame('peer', $database->getDocument($collection, 'written')->getAttribute('name'));
+
+        $this->assertTrue($database->deleteCollection($collection));
     }
 }

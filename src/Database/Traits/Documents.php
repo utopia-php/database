@@ -3325,10 +3325,31 @@ trait Documents
                 throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
             }
 
-            $joinDocumentSecurity[$joinCollectionId] = (bool) $joinCollection->getAttribute('documentSecurity', false);
+            $enabled = (bool) $joinCollection->getAttribute('documentSecurity', false);
+            foreach ($this->joinDocumentSecurityKeys($joinCollectionId, $joinCollection) as $key) {
+                $joinDocumentSecurity[$key] = $enabled;
+            }
         }
 
         return $joinDocumentSecurity;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function joinDocumentSecurityKeys(string $joinCollectionId, Document $joinCollection): array
+    {
+        $keys = [
+            $joinCollectionId,
+            $joinCollection->getId(),
+            $this->adapter->filter($joinCollectionId),
+            $this->adapter->filter($joinCollection->getId()),
+        ];
+
+        return \array_values(\array_unique(\array_filter(
+            $keys,
+            static fn (string $key): bool => $key !== '',
+        )));
     }
 
     /**

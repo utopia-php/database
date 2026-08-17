@@ -4316,6 +4316,68 @@ trait JoinTests
         $this->cleanupAggCollections($database, $cols);
     }
 
+    public function testJoinCollectionAclAllowsWhenDocumentSecurityOffOnPhysicalIds(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'database_1_collection_1';
+        $jCol = 'database_1_collection_2';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($mCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false);
+        $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($jCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false);
+        $database->createAttribute($jCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($jCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'm1',
+            'name' => 'Main',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createDocument($jCol, new Document([
+            '$id' => 'j-secret',
+            'mainId' => 'm1',
+            'score' => 999,
+            '$permissions' => [Permission::read(Role::user('other'))],
+        ]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $results = $database->find($mCol, [
+                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::select(['name', 'rev.score']),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+            $this->assertContains(999, $this->aliasedScores($results));
+
+            $rewritten = Query::leftJoin('jp_dsoff_public', '$id', 'mainId', '=', 'rev');
+            $rewritten->setAttribute($jCol);
+            $rewrittenResults = $database->find($mCol, [
+                $rewritten,
+                Query::select(['name', 'rev.score']),
+            ]);
+            $this->assertGreaterThanOrEqual(1, \count($rewrittenResults));
+            $this->assertContains(999, $this->aliasedScores($rewrittenResults));
+
+            $document = $database->getDocument($mCol, 'm1', [
+                Query::leftJoin($jCol, '$id', 'mainId', '=', 'rev'),
+                Query::select(['name', 'rev.score']),
+            ]);
+            $this->assertSame(false, $document->isEmpty());
+            $this->assertContains(999, $this->aliasedScores([$document]));
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
     public function testInnerJoinDoesNotLeakUnauthorizedJoinDocument(): void
     {
         $database = static::getDatabase();
@@ -5581,6 +5643,23 @@ trait JoinTests
         $scores = [];
         foreach ($documents as $document) {
             $score = $document->getAttribute('score');
+            if (\is_numeric($score)) {
+                $scores[] = (int) $score;
+            }
+        }
+
+        return $scores;
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return list<int>
+     */
+    private function aliasedScores(array $documents): array
+    {
+        $scores = [];
+        foreach ($documents as $document) {
+            $score = $document->getAttribute('rev.score') ?? $document->getAttribute('score');
             if (\is_numeric($score)) {
                 $scores[] = (int) $score;
             }

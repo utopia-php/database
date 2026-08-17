@@ -650,6 +650,40 @@ class FindLogicTest extends TestCase
         $this->assertTrue($authOnFind);
     }
 
+    public function testFindStampsJoinDocumentSecurityForPhysicalIds(): void
+    {
+        $captured = null;
+        $join = $this->collectionDoc('jp_public', documentSecurity: false);
+        $db = $this->buildDbWithCapabilities(
+            [
+                Capability::Index,
+                Capability::IndexArray,
+                Capability::UniqueIndex,
+                Capability::DefinedAttributes,
+                Capability::Joins,
+            ],
+            function (Adapter&MockObject $adapter) use (&$captured): void {
+                $adapter->method('find')->willReturnCallback(function (Document $collection) use (&$captured) {
+                    $captured = $collection->getAttribute('joinDocumentSecurity');
+
+                    return [];
+                });
+            },
+            extraCollections: [
+                'database_1_collection_1' => $this->collectionDoc('database_1_collection_1', documentSecurity: false),
+                'database_1_collection_2' => $join,
+            ],
+        );
+
+        $db->skipValidation(fn () => $db->find('database_1_collection_1', [
+            Query::leftJoin('database_1_collection_2', '$id', 'mainId', '=', 'rev'),
+        ]));
+
+        $this->assertIsArray($captured);
+        $this->assertSame(false, $captured['database_1_collection_2'] ?? true);
+        $this->assertSame(false, $captured['jp_public'] ?? true);
+    }
+
     public function testGetDocumentKeepsAuthorizationEnabledOnJoins(): void
     {
         $authOnGet = null;

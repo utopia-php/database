@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
 use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Document;
@@ -68,6 +69,24 @@ final class SQLFindTest extends TestCase
     {
         yield 'fast path' => [true];
         yield 'builder path' => [false];
+    }
+
+    public function testJoinDocumentSecurityLookupMatchesRemappedPhysicalIds(): void
+    {
+        $adapter = new MySQL($this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock());
+        $adapter->setDatabase('appwrite');
+        $adapter->setNamespace('_5');
+
+        $method = new ReflectionMethod(MySQL::class, 'joinDocumentSecurityEnabled');
+
+        $map = ['database_1_collection_2' => false];
+        $this->assertFalse($method->invoke($adapter, $map, 'database_1_collection_2'));
+        $this->assertFalse($method->invoke($adapter, $map, 'appwrite._5_database_1_collection_2'));
+        $this->assertFalse($method->invoke($adapter, $map, '_5_database_1_collection_2'));
+
+        $this->assertTrue($method->invoke($adapter, $map, 'database_1_collection_9'));
+        $this->assertTrue($method->invoke($adapter, [], 'appwrite._5_database_1_collection_2'));
+        $this->assertTrue($method->invoke($adapter, ['database_1_collection_2' => true], 'appwrite._5_database_1_collection_2'));
     }
 
     public function testJoinWithoutSelectProjectsQualifiedStars(): void

@@ -3748,7 +3748,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $joinDocumentSecurity = \is_array($joinDocumentSecurity) ? $joinDocumentSecurity : [];
 
             foreach ($joinTablePrefixes as $join) {
-                if (($joinDocumentSecurity[$join['table']] ?? true) === false) {
+                if ($this->joinDocumentSecurityEnabled($joinDocumentSecurity, $join['table']) === false) {
                     continue;
                 }
 
@@ -3766,6 +3766,54 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $hasSelectionProjection;
+    }
+
+    /**
+     * @param  array<string, mixed>  $joinDocumentSecurity
+     */
+    private function joinDocumentSecurityEnabled(array $joinDocumentSecurity, string $table): bool
+    {
+        foreach ($this->joinDocumentSecurityLookupKeys($table) as $key) {
+            if (\array_key_exists($key, $joinDocumentSecurity)) {
+                return (bool) $joinDocumentSecurity[$key];
+            }
+        }
+
+        if ($joinDocumentSecurity === []) {
+            return true;
+        }
+
+        $candidates = $this->joinDocumentSecurityLookupKeys($table);
+        foreach ($joinDocumentSecurity as $key => $enabled) {
+            $key = (string) $key;
+            if ($key === '') {
+                continue;
+            }
+
+            if (\array_intersect($candidates, $this->joinDocumentSecurityLookupKeys($key)) !== []) {
+                return (bool) $enabled;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function joinDocumentSecurityLookupKeys(string $table): array
+    {
+        $filtered = $this->filter($table);
+        $keys = [$table, $filtered];
+        $qualified = $this->getSQLTableRaw($filtered);
+        $keys[] = $qualified;
+
+        $dot = \strrpos($qualified, '.');
+        if ($dot !== false) {
+            $keys[] = \substr($qualified, $dot + 1);
+        }
+
+        return \array_values(\array_unique($keys));
     }
 
     /**

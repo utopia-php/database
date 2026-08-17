@@ -1254,6 +1254,14 @@ class Database
     }
 
     /**
+     * Whether document structure validation is currently enabled.
+     */
+    public function isValidationEnabled(): bool
+    {
+        return $this->validate;
+    }
+
+    /**
      * Skip Validation
      *
      * Execute a callback without validation
@@ -1266,7 +1274,7 @@ class Database
     public function skipValidation(callable $callback): mixed
     {
         $initial = $this->validate;
-        $this->disableValidation();
+        $this->validate = false;
 
         try {
             return $callback();

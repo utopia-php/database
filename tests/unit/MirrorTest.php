@@ -94,6 +94,42 @@ class MirrorTest extends TestCase
         $this->assertFalse($source->getCollection('upgrades')->isEmpty());
     }
 
+    public function testSkipValidationRestoresSourceAndDestination(): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+
+        $this->assertTrue($mirror->isValidationEnabled());
+        $this->assertTrue($source->isValidationEnabled());
+        $this->assertTrue($destination->isValidationEnabled());
+
+        $mirror->skipValidation(function () use ($mirror, $source, $destination) {
+            $this->assertFalse($mirror->isValidationEnabled());
+            $this->assertFalse($source->isValidationEnabled());
+            $this->assertFalse($destination->isValidationEnabled());
+        });
+
+        $this->assertTrue($mirror->isValidationEnabled());
+        $this->assertTrue($source->isValidationEnabled());
+        $this->assertTrue($destination->isValidationEnabled());
+    }
+
+    public function testDisableValidationDelegatesToSourceAndDestination(): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+
+        $mirror->disableValidation();
+
+        $this->assertFalse($mirror->isValidationEnabled());
+        $this->assertFalse($source->isValidationEnabled());
+        $this->assertFalse($destination->isValidationEnabled());
+
+        $mirror->enableValidation();
+
+        $this->assertTrue($mirror->isValidationEnabled());
+        $this->assertTrue($source->isValidationEnabled());
+        $this->assertTrue($destination->isValidationEnabled());
+    }
+
     public function testCreateThrowsWhenDestinationCreateFails(): void
     {
         $source = new Database(new Memory(), new Cache(new None()));

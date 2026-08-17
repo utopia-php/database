@@ -242,6 +242,24 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
+    public function skipValidation(callable $callback): mixed
+    {
+        return parent::skipValidation(function () use ($callback) {
+            if ($this->destination === null) {
+                return $this->source->skipValidation($callback);
+            }
+
+            $destination = $this->destination;
+
+            return $this->source->skipValidation(
+                fn () => $destination->skipValidation($callback)
+            );
+        });
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function addLifecycleHook(Lifecycle $hook): static
     {
         $this->source->addHook($hook);

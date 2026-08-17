@@ -77,7 +77,10 @@ class Pool extends Adapter
     protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
     {
         if ($this->pinnedAdapter !== null) {
-            return $this->invokeDelegated($this->pinnedAdapter, $method, $args, $feature);
+            $adapter = $this->pinnedAdapter;
+            $this->syncBorrowedAdapter($adapter);
+
+            return $this->invokeDelegated($adapter, $method, $args, $feature);
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($method, $args, $feature) {

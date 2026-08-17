@@ -78,6 +78,30 @@ final class PoolTest extends TestCase
         $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
     }
 
+    public function testPinnedAdapterResyncsTenantAndDatabaseBeforeDelegatedCall(): void
+    {
+        $adapter = new Memory();
+        $adapter->setDatabase('old_db');
+        $adapter->setNamespace('old_ns');
+        $adapter->setTenant(1);
+
+        $pool = $this->createPool($adapter);
+        $pool->setDatabase('old_db');
+        $pool->setNamespace('old_ns');
+        $pool->setTenant(1);
+
+        $pool->withTransaction(function () use ($pool, $adapter): void {
+            $pool->setDatabase('new_db');
+            $pool->setNamespace('new_ns');
+            $pool->setTenant(2);
+
+            $this->assertTrue($pool->ping());
+            $this->assertSame('new_db', $adapter->getDatabase());
+            $this->assertSame('new_ns', $adapter->getNamespace());
+            $this->assertSame(2, $adapter->getTenant());
+        });
+    }
+
     public function testMemoryPoolPingDoesNotRequireTimeouts(): void
     {
         $pool = $this->createPool(new Memory());

@@ -109,6 +109,11 @@ class MirrorTest extends Base
 
         $database->create();
 
+        $destination = $database->getDestination();
+        if ($destination === null || ! $destination->exists($this->testDatabase, Database::METADATA)) {
+            throw new Exception('Mirror destination is missing _metadata after create');
+        }
+
         return self::$database = $database;
     }
 

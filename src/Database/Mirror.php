@@ -148,7 +148,9 @@ class Mirror extends Database
      */
     public function setDatabase(string $name): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        parent::setDatabase($name);
+        $this->source->setDatabase($name);
+        $this->destination?->setDatabase($name);
 
         return $this;
     }
@@ -158,7 +160,9 @@ class Mirror extends Database
      */
     public function setNamespace(string $namespace): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        parent::setNamespace($namespace);
+        $this->source->setNamespace($namespace);
+        $this->destination?->setNamespace($namespace);
 
         return $this;
     }
@@ -168,7 +172,9 @@ class Mirror extends Database
      */
     public function setSharedTables(bool $sharedTables): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        parent::setSharedTables($sharedTables);
+        $this->source->setSharedTables($sharedTables);
+        $this->destination?->setSharedTables($sharedTables);
 
         return $this;
     }
@@ -178,7 +184,9 @@ class Mirror extends Database
      */
     public function setTenant(int|string|null $tenant): static
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        parent::setTenant($tenant);
+        $this->source->setTenant($tenant);
+        $this->destination?->setTenant($tenant);
 
         return $this;
     }
@@ -277,8 +285,12 @@ class Mirror extends Database
      */
     public function create(?string $database = null): bool
     {
-        /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $result = $this->source->create($database);
+
+        if ($this->destination !== null) {
+            $this->destination->create($database);
+        }
+
         return $result;
     }
 
@@ -289,6 +301,22 @@ class Mirror extends Database
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function listCollections(int $limit = 25, int $offset = 0): array
+    {
+        $result = $this->silent(fn () => $this->source->find(self::METADATA, [
+            Query::notEqual(Document::ID, self::SOURCE_ONLY_COLLECTIONS),
+            Query::limit($limit),
+            Query::offset($offset),
+        ]));
+
+        $this->trigger(Event::CollectionList, $result);
+
         return $result;
     }
 

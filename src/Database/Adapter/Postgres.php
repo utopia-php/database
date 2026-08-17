@@ -828,7 +828,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             }
 
             $builder = $this->newBuilder($name);
-            $row = [Storage::UID => $document->getId()];
+            $row = [];
+            if (\strcasecmp($document->getId(), $id) !== 0) {
+                $row[Storage::UID] = $document->getId();
+            }
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
@@ -858,7 +861,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             $this->execute($stmt);
 
-            $ctx = $this->buildWriteContext($name);
+            $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
         } catch (PDOException $e) {
             throw $this->processException($e);

@@ -73,7 +73,9 @@ class Permissions extends Interceptor
             return;
         }
 
-        $permissions = $this->readCurrentPermissions($collection, $document, $context);
+        [$permissionsMap, $storedIds] = $this->readCurrentPermissionsBatch($collection, [$document], $context);
+        $permissions = $this->currentPermissions($permissionsMap, $document->getId());
+        $permissionDocumentId = $this->permissionDocumentId($document->getId(), $storedIds);
 
         /** @var array<string, list<string>> $removals */
         $removals = [];
@@ -91,8 +93,8 @@ class Permissions extends Interceptor
             }
         }
 
-        $this->deletePermissions($collection, $document, $removals, $context);
-        $this->insertPermissions($collection, $document, $additions, $context);
+        $this->deletePermissions($collection, $permissionDocumentId, $removals, $context);
+        $this->insertPermissions($collection, $document, $permissionDocumentId, $additions, $context);
     }
 
     /**
@@ -125,7 +127,7 @@ class Permissions extends Interceptor
             return;
         }
 
-        $permissionsMap = $this->readCurrentPermissionsBatch($collection, $eligible, $context);
+        [$permissionsMap, $storedIds] = $this->readCurrentPermissionsBatch($collection, $eligible, $context);
         $updatesByType = [];
         foreach (self::PERM_TYPES as $type) {
             $updatesByType[$type->value] = $updates->getPermissionsByType($type);
@@ -133,12 +135,13 @@ class Permissions extends Interceptor
 
         foreach ($eligible as $document) {
             $permissions = $this->currentPermissions($permissionsMap, $document->getId());
+            $permissionDocumentId = $this->permissionDocumentId($document->getId(), $storedIds);
 
             foreach (self::PERM_TYPES as $type) {
                 $diff = \array_diff($permissions[$type->value], $updatesByType[$type->value]);
                 if (! empty($diff)) {
                     $removeConditions[] = Query::and([
-                        Query::equal(Storage::PERM_DOCUMENT, [$document->getId()]),
+                        Query::equal(Storage::PERM_DOCUMENT, [$permissionDocumentId]),
                         Query::equal(Storage::PERM_TYPE, [$type->value]),
                         Query::equal(Storage::PERM_PERMISSION, \array_values($diff)),
                     ]);
@@ -151,7 +154,7 @@ class Permissions extends Interceptor
                 if (! empty($diff)) {
                     foreach ($diff as $permission) {
                         $row = ($context->decorateRow)([
-                            Storage::PERM_DOCUMENT => $document->getId(),
+                            Storage::PERM_DOCUMENT => $permissionDocumentId,
                             Storage::PERM_TYPE => $type->value,
                             Storage::PERM_PERMISSION => $permission,
                         ], $metadata);
@@ -265,31 +268,21 @@ class Permissions extends Interceptor
     }
 
     /**
-     * @return array<string, list<string>>
-     */
-    private function readCurrentPermissions(string $collection, Document $document, WriteContext $context): array
-    {
-        $map = $this->readCurrentPermissionsBatch($collection, [$document], $context);
-
-        return $this->currentPermissions($map, $document->getId());
-    }
-
-    /**
      * Batched version of readCurrentPermissions — issues a single SELECT scoped
      * to all document ids and groups rows into the same shape per document.
      *
      * @param  array<Document>  $documents
-     * @return array<string, array<string, list<string>>>
+     * @return array{0: array<string, array<string, list<string>>>, 1: array<string, string>}
      */
     private function readCurrentPermissionsBatch(string $collection, array $documents, WriteContext $context): array
     {
         if (empty($documents)) {
-            return [];
+            return [[], []];
         }
 
-        $documentIds = [];
-        foreach ($documents as $document) {
-            $documentIds[] = $document->getId();
+        $documentIds = $this->permissionReadIds($documents, $context);
+        if ($documentIds === []) {
+            return [[], []];
         }
 
         $readBuilder = ($context->newBuilder)(Storage::permissionsTable($collection));
@@ -303,7 +296,73 @@ class Permissions extends Interceptor
         $rows = (array) $readStmt->fetchAll();
         $readStmt->closeCursor();
 
-        return $this->groupPermissionRows($documentIds, $rows);
+        return [
+            $this->groupPermissionRows($documentIds, $rows),
+            $this->storedDocumentIds($documentIds, $rows),
+        ];
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<string>
+     */
+    private function permissionReadIds(array $documents, WriteContext $context): array
+    {
+        $documentIds = [];
+        foreach ($documents as $document) {
+            $id = $document->getId();
+            if ($id !== '') {
+                $documentIds[] = $id;
+            }
+        }
+
+        if ($context->lookupId !== null && $context->lookupId !== '') {
+            $documentIds[] = $context->lookupId;
+        }
+
+        return \array_values(\array_unique($documentIds));
+    }
+
+    /**
+     * @param  list<string>  $documentIds
+     * @param  array<array<string, string>>  $rows
+     * @return array<string, string>
+     */
+    private function storedDocumentIds(array $documentIds, array $rows): array
+    {
+        $stored = [];
+        foreach ($rows as $row) {
+            $storedId = $row[Storage::PERM_DOCUMENT] ?? null;
+            if (! \is_string($storedId) || $storedId === '') {
+                continue;
+            }
+
+            foreach ($documentIds as $id) {
+                if (\strcasecmp($storedId, $id) === 0) {
+                    $stored[$id] = $storedId;
+                }
+            }
+        }
+
+        return $stored;
+    }
+
+    /**
+     * @param  array<string, string>  $storedIds
+     */
+    private function permissionDocumentId(string $requestedId, array $storedIds): string
+    {
+        if (isset($storedIds[$requestedId]) && \strcasecmp($storedIds[$requestedId], $requestedId) === 0) {
+            return $storedIds[$requestedId];
+        }
+
+        foreach ($storedIds as $storedId) {
+            if (\strcasecmp($storedId, $requestedId) === 0) {
+                return $storedId;
+            }
+        }
+
+        return $requestedId;
     }
 
     /**
@@ -328,11 +387,17 @@ class Permissions extends Interceptor
                 continue;
             }
 
-            $key = $this->resolveStoredDocumentId($storedId, $result, $requestedByLower);
-            if (! isset($result[$key])) {
-                $result[$key] = $this->emptyPermissions();
+            $targets = $requestedByLower[\strtolower($storedId)] ?? [];
+            if ($targets === []) {
+                $targets = [$this->resolveStoredDocumentId($storedId, $result, $requestedByLower)];
             }
-            $result[$key][$type][] = $permission;
+
+            foreach ($targets as $key) {
+                if (! isset($result[$key])) {
+                    $result[$key] = $this->emptyPermissions();
+                }
+                $result[$key][$type][] = $permission;
+            }
         }
 
         return $result;
@@ -401,7 +466,7 @@ class Permissions extends Interceptor
     /**
      * @param  array<string, list<string>>  $removals
      */
-    private function deletePermissions(string $collection, Document $document, array $removals, WriteContext $context): void
+    private function deletePermissions(string $collection, string $documentId, array $removals, WriteContext $context): void
     {
         if (empty($removals)) {
             return;
@@ -410,7 +475,7 @@ class Permissions extends Interceptor
         $removeConditions = [];
         foreach ($removals as $type => $perms) {
             $removeConditions[] = Query::and([
-                Query::equal(Storage::PERM_DOCUMENT, [$document->getId()]),
+                Query::equal(Storage::PERM_DOCUMENT, [$documentId]),
                 Query::equal(Storage::PERM_TYPE, [$type]),
                 Query::equal(Storage::PERM_PERMISSION, $perms),
             ]);
@@ -426,7 +491,7 @@ class Permissions extends Interceptor
     /**
      * @param  array<string, list<string>>  $additions
      */
-    private function insertPermissions(string $collection, Document $document, array $additions, WriteContext $context): void
+    private function insertPermissions(string $collection, Document $document, string $documentId, array $additions, WriteContext $context): void
     {
         if (empty($additions)) {
             return;
@@ -438,7 +503,7 @@ class Permissions extends Interceptor
         foreach ($additions as $type => $perms) {
             foreach (\array_values(\array_unique($perms)) as $permission) {
                 $row = ($context->decorateRow)([
-                    Storage::PERM_DOCUMENT => $document->getId(),
+                    Storage::PERM_DOCUMENT => $documentId,
                     Storage::PERM_TYPE => $type,
                     Storage::PERM_PERMISSION => $permission,
                 ], $metadata);

@@ -7241,6 +7241,7 @@ trait DocumentTests
         $database->updateDocument($collection, 'caseSensitive', $stored);
 
         $updated = $database->getDocument($collection, 'caseSensitive');
+        $this->assertSame('caseSensitive', $updated->getId());
         $this->assertContains('guests', $updated->getRead());
         $this->assertContains('guests', $updated->getCreate());
         $this->assertContains('any', $updated->getCreate());

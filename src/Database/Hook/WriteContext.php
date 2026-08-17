@@ -22,6 +22,7 @@ readonly class WriteContext
      * @param  Closure(): \Utopia\Query\Builder\SQL  $createBuilder  Create a raw builder (no hooks, no table)
      * @param  Closure(string): string  $getTableRaw  Get the raw SQL table name with namespace prefix
      * @param  bool  $skipDuplicates  Whether duplicate-key errors should be swallowed by this write
+     * @param  string|null  $lookupId  The document id used to load/update, when it may differ in casing from getId()
      */
     public function __construct(
         public Closure $newBuilder,
@@ -31,6 +32,7 @@ readonly class WriteContext
         public Closure $createBuilder,
         public Closure $getTableRaw,
         public bool $skipDuplicates = false,
+        public ?string $lookupId = null,
     ) {
     }
 }

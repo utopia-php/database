@@ -129,6 +129,60 @@ final class PermissionsTest extends TestCase
         $this->assertSame(['any'], $map['CaseSensitive'][PermissionType::Read->value]);
     }
 
+    public function testGroupPermissionRowsPopulatesBothRequestedCasings(): void
+    {
+        /** @var array<string, array<string, list<string>>> $map */
+        $map = $this->invokeHook('groupPermissionRows', [
+            ['CaseSensitive', 'caseSensitive'],
+            [
+                [
+                    Storage::PERM_DOCUMENT => 'caseSensitive',
+                    Storage::PERM_TYPE => PermissionType::Create->value,
+                    Storage::PERM_PERMISSION => 'any',
+                ],
+            ],
+        ]);
+
+        $this->assertSame(['any'], $map['CaseSensitive'][PermissionType::Create->value]);
+        $this->assertSame(['any'], $map['caseSensitive'][PermissionType::Create->value]);
+    }
+
+    public function testStoredDocumentIdsKeepsTableCasing(): void
+    {
+        /** @var array<string, string> $stored */
+        $stored = $this->invokeHook('storedDocumentIds', [
+            ['CaseSensitive', 'caseSensitive'],
+            [
+                [
+                    Storage::PERM_DOCUMENT => 'caseSensitive',
+                    Storage::PERM_TYPE => PermissionType::Create->value,
+                    Storage::PERM_PERMISSION => 'any',
+                ],
+            ],
+        ]);
+
+        $this->assertSame('caseSensitive', $stored['CaseSensitive']);
+        $this->assertSame('caseSensitive', $stored['caseSensitive']);
+    }
+
+    public function testPermissionDocumentIdUsesStoredCasing(): void
+    {
+        $this->assertSame(
+            'caseSensitive',
+            $this->invokeHook('permissionDocumentId', [
+                'CaseSensitive',
+                ['CaseSensitive' => 'caseSensitive'],
+            ])
+        );
+        $this->assertSame(
+            'new-id',
+            $this->invokeHook('permissionDocumentId', [
+                'new-id',
+                ['old-id' => 'old-id'],
+            ])
+        );
+    }
+
     public function testUpdateDoesNotInsertDuplicatePermissionRows(): void
     {
         $adapter = $this->adapter();
@@ -160,6 +214,40 @@ final class PermissionsTest extends TestCase
 
         $document = $adapter->getDocument($collection, 'dupes');
         $this->assertSame(['any', 'guests'], $document->getCreate());
+    }
+
+    public function testUpdateDoesNotDuplicatePermissionsWhenDocumentIdCasingDiffers(): void
+    {
+        $adapter = $this->adapter();
+        $this->assertTrue($adapter->createCollection('movies'));
+        $collection = new Document(['$id' => 'movies']);
+        $adapter->createDocuments($collection, [
+            new Document([
+                '$id' => 'caseSensitive',
+                '$permissions' => [
+                    Permission::create(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]),
+        ]);
+
+        $update = new Document([
+            '$id' => 'CaseSensitive',
+            '$permissions' => [
+                Permission::create(Role::any()),
+                Permission::create(Role::guests()),
+                Permission::create(Role::guests()),
+                Permission::read(Role::any()),
+                Permission::read(Role::guests()),
+                Permission::read(Role::guests()),
+            ],
+        ]);
+
+        $adapter->updateDocument($collection, 'caseSensitive', $update, false);
+
+        $document = $adapter->getDocument($collection, 'caseSensitive');
+        $this->assertSame(['any', 'guests'], $document->getCreate());
+        $this->assertSame(['any', 'guests'], $document->getRead());
     }
 
     public function testBatchUpdateDeduplicatesPermissionAdditions(): void

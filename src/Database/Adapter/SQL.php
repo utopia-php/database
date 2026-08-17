@@ -3069,8 +3069,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Build a WriteContext that delegates to this adapter's query infrastructure.
      *
      * @param  string  $collection  The filtered collection name
+     * @param  string|null  $lookupId  The document id used to load/update this write
      */
-    protected function buildWriteContext(string $collection): WriteContext
+    protected function buildWriteContext(string $collection, ?string $lookupId = null): WriteContext
     {
         $name = $this->filter($collection);
 
@@ -3082,6 +3083,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             createBuilder: fn () => $this->createBuilder(),
             getTableRaw: fn (string $table) => $this->getSQLTableRaw($table),
             skipDuplicates: $this->skipDuplicates,
+            lookupId: $lookupId,
         );
     }
 

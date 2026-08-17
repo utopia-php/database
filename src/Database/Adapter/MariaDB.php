@@ -744,7 +744,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             }
 
             $builder = $this->newBuilder($name);
-            $regularRow = [Storage::UID => $document->getId()];
+            $regularRow = [];
+            if (\strcasecmp($document->getId(), $id) !== 0) {
+                $regularRow[Storage::UID] = $document->getId();
+            }
 
             $spatialMap = \array_fill_keys($spatialAttributes, true);
 
@@ -777,7 +780,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
             $this->execute($stmt);
 
-            $ctx = $this->buildWriteContext($name);
+            $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
         } catch (PDOException $e) {
             throw $this->processException($e);

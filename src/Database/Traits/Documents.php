@@ -926,6 +926,10 @@ trait Documents
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document[Document::COLLECTION] = $old->getAttribute(Document::COLLECTION); // Make sure user doesn't switch collection ID
+            $incomingId = $document[Document::ID] ?? '';
+            if (\is_string($incomingId) && \strcasecmp($incomingId, $old->getId()) === 0) {
+                $document[Document::ID] = $old->getId();
+            }
             $document[Document::CREATED_AT] = ($createdAt === null || ! $this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {

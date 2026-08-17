@@ -1321,7 +1321,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
 
             $builder = $this->newBuilder($name);
-            $regularRow = [Storage::UID => $document->getId()];
+            $regularRow = [];
+            if (\strcasecmp($document->getId(), $id) !== 0) {
+                $regularRow[Storage::UID] = $document->getId();
+            }
 
             foreach ($attributes as $attribute => $value) {
                 $column = $this->filter($attribute);
@@ -1354,7 +1357,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $this->execute($stmt);
 
-            $ctx = $this->buildWriteContext($name);
+            $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
         } catch (PDOException $e) {
             throw $this->processException($e);

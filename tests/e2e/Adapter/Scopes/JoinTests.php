@@ -5522,7 +5522,7 @@ trait JoinTests
     private function jsonContainsScalar(mixed $value, int $needle, string|int|null $key = null): bool
     {
         if (\is_int($value) || \is_float($value) || (\is_string($value) && \is_numeric($value))) {
-            if (\in_array($key, [Document::SEQUENCE, Document::CREATED_AT, Document::UPDATED_AT], true)) {
+            if ($this->isIgnoredJoinSecretKey($key)) {
                 return false;
             }
 
@@ -5540,6 +5540,22 @@ trait JoinTests
         }
 
         return false;
+    }
+
+    private function isIgnoredJoinSecretKey(string|int|null $key): bool
+    {
+        return \in_array($key, [
+            Document::SEQUENCE,
+            Document::CREATED_AT,
+            Document::UPDATED_AT,
+            Document::TENANT,
+            Document::VERSION,
+            Document::COLLECTION,
+            Document::DISTANCE,
+            Document::DELETED_AT,
+            Document::INTERNAL_ID,
+            Document::SKIP_PERMISSIONS_UPDATE,
+        ], true);
     }
 
     private function assertJoinAttributesAbsent(Document $document): void

@@ -268,8 +268,12 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
-                $this->callback(function ($orderAttributes) {
-                    $sequenceCount = array_count_values($orderAttributes)['$sequence'] ?? 0;
+                $this->callback(function (mixed $orderAttributes): bool {
+                    if (! \is_array($orderAttributes)) {
+                        return false;
+                    }
+                    $values = \array_filter($orderAttributes, \is_string(...));
+                    $sequenceCount = \array_count_values($values)[Document::SEQUENCE] ?? 0;
 
                     return $sequenceCount === 1;
                 }),
@@ -383,9 +387,12 @@ class FindLogicTest extends TestCase
             ->method('find')
             ->with(
                 $this->anything(),
-                $this->callback(function ($queries) {
+                $this->callback(function (mixed $queries): bool {
+                    if (! \is_array($queries)) {
+                        return false;
+                    }
                     foreach ($queries as $q) {
-                        if ($q->getAttribute() === 'status') {
+                        if ($q instanceof Query && $q->getAttribute() === 'status') {
                             return true;
                         }
                     }
@@ -498,14 +505,17 @@ class FindLogicTest extends TestCase
         $db = $this->buildDbWithCapabilities([
             Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
             Capability::DefinedAttributes, Capability::Aggregations,
-        ], function ($adapter) {
+        ], function (Adapter&MockObject $adapter): void {
             $adapter->expects($this->once())
                 ->method('find')
                 ->with(
                     $this->anything(),
-                    $this->callback(function ($queries) {
+                    $this->callback(function (mixed $queries): bool {
+                        if (! \is_array($queries)) {
+                            return false;
+                        }
                         foreach ($queries as $q) {
-                            if ($q->getMethod()->value === 'groupBy') {
+                            if ($q instanceof Query && $q->getMethod()->value === 'groupBy') {
                                 return true;
                             }
                         }
@@ -537,9 +547,12 @@ class FindLogicTest extends TestCase
             ->method('find')
             ->with(
                 $this->anything(),
-                $this->callback(function ($queries) {
+                $this->callback(function (mixed $queries): bool {
+                    if (! \is_array($queries)) {
+                        return false;
+                    }
                     foreach ($queries as $q) {
-                        if ($q->getMethod()->value === 'distinct') {
+                        if ($q instanceof Query && $q->getMethod()->value === 'distinct') {
                             return true;
                         }
                     }
@@ -622,14 +635,13 @@ class FindLogicTest extends TestCase
             Capability::UniqueIndex,
             Capability::DefinedAttributes,
             Capability::Joins,
-        ], function (Adapter&MockObject $adapter, array &$collectionMap) use (&$authOnFind, &$db): void {
-            $collectionMap['other'] = $this->collectionDoc('other');
+        ], function (Adapter&MockObject $adapter) use (&$authOnFind, &$db): void {
             $adapter->method('find')->willReturnCallback(function () use (&$authOnFind, &$db) {
                 $authOnFind = $db?->getAuthorization()->getStatus();
 
                 return [];
             });
-        });
+        }, extraCollections: ['other' => $this->collectionDoc('other')]);
 
         $db->skipValidation(fn () => $db->find('testCol', [
             Query::join('other', 'fk', '$id'),
@@ -642,15 +654,16 @@ class FindLogicTest extends TestCase
     {
         $authOnGet = null;
         $db = null;
-        $db = $this->buildDbWithCapabilities([
-            Capability::Index,
-            Capability::IndexArray,
-            Capability::UniqueIndex,
-            Capability::DefinedAttributes,
-            Capability::Joins,
-        ], function (Adapter&MockObject $adapter, array &$collectionMap, ?callable &$getDocumentOverride) use (&$authOnGet, &$db): void {
-            $collectionMap['other'] = $this->collectionDoc('other');
-            $getDocumentOverride = function (Document $col, string $docId) use (&$authOnGet, &$db): ?Document {
+        $db = $this->buildDbWithCapabilities(
+            [
+                Capability::Index,
+                Capability::IndexArray,
+                Capability::UniqueIndex,
+                Capability::DefinedAttributes,
+                Capability::Joins,
+            ],
+            extraCollections: ['other' => $this->collectionDoc('other')],
+            getDocumentOverride: function (Document $col, string $docId) use (&$authOnGet, &$db): ?Document {
                 if ($col->getId() === Database::METADATA) {
                     return null;
                 }
@@ -661,8 +674,8 @@ class FindLogicTest extends TestCase
                     '$id' => $docId,
                     '$collection' => $col->getId(),
                 ]);
-            };
-        });
+            },
+        );
 
         $db->skipValidation(fn () => $db->getDocument('testCol', 'doc1', [
             Query::join('other', 'fk', '$id'),
@@ -779,13 +792,14 @@ class FindLogicTest extends TestCase
         $db = $this->buildDbWithCapabilities([
             Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
             Capability::DefinedAttributes, Capability::Aggregations,
-        ], function ($adapter) {
+        ], function (Adapter&MockObject $adapter): void {
             $aggResult = new Document(['cnt' => 10]);
             $adapter->expects($this->once())
                 ->method('find')
                 ->willReturn([$aggResult]);
         });
 
+        /** @var list<Document> $results */
         $results = $db->skipValidation(fn () => $db->aggregate('testCol', [Query::count('*', 'cnt')]));
         $this->assertCount(1, $results);
         $this->assertSame(10, $results[0]->getAttribute('cnt'));
@@ -951,10 +965,16 @@ class FindLogicTest extends TestCase
 
     /**
      * @param  list<Capability>  $capabilities
-     * @param  (callable(Adapter&MockObject, array<string, Document>, mixed): void)|null  $adapterSetup
+     * @param  (callable(Adapter&MockObject): void)|null  $adapterSetup
+     * @param  array<string, Document>  $extraCollections
+     * @param  (callable(Document, string): ?Document)|null  $getDocumentOverride
      */
-    private function buildDbWithCapabilities(array $capabilities, ?callable $adapterSetup = null): Database
-    {
+    private function buildDbWithCapabilities(
+        array $capabilities,
+        ?callable $adapterSetup = null,
+        array $extraCollections = [],
+        ?callable $getDocumentOverride = null,
+    ): Database {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
@@ -992,17 +1012,17 @@ class FindLogicTest extends TestCase
                 'indexes' => [],
                 'documentSecurity' => true,
             ]),
+            ...$extraCollections,
         ];
-        $getDocumentOverride = null;
-        if ($adapterSetup) {
-            $adapterSetup($adapter, $collectionMap, $getDocumentOverride);
+        if ($adapterSetup !== null) {
+            $adapterSetup($adapter);
         } else {
             $adapter->method('find')->willReturn([]);
         }
 
         $adapter->method('getDocument')->willReturnCallback(
-            function (Document $col, string $docId) use (&$collectionMap, &$getDocumentOverride) {
-                if (\is_callable($getDocumentOverride)) {
+            function (Document $col, string $docId) use ($collectionMap, $getDocumentOverride) {
+                if ($getDocumentOverride !== null) {
                     $override = $getDocumentOverride($col, $docId);
                     if ($override instanceof Document) {
                         return $override;

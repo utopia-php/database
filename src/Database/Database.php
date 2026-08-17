@@ -1908,11 +1908,21 @@ class Database
                 // tenants. A DuplicateException simply means the table already
                 // exists for another tenant — not an orphan.
             } else {
-                // Metadata check (above) already verified collection is absent
-                // from metadata. A DuplicateException from the adapter means
-                // the collection exists only in physical schema — an orphan
-                // from a prior partial failure. Drop and recreate to ensure
-                // schema matches.
+                // The metadata check above can be served by a negative cache
+                // entry that a concurrent creator has not purged yet, because
+                // the purge only happens once its insert commits. Re-read past
+                // the cache before concluding the table is an orphan: if the
+                // metadata is there, the table belongs to that creator and
+                // dropping it would destroy a live collection.
+                $committed = $this->silent(fn () => $this->getDocument(self::METADATA, $id, forUpdate: true));
+
+                if (!$committed->isEmpty()) {
+                    throw new DuplicateException('Collection ' . $id . ' already exists');
+                }
+
+                // The collection is absent from metadata but present in the
+                // physical schema — an orphan from a prior partial failure.
+                // Drop and recreate to ensure schema matches.
                 try {
                     $this->adapter->deleteCollection($id);
                 } catch (NotFoundException) {
@@ -1929,6 +1939,11 @@ class Database
 
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (DuplicateException $e) {
+            // A concurrent creator committed the metadata for this id first, so
+            // the physical table is the one its metadata describes. Rolling back
+            // here would drop a live collection out from under it.
+            throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
         } catch (\Throwable $e) {
             if ($createdPhysicalTable) {
                 try {

@@ -3,6 +3,8 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Cache\Adapter\None as NoneCache;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -1841,5 +1843,68 @@ trait CollectionTests
         $this->assertEquals('LongId Test', $fetched->getAttribute('name'));
 
         $this->assertTrue($database->deleteCollection($collection));
+    }
+
+    /**
+     * Two processes reconciling the same schema race: one reads the collection
+     * as missing, a peer creates it and commits, and only then does the first
+     * process try to create it. The loser must not mistake the peer's table for
+     * an orphan and drop it.
+     */
+    public function testCreateCollectionConcurrentlyKeepsPeerData(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'concurrentCreate';
+
+        // A peer process: same database, its own cache, so its writes do not
+        // purge the negative cache entry this process is about to record.
+        $peer = (new Database($database->getAdapter(), new Cache(new NoneCache())))
+            ->setAuthorization(self::$authorization);
+
+        $this->assertTrue($database->getCollection($collection)->isEmpty());
+
+        $peer->createCollection($collection, [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => false,
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $peer->createDocument($collection, new Document([
+            '$id' => ID::custom('written'),
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'peer',
+        ]));
+
+        try {
+            $database->createCollection($collection, [
+                new Document([
+                    '$id' => ID::custom('name'),
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => false,
+                ]),
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ]);
+            $this->fail('Expected DuplicateException for a collection a peer already created');
+        } catch (DuplicateException) {
+        }
+
+        $survivor = $peer->getDocument($collection, 'written');
+        $this->assertSame('peer', $survivor->getAttribute('name'), 'Peer document was destroyed by the losing creator');
+
+        $metadata = $peer->getCollection($collection);
+        $this->assertFalse($metadata->isEmpty(), 'Peer collection metadata was destroyed by the losing creator');
+
+        $this->assertTrue($peer->deleteCollection($collection));
     }
 }

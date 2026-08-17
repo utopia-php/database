@@ -1450,10 +1450,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             // Cursor pagination and order-by both walk $orderAttributes; without
             // this, every order column passes through filter()+
             // getInternalKeyForAttribute() multiple times.
+            $joinAliases = \array_column($joinTablePrefixes, 'alias');
             $internalKeyCache = [];
-            $resolveInternalKey = function (string $attribute) use (&$internalKeyCache): string {
+            $resolveInternalKey = function (string $attribute) use (&$internalKeyCache, $joinAliases): string {
                 return $internalKeyCache[$attribute]
-                    ??= $this->qualifyOrderAttribute($attribute);
+                    ??= $this->qualifyOrderAttribute($attribute, $joinAliases);
             };
 
             $vectorDistance = null;
@@ -1601,7 +1602,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 }
             }
 
-            $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection);
+            $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
             $results = $this->executeSelect($builder, Event::DocumentFind);
         }
 
@@ -3819,6 +3820,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string>  $joinAliases
      */
     private function applyFindPage(
         SQLBuilder $builder,
@@ -3828,6 +3830,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         ?int $offset,
         CursorDirection $cursorDirection = CursorDirection::After,
         bool $afterUnion = false,
+        array $joinAliases = [],
     ): void {
         if ($afterUnion) {
             $quote = $this->getIdentifierQuoteChar();
@@ -3888,7 +3891,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            $internalAttr = $this->qualifyOrderAttribute($originalAttribute);
+            $internalAttr = $this->qualifyOrderAttribute($originalAttribute, $joinAliases);
             $direction = $orderType;
 
             if ($cursorDirection === CursorDirection::Before) {
@@ -3972,17 +3975,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $prefix.'.'.$this->getInternalKeyForAttribute($name);
     }
 
-    private function qualifyOrderAttribute(string $attribute): string
+    /**
+     * @param  array<string>  $joinAliases
+     */
+    private function qualifyOrderAttribute(string $attribute, array $joinAliases = []): string
     {
         $dot = \strpos($attribute, '.');
-        if ($dot === false) {
-            return $this->filter($this->getInternalKeyForAttribute($attribute));
+        if ($dot !== false) {
+            $prefix = \substr($attribute, 0, $dot);
+            if (\in_array($prefix, $joinAliases, true)) {
+                $name = \substr($attribute, $dot + 1);
+
+                return $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
+            }
         }
 
-        $prefix = \substr($attribute, 0, $dot);
-        $name = \substr($attribute, $dot + 1);
-
-        return $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
+        return $this->filter($this->getInternalKeyForAttribute($attribute));
     }
 
     /**

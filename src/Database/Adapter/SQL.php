@@ -3489,7 +3489,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
         }
 
-        return $this->filter($this->getInternalKeyForAttribute($attribute));
+        return $attribute;
     }
 
     /**
@@ -4209,8 +4209,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $public = Storage::attribute($bare);
             $dotted = $prefix.'.'.$public;
             $identity = isset($identityColumns[$bare]);
+            $mainAlias = $prefix === Query::DEFAULT_ALIAS;
 
-            if ($bare !== '' && ! $identity && ! \array_key_exists($bare, $row)) {
+            if ($bare !== '' && ! \array_key_exists($bare, $row) && (! $identity || $mainAlias)) {
                 $row[$bare] = $row[$key];
             }
             if (! \array_key_exists($dotted, $row)) {

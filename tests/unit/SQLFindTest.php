@@ -198,6 +198,8 @@ final class SQLFindTest extends TestCase
                 'table_main._createdAt' => '2020-01-01 00:00:00.000',
                 'table_main._updatedAt' => '2020-01-01 00:00:00.000',
                 'table_main.name' => 'Alice',
+                'orders._uid' => 'order1',
+                'orders._permissions' => '["read"]',
                 'foj_ord_0' => 1,
             ],
         ]);
@@ -220,6 +222,40 @@ final class SQLFindTest extends TestCase
         $this->assertSame('Alice', $results[0]->getAttribute('name'));
         $this->assertSame(false, $results[0]->isSet('foj_ord_0'));
         $this->assertSame(false, $results[0]->isSet('table_main._uid'));
+        $this->assertSame('order1', $results[0]->getAttribute('orders.$id'));
+        $this->assertSame(['read'], $results[0]->getAttribute('orders.$permissions'));
+        $this->assertSame(false, $results[0]->isSet('orders._uid'));
+    }
+
+    public function testQualifyDottedAttributeKeepsNestedObjectPaths(): void
+    {
+        $adapter = new MySQL($this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock());
+        $method = new ReflectionMethod(MySQL::class, 'qualifyDottedAttribute');
+
+        $aliasSet = [
+            Query::DEFAULT_ALIAS => true,
+            'orders' => true,
+        ];
+        $mainAttributes = [
+            'meta.score' => true,
+        ];
+
+        $this->assertSame(
+            'metascore',
+            $method->invoke($adapter, 'meta.score', $aliasSet, $mainAttributes)
+        );
+        $this->assertSame(
+            'orders.email',
+            $method->invoke($adapter, 'orders.email', $aliasSet, $mainAttributes)
+        );
+        $this->assertSame(
+            'orders._uid',
+            $method->invoke($adapter, 'orders.$id', $aliasSet, $mainAttributes)
+        );
+        $this->assertSame(
+            'profile.user.email',
+            $method->invoke($adapter, 'profile.user.email', $aliasSet, $mainAttributes)
+        );
     }
 
     /**

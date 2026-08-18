@@ -115,7 +115,9 @@ class DocumentsQueriesTest extends TestCase
         ];
     }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     /**
      * @throws Exception

@@ -22,29 +22,33 @@ use Utopia\Query\Schema\ColumnType;
 
 class QueriesTest extends TestCase
 {
-    protected function setUp(): void {}
+    protected function setUp(): void
+    {
+    }
 
-    protected function tearDown(): void {}
+    protected function tearDown(): void
+    {
+    }
 
     public function test_empty_queries(): void
     {
-        $validator = new Queries;
+        $validator = new Queries();
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
     public function test_invalid_method(): void
     {
-        $validator = new Queries;
+        $validator = new Queries();
         $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
 
-        $validator = new Queries([new Limit]);
+        $validator = new Queries([new Limit()]);
         $this->assertEquals(false, $validator->isValid([Query::equal('attr', ['value'])]));
     }
 
     public function test_invalid_value(): void
     {
-        $validator = new Queries([new Limit]);
+        $validator = new Queries([new Limit()]);
         $this->assertEquals(false, $validator->isValid([Query::limit(-1)]));
     }
 
@@ -70,10 +74,10 @@ class QueriesTest extends TestCase
 
         $validator = new Queries(
             [
-                new Cursor,
+                new Cursor(),
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit,
-                new Offset,
+                new Limit(),
+                new Offset(),
                 new Order($attributes),
             ]
         );
@@ -121,7 +125,7 @@ class QueriesTest extends TestCase
 
     public function test_non_array_value_returns_false(): void
     {
-        $validator = new Queries;
+        $validator = new Queries();
 
         $this->assertFalse($validator->isValid('not_an_array'));
         $this->assertEquals('Queries must be an array', $validator->getDescription());
@@ -132,7 +136,7 @@ class QueriesTest extends TestCase
 
     public function test_query_count_exceeds_length(): void
     {
-        $validator = new Queries([new Limit], length: 2);
+        $validator = new Queries([new Limit()], length: 2);
 
         $this->assertFalse($validator->isValid([
             Query::limit(10),
@@ -153,7 +157,7 @@ class QueriesTest extends TestCase
         ];
 
         $validator = new Queries([
-            new Aggregate,
+            new Aggregate(),
             new Order($attributes),
         ]);
 
@@ -165,7 +169,7 @@ class QueriesTest extends TestCase
 
     public function test_variance_and_stddev_method_type_mapping(): void
     {
-        $validator = new Queries([new Aggregate]);
+        $validator = new Queries([new Aggregate()]);
 
         $this->assertTrue($validator->isValid([Query::variance('col', 'var_col')]));
         $this->assertTrue($validator->isValid([Query::stddev('col', 'std_col')]));
@@ -173,28 +177,28 @@ class QueriesTest extends TestCase
 
     public function test_distinct_method_type_mapping(): void
     {
-        $validator = new Queries([new Distinct]);
+        $validator = new Queries([new Distinct()]);
 
         $this->assertTrue($validator->isValid([Query::distinct()]));
     }
 
     public function test_group_by_method_type_mapping(): void
     {
-        $validator = new Queries([new GroupBy]);
+        $validator = new Queries([new GroupBy()]);
 
         $this->assertTrue($validator->isValid([Query::groupBy(['category'])]));
     }
 
     public function test_having_method_type_mapping(): void
     {
-        $validator = new Queries([new Having]);
+        $validator = new Queries([new Having()]);
 
         $this->assertTrue($validator->isValid([Query::having([Query::greaterThan('count', 5)])]));
     }
 
     public function test_join_method_type_mapping(): void
     {
-        $validator = new Queries([new Join]);
+        $validator = new Queries([new Join()]);
 
         $this->assertTrue($validator->isValid([Query::join('orders', 'user_id', 'id')]));
     }
@@ -212,7 +216,7 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Select($attributes),
-            new Join,
+            new Join(),
         ]);
 
         $this->assertTrue($validator->isValid([
@@ -234,7 +238,7 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Filter($attributes, ColumnType::Integer->value),
-            new Join,
+            new Join(),
         ]);
 
         $this->assertTrue($validator->isValid([
@@ -256,7 +260,7 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Order($attributes),
-            new Join,
+            new Join(),
         ]);
 
         $this->assertTrue($validator->isValid([
@@ -278,7 +282,7 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Filter($attributes, ColumnType::Integer->value),
-            new Join,
+            new Join(),
         ]);
 
         $this->assertFalse($validator->isValid([
@@ -307,7 +311,7 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Filter($attributes, ColumnType::Integer->value),
-            new Join,
+            new Join(),
         ]);
 
         $this->assertTrue($validator->isValid([
@@ -341,7 +345,7 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Filter($attributes, ColumnType::Integer->value),
-            new Join,
+            new Join(),
         ]);
 
         $this->assertFalse($validator->isValid([
@@ -376,7 +380,7 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Filter($attributes, ColumnType::Integer->value),
-            new Join,
+            new Join(),
         ]);
 
         $this->assertFalse($validator->isValid([
@@ -394,14 +398,14 @@ class QueriesTest extends TestCase
 
     public function test_is_array(): void
     {
-        $validator = new Queries;
+        $validator = new Queries();
 
         $this->assertTrue($validator->isArray());
     }
 
     public function test_get_type(): void
     {
-        $validator = new Queries;
+        $validator = new Queries();
 
         $this->assertEquals('object', $validator->getType());
     }

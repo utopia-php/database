@@ -223,11 +223,11 @@ class Filter extends Base
 
                 case ColumnType::Float:
                 case ColumnType::Double:
-                    $validator = new FloatValidator;
+                    $validator = new FloatValidator();
                     break;
 
                 case ColumnType::Boolean:
-                    $validator = new Boolean;
+                    $validator = new Boolean();
                     break;
 
                 case ColumnType::Datetime:

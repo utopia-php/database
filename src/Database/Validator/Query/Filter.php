@@ -8,6 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Sequence;
 use Utopia\Query\Method;
@@ -217,16 +218,16 @@ class Filter extends Base
                 case ColumnType::BigSerial:
                     /** @var bool $signed */
                     $signed = $attributeSchema['signed'] ?? true;
-                    $validator = new \Utopia\Database\Validator\BigInt($signed, $this->supportUnsignedBigInt);
+                    $validator = new BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 
                 case ColumnType::Float:
                 case ColumnType::Double:
-                    $validator = new FloatValidator();
+                    $validator = new FloatValidator;
                     break;
 
                 case ColumnType::Boolean:
-                    $validator = new Boolean();
+                    $validator = new Boolean;
                     break;
 
                 case ColumnType::Datetime:
@@ -590,6 +591,17 @@ class Filter extends Base
                     return false;
                 }
 
+                foreach ($andOrValues as $nested) {
+                    if (! $nested instanceof Query) {
+                        $this->message = \ucfirst($method->value).' queries can only contain filter queries';
+
+                        return false;
+                    }
+                    if (! $this->isValid($nested)) {
+                        return false;
+                    }
+                }
+
                 return true;
 
             case Method::ElemMatch:
@@ -622,6 +634,17 @@ class Filter extends Base
                     return false;
                 }
 
+                foreach ($elemMatchValues as $nested) {
+                    if (! $nested instanceof Query) {
+                        $this->message = 'elemMatch queries can only contain filter queries';
+
+                        return false;
+                    }
+                    if (! $this->isValid($nested)) {
+                        return false;
+                    }
+                }
+
                 return true;
 
             default:
@@ -641,7 +664,7 @@ class Filter extends Base
     }
 
     /**
-     * @param array<string> $aliases
+     * @param  array<string>  $aliases
      */
     public function allowJoinAliases(array $aliases): void
     {
@@ -664,8 +687,6 @@ class Filter extends Base
 
     /**
      * Get the maximum number of values allowed in a single filter query.
-     *
-     * @return int
      */
     public function getMaxValuesCount(): int
     {
@@ -674,8 +695,6 @@ class Filter extends Base
 
     /**
      * Get the method type this validator handles.
-     *
-     * @return string
      */
     public function getMethodType(): string
     {

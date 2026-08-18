@@ -17,40 +17,36 @@ use Utopia\Query\Schema\IndexType;
 
 class IndexedQueriesTest extends TestCase
 {
-    protected function setUp(): void
-    {
-    }
+    protected function setUp(): void {}
 
-    protected function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
     public function test_empty_queries(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new IndexedQueries;
 
         $this->assertEquals(true, $validator->isValid([]));
     }
 
     public function test_invalid_query(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new IndexedQueries;
 
         $this->assertEquals(false, $validator->isValid(['this.is.invalid']));
     }
 
     public function test_invalid_method(): void
     {
-        $validator = new IndexedQueries();
+        $validator = new IndexedQueries;
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
 
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new IndexedQueries([], [], [new Limit]);
         $this->assertEquals(false, $validator->isValid(['equal("attr", "value")']));
     }
 
     public function test_invalid_value(): void
     {
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new IndexedQueries([], [], [new Limit]);
         $this->assertEquals(false, $validator->isValid(['limit(-1)']));
     }
 
@@ -80,10 +76,10 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor(),
+                new Cursor,
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit(),
-                new Offset(),
+                new Limit,
+                new Offset,
                 new Order($attributes),
             ]
         );
@@ -143,10 +139,10 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor(),
+                new Cursor,
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit(),
-                new Offset(),
+                new Limit,
+                new Offset,
                 new Order($attributes),
             ]
         );
@@ -196,10 +192,10 @@ class IndexedQueriesTest extends TestCase
             $attributes,
             $indexes,
             [
-                new Cursor(),
+                new Cursor,
                 new Filter($attributes, ColumnType::Integer->value),
-                new Limit(),
-                new Offset(),
+                new Limit,
+                new Offset,
                 new Order($attributes),
             ]
         );
@@ -273,7 +269,7 @@ class IndexedQueriesTest extends TestCase
 
     public function test_unparseable_string_query_returns_error(): void
     {
-        $validator = new IndexedQueries([], [], [new Limit()]);
+        $validator = new IndexedQueries([], [], [new Limit]);
 
         $this->assertFalse($validator->isValid(['totally broken }{']));
         $this->assertStringContainsString('Invalid query', $validator->getDescription());
@@ -285,6 +281,52 @@ class IndexedQueriesTest extends TestCase
 
         $nestedOr = Query::or([Query::equal('nonexistent', ['value'])]);
         $this->assertFalse($validator->isValid([$nestedOr]));
+    }
+
+    public function test_nested_search_requires_fulltext_index(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'title',
+                'key' => 'title',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $indexes = [
+            new Document([
+                'type' => IndexType::Fulltext->value,
+                'attributes' => ['title'],
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            $indexes,
+            [new Filter($attributes, ColumnType::Integer->value)]
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::or([
+                Query::search('title', 'foo'),
+                Query::equal('name', ['bar']),
+            ]),
+        ]));
+
+        $this->assertFalse($validator->isValid([
+            Query::or([
+                Query::search('name', 'foo'),
+                Query::equal('title', ['bar']),
+            ]),
+        ]));
+        $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $validator->getDescription());
     }
 
     public function test_multiple_vector_queries_fails(): void

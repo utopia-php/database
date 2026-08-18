@@ -115,9 +115,7 @@ class DocumentsQueriesTest extends TestCase
         ];
     }
 
-    protected function tearDown(): void
-    {
-    }
+    protected function tearDown(): void {}
 
     /**
      * @throws Exception
@@ -190,7 +188,7 @@ class DocumentsQueriesTest extends TestCase
 
     }
 
-    public function testFilterWithJoinAliasIsValid(): void
+    public function test_filter_with_join_alias_is_valid(): void
     {
         $validator = new Documents(
             $this->attributes,
@@ -204,7 +202,7 @@ class DocumentsQueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
-    public function testOrderWithJoinAliasIsValid(): void
+    public function test_order_with_join_alias_is_valid(): void
     {
         $validator = new Documents(
             $this->attributes,
@@ -218,7 +216,7 @@ class DocumentsQueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
-    public function testUnknownJoinAliasFilterIsInvalid(): void
+    public function test_unknown_join_alias_filter_is_invalid(): void
     {
         $validator = new Documents(
             $this->attributes,
@@ -231,5 +229,25 @@ class DocumentsQueriesTest extends TestCase
             Query::join('orders', '$id', 'customerId', '=', 'sec'),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: other', $validator->getDescription());
+    }
+
+    public function test_nested_and_or_join_alias_is_valid(): void
+    {
+        $validator = new Documents(
+            $this->attributes,
+            $this->indexes,
+            ColumnType::Integer->value
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::join('meta', '$id', 'mainId', '=', 'meta'),
+            Query::and([
+                Query::equal('title', ['Main']),
+                Query::or([
+                    Query::equal('meta.score', [10]),
+                    Query::equal('rating', [2]),
+                ]),
+            ]),
+        ]), $validator->getDescription());
     }
 }

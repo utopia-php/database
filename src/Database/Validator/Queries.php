@@ -49,8 +49,7 @@ class Queries extends Validator
     /**
      * Validate an array of queries, checking each against registered method-type validators.
      *
-     * @param mixed $value Array of Query objects or query strings
-     * @return bool
+     * @param  mixed  $value  Array of Query objects or query strings
      */
     public function isValid($value): bool
     {
@@ -60,7 +59,6 @@ class Queries extends Validator
             return false;
         }
         /** @var array<Query|string> $value */
-
         if ($this->length && \count($value) > $this->length) {
             return false;
         }
@@ -147,17 +145,23 @@ class Queries extends Validator
             }
         }
 
-        foreach ($parsedQueries as $query) {
+        // Same pass: nested and/or children must keep the join aliases collected above.
+        $pending = $parsedQueries;
+        while ($pending !== []) {
+            $query = \array_shift($pending);
 
-            // Only logical filter wrappers carry a list of sibling filters to
-            // re-validate. Having has its own handling; Union/UnionAll wrap
-            // sub-SELECTs whose children are not filters for this collection
-            // and must not be recursed into here.
             if (\in_array($query->getMethod(), Query::LOGICAL_TYPES, true)) {
-                /** @var array<Query|string> $nestedValues */
-                $nestedValues = $query->getValues();
-                if (! self::isValid($nestedValues)) {
-                    return false;
+                foreach ($query->getValues() as $nested) {
+                    if (! $nested instanceof Query) {
+                        try {
+                            $nested = Query::parse((string) $nested);
+                        } catch (Throwable $e) {
+                            $this->message = 'Invalid query: '.$e->getMessage();
+
+                            return false;
+                        }
+                    }
+                    $pending[] = $nested;
                 }
             }
 

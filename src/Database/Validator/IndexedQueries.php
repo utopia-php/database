@@ -108,12 +108,6 @@ class IndexedQueries extends Queries
                 }
             }
 
-            if ($query->isNested() && $query->getMethod() !== Method::Having) {
-                if (! self::isValid($query->getValues())) {
-                    return false;
-                }
-            }
-
             $queries[] = $query;
         }
 
@@ -124,28 +118,41 @@ class IndexedQueries extends Queries
             return false;
         }
 
-        $grouped = Query::groupForDatabase($queries);
-        $filters = $grouped['filters'];
+        return $this->validateSearchIndexes($queries);
+    }
 
-        foreach ($filters as $filter) {
+    /**
+     * @param  array<Query>  $queries
+     */
+    private function validateSearchIndexes(array $queries): bool
+    {
+        foreach ($queries as $query) {
             if (
-                $filter->getMethod() === Method::Search ||
-                $filter->getMethod() === Method::NotSearch
+                $query->getMethod() === Method::Search ||
+                $query->getMethod() === Method::NotSearch
             ) {
                 $matched = false;
 
                 foreach ($this->indexes as $index) {
                     if (
                         $index->type === IndexType::Fulltext
-                        && $index->attributes === [$filter->getAttribute()]
+                        && $index->attributes === [$query->getAttribute()]
                     ) {
                         $matched = true;
                     }
                 }
 
                 if (! $matched) {
-                    $this->message = "Searching by attribute \"{$filter->getAttribute()}\" requires a fulltext index.";
+                    $this->message = "Searching by attribute \"{$query->getAttribute()}\" requires a fulltext index.";
 
+                    return false;
+                }
+            }
+
+            if ($query->isNested() && $query->getMethod() !== Method::Having) {
+                /** @var array<Query> $nested */
+                $nested = $query->getValues();
+                if (! $this->validateSearchIndexes($nested)) {
                     return false;
                 }
             }

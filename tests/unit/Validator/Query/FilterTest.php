@@ -4,6 +4,7 @@ namespace Tests\Unit\Validator\Query;
 
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
+use Utopia\Database\Exception;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Query\Method;
@@ -14,7 +15,7 @@ class FilterTest extends TestCase
     protected Filter $validator;
 
     /**
-     * @throws \Utopia\Database\Exception
+     * @throws Exception
      */
     protected function setUp(): void
     {
@@ -215,7 +216,7 @@ class FilterTest extends TestCase
         $this->assertEquals('NotBetween queries require exactly two values.', $this->validator->getDescription());
     }
 
-    public function testDottedJoinAliasIsAcceptedAfterAllowJoinAliases(): void
+    public function test_dotted_join_alias_is_accepted_after_allow_join_aliases(): void
     {
         $this->validator->allowJoinAliases(['sec']);
 
@@ -223,7 +224,7 @@ class FilterTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::equal('sec.$id', ['abc'])));
     }
 
-    public function testUnknownJoinAliasIsRejected(): void
+    public function test_unknown_join_alias_is_rejected(): void
     {
         $this->validator->allowJoinAliases(['sec']);
 
@@ -231,7 +232,7 @@ class FilterTest extends TestCase
         $this->assertSame('Attribute not found in schema: other', $this->validator->getDescription());
     }
 
-    public function testUnqualifiedJoinAttributeIsStillRejected(): void
+    public function test_unqualified_join_attribute_is_still_rejected(): void
     {
         $this->validator->allowJoinAliases(['sec']);
 
@@ -239,12 +240,39 @@ class FilterTest extends TestCase
         $this->assertSame('Attribute not found in schema: amount', $this->validator->getDescription());
     }
 
-    public function testJoinAliasIsRejectedAfterReset(): void
+    public function test_join_alias_is_rejected_after_reset(): void
     {
         $this->validator->allowJoinAliases(['sec']);
         $this->validator->resetJoinAliases();
 
         $this->assertFalse($this->validator->isValid(Query::equal('sec.amount', [777])));
         $this->assertSame('Attribute not found in schema: sec', $this->validator->getDescription());
+    }
+
+    public function test_nested_and_or_join_alias_is_accepted(): void
+    {
+        $this->validator->allowJoinAliases(['meta']);
+
+        $this->assertTrue($this->validator->isValid(Query::and([
+            Query::equal('string', ['Main']),
+            Query::or([
+                Query::equal('meta.score', [10]),
+                Query::equal('integer', [2]),
+            ]),
+        ])));
+    }
+
+    public function test_nested_and_or_unknown_join_alias_is_rejected(): void
+    {
+        $this->validator->allowJoinAliases(['meta']);
+
+        $this->assertFalse($this->validator->isValid(Query::and([
+            Query::equal('string', ['Main']),
+            Query::or([
+                Query::equal('other.score', [10]),
+                Query::equal('integer', [2]),
+            ]),
+        ])));
+        $this->assertSame('Attribute not found in schema: other', $this->validator->getDescription());
     }
 }

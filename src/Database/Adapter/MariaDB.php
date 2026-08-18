@@ -1496,14 +1496,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
     protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
     {
-        $attribute = $this->filter($this->getInternalKeyForAttribute($query->getAttribute()));
-        $attribute = $this->quote($attribute);
-        $quotedAlias = $this->quote($alias);
+        [$quotedAlias, $quotedAttribute] = $this->quoteSearchAttribute($query->getAttribute(), $alias);
         $searchVal = $query->getValue();
         $term = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
 
         return [
-            'expression' => "MATCH({$quotedAlias}.{$attribute}) AGAINST (? IN BOOLEAN MODE) AS `_relevance`",
+            'expression' => "MATCH({$quotedAlias}.{$quotedAttribute}) AGAINST (? IN BOOLEAN MODE) AS `_relevance`",
             'order' => '`_relevance` DESC',
             'bindings' => [$term],
         ];

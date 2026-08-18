@@ -1373,6 +1373,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
+        $joinAliases = \array_column($joinTablePrefixes, 'alias');
+        $internalKeyCache = [];
+        $resolveInternalKey = function (string $attribute) use (&$internalKeyCache, $joinAliases): string {
+            return $internalKeyCache[$attribute]
+                ??= $this->qualifyOrderAttribute($attribute, $joinAliases);
+        };
+
         if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
             $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
             $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
@@ -1401,6 +1408,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $leftProjected,
                 $joinTablePrefixes,
             );
+            $this->applyFindCursor(
+                $left,
+                $orderAttributes,
+                $orderTypes,
+                $cursor,
+                $cursorDirection,
+                $resolveInternalKey,
+            );
 
             $right = $this->newBuilder($name, $alias, true);
             $rightProjected = $this->configureFindBuilder(
@@ -1425,6 +1440,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $rightProjected,
                 $joinTablePrefixes,
             );
+            $this->applyFindCursor(
+                $right,
+                $orderAttributes,
+                $orderTypes,
+                $cursor,
+                $cursorDirection,
+                $resolveInternalKey,
+            );
 
             $left->unionAll($right);
             $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
@@ -1445,17 +1468,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $forPermission,
                 $hasPreservingOuterJoin,
             );
-
-            // Memoize internal-key resolution for the duration of this find().
-            // Cursor pagination and order-by both walk $orderAttributes; without
-            // this, every order column passes through filter()+
-            // getInternalKeyForAttribute() multiple times.
-            $joinAliases = \array_column($joinTablePrefixes, 'alias');
-            $internalKeyCache = [];
-            $resolveInternalKey = function (string $attribute) use (&$internalKeyCache, $joinAliases): string {
-                return $internalKeyCache[$attribute]
-                    ??= $this->qualifyOrderAttribute($attribute, $joinAliases);
-            };
 
             $vectorDistance = null;
             $vectorQuery = $vectorQueries[0] ?? null;
@@ -1491,70 +1503,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
             }
 
-            if (! empty($cursor) && $vectorDistance === null) {
-                $cursorConditions = [];
-
-                foreach ($orderAttributes as $i => $originalAttribute) {
-                    $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
-                    if ($orderType === OrderDirection::Random) {
-                        continue;
-                    }
-
-                    $direction = $orderType;
-
-                    if ($cursorDirection === CursorDirection::Before) {
-                        $direction = ($direction === OrderDirection::Asc)
-                            ? OrderDirection::Desc
-                            : OrderDirection::Asc;
-                    }
-
-                    $internalAttr = $resolveInternalKey($originalAttribute);
-
-                    // Special case: single attribute on unique primary key
-                    if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === Document::SEQUENCE) {
-                        /** @var bool|float|int|string $cursorVal */
-                        $cursorVal = $cursor[$originalAttribute];
-                        if ($direction === OrderDirection::Desc) {
-                            $cursorConditions[] = BaseQuery::lessThan($internalAttr, $cursorVal);
-                        } else {
-                            $cursorConditions[] = BaseQuery::greaterThan($internalAttr, $cursorVal);
-                        }
-                        break;
-                    }
-
-                    // Multi-attribute cursor: (prev_attrs equal) AND (current_attr > or < cursor)
-                    $andConditions = [];
-
-                    for ($j = 0; $j < $i; $j++) {
-                        $prevOriginal = $orderAttributes[$j];
-                        $prevAttr = $resolveInternalKey($prevOriginal);
-                        /** @var array<array<mixed>|bool|float|int|string|null> $prevCursorVals */
-                        $prevCursorVals = [$cursor[$prevOriginal]];
-                        $andConditions[] = BaseQuery::equal($prevAttr, $prevCursorVals);
-                    }
-
-                    /** @var bool|float|int|string $cursorAttrVal */
-                    $cursorAttrVal = $cursor[$originalAttribute];
-                    if ($direction === OrderDirection::Desc) {
-                        $andConditions[] = BaseQuery::lessThan($internalAttr, $cursorAttrVal);
-                    } else {
-                        $andConditions[] = BaseQuery::greaterThan($internalAttr, $cursorAttrVal);
-                    }
-
-                    if (count($andConditions) === 1) {
-                        $cursorConditions[] = $andConditions[0];
-                    } else {
-                        $cursorConditions[] = BaseQuery::and($andConditions);
-                    }
-                }
-
-                if (! empty($cursorConditions)) {
-                    if (count($cursorConditions) === 1) {
-                        $builder->filter($cursorConditions);
-                    } else {
-                        $builder->filter([BaseQuery::or($cursorConditions)]);
-                    }
-                }
+            if ($vectorDistance === null) {
+                $this->applyFindCursor(
+                    $builder,
+                    $orderAttributes,
+                    $orderTypes,
+                    $cursor,
+                    $cursorDirection,
+                    $resolveInternalKey,
+                );
             }
 
             // Vector ordering (comes first for similarity search)
@@ -3507,10 +3464,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             Document::UPDATED_AT,
         ];
 
-        $selections = \array_diff($selections, [...$internalKeys, Document::COLLECTION]);
+        $explicitInternals = [];
+        foreach ($selections as $selection) {
+            if (\in_array($selection, $internalKeys, true)) {
+                $explicitInternals[] = $selection;
+            }
+        }
+
+        $selections = \array_values(\array_diff($selections, [...$internalKeys, Document::COLLECTION]));
 
         if ($includeInternal) {
             foreach ($internalKeys as $internalKey) {
+                $selections[] = $this->getInternalKeyForAttribute($internalKey);
+            }
+        } else {
+            foreach (\array_values(\array_unique($explicitInternals)) as $internalKey) {
                 $selections[] = $this->getInternalKeyForAttribute($internalKey);
             }
         }
@@ -3526,7 +3494,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $name = \substr($selection, $dot + 1);
                     $internal = $this->filter($this->getInternalKeyForAttribute($name));
                     $qualified = $quote.$this->filter($prefix).$quote.'.'.$quote.$internal.$quote;
-                    $output = $prefix.'.'.$name;
+                    $output = $prefix.'.'.$internal;
                     $columns[] = $qualified.' AS '.$quote.$output.$quote;
 
                     continue;
@@ -3997,6 +3965,89 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
+     * @param  callable(string): string  $resolveInternalKey
+     */
+    private function applyFindCursor(
+        SQLBuilder $builder,
+        array $orderAttributes,
+        array $orderTypes,
+        array $cursor,
+        CursorDirection $cursorDirection,
+        callable $resolveInternalKey,
+    ): void {
+        if ($cursor === []) {
+            return;
+        }
+
+        $cursorConditions = [];
+
+        foreach ($orderAttributes as $i => $originalAttribute) {
+            $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
+            if ($orderType === OrderDirection::Random) {
+                continue;
+            }
+
+            $direction = $orderType;
+
+            if ($cursorDirection === CursorDirection::Before) {
+                $direction = ($direction === OrderDirection::Asc)
+                    ? OrderDirection::Desc
+                    : OrderDirection::Asc;
+            }
+
+            $internalAttr = $resolveInternalKey($originalAttribute);
+
+            if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === Document::SEQUENCE) {
+                /** @var bool|float|int|string $cursorVal */
+                $cursorVal = $cursor[$originalAttribute];
+                if ($direction === OrderDirection::Desc) {
+                    $cursorConditions[] = BaseQuery::lessThan($internalAttr, $cursorVal);
+                } else {
+                    $cursorConditions[] = BaseQuery::greaterThan($internalAttr, $cursorVal);
+                }
+                break;
+            }
+
+            $andConditions = [];
+
+            for ($j = 0; $j < $i; $j++) {
+                $prevOriginal = $orderAttributes[$j];
+                $prevAttr = $resolveInternalKey($prevOriginal);
+                /** @var array<array<mixed>|bool|float|int|string|null> $prevCursorVals */
+                $prevCursorVals = [$cursor[$prevOriginal]];
+                $andConditions[] = BaseQuery::equal($prevAttr, $prevCursorVals);
+            }
+
+            /** @var bool|float|int|string $cursorAttrVal */
+            $cursorAttrVal = $cursor[$originalAttribute];
+            if ($direction === OrderDirection::Desc) {
+                $andConditions[] = BaseQuery::lessThan($internalAttr, $cursorAttrVal);
+            } else {
+                $andConditions[] = BaseQuery::greaterThan($internalAttr, $cursorAttrVal);
+            }
+
+            if (count($andConditions) === 1) {
+                $cursorConditions[] = $andConditions[0];
+            } else {
+                $cursorConditions[] = BaseQuery::and($andConditions);
+            }
+        }
+
+        if ($cursorConditions === []) {
+            return;
+        }
+
+        if (count($cursorConditions) === 1) {
+            $builder->filter($cursorConditions);
+        } else {
+            $builder->filter([BaseQuery::or($cursorConditions)]);
+        }
+    }
+
+    /**
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
      * @param  array<string>  $joinAliases
      */
     private function applyFindPage(
@@ -4217,14 +4268,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if ($bare !== '' && ! \array_key_exists($bare, $row) && (! $identity || $mainAlias)) {
                 $row[$bare] = $row[$key];
             }
-            if (! \array_key_exists($dotted, $row)) {
-                $value = $row[$key];
-                if ($bare === Storage::PERMISSIONS) {
-                    $value = \json_decode(\is_string($value) ? $value : '[]', true);
-                }
+
+            $value = $row[$key];
+            if ($bare === Storage::PERMISSIONS || $public === Document::PERMISSIONS) {
+                $value = \json_decode(\is_string($value) ? $value : '[]', true);
+            }
+            if (! \array_key_exists($dotted, $row) || $key === $dotted) {
                 $row[$dotted] = $value;
             }
-            unset($row[$key]);
+            if ($key !== $dotted) {
+                unset($row[$key]);
+            }
         }
 
         foreach (Storage::columnMap() as $internal => $public) {
@@ -5423,6 +5477,30 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $searchQueries;
+    }
+
+    /**
+     * Quote a search attribute, keeping join-qualified paths on the join alias.
+     *
+     * @return array{0: string, 1: string}
+     */
+    protected function quoteSearchAttribute(string $attribute, string $alias): array
+    {
+        $dot = \strpos($attribute, '.');
+        if ($dot !== false) {
+            $prefix = \substr($attribute, 0, $dot);
+            $name = \substr($attribute, $dot + 1);
+
+            return [
+                $this->quote($this->filter($prefix)),
+                $this->quote($this->filter($this->getInternalKeyForAttribute($name))),
+            ];
+        }
+
+        return [
+            $this->quote($alias),
+            $this->quote($this->filter($this->getInternalKeyForAttribute($attribute))),
+        ];
     }
 
     /**

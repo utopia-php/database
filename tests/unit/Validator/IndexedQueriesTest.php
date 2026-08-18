@@ -9,6 +9,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
@@ -162,6 +163,40 @@ class IndexedQueriesTest extends TestCase
         $query = Query::search('name', 'phrase');
         $this->assertEquals(false, $validator->isValid([$query]));
         $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $validator->getDescription());
+    }
+
+    public function test_join_side_search_skips_main_fulltext_index(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
+            Query::search('meta.body', 'needle'),
+        ]), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([
+            Query::search('name', 'needle'),
+        ]));
+        $this->assertSame(
+            'Searching by attribute "name" requires a fulltext index.',
+            $validator->getDescription()
+        );
     }
 
     public function test_two_attributes_fulltext(): void

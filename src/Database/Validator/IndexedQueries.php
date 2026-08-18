@@ -86,6 +86,31 @@ class IndexedQueries extends Queries
     }
 
     /**
+     * @param  array<Query>  $queries
+     * @return array<string, true>
+     */
+    private function joinAliases(array $queries): array
+    {
+        $aliases = [];
+
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $method = $query->getMethod();
+            $values = $query->getValues();
+            $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
+            $alias = $values[$aliasIndex] ?? '';
+            if (\is_string($alias) && $alias !== '') {
+                $aliases[$alias] = true;
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
      * @param  mixed  $value
      *
      * @throws Exception
@@ -118,32 +143,39 @@ class IndexedQueries extends Queries
             return false;
         }
 
-        return $this->validateSearchIndexes($queries);
+        return $this->validateSearchIndexes($queries, $this->joinAliases($queries));
     }
 
     /**
      * @param  array<Query>  $queries
+     * @param  array<string, true>  $joinAliases
      */
-    private function validateSearchIndexes(array $queries): bool
+    private function validateSearchIndexes(array $queries, array $joinAliases): bool
     {
         foreach ($queries as $query) {
             if (
                 $query->getMethod() === Method::Search ||
                 $query->getMethod() === Method::NotSearch
             ) {
+                $attribute = $query->getAttribute();
+                $dot = \strpos($attribute, '.');
+                if ($dot !== false && isset($joinAliases[\substr($attribute, 0, $dot)])) {
+                    continue;
+                }
+
                 $matched = false;
 
                 foreach ($this->indexes as $index) {
                     if (
                         $index->type === IndexType::Fulltext
-                        && $index->attributes === [$query->getAttribute()]
+                        && $index->attributes === [$attribute]
                     ) {
                         $matched = true;
                     }
                 }
 
                 if (! $matched) {
-                    $this->message = "Searching by attribute \"{$query->getAttribute()}\" requires a fulltext index.";
+                    $this->message = "Searching by attribute \"{$attribute}\" requires a fulltext index.";
 
                     return false;
                 }
@@ -152,7 +184,7 @@ class IndexedQueries extends Queries
             if ($query->isNested() && $query->getMethod() !== Method::Having) {
                 /** @var array<Query> $nested */
                 $nested = $query->getValues();
-                if (! $this->validateSearchIndexes($nested)) {
+                if (! $this->validateSearchIndexes($nested, $joinAliases)) {
                     return false;
                 }
             }

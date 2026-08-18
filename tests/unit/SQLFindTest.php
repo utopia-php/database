@@ -227,6 +227,171 @@ final class SQLFindTest extends TestCase
         $this->assertSame(false, $results[0]->isSet('orders._uid'));
     }
 
+    public function testRemapRowPreservesSelectedJoinIdentity(): void
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([
+            [
+                '_uid' => 'hm1',
+                '_id' => 1,
+                '_permissions' => '[]',
+                '_createdAt' => '2020-01-01 00:00:00.000',
+                '_updatedAt' => '2020-01-01 00:00:00.000',
+                'name' => 'Main',
+                'alpha.$id' => 'peer-a',
+                'beta.$id' => 'peer-b',
+                'alpha.label' => 'alpha-one',
+                'beta.label' => 'beta-key',
+                'alpha.score' => 11,
+            ],
+        ]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $results = $this->adapter($statement)->find(
+            new Document(['$id' => 'collection']),
+            [
+                Query::join('peers', '$id', 'mainId', '=', 'alpha'),
+                Query::join('peers', 'peerKey', '$id', '=', 'beta'),
+                Query::select(['name', 'alpha.$id', 'beta.$id', 'alpha.label', 'beta.label', 'alpha.score']),
+            ],
+        );
+
+        $this->assertSame(1, \count($results));
+        $this->assertSame('hm1', $results[0]->getId());
+        $this->assertSame('peer-a', $results[0]->getAttribute('alpha.$id'));
+        $this->assertSame('peer-b', $results[0]->getAttribute('beta.$id'));
+        $this->assertSame('alpha-one', $results[0]->getAttribute('alpha.label'));
+        $this->assertSame('beta-key', $results[0]->getAttribute('beta.label'));
+        $this->assertNotSame('peer-a', $results[0]->getId());
+        $this->assertNotSame('peer-b', $results[0]->getId());
+    }
+
+    public function testRemapRowDoesNotCopyJoinIdentityOntoMain(): void
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([
+            [
+                'table_main._uid' => 'hm1',
+                'table_main._id' => '1',
+                'table_main._permissions' => '[]',
+                'table_main._createdAt' => '2020-01-01 00:00:00.000',
+                'table_main._updatedAt' => '2020-01-01 00:00:00.000',
+                'table_main.name' => 'Main',
+                'twin.$id' => 'hm1',
+                'twin.name' => 'Main',
+                'twin.$permissions' => '["read(\"any\")"]',
+            ],
+        ]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $results = $this->adapter($statement)->find(
+            new Document(['$id' => 'collection']),
+            [
+                Query::join('collection', '$id', '$id', '=', 'twin'),
+                Query::select(['name', 'twin.$id', 'twin.name', 'twin.$permissions']),
+            ],
+        );
+
+        $this->assertSame(1, \count($results));
+        $this->assertSame('hm1', $results[0]->getId());
+        $this->assertSame('hm1', $results[0]->getAttribute('twin.$id'));
+        $this->assertSame('Main', $results[0]->getAttribute('twin.name'));
+        $this->assertSame(['read("any")'], $results[0]->getAttribute('twin.$permissions'));
+    }
+
+    public function testRemapRowMapsMainAliasIdentityWhenJoinIdentityIsSelected(): void
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([
+            [
+                'table_main._uid' => '',
+                'table_main._id' => null,
+                'table_main._permissions' => '[]',
+                'table_main._createdAt' => null,
+                'table_main._updatedAt' => null,
+                'table_main.name' => null,
+                'tail.score' => 7,
+            ],
+        ]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $results = $this->adapter($statement)->find(
+            new Document(['$id' => 'collection']),
+            [
+                Query::rightJoin('tail', '$id', 'mainId', '=', 'tail'),
+                Query::select(['name', 'tail.score']),
+            ],
+        );
+
+        $this->assertSame(1, \count($results));
+        $this->assertSame('', $results[0]->getId());
+        $this->assertSame(7, $results[0]->getAttribute('tail.score'));
+    }
+
+    public function testDistinctSelectIdProjectsMainUid(): void
+    {
+        $sql = $this->captureFindSql([
+            Query::distinct(),
+            Query::join('orders', '$id', 'customerId', '=', 'b'),
+            Query::select(['$id', 'name', 'b.label']),
+        ]);
+
+        $this->assertMatchesRegularExpression('/SELECT\s+DISTINCT/i', $sql);
+        $this->assertStringContainsString('`table_main`.`_uid`', $sql);
+        $this->assertStringContainsString('`b`.`label` AS `b.label`', $sql);
+    }
+
+    public function testSelectedJoinIdentityIsProjectedAsQualifiedInternal(): void
+    {
+        $sql = $this->captureFindSql([
+            Query::join('peers', '$id', 'mainId', '=', 'alpha'),
+            Query::select(['name', 'alpha.$id', 'alpha.label']),
+        ]);
+
+        $this->assertStringContainsString('`alpha`.`_uid` AS `alpha._uid`', $sql);
+        $this->assertStringContainsString('`alpha`.`label` AS `alpha.label`', $sql);
+        $this->assertStringNotContainsString('`alpha.$id`', $sql);
+        $this->assertStringContainsString('`table_main`.`_uid`', $sql);
+    }
+
+    public function testJoinSideSearchRelevanceUsesJoinAlias(): void
+    {
+        $sql = $this->captureFindSql([
+            Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
+            Query::search('meta.body', 'needle'),
+        ]);
+
+        $this->assertStringContainsString('`meta`.`body`', $sql);
+        $this->assertStringNotContainsString('metabody', $sql);
+        $this->assertStringNotContainsString('`table_main`.`metabody`', $sql);
+    }
+
+    public function testEmulatesFullOuterJoinCursorAfterUsesJoinQualifiedOrder(): void
+    {
+        $sql = $this->captureFindSql(
+            [Query::fullOuterJoin('meta', '$id', 'mainId', '=', 'meta')],
+            limit: 1,
+            orderAttributes: ['meta.score', Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
+            cursor: [
+                'meta.score' => 10,
+                Document::SEQUENCE => '5',
+            ],
+        );
+
+        $this->assertEmulatedFullOuterJoin($sql);
+        $this->assertSame(1, $this->countLimitsAfterUnion($sql), $sql);
+        $this->assertUnambiguousUnionOrderBy($sql, expectedTerms: 2);
+        $this->assertGreaterThanOrEqual(2, \preg_match_all('/`meta`\.`score`\s*>/i', $sql));
+        $this->assertDoesNotMatchRegularExpression(
+            '/ORDER BY\s+`score`\b/i',
+            $sql,
+        );
+    }
+
     public function testQualifyDottedAttributeKeepsNestedObjectPaths(): void
     {
         $adapter = new MySQL($this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock());
@@ -262,12 +427,14 @@ final class SQLFindTest extends TestCase
      * @param  array<Query>  $queries
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
      */
     private function captureFindSql(
         array $queries,
         ?int $limit = 25,
         array $orderAttributes = [],
         array $orderTypes = [],
+        array $cursor = [],
     ): string {
         $statement = $this->statement();
         $statement->method('execute')->willReturn(true);
@@ -299,6 +466,7 @@ final class SQLFindTest extends TestCase
             limit: $limit,
             orderAttributes: $orderAttributes,
             orderTypes: $orderTypes,
+            cursor: $cursor,
         );
 
         $this->assertNotSame('', $sql);

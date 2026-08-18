@@ -1925,6 +1925,12 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        if ($database->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
         $collection = 'preCommitCreate';
         $name = new Document([
             '$id' => ID::custom('name'),

@@ -214,10 +214,14 @@ trait JoinComboTests
 
             $this->assertSame(1, \count($aggregated));
             $this->assertComboSecretsHidden($aggregated);
-            $this->assertSame(323, (int) $aggregated[0]->getAttribute('total'));
-            $this->assertNotSame(1100, (int) $aggregated[0]->getAttribute('total'));
-            $this->assertSame(2, (int) $aggregated[0]->getAttribute('cnt'));
-            $this->assertNotSame(3, (int) $aggregated[0]->getAttribute('cnt'));
+            $total = $aggregated[0]->getAttribute('total');
+            $this->assertTrue(\is_numeric($total));
+            $this->assertSame(323, (int) $total);
+            $this->assertNotSame(1100, (int) $total);
+            $cnt = $aggregated[0]->getAttribute('cnt');
+            $this->assertTrue(\is_numeric($cnt));
+            $this->assertSame(2, (int) $cnt);
+            $this->assertNotSame(3, (int) $cnt);
 
             $havingSum = $database->skipValidation(fn () => $database->find($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
@@ -354,8 +358,10 @@ trait JoinComboTests
             ]));
             $this->assertSame(2, \count($equal));
             $this->assertComboSecretsHidden($equal);
-            $this->assertSame([10, 10], $this->comboNumericScores($equal));
-            $this->assertSame(false, \in_array(777, $this->comboNumericScores($equal), true));
+            foreach ($this->comboNumericScores($equal) as $score) {
+                $this->assertNotSame(777, $score);
+                $this->assertSame(10, $score);
+            }
         });
 
         $this->cleanupAggCollections($database, $this->joinComboCollections());
@@ -380,7 +386,9 @@ trait JoinComboTests
             $this->assertSame(false, $unmatched->isEmpty());
             $this->assertSame('m2', $unmatched->getId());
             $this->assertComboSecretHidden($unmatched);
-            $this->assertSame(313, (int) $unmatched->getAttribute('score'));
+            $unmatchedScore = $unmatched->getAttribute('score');
+            $this->assertTrue(\is_numeric($unmatchedScore));
+            $this->assertSame(313, (int) $unmatchedScore);
 
             $matched = $database->getDocument($mCol, 'm1', [
                 Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
@@ -529,6 +537,7 @@ trait JoinComboTests
             $this->assertComboSecretsHidden($filtered);
             foreach ($filtered as $document) {
                 $value = $document->getAttribute('rev.score') ?? $document->getAttribute('revscore');
+                $this->assertTrue(\is_numeric($value));
                 $this->assertSame(21, (int) $value);
             }
         });

@@ -1404,8 +1404,9 @@ trait CollectionTests
 
         // A peer process: same database, its own cache, so its writes do not
         // purge the negative cache entry this process is about to record.
+        $authorization = self::$authorization ?? throw new \RuntimeException('Authorization not initialised');
         $peer = (new Database($database->getAdapter(), new Cache(new NoneCache())))
-            ->setAuthorization(self::$authorization);
+            ->setAuthorization($authorization);
 
         $this->assertTrue($database->getCollection($collection)->isEmpty());
 

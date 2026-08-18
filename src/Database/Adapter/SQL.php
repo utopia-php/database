@@ -4204,6 +4204,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
             $separator = \strrpos($key, '.');
+            if (! \is_int($separator)) {
+                continue;
+            }
             $prefix = \substr($key, 0, $separator);
             $bare = \trim(\substr($key, $separator + 1), '`"');
             $public = Storage::attribute($bare);

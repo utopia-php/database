@@ -367,47 +367,34 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $database = $this->getDatabase();
         $permissions = Storage::permissionsTable($collection);
 
-        $builder = $this->createBuilder();
-
-        $collectionResult = $builder
-            ->from('INFORMATION_SCHEMA.TABLES')
-            ->selectRaw('SUM(data_length + index_length)')
-            ->filter([
-                BaseQuery::equal('table_name', [$collection]),
-                BaseQuery::equal('table_schema', [$database]),
-            ])
+        $result = $this->createBuilder()
+            ->fromNone()
+            ->selectRaw(
+                'SUM(size) FROM (
+                    SELECT data_length + index_length AS size
+                    FROM INFORMATION_SCHEMA.TABLES
+                    WHERE table_name = ? AND
+                    table_schema = ?
+                    UNION ALL
+                    SELECT data_length + index_length AS size
+                    FROM INFORMATION_SCHEMA.TABLES
+                    WHERE table_name = ? AND
+                    table_schema = ?
+                ) AS sizes',
+                [$collection, $database, $permissions, $database]
+            )
             ->build();
 
-        $permissionsResult = $builder->reset()
-            ->from('INFORMATION_SCHEMA.TABLES')
-            ->selectRaw('SUM(data_length + index_length)')
-            ->filter([
-                BaseQuery::equal('table_name', [$permissions]),
-                BaseQuery::equal('table_schema', [$database]),
-            ])
-            ->build();
-
-        $collectionSize = $this->executeResult($collectionResult, Event::CollectionRead);
-        $permissionsSize = $this->executeResult($permissionsResult, Event::CollectionRead);
-
-        foreach ($collectionResult->bindings as $i => $v) {
-            $collectionSize->bindValue($i + 1, $v);
-        }
-        foreach ($permissionsResult->bindings as $i => $v) {
-            $permissionsSize->bindValue($i + 1, $v);
-        }
+        $statement = $this->executeResult($result, Event::CollectionRead);
 
         try {
-            $this->execute($collectionSize);
-            $this->execute($permissionsSize);
-            $collVal = $collectionSize->fetchColumn();
-            $permVal = $permissionsSize->fetchColumn();
-            $size = (int) (\is_numeric($collVal) ? $collVal : 0) + (int) (\is_numeric($permVal) ? $permVal : 0);
+            $this->execute($statement);
+            $size = $statement->fetchColumn();
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get collection size: '.$e->getMessage());
         }
 
-        return $size;
+        return (int) (\is_numeric($size) ? $size : 0);
     }
 
     /**

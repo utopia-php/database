@@ -5203,17 +5203,17 @@ trait JoinTests
             $this->assertContains(10, $this->numericScores($baseline));
             $this->assertSecretJoinPayloadHidden($baseline, 'j-secret', 999);
 
-            $filtered = $database->skipValidation(fn () => $database->find($mCol, [
+            $filtered = $database->find($mCol, [
                 $join,
                 Query::equal('rev.score', [999]),
-            ]));
+            ]);
             $this->assertLessThanOrEqual(\count($baseline), \count($filtered));
             $this->assertSecretJoinPayloadHidden($filtered, 'j-secret', 999);
 
-            $ordered = $database->skipValidation(fn () => $database->find($mCol, [
+            $ordered = $database->find($mCol, [
                 $join,
                 Query::orderDesc('rev.score'),
-            ]));
+            ]);
             $this->assertSame(\count($baseline), \count($ordered));
             $this->assertSecretJoinPayloadHidden($ordered, 'j-secret', 999);
 
@@ -5221,20 +5221,20 @@ trait JoinTests
                 return;
             }
 
-            $aggregated = $database->skipValidation(fn () => $database->find($mCol, [
+            $aggregated = $database->find($mCol, [
                 $join,
                 Query::max('rev.score', 'max_score'),
                 Query::groupBy(['name']),
                 Query::having([Query::greaterThanEqual('max_score', 999)]),
-            ]));
+            ]);
             $this->assertLessThanOrEqual(\count($baseline), \count($aggregated));
             $this->assertSecretJoinPayloadHidden($aggregated, 'j-secret', 999);
 
-            $maxOnly = $database->skipValidation(fn () => $database->find($mCol, [
+            $maxOnly = $database->find($mCol, [
                 $join,
                 Query::max('rev.score', 'max_score'),
                 Query::groupBy(['name']),
-            ]));
+            ]);
             $this->assertSecretJoinPayloadHidden($maxOnly, 'j-secret', 999);
             foreach ($maxOnly as $document) {
                 $maxScore = $document->getAttribute('max_score');

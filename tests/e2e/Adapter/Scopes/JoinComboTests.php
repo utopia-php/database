@@ -91,21 +91,21 @@ trait JoinComboTests
         [$mCol, $pubCol, $secCol] = $this->seedJoinComboFixture($database);
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
-            $ordered = $database->skipValidation(fn () => $database->find($mCol, [
+            $ordered = $database->find($mCol, [
                 Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
                 Query::orderDesc('sec.score'),
-            ]));
+            ]);
             $this->assertComboSecretsHidden($ordered);
             $scores = $this->comboNumericScores($ordered);
             $this->assertSame(false, \in_array(777, $scores, true));
             $this->assertContains(313, $scores);
             $this->assertSame($scores, $this->sortedDesc($scores));
 
-            $limited = $database->skipValidation(fn () => $database->find($mCol, [
+            $limited = $database->find($mCol, [
                 Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
                 Query::orderDesc('sec.score'),
                 Query::limit(2),
-            ]));
+            ]);
             $this->assertSame(2, \count($limited));
             $this->assertComboSecretsHidden($limited);
             $this->assertSame(
@@ -113,12 +113,12 @@ trait JoinComboTests
                 $this->comboNumericScores($limited)
             );
 
-            $offset = $database->skipValidation(fn () => $database->find($mCol, [
+            $offset = $database->find($mCol, [
                 Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
                 Query::orderDesc('sec.score'),
                 Query::limit(2),
                 Query::offset(1),
-            ]));
+            ]);
             $this->assertSame(2, \count($offset));
             $this->assertComboSecretsHidden($offset);
             $this->assertSame(
@@ -126,10 +126,10 @@ trait JoinComboTests
                 $this->comboNumericScores($offset)
             );
 
-            $foj = $database->skipValidation(fn () => $database->find($mCol, [
+            $foj = $database->find($mCol, [
                 Query::fullOuterJoin($pubCol, '$id', 'mainId', '=', 'pub'),
                 Query::orderDesc('pub.score'),
-            ]));
+            ]);
             $this->assertComboSecretsHidden($foj);
             $fojScores = $this->comboNumericScores($foj);
             $this->assertSame(4242, $fojScores[0]);
@@ -137,12 +137,12 @@ trait JoinComboTests
             $this->assertSame(false, \in_array(777, $fojScores, true));
             $this->assertSame($fojScores, $this->sortedDesc($fojScores));
 
-            $fojLimited = $database->skipValidation(fn () => $database->find($mCol, [
+            $fojLimited = $database->find($mCol, [
                 Query::fullOuterJoin($pubCol, '$id', 'mainId', '=', 'pub'),
                 Query::orderDesc('pub.score'),
                 Query::limit(2),
                 Query::offset(1),
-            ]));
+            ]);
             $this->assertSame(2, \count($fojLimited));
             $this->assertComboSecretsHidden($fojLimited);
 
@@ -172,11 +172,11 @@ trait JoinComboTests
         [$mCol, , $secCol] = $this->seedJoinComboFixture($database);
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $secCol): void {
-            $results = $database->skipValidation(fn () => $database->find($mCol, [
+            $results = $database->find($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
                 Query::equal('rev.score', [777]),
                 Query::select(['name']),
-            ]));
+            ]);
 
             $this->assertSame(0, \count($results));
             $this->assertComboSecretsHidden($results);
@@ -206,13 +206,13 @@ trait JoinComboTests
         [$mCol, , $secCol] = $this->seedJoinComboFixture($database);
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $secCol): void {
-            $aggregated = $database->skipValidation(fn () => $database->find($mCol, [
+            $aggregated = $database->find($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
                 Query::equal('name', ['Main']),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
                 Query::groupBy(['name']),
-            ]));
+            ]);
 
             $this->assertSame(1, \count($aggregated));
             $this->assertComboSecretsHidden($aggregated);
@@ -225,23 +225,23 @@ trait JoinComboTests
             $this->assertSame(2, (int) $cnt);
             $this->assertNotSame(3, (int) $cnt);
 
-            $havingSum = $database->skipValidation(fn () => $database->find($mCol, [
+            $havingSum = $database->find($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
                 Query::groupBy(['name']),
                 Query::having([Query::equal('total', [1100])]),
-            ]));
+            ]);
             $this->assertSame(0, \count($havingSum));
             $this->assertComboSecretsHidden($havingSum);
 
-            $havingCount = $database->skipValidation(fn () => $database->find($mCol, [
+            $havingCount = $database->find($mCol, [
                 Query::join($secCol, '$id', 'mainId', '=', 'rev'),
                 Query::sum('rev.score', 'total'),
                 Query::count('*', 'cnt'),
                 Query::groupBy(['name']),
                 Query::having([Query::equal('cnt', [3])]),
-            ]));
+            ]);
             $this->assertSame(0, \count($havingCount));
             $this->assertComboSecretsHidden($havingCount);
         });
@@ -261,29 +261,29 @@ trait JoinComboTests
         [$mCol, $pubCol] = $this->seedJoinComboFixture($database);
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol): void {
-            $full = $database->skipValidation(fn () => $database->find($mCol, [
+            $full = $database->find($mCol, [
                 Query::join($pubCol, '$id', 'mainId', '=', 'pub'),
                 Query::orderAsc('pub.score'),
-            ]));
+            ]);
             $this->assertSame(2, \count($full));
             $this->assertComboSecretsHidden($full);
             $this->assertSame([10, 313], $this->comboNumericScores($full));
 
-            $first = $database->skipValidation(fn () => $database->find($mCol, [
+            $first = $database->find($mCol, [
                 Query::join($pubCol, '$id', 'mainId', '=', 'pub'),
                 Query::orderAsc('pub.score'),
                 Query::limit(1),
-            ]));
+            ]);
             $this->assertSame(1, \count($first));
             $this->assertSame(10, $this->comboNumericScores($first)[0]);
             $this->assertComboSecretsHidden($first);
 
-            $next = $database->skipValidation(fn () => $database->find($mCol, [
+            $next = $database->find($mCol, [
                 Query::join($pubCol, '$id', 'mainId', '=', 'pub'),
                 Query::orderAsc('pub.score'),
                 Query::cursorAfter($first[0]),
                 Query::limit(1),
-            ]));
+            ]);
             $this->assertSame(1, \count($next));
             $this->assertComboSecretsHidden($next);
             $this->assertSame(313, $this->comboNumericScores($next)[0]);
@@ -305,12 +305,12 @@ trait JoinComboTests
         [$mCol, $pubCol, $secCol] = $this->seedJoinComboFixture($database);
 
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
-            $results = $database->skipValidation(fn () => $database->find($mCol, [
+            $results = $database->find($mCol, [
                 Query::fullOuterJoin($pubCol, '$id', 'mainId', '=', 'pub'),
                 Query::leftJoin($secCol, '$id', 'mainId', '=', 'sec'),
                 Query::isNull('sec.score'),
                 Query::select(['name', 'pub.score']),
-            ]));
+            ]);
 
             $this->assertGreaterThanOrEqual(1, \count($results));
             $this->assertComboSecretsHidden($results);
@@ -354,10 +354,10 @@ trait JoinComboTests
             $this->assertComboSecretsHidden($crossed);
             $this->assertSame(false, \in_array(777, $this->comboNumericScores($crossed), true));
 
-            $equal = $database->skipValidation(fn () => $database->find($mCol, [
+            $equal = $database->find($mCol, [
                 Query::crossJoin($secCol, 'sec'),
                 Query::equal('sec.score', [10]),
-            ]));
+            ]);
             $this->assertSame(2, \count($equal));
             $this->assertComboSecretsHidden($equal);
             foreach ($this->comboNumericScores($equal) as $score) {

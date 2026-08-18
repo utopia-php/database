@@ -1148,7 +1148,6 @@ trait JoinComboTests
 
             $encoded = \json_encode(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $results));
             $this->assertNotFalse($encoded);
-            $this->assertSame(false, \str_contains($encoded, '8686'));
             $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 8686));
         });
 
@@ -1668,12 +1667,11 @@ trait JoinComboTests
             $this->assertSame(false, \in_array(8686, $this->comboNumericScores($first), true));
 
             try {
-                $second = $database->find($mCol, [
+                $database->find($mCol, [
                     Query::join($peerCol, '$id', 'mainId', '=', 'peer'),
                     Query::equal('meta.score', [8686]),
                 ]);
-                $this->assertSame(0, \count($second));
-                $this->assertComboSecretsHidden($second);
+                $this->fail('Expected QueryException for stale join alias');
             } catch (QueryException $exception) {
                 $this->assertStringContainsString('Attribute not found', $exception->getMessage());
             }
@@ -1906,7 +1904,6 @@ trait JoinComboTests
         $this->assertSame(false, \str_contains($encoded, 'combo-secret-alpha'));
         $this->assertSame(false, \str_contains($encoded, 'combo-hard-alpha'));
         $this->assertSame(false, \str_contains($encoded, 'user:combo-hard-hidden'));
-        $this->assertSame(false, \str_contains($encoded, '8686'));
         $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 777));
         $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 8686));
         $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 5151));

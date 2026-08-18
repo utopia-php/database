@@ -479,7 +479,10 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
-                return true;
+                if ($this->getSharedTables() || $name === Database::METADATA) {
+                    return true;
+                }
+                throw $e;
             }
             // Client throws code-0 "Collection Exists" when its pre-check
             // finds the collection. In shared-tables/metadata context this

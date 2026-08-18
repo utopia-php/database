@@ -1908,18 +1908,19 @@ class Database
                 // tenants. A DuplicateException simply means the table already
                 // exists for another tenant — not an orphan.
             } else {
-                // Metadata check (above) already verified collection is absent
-                // from metadata. A DuplicateException from the adapter means
-                // the collection exists only in physical schema — an orphan
-                // from a prior partial failure. Drop and recreate to ensure
-                // schema matches.
+                // The table exists and this process did not create it. It may
+                // belong to a peer that has not committed metadata yet, or it
+                // may be an orphan. Dropping it destroyed live collections
+                // during concurrent boot; attaching this caller's metadata to
+                // an unknown physical schema can invent columns that are not
+                // there. Leave the table and report Duplicate. Claiming the
+                // metadata row first is #939.
                 try {
-                    $this->adapter->deleteCollection($id);
-                } catch (NotFoundException) {
-                    // Already removed by a concurrent reconciler.
+                    $this->purgeCachedDocument(self::METADATA, $id);
+                } catch (\Throwable $cacheError) {
+                    Console::warning('Warning: Failed to purge stale collection cache: ' . $cacheError->getMessage());
                 }
-                $this->adapter->createCollection($id, $attributes, $indexes);
-                $createdPhysicalTable = true;
+                throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
             }
         }
 
@@ -1929,6 +1930,16 @@ class Database
 
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (DuplicateException $e) {
+            // A concurrent creator committed the metadata for this id first, so
+            // the physical table is the one its metadata describes. Rolling back
+            // here would drop a live collection out from under it.
+            try {
+                $this->purgeCachedDocument(self::METADATA, $id);
+            } catch (\Throwable $cacheError) {
+                Console::warning('Warning: Failed to purge stale collection cache: ' . $cacheError->getMessage());
+            }
+            throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
         } catch (\Throwable $e) {
             if ($createdPhysicalTable) {
                 try {

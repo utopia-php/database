@@ -2814,7 +2814,7 @@ trait Documents
             }
 
             foreach ($orderAttributes as $order) {
-                if ($cursor->getAttribute($order) === null) {
+                if ($this->cursorOrderValue($cursor, $order) === null) {
                     throw new OrderException(
                         message: "Order attribute '{$order}' is empty",
                         attribute: $order
@@ -2831,6 +2831,15 @@ trait Documents
             $cursor = $this->encode($collection, $cursor);
             $cursor = $this->castingBefore($collection, $cursor);
             $cursor = $cursor->getArrayCopy();
+            foreach ($orderAttributes as $order) {
+                if (\array_key_exists($order, $cursor) && $cursor[$order] !== null) {
+                    continue;
+                }
+                $bare = $this->bareOrderAttribute($order);
+                if ($bare !== $order && \array_key_exists($bare, $cursor) && $cursor[$bare] !== null) {
+                    $cursor[$order] = $cursor[$bare];
+                }
+            }
         } else {
             $cursor = [];
         }
@@ -3303,6 +3312,31 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         return $this->find($collection, $queries);
+    }
+
+    private function cursorOrderValue(Document $cursor, string $order): mixed
+    {
+        $value = $cursor->getAttribute($order);
+        if ($value !== null) {
+            return $value;
+        }
+
+        $bare = $this->bareOrderAttribute($order);
+        if ($bare === $order) {
+            return null;
+        }
+
+        return $cursor->getAttribute($bare);
+    }
+
+    private function bareOrderAttribute(string $order): string
+    {
+        $dot = \strrpos($order, '.');
+        if ($dot === false) {
+            return $order;
+        }
+
+        return \substr($order, $dot + 1);
     }
 
     /**

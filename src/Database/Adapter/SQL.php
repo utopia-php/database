@@ -3380,6 +3380,121 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @param  array<string>  $selections
      * @param  array<string>  $joinAliases
+     */
+    private function applySelectionProjection(
+        SQLBuilder $builder,
+        array $selections,
+        bool $includeInternal = true,
+        array $joinAliases = [],
+    ): void {
+        $mapped = $this->mapSelectionsToColumns($selections, $includeInternal, $joinAliases);
+        $simple = [];
+        foreach ($mapped as $column) {
+            if (\str_contains($column, ' AS ')) {
+                $builder->selectRaw($column);
+            } else {
+                $simple[] = $column;
+            }
+        }
+        if ($simple !== []) {
+            $builder->select($simple);
+        }
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     */
+    private function remapDottedQueryAttributes(array $queries, array $joinTablePrefixes, Document $collection): void
+    {
+        $aliasSet = \array_fill_keys(\array_column($joinTablePrefixes, 'alias'), true);
+        $aliasSet[Query::DEFAULT_ALIAS] = true;
+        $mainAttributes = [];
+        /** @var array<Document> $collectionAttrs */
+        $collectionAttrs = $collection->getAttribute('attributes', []);
+        foreach ($collectionAttrs as $attribute) {
+            $mainAttributes[$attribute->getId()] = true;
+        }
+
+        foreach ($queries as $query) {
+            $this->remapDottedQuery($query, $aliasSet, $mainAttributes);
+        }
+    }
+
+    /**
+     * @param  array<string, true>  $aliasSet
+     * @param  array<string, true>  $mainAttributes
+     */
+    private function remapDottedQuery(BaseQuery $query, array $aliasSet, array $mainAttributes): void
+    {
+        $method = $query->getMethod();
+        if ($method->isJoin() || $method === Method::Select) {
+            return;
+        }
+
+        if ($query->isNested()) {
+            foreach ($query->getValues() as $child) {
+                if ($child instanceof BaseQuery) {
+                    $this->remapDottedQuery($child, $aliasSet, $mainAttributes);
+                }
+            }
+
+            return;
+        }
+
+        if ($method === Method::GroupBy) {
+            $values = $query->getValues();
+            $changed = false;
+            foreach ($values as $i => $column) {
+                if (! \is_string($column) || ! \str_contains($column, '.')) {
+                    continue;
+                }
+                $values[$i] = $this->qualifyDottedAttribute($column, $aliasSet, $mainAttributes);
+                $changed = true;
+            }
+            if ($changed) {
+                $query->setValues($values);
+            }
+
+            return;
+        }
+
+        $attribute = $query->getAttribute();
+        if ($attribute === '' || $attribute === '*' || ! \str_contains($attribute, '.')) {
+            return;
+        }
+
+        $query->setAttribute($this->qualifyDottedAttribute($attribute, $aliasSet, $mainAttributes));
+    }
+
+    /**
+     * @param  array<string, true>  $aliasSet
+     * @param  array<string, true>  $mainAttributes
+     */
+    private function qualifyDottedAttribute(string $attribute, array $aliasSet, array $mainAttributes): string
+    {
+        if (isset($mainAttributes[$attribute])) {
+            return $this->filter($this->getInternalKeyForAttribute($attribute));
+        }
+
+        $dot = \strpos($attribute, '.');
+        if ($dot === false) {
+            return $this->filter($this->getInternalKeyForAttribute($attribute));
+        }
+
+        $prefix = \substr($attribute, 0, $dot);
+        if (isset($aliasSet[$prefix])) {
+            $name = \substr($attribute, $dot + 1);
+
+            return $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
+        }
+
+        return $this->filter($this->getInternalKeyForAttribute($attribute));
+    }
+
+    /**
+     * @param  array<string>  $selections
+     * @param  array<string>  $joinAliases
      * @return array<string>
      */
     protected function mapSelectionsToColumns(array $selections, bool $includeInternal = true, array $joinAliases = []): array
@@ -3401,6 +3516,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $aliasSet = \array_fill_keys($joinAliases, true);
+        $quote = $this->getIdentifierQuoteChar();
         $columns = [];
         foreach ($selections as $selection) {
             $dot = \strpos($selection, '.');
@@ -3408,7 +3524,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $prefix = \substr($selection, 0, $dot);
                 if (isset($aliasSet[$prefix])) {
                     $name = \substr($selection, $dot + 1);
-                    $columns[] = $this->filter($prefix).'.'.$this->filter($this->getInternalKeyForAttribute($name));
+                    $internal = $this->filter($this->getInternalKeyForAttribute($name));
+                    $qualified = $quote.$this->filter($prefix).$quote.'.'.$quote.$internal.$quote;
+                    $output = $prefix.'.'.$name;
+                    $columns[] = $qualified.' AS '.$quote.$output.$quote;
 
                     continue;
                 }
@@ -3662,11 +3781,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 }
             }
             if (! empty($selections) && ! \in_array('*', $selections)) {
-                $builder->select($this->mapSelectionsToColumns(
+                $this->applySelectionProjection(
+                    $builder,
                     $selections,
                     includeInternal: ! $hasDistinct,
                     joinAliases: \array_column($joinTablePrefixes, 'alias'),
-                ));
+                );
                 $hasSelectionProjection = true;
             } elseif (! empty($joinTablePrefixes)) {
                 $builder->select($this->starProjection($joinTablePrefixes, $alias));
@@ -3719,6 +3839,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
+        $this->remapDottedQueryAttributes($queries, $joinTablePrefixes, $collection);
         $builder->filter($queries);
 
         foreach ($adapterFilterQueries as $query) {
@@ -3851,17 +3972,25 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $quote = $this->getIdentifierQuoteChar();
+        $joinAliases = \array_column($joinTablePrefixes, 'alias');
         foreach ($orderAttributes as $i => $attribute) {
             $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
             if ($orderType === OrderDirection::Random) {
                 continue;
             }
 
-            $column = $this->filter($this->getInternalKeyForAttribute($attribute));
+            $qualified = $this->qualifyOrderAttribute($attribute, $joinAliases);
+            $dot = \strpos($qualified, '.');
+            if ($dot !== false) {
+                $prefix = \substr($qualified, 0, $dot);
+                $column = \substr($qualified, $dot + 1);
+                $expression = $quote.$prefix.$quote.'.'.$quote.$column.$quote;
+            } else {
+                $expression = $quote.$alias.$quote.'.'.$quote.$qualified.$quote;
+            }
+
             $output = self::FOJ_ORDER_ALIAS_PREFIX.$i;
-            $builder->selectRaw(
-                $quote.$alias.$quote.'.'.$quote.$column.$quote.' AS '.$quote.$output.$quote
-            );
+            $builder->selectRaw($expression.' AS '.$quote.$output.$quote);
         }
     }
 
@@ -4046,6 +4175,25 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     private function remapRow(array &$row): void
     {
+        $identityColumns = [
+            Storage::UID => true,
+            Storage::SEQUENCE => true,
+            Storage::PERMISSIONS => true,
+            Storage::CREATED_AT => true,
+            Storage::UPDATED_AT => true,
+            Storage::COLLECTION => true,
+            Storage::TENANT => true,
+            Storage::VERSION => true,
+            Document::ID => true,
+            Document::SEQUENCE => true,
+            Document::PERMISSIONS => true,
+            Document::CREATED_AT => true,
+            Document::UPDATED_AT => true,
+            Document::COLLECTION => true,
+            Document::TENANT => true,
+            Document::VERSION => true,
+        ];
+
         foreach (\array_keys($row) as $key) {
             if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
                 unset($row[$key]);
@@ -4055,9 +4203,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if (! \str_contains($key, '.')) {
                 continue;
             }
-            $bare = \trim(\substr($key, \strrpos($key, '.') + 1), '`"');
-            if ($bare !== '' && ! \array_key_exists($bare, $row)) {
+            $separator = \strrpos($key, '.');
+            $prefix = \substr($key, 0, $separator);
+            $bare = \trim(\substr($key, $separator + 1), '`"');
+            $public = Storage::attribute($bare);
+            $dotted = $prefix.'.'.$public;
+            $identity = isset($identityColumns[$bare]);
+
+            if ($bare !== '' && ! $identity && ! \array_key_exists($bare, $row)) {
                 $row[$bare] = $row[$key];
+            }
+            if (! \array_key_exists($dotted, $row)) {
+                $value = $row[$key];
+                if ($bare === Storage::PERMISSIONS) {
+                    $value = \json_decode(\is_string($value) ? $value : '[]', true);
+                }
+                $row[$dotted] = $value;
             }
             unset($row[$key]);
         }

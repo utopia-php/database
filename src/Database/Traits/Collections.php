@@ -216,10 +216,28 @@ trait Collections
             $this->adapter->createCollection($id, $attributes, $indexes);
             $created = true;
         } catch (DuplicateException $e) {
-            // Metadata check (above) already verified collection is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // collection exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata creation.
+            if ($id === self::METADATA
+                || ($this->adapter->getSharedTables()
+                    && $this->adapter->exists($this->adapter->getDatabase(), $id))) {
+                // The metadata table must never be dropped during reconciliation.
+                // In shared-tables mode the physical table is reused across
+                // tenants. A DuplicateException simply means the table already
+                // exists for another tenant — not an orphan.
+            } else {
+                // The table exists and this process did not create it. It may
+                // belong to a peer that has not committed metadata yet, or it
+                // may be an orphan. Dropping it destroyed live collections
+                // during concurrent boot; attaching this caller's metadata to
+                // an unknown physical schema can invent columns that are not
+                // there. Leave the table and report Duplicate. Claiming the
+                // metadata row first is #939.
+                try {
+                    $this->purgeCachedDocument(self::METADATA, $id);
+                } catch (Throwable $cacheError) {
+                    Console::warning('Warning: Failed to purge stale collection cache: '.$cacheError->getMessage());
+                }
+                throw new DuplicateException('Collection '.$id.' already exists', previous: $e);
+            }
         }
 
         if ($id === self::METADATA) {
@@ -228,6 +246,16 @@ trait Collections
 
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (DuplicateException $e) {
+            // A concurrent creator committed the metadata for this id first, so
+            // the physical table is the one its metadata describes. Rolling back
+            // here would drop a live collection out from under it.
+            try {
+                $this->purgeCachedDocument(self::METADATA, $id);
+            } catch (Throwable $cacheError) {
+                Console::warning('Warning: Failed to purge stale collection cache: '.$cacheError->getMessage());
+            }
+            throw new DuplicateException('Collection '.$id.' already exists', previous: $e);
         } catch (Throwable $e) {
             if ($created) {
                 try {

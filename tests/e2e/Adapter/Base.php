@@ -9,6 +9,7 @@ use Tests\E2E\Adapter\Scopes\CollectionTests;
 use Tests\E2E\Adapter\Scopes\DocumentTests;
 use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
+use Tests\E2E\Adapter\Scopes\JoinComboTests;
 use Tests\E2E\Adapter\Scopes\JoinTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\OperatorTests;
@@ -32,6 +33,7 @@ abstract class Base extends TestCase
     use DocumentTests;
     use GeneralTests;
     use IndexTests;
+    use JoinComboTests;
     use JoinTests;
     use ObjectAttributeTests;
     use OperatorTests;

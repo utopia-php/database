@@ -225,6 +225,73 @@ class QueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
+    public function testFilterBeforeJoinAcceptsDottedAlias(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Filter($attributes, ColumnType::Integer->value),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::equal('sec.amount', [777]),
+            Query::join('orders', '$id', 'customer_uid', '=', 'sec'),
+        ]), $validator->getDescription());
+    }
+
+    public function testOrderBeforeJoinAcceptsDottedAlias(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Order($attributes),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::orderAsc('sec.amount'),
+            Query::join('orders', '$id', 'customer_uid', '=', 'sec'),
+        ]), $validator->getDescription());
+    }
+
+    public function testUnknownJoinAliasFilterIsRejected(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Filter($attributes, ColumnType::Integer->value),
+            new Join(),
+        ]);
+
+        $this->assertFalse($validator->isValid([
+            Query::equal('other.amount', [777]),
+            Query::join('orders', '$id', 'customer_uid', '=', 'sec'),
+        ]));
+        $this->assertSame('Invalid query: Attribute not found in schema: other', $validator->getDescription());
+    }
+
     public function test_is_array(): void
     {
         $validator = new Queries();

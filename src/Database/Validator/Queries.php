@@ -5,6 +5,7 @@ namespace Utopia\Database\Validator;
 use Throwable;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
+use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
@@ -72,7 +73,11 @@ class Queries extends Validator
             if ($validator instanceof Order) {
                 $validator->resetAggregationAliases();
             }
-            if ($validator instanceof Select) {
+            if (
+                $validator instanceof Select
+                || $validator instanceof Filter
+                || $validator instanceof Order
+            ) {
                 $validator->resetJoinAliases();
             }
         }
@@ -132,7 +137,11 @@ class Queries extends Validator
         }
         if (! empty($joinAliases)) {
             foreach ($this->validators as $validator) {
-                if ($validator instanceof Select) {
+                if (
+                    $validator instanceof Select
+                    || $validator instanceof Filter
+                    || $validator instanceof Order
+                ) {
                     $validator->allowJoinAliases($joinAliases);
                 }
             }

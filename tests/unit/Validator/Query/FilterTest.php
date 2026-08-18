@@ -214,4 +214,37 @@ class FilterTest extends TestCase
         $this->assertFalse($this->validator->isValid(new Query(Method::NotBetween, 'integer', [10, 20, 30])));
         $this->assertEquals('NotBetween queries require exactly two values.', $this->validator->getDescription());
     }
+
+    public function testDottedJoinAliasIsAcceptedAfterAllowJoinAliases(): void
+    {
+        $this->validator->allowJoinAliases(['sec']);
+
+        $this->assertTrue($this->validator->isValid(Query::equal('sec.amount', [777])));
+        $this->assertTrue($this->validator->isValid(Query::equal('sec.$id', ['abc'])));
+    }
+
+    public function testUnknownJoinAliasIsRejected(): void
+    {
+        $this->validator->allowJoinAliases(['sec']);
+
+        $this->assertFalse($this->validator->isValid(Query::equal('other.amount', [777])));
+        $this->assertSame('Attribute not found in schema: other', $this->validator->getDescription());
+    }
+
+    public function testUnqualifiedJoinAttributeIsStillRejected(): void
+    {
+        $this->validator->allowJoinAliases(['sec']);
+
+        $this->assertFalse($this->validator->isValid(Query::equal('amount', [777])));
+        $this->assertSame('Attribute not found in schema: amount', $this->validator->getDescription());
+    }
+
+    public function testJoinAliasIsRejectedAfterReset(): void
+    {
+        $this->validator->allowJoinAliases(['sec']);
+        $this->validator->resetJoinAliases();
+
+        $this->assertFalse($this->validator->isValid(Query::equal('sec.amount', [777])));
+        $this->assertSame('Attribute not found in schema: sec', $this->validator->getDescription());
+    }
 }

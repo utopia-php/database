@@ -189,4 +189,47 @@ class DocumentsQueriesTest extends TestCase
         $this->assertEquals('Invalid query: Equal queries require at least one value.', $validator->getDescription());
 
     }
+
+    public function testFilterWithJoinAliasIsValid(): void
+    {
+        $validator = new Documents(
+            $this->attributes,
+            $this->indexes,
+            ColumnType::Integer->value
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::equal('sec.amount', [777]),
+            Query::join('orders', '$id', 'customerId', '=', 'sec'),
+        ]), $validator->getDescription());
+    }
+
+    public function testOrderWithJoinAliasIsValid(): void
+    {
+        $validator = new Documents(
+            $this->attributes,
+            $this->indexes,
+            ColumnType::Integer->value
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::orderAsc('sec.amount'),
+            Query::join('orders', '$id', 'customerId', '=', 'sec'),
+        ]), $validator->getDescription());
+    }
+
+    public function testUnknownJoinAliasFilterIsInvalid(): void
+    {
+        $validator = new Documents(
+            $this->attributes,
+            $this->indexes,
+            ColumnType::Integer->value
+        );
+
+        $this->assertFalse($validator->isValid([
+            Query::equal('other.amount', [777]),
+            Query::join('orders', '$id', 'customerId', '=', 'sec'),
+        ]));
+        $this->assertSame('Invalid query: Attribute not found in schema: other', $validator->getDescription());
+    }
 }

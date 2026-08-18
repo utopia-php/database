@@ -28,6 +28,11 @@ class Filter extends Base
     protected array $schema = [];
 
     /**
+     * @var array<string, true>
+     */
+    protected array $joinAliases = [];
+
+    /**
      * @param  array<Document>  $attributes
      */
     public function __construct(
@@ -67,15 +72,23 @@ class Filter extends Base
             return false;
         }
 
-        if (\str_contains($attribute, '.')) {
+        $dot = \strpos($attribute, '.');
+        if ($dot !== false) {
             // Check for special symbol `.`
             if (isset($this->schema[$attribute])) {
                 return true;
             }
 
+            $alias = \substr($attribute, 0, $dot);
+            $column = \substr($attribute, $dot + 1);
+
+            if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
+                return true;
+            }
+
             // For relationships, just validate the top level.
             // will validate each nested level during the recursive calls.
-            $attribute = \explode('.', $attribute)[0];
+            $attribute = $alias;
         }
 
         // Search for attribute in schema
@@ -100,10 +113,25 @@ class Filter extends Base
         $originalAttribute = $attribute;
         // isset check if for special symbols "." in the attribute name
         // same for nested path on object
-        if (\str_contains($attribute, '.') && ! isset($this->schema[$attribute])) {
+        $dot = \strpos($attribute, '.');
+        if ($dot !== false && ! isset($this->schema[$attribute])) {
+            $alias = \substr($attribute, 0, $dot);
+            $column = \substr($attribute, $dot + 1);
+
+            // Joined columns are not in this collection's schema; skip local type checks.
+            if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
+                if (count($values) > $this->maxValuesCount) {
+                    $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
+
+                    return false;
+                }
+
+                return true;
+            }
+
             // For relationships, just validate the top level.
             // Utopia will validate each nested level during the recursive calls.
-            $attribute = \explode('.', $attribute)[0];
+            $attribute = $alias;
         }
 
         // exists and notExists queries don't require values, just attribute validation
@@ -509,8 +537,22 @@ class Filter extends Base
 
                 // Handle dotted attributes (relationships)
                 $attributeKey = $attribute;
-                if (\str_contains($attributeKey, '.') && ! isset($this->schema[$attributeKey])) {
-                    $attributeKey = \explode('.', $attributeKey)[0];
+                $dot = \strpos($attributeKey, '.');
+                if ($dot !== false && ! isset($this->schema[$attributeKey])) {
+                    $alias = \substr($attributeKey, 0, $dot);
+                    $column = \substr($attributeKey, $dot + 1);
+
+                    if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
+                        if (count($value->getValues()) != 1) {
+                            $this->message = \ucfirst($method->value).' queries require exactly one vector value.';
+
+                            return false;
+                        }
+
+                        return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+                    }
+
+                    $attributeKey = $alias;
                 }
 
                 /** @var array<string, mixed> $attributeSchema */
@@ -596,6 +638,28 @@ class Filter extends Base
 
                 return false;
         }
+    }
+
+    /**
+     * @param array<string> $aliases
+     */
+    public function allowJoinAliases(array $aliases): void
+    {
+        foreach ($aliases as $alias) {
+            if ($alias !== '') {
+                $this->joinAliases[$alias] = true;
+            }
+        }
+    }
+
+    public function resetJoinAliases(): void
+    {
+        $this->joinAliases = [];
+    }
+
+    private function isAllowedJoinColumn(string $column): bool
+    {
+        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
     }
 
     /**

@@ -101,4 +101,29 @@ class OrderTest extends TestCase
         $this->assertTrue($this->validator->isValid(Query::orderAsc('total_count')));
         $this->assertTrue($this->validator->isValid(Query::orderDesc('avg_price')));
     }
+
+    public function testDottedJoinAliasIsAcceptedAfterAllowJoinAliases(): void
+    {
+        $this->validator->allowJoinAliases(['sec']);
+
+        $this->assertTrue($this->validator->isValid(Query::orderAsc('sec.amount')));
+        $this->assertTrue($this->validator->isValid(Query::orderDesc('sec.$id')));
+    }
+
+    public function testUnknownJoinAliasIsRejected(): void
+    {
+        $this->validator->allowJoinAliases(['sec']);
+
+        $this->assertFalse($this->validator->isValid(Query::orderAsc('other.amount')));
+        $this->assertSame('Attribute not found in schema: other', $this->validator->getDescription());
+    }
+
+    public function testJoinAliasIsRejectedAfterReset(): void
+    {
+        $this->validator->allowJoinAliases(['sec']);
+        $this->validator->resetJoinAliases();
+
+        $this->assertFalse($this->validator->isValid(Query::orderAsc('sec.amount')));
+        $this->assertSame('Attribute not found in schema: sec', $this->validator->getDescription());
+    }
 }

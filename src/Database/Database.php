@@ -1915,8 +1915,12 @@ class Database
                 // an unknown physical schema can invent columns that are not
                 // there. Leave the table and report Duplicate. Claiming the
                 // metadata row first is #939.
-                $this->purgeCachedDocument(self::METADATA, $id);
-                throw new DuplicateException('Collection ' . $id . ' already exists');
+                try {
+                    $this->purgeCachedDocument(self::METADATA, $id);
+                } catch (\Throwable $cacheError) {
+                    Console::warning('Warning: Failed to purge stale collection cache: ' . $cacheError->getMessage());
+                }
+                throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
             }
         }
 
@@ -1930,7 +1934,11 @@ class Database
             // A concurrent creator committed the metadata for this id first, so
             // the physical table is the one its metadata describes. Rolling back
             // here would drop a live collection out from under it.
-            $this->purgeCachedDocument(self::METADATA, $id);
+            try {
+                $this->purgeCachedDocument(self::METADATA, $id);
+            } catch (\Throwable $cacheError) {
+                Console::warning('Warning: Failed to purge stale collection cache: ' . $cacheError->getMessage());
+            }
             throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
         } catch (\Throwable $e) {
             if ($createdPhysicalTable) {

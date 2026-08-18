@@ -1967,8 +1967,10 @@ trait CollectionTests
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
             ]);
-            $this->fail('Expected DuplicateException for an existing physical collection');
         } catch (DuplicateException) {
+            // SQL adapters report the existing table as Duplicate. Mongo's
+            // createCollection is idempotent, so this process continues and
+            // claims metadata. Either way the physical collection must stay.
         }
 
         $this->assertSame(
@@ -1977,6 +1979,10 @@ trait CollectionTests
             'Physical collection was dropped while metadata was still uncommitted'
         );
 
-        $database->getAdapter()->deleteCollection($collection);
+        try {
+            $database->deleteCollection($collection);
+        } catch (\Throwable) {
+            $database->getAdapter()->deleteCollection($collection);
+        }
     }
 }

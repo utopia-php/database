@@ -11,9 +11,11 @@ use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
 
@@ -367,6 +369,42 @@ final class SQLFindTest extends TestCase
         $this->assertStringContainsString('`meta`.`body`', $sql);
         $this->assertStringNotContainsString('metabody', $sql);
         $this->assertStringNotContainsString('`table_main`.`metabody`', $sql);
+    }
+
+    public function testSqliteJoinSideSearchQuotesJoinAlias(): void
+    {
+        $adapter = new SQLite(new \PDO('sqlite::memory:'));
+        $adapter->setNamespace('namespace');
+        $compile = new ReflectionMethod(SQLite::class, 'compileAdapterFilter');
+
+        $compiled = $compile->invoke(
+            $adapter,
+            Query::search('meta.body', 'needle'),
+            'jh_m',
+            Query::DEFAULT_ALIAS,
+        );
+
+        $this->assertIsArray($compiled);
+        $this->assertArrayHasKey('expression', $compiled);
+        $this->assertIsString($compiled['expression']);
+        $expression = $compiled['expression'];
+        $this->assertStringContainsString('`meta`.`body`', $expression);
+        $this->assertStringContainsString('LIKE', $expression);
+        $this->assertStringNotContainsString('metabody', $expression);
+        $this->assertStringNotContainsString('`table_main`.`metabody`', $expression);
+        $this->assertStringNotContainsString(Storage::SEQUENCE, $expression);
+
+        $main = $compile->invoke(
+            $adapter,
+            Query::search('body', 'needle'),
+            'jh_m',
+            Query::DEFAULT_ALIAS,
+        );
+
+        $this->assertIsArray($main);
+        $this->assertArrayHasKey('expression', $main);
+        $this->assertIsString($main['expression']);
+        $this->assertStringContainsString('`table_main`.`body`', $main['expression']);
     }
 
     public function testEmulatesFullOuterJoinCursorAfterUsesJoinQualifiedOrder(): void

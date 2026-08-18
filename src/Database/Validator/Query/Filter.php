@@ -575,11 +575,21 @@ class Filter extends Base
                 return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
             case Method::Or:
             case Method::And:
-                /** @var array<Query> $andOrValues */
+                /** @var list<Query|string> $andOrValues */
                 $andOrValues = $value->getValues();
-                $filters = Query::groupForDatabase($andOrValues)['filters'];
+                $nestedQueries = [];
+                foreach ($andOrValues as $nested) {
+                    if (! $nested instanceof Query) {
+                        $this->message = \ucfirst($method->value).' queries can only contain filter queries';
 
-                if (count($value->getValues()) !== count($filters)) {
+                        return false;
+                    }
+                    $nestedQueries[] = $nested;
+                }
+
+                $filters = Query::groupForDatabase($nestedQueries)['filters'];
+
+                if (count($nestedQueries) !== count($filters)) {
                     $this->message = \ucfirst($method->value).' queries can only contain filter queries';
 
                     return false;
@@ -591,12 +601,7 @@ class Filter extends Base
                     return false;
                 }
 
-                foreach ($andOrValues as $nested) {
-                    if (! $nested instanceof Query) {
-                        $this->message = \ucfirst($method->value).' queries can only contain filter queries';
-
-                        return false;
-                    }
+                foreach ($nestedQueries as $nested) {
                     if (! $this->isValid($nested)) {
                         return false;
                     }
@@ -619,10 +624,20 @@ class Filter extends Base
 
                 // For schemaless mode, allow elemMatch on any attribute
                 // Validate nested queries are filter queries
-                /** @var array<Query> $elemMatchValues */
+                /** @var list<Query|string> $elemMatchValues */
                 $elemMatchValues = $value->getValues();
-                $filters = Query::groupForDatabase($elemMatchValues)['filters'];
-                if (count($value->getValues()) !== count($filters)) {
+                $nestedQueries = [];
+                foreach ($elemMatchValues as $nested) {
+                    if (! $nested instanceof Query) {
+                        $this->message = 'elemMatch queries can only contain filter queries';
+
+                        return false;
+                    }
+                    $nestedQueries[] = $nested;
+                }
+
+                $filters = Query::groupForDatabase($nestedQueries)['filters'];
+                if (count($nestedQueries) !== count($filters)) {
                     $this->message = 'elemMatch queries can only contain filter queries';
 
                     return false;
@@ -634,12 +649,7 @@ class Filter extends Base
                     return false;
                 }
 
-                foreach ($elemMatchValues as $nested) {
-                    if (! $nested instanceof Query) {
-                        $this->message = 'elemMatch queries can only contain filter queries';
-
-                        return false;
-                    }
+                foreach ($nestedQueries as $nested) {
                     if (! $this->isValid($nested)) {
                         return false;
                     }

@@ -275,4 +275,19 @@ class FilterTest extends TestCase
         ])));
         $this->assertSame('Attribute not found in schema: other', $this->validator->getDescription());
     }
+
+    public function test_and_or_string_child_is_rejected(): void
+    {
+        $this->assertFalse($this->validator->isValid(new Query(Method::And, '', [
+            Query::equal('string', ['Main'])->toString(),
+            Query::equal('integer', [2])->toString(),
+        ])));
+        $this->assertSame('And queries can only contain filter queries', $this->validator->getDescription());
+
+        $this->assertFalse($this->validator->isValid(new Query(Method::Or, '', [
+            Query::equal('string', ['Main'])->toString(),
+            Query::equal('integer', [2])->toString(),
+        ])));
+        $this->assertSame('Or queries can only contain filter queries', $this->validator->getDescription());
+    }
 }

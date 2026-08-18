@@ -153,8 +153,13 @@ class Queries extends Validator
             if (\in_array($query->getMethod(), Query::LOGICAL_TYPES, true)) {
                 foreach ($query->getValues() as $nested) {
                     if (! $nested instanceof Query) {
+                        if (! \is_string($nested)) {
+                            $this->message = 'Invalid query: nested query must be a string';
+
+                            return false;
+                        }
                         try {
-                            $nested = Query::parse((string) $nested);
+                            $nested = Query::parse($nested);
                         } catch (Throwable $e) {
                             $this->message = 'Invalid query: '.$e->getMessage();
 

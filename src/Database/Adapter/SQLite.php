@@ -1733,8 +1733,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return null;
         }
 
-        $attribute = $this->filter($this->getInternalKeyForAttribute($query->getAttribute()));
-        $aliasQuoted = $this->quote($alias);
+        $rawAttribute = $query->getAttribute();
+        [$quotedAlias, $quotedAttribute] = $this->quoteSearchAttribute($rawAttribute, $alias);
 
         $rawValue = '';
         $queryValue = $query->getValue();
@@ -1750,10 +1750,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             ];
         }
 
-        $ftsTable = $this->findFulltextTableForAttribute($collection, $attribute);
+        $ftsTable = $this->findFulltextTableForAttribute($collection, $rawAttribute);
 
         if ($ftsTable === null) {
-            $likeExpr = "{$aliasQuoted}.{$this->quote($attribute)} LIKE ? ESCAPE '\\'";
+            $likeExpr = "{$quotedAlias}.{$quotedAttribute} LIKE ? ESCAPE '\\'";
             $likeBinding = '%' . $this->escapeWildcards($rawValue) . '%';
 
             return [
@@ -1762,7 +1762,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             ];
         }
 
-        $subquery = "{$aliasQuoted}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
+        $subquery = "{$quotedAlias}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH ?)";
 
         return [
             'expression' => $method === Method::Search ? $subquery : "NOT ({$subquery})",
@@ -3218,6 +3218,13 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     protected function findFulltextTableForAttribute(string $collection, string $attribute): ?string
     {
+        $dot = \strpos($attribute, '.');
+        if ($dot !== false) {
+            return null;
+        }
+
+        $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
+
         if (!\array_key_exists($collection, $this->ftsTableCache)) {
             $this->ftsTableCache[$collection] = $this->buildFulltextAttributeMap($collection);
         }

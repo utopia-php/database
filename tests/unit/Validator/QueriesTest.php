@@ -18,6 +18,7 @@ use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
 class QueriesTest extends TestCase
@@ -394,6 +395,27 @@ class QueriesTest extends TestCase
             ]),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: meta', $validator->getDescription());
+    }
+
+    public function test_nested_non_string_query_is_rejected(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Filter($attributes, ColumnType::Integer->value),
+        ]);
+
+        $this->assertFalse($validator->isValid([
+            new Query(Method::And, '', [123, Query::equal('name', ['Main'])]),
+        ]));
+        $this->assertSame('Invalid query: nested query must be a string', $validator->getDescription());
     }
 
     public function test_is_array(): void

@@ -86,6 +86,31 @@ class IndexedQueries extends Queries
     }
 
     /**
+     * @param  array<Query>  $queries
+     * @return array<string, true>
+     */
+    private function joinAliases(array $queries): array
+    {
+        $aliases = [];
+
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $method = $query->getMethod();
+            $values = $query->getValues();
+            $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
+            $alias = $values[$aliasIndex] ?? '';
+            if (\is_string($alias) && $alias !== '') {
+                $aliases[$alias] = true;
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
      * @param  mixed  $value
      *
      * @throws Exception
@@ -126,25 +151,32 @@ class IndexedQueries extends Queries
 
         $grouped = Query::groupForDatabase($queries);
         $filters = $grouped['filters'];
+        $joinAliases = $this->joinAliases($queries);
 
         foreach ($filters as $filter) {
             if (
                 $filter->getMethod() === Method::Search ||
                 $filter->getMethod() === Method::NotSearch
             ) {
+                $attribute = $filter->getAttribute();
+                $dot = \strpos($attribute, '.');
+                if ($dot !== false && isset($joinAliases[\substr($attribute, 0, $dot)])) {
+                    continue;
+                }
+
                 $matched = false;
 
                 foreach ($this->indexes as $index) {
                     if (
                         $index->type === IndexType::Fulltext
-                        && $index->attributes === [$filter->getAttribute()]
+                        && $index->attributes === [$attribute]
                     ) {
                         $matched = true;
                     }
                 }
 
                 if (! $matched) {
-                    $this->message = "Searching by attribute \"{$filter->getAttribute()}\" requires a fulltext index.";
+                    $this->message = "Searching by attribute \"{$attribute}\" requires a fulltext index.";
 
                     return false;
                 }

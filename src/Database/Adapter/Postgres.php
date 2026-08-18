@@ -1862,13 +1862,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
     protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
     {
-        $attribute = $this->filter($this->getInternalKeyForAttribute($query->getAttribute()));
-        $attribute = $this->quote($attribute);
+        [$quotedAlias, $quotedAttribute] = $this->quoteSearchAttribute($query->getAttribute(), $alias);
+        $column = $quotedAlias.'.'.$quotedAttribute;
         $searchVal = $query->getValue();
         $term = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
 
         return [
-            'expression' => "ts_rank(to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')), websearch_to_tsquery(?)) AS \"_relevance\"",
+            'expression' => "ts_rank(to_tsvector(regexp_replace({$column}, '[^\w]+',' ','g')), websearch_to_tsquery(?)) AS \"_relevance\"",
             'order' => '"_relevance" DESC',
             'bindings' => [$term],
         ];

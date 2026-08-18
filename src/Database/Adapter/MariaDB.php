@@ -291,18 +291,19 @@ class MariaDB extends SQL
                 SELECT data_length + index_length AS size
                 FROM INFORMATION_SCHEMA.TABLES
                 WHERE table_name = :name AND
-                table_schema = :database
+                table_schema = :database_name
                 UNION ALL
                 SELECT data_length + index_length AS size
                 FROM INFORMATION_SCHEMA.TABLES
                 WHERE table_name = :permissions AND
-                table_schema = :database
+                table_schema = :database_permissions
             ) AS sizes
         ");
 
         $statement->bindParam(':name', $collection);
         $statement->bindParam(':permissions', $permissions);
-        $statement->bindParam(':database', $database);
+        $statement->bindParam(':database_name', $database);
+        $statement->bindParam(':database_permissions', $database);
 
         try {
             $statement->execute();

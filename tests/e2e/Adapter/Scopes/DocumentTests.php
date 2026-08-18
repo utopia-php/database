@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -4933,6 +4934,77 @@ trait DocumentTests
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
+    public function testIntegersBeyondInt32(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__, attributes: [
+            new Document([
+                '$id' => 'amount',
+                'type' => Database::VAR_INTEGER,
+                'size' => 8,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'amounts',
+                'type' => Database::VAR_INTEGER,
+                'size' => 8,
+                'required' => true,
+                'signed' => true,
+                'array' => true,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+
+        // Small values encode as int32, large ones as int64. Mongo hands the
+        // latter back wrapped, so both widths have to appear in one row.
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'row1',
+            'amount' => 2000000000,
+            'amounts' => [-3408048000, -42, 3408048000, Database::MAX_BIG_INT],
+        ]));
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'row2',
+            'amount' => 2000000000,
+            'amounts' => [-42],
+        ]));
+
+        foreach (['getDocument' => $database->getDocument(__FUNCTION__, 'row1'), 'find' => $database->find(__FUNCTION__, [Query::equal('$id', ['row1'])])[0]] as $path => $document) {
+            $this->assertIsInt($document->getAttribute('amount'), $path . ' returned a non-int scalar');
+
+            $amounts = $document->getAttribute('amounts');
+            foreach ($amounts as $index => $amount) {
+                $this->assertIsInt($amount, $path . ' returned a non-int at amounts[' . $index . ']');
+            }
+
+            $this->assertSame([-3408048000, -42, 3408048000, Database::MAX_BIG_INT], $amounts);
+
+            // An Int64 wrapper survives assertSame above but serialises as
+            // {"$numberLong":"..."}, which is what reaches an API client.
+            $this->assertSame(
+                '{"amount":2000000000,"amounts":[-3408048000,-42,3408048000,' . Database::MAX_BIG_INT . ']}',
+                \json_encode([
+                    'amount' => $document->getAttribute('amount'),
+                    'amounts' => $amounts,
+                ]),
+                $path . ' did not serialise as plain JSON numbers'
+            );
+        }
+
+        // sum() declares float|int, so a total past int32 is a return type
+        // violation unless the adapter hands back a native integer.
+        $sum = $database->sum(__FUNCTION__, 'amount');
+        $this->assertIsInt($sum);
+        $this->assertSame(4000000000, $sum);
+    }
+
     public function testEncodeDecode(): void
     {
         $collection = new Document([
@@ -5795,11 +5867,12 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 
     /**
-     * Test that DuplicateException messages differentiate between
+     * Test that duplicate exceptions differentiate between
      * document ID duplicates and unique index violations.
      */
     public function testDuplicateExceptionMessages(): void
@@ -5836,10 +5909,11 @@ trait DocumentTests
             ]));
             $this->fail('Expected DuplicateException for duplicate document ID');
         } catch (DuplicateException $e) {
+            $this->assertNotInstanceOf(UniqueException::class, $e);
             $this->assertStringContainsString('Document already exists', $e->getMessage());
         }
 
-        // Test 2: Unique index violation should mention "unique attributes"
+        // Test 2: Unique index violation should use UniqueException
         try {
             $database->createDocument('duplicateMessages', new Document([
                 '$id' => 'dup_msg_2',
@@ -5850,11 +5924,37 @@ trait DocumentTests
             ]));
             $this->fail('Expected DuplicateException for unique index violation');
         } catch (DuplicateException $e) {
-            $this->assertStringContainsString('unique attributes', $e->getMessage());
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('Unique index violation', $e->getMessage());
+        }
+
+        // Test 3: A conflicting value containing "_uid" must not be mistaken
+        // for a document identifier conflict
+        $database->createDocument('duplicateMessages', new Document([
+            '$id' => 'dup_msg_3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'email' => 'prefix_uid_suffix@example.com',
+        ]));
+
+        try {
+            $database->createDocument('duplicateMessages', new Document([
+                '$id' => 'dup_msg_4',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'email' => 'prefix_uid_suffix@example.com',
+            ]));
+            $this->fail('Expected DuplicateException for unique index violation');
+        } catch (DuplicateException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('Unique index violation', $e->getMessage());
         }
 
         $database->deleteCollection('duplicateMessages');
     }
+
     /**
      * @depends testUniqueIndexDuplicate
      */
@@ -5895,6 +5995,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 

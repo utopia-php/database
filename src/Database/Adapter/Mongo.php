@@ -22,6 +22,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -1401,7 +1402,9 @@ class Mongo extends Adapter
     private function convertStdClassToArray(mixed $value): mixed
     {
         if (is_object($value) && get_class($value) === stdClass::class) {
-            return array_map($this->convertStdClassToArray(...), get_object_vars($value));
+            $properties = get_object_vars($value);
+
+            return $properties === [] ? $value : array_map($this->convertStdClassToArray(...), $properties);
         }
 
         if (is_array($value)) {
@@ -4008,9 +4011,9 @@ class Mongo extends Adapter
 
         // Duplicate key error
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
-            $message = $e->getMessage();
-            if (!\str_contains($message, '_uid')) {
-                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            $index = $this->getViolatedIndex($e->getMessage());
+            if ($index !== null && $index !== '_uid' && $index !== '_id_') {
+                return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
@@ -4047,6 +4050,20 @@ class Mongo extends Adapter
         }
 
         return $e;
+    }
+
+    /**
+     * Extract the index name from a duplicate key error, e.g.
+     * "E11000 duplicate key error collection: db.movies index: _uid dup key: { _uid: \"movie\" }"
+     * resolves to "_uid". Returns null when the message cannot be parsed.
+     */
+    protected function getViolatedIndex(string $message): ?string
+    {
+        if (\preg_match('/index:\s*(\S+)\s+dup key/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
     }
 
     protected function quote(string $string): string

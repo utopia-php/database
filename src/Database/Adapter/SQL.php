@@ -1670,6 +1670,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
+        $collectionDoc = $collection;
         $collection = $collection->getId();
         $name = $this->filter($collection);
         $roles = $this->authorization->getRoles();
@@ -1678,10 +1679,28 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         // count() forwards queries to filter() without mutating individual
         // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
+        $hasJoins = false;
         foreach ($queries as $query) {
-            if (! $query->getMethod()->isVector()) {
-                $otherQueries[] = $query;
+            if ($query->getMethod()->isVector()) {
+                continue;
             }
+            $otherQueries[] = $query;
+            if ($query->getMethod()->isJoin()) {
+                $hasJoins = true;
+            }
+        }
+
+        if ($hasJoins) {
+            $innerBuilder = $this->configureCountBuilder(
+                $collectionDoc,
+                $otherQueries,
+                $name,
+                $alias,
+                $roles,
+                $max,
+            );
+
+            return $this->executeWrappedCount($innerBuilder);
         }
 
         // Fast path: no filters, no permission subquery, no shared-tenant
@@ -1724,36 +1743,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $innerBuilder->limit($max);
         }
 
-        // Wrap in outer count: SELECT COUNT(1) as sum FROM (...) table_count
-        $outerBuilder = $this->createBuilder();
-        $outerBuilder->fromSub($innerBuilder, 'table_count');
-        $outerBuilder->count('1', 'sum');
-
-        $result = $outerBuilder->build();
-        $sql = $result->query;
-        $stmt = $this->prepareStatement($sql, Event::DocumentCount);
-
-        $this->bindStatement($stmt, $result->bindings);
-
-        try {
-            $this->execute($stmt);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        $result = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (! empty($result)) {
-            $result = $result[0];
-        }
-
-        if (\is_array($result)) {
-            $sumInt = $result['sum'] ?? 0;
-
-            return \is_numeric($sumInt) ? (int) $sumInt : 0;
-        }
-
-        return 0;
+        return $this->executeWrappedCount($innerBuilder);
     }
 
     /**
@@ -1766,20 +1756,41 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
     {
+        $collectionDoc = $collection;
         $collection = $collection->getId();
         $name = $this->filter($collection);
-        $attribute = $this->filter($attribute);
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
         // sum() forwards queries to filter() without mutating individual
         // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
+        $hasJoins = false;
         foreach ($queries as $query) {
-            if (! $query->getMethod()->isVector()) {
-                $otherQueries[] = $query;
+            if ($query->getMethod()->isVector()) {
+                continue;
+            }
+            $otherQueries[] = $query;
+            if ($query->getMethod()->isJoin()) {
+                $hasJoins = true;
             }
         }
+
+        if ($hasJoins) {
+            $innerBuilder = $this->configureCountBuilder(
+                $collectionDoc,
+                $otherQueries,
+                $name,
+                $alias,
+                $roles,
+                $max,
+                $attribute,
+            );
+
+            return $this->executeWrappedSum($innerBuilder, 'sum_attr');
+        }
+
+        $attribute = $this->filter($attribute);
 
         // Fast path: trivial SUM(column) over the entire collection. Bypass
         // the Builder's full SELECT/FROM/WHERE pipeline.
@@ -1824,15 +1835,177 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $innerBuilder->limit($max);
         }
 
-        // Wrap in outer sum: SELECT SUM(attribute) as sum FROM (...) table_count
+        return $this->executeWrappedSum($innerBuilder, $attribute);
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param  array<string>  $roles
+     */
+    private function configureCountBuilder(
+        Document $collection,
+        array $queries,
+        string $name,
+        string $alias,
+        array $roles,
+        ?int $max,
+        ?string $sumAttribute = null,
+    ): SQLBuilder {
+        $queries = \array_map(static fn ($query) => clone $query, $queries);
+
+        $adapterFilterQueries = [];
+        $filterQueries = [];
+        foreach ($queries as $query) {
+            if ($this->isAdapterFilterQuery($query)) {
+                $adapterFilterQueries[] = $query;
+
+                continue;
+            }
+            $filterQueries[] = $query;
+        }
+        $queries = $filterQueries;
+
+        $joinTablePrefixes = $this->remapJoinQueries($queries);
+        $selectRaw = $sumAttribute === null
+            ? '1'
+            : $this->qualifySumSelect($sumAttribute, $joinTablePrefixes, $collection).' AS '.$this->quote('sum_attr');
+
+        $hasPreservingOuterJoin = false;
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
+                $hasPreservingOuterJoin = true;
+                break;
+            }
+        }
+
+        if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
+            $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
+            $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
+            $rightQueries[] = BaseQuery::isNull($alias.'.'.Storage::UID);
+
+            $left = $this->newBuilder($name, $alias, false);
+            $left->selectRaw($selectRaw);
+            $this->applyFindFilters(
+                $left,
+                $collection,
+                $leftQueries,
+                $joinTablePrefixes,
+                $adapterFilterQueries,
+                $name,
+                $alias,
+                $roles,
+                PermissionType::Read,
+                false,
+            );
+
+            $right = $this->newBuilder($name, $alias, true);
+            $right->selectRaw($selectRaw);
+            $this->applyFindFilters(
+                $right,
+                $collection,
+                $rightQueries,
+                $joinTablePrefixes,
+                $adapterFilterQueries,
+                $name,
+                $alias,
+                $roles,
+                PermissionType::Read,
+                true,
+            );
+
+            $left->unionAll($right);
+            if (! \is_null($max)) {
+                $this->applyFindPage($left, [], [], $max, null, afterUnion: true);
+            }
+
+            return $left;
+        }
+
+        $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
+        $builder->selectRaw($selectRaw);
+        $this->applyFindFilters(
+            $builder,
+            $collection,
+            $queries,
+            $joinTablePrefixes,
+            $adapterFilterQueries,
+            $name,
+            $alias,
+            $roles,
+            PermissionType::Read,
+            $hasPreservingOuterJoin,
+        );
+
+        if (! \is_null($max)) {
+            $builder->limit($max);
+        }
+
+        return $builder;
+    }
+
+    /**
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     */
+    private function qualifySumSelect(string $attribute, array $joinTablePrefixes, Document $collection): string
+    {
+        $quote = $this->getIdentifierQuoteChar();
+        $aliasSet = \array_fill_keys(\array_column($joinTablePrefixes, 'alias'), true);
+        $aliasSet[Query::DEFAULT_ALIAS] = true;
+        $mainAttributes = [];
+        /** @var array<Document> $collectionAttrs */
+        $collectionAttrs = $collection->getAttribute('attributes', []);
+        foreach ($collectionAttrs as $attr) {
+            $mainAttributes[$attr->getId()] = true;
+        }
+
+        $qualified = $this->qualifyDottedAttribute($attribute, $aliasSet, $mainAttributes);
+        if (! \str_contains($qualified, '.')) {
+            $qualified = Query::DEFAULT_ALIAS.'.'.$qualified;
+        }
+
+        $dot = \strpos($qualified, '.');
+        $prefix = \substr($qualified, 0, (int) $dot);
+        $name = \substr($qualified, (int) $dot + 1);
+
+        return $quote.$prefix.$quote.'.'.$quote.$name.$quote;
+    }
+
+    private function executeWrappedCount(SQLBuilder $innerBuilder): int
+    {
+        $outerBuilder = $this->createBuilder();
+        $outerBuilder->fromSub($innerBuilder, 'table_count');
+        $outerBuilder->count('1', 'sum');
+
+        $row = $this->fetchAggregateRow($outerBuilder, Event::DocumentCount);
+        $sumInt = $row['sum'] ?? 0;
+
+        return \is_numeric($sumInt) ? (int) $sumInt : 0;
+    }
+
+    private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute): int|float
+    {
         $outerBuilder = $this->createBuilder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->sum($attribute, 'sum');
 
-        $result = $outerBuilder->build();
-        $sql = $result->query;
-        $stmt = $this->prepareStatement($sql, Event::DocumentSum);
+        $row = $this->fetchAggregateRow($outerBuilder, Event::DocumentSum);
+        $sumVal = $row['sum'] ?? 0;
 
+        if (\is_numeric($sumVal)) {
+            return \str_contains((string) $sumVal, '.') ? (float) $sumVal : (int) $sumVal;
+        }
+
+        return 0;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function fetchAggregateRow(SQLBuilder $builder, Event $event): array
+    {
+        $result = $builder->build();
+        $stmt = $this->prepareStatement($result->query, $event);
         $this->bindStatement($stmt, $result->bindings);
 
         try {
@@ -1841,23 +2014,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             throw $this->processException($e);
         }
 
-        $result = $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
         $stmt->closeCursor();
-        if (! empty($result)) {
-            $result = $result[0];
+        if (! empty($rows) && \is_array($rows[0])) {
+            /** @var array<string, mixed> $row */
+            $row = $rows[0];
+
+            return $row;
         }
 
-        if (\is_array($result)) {
-            $sumVal = $result['sum'] ?? 0;
-
-            if (\is_numeric($sumVal)) {
-                return \str_contains((string) $sumVal, '.') ? (float) $sumVal : (int) $sumVal;
-            }
-
-            return 0;
-        }
-
-        return 0;
+        return [];
     }
 
     /**
@@ -3839,6 +4005,40 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
+        $this->applyFindFilters(
+            $builder,
+            $collection,
+            $queries,
+            $joinTablePrefixes,
+            $adapterFilterQueries,
+            $name,
+            $alias,
+            $roles,
+            $forPermission,
+            $preservingOuter,
+        );
+
+        return $hasSelectionProjection;
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  array<Query>  $adapterFilterQueries
+     * @param  array<string>  $roles
+     */
+    private function applyFindFilters(
+        SQLBuilder $builder,
+        Document $collection,
+        array $queries,
+        array $joinTablePrefixes,
+        array $adapterFilterQueries,
+        string $name,
+        string $alias,
+        array $roles,
+        PermissionType $forPermission,
+        bool $preservingOuter,
+    ): void {
         $this->remapDottedQueryAttributes($queries, $joinTablePrefixes, $collection);
         $builder->filter($queries);
 
@@ -3885,8 +4085,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 ));
             }
         }
-
-        return $hasSelectionProjection;
     }
 
     /**

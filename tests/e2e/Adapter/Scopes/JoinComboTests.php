@@ -480,6 +480,53 @@ trait JoinComboTests
         $this->cleanupAggCollections($database, $this->joinComboCollections());
     }
 
+    public function testJoinComboCountMatchesFindWhenFilteringJoinAlias(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $pubCol, $secCol] = $this->seedJoinComboFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $pubCol, $secCol): void {
+            $visible = [
+                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::equal('sec.score', [313]),
+            ];
+            $found = $database->find($mCol, $visible);
+            $this->assertSame(\count($found), $database->count($mCol, $visible));
+            $this->assertGreaterThan(0, \count($found));
+            $this->assertComboSecretsHidden($found);
+            $this->assertContains(313, $this->comboNumericScores($found));
+
+            $hiddenScore = [
+                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::equal('sec.score', [777]),
+            ];
+            $hiddenScoreFound = $database->find($mCol, $hiddenScore);
+            $this->assertSame(0, \count($hiddenScoreFound));
+            $this->assertSame(0, $database->count($mCol, $hiddenScore));
+            $this->assertComboSecretsHidden($hiddenScoreFound);
+
+            $hiddenSecret = [
+                Query::leftJoin($pubCol, '$id', 'mainId', '=', 'pub'),
+                Query::join($secCol, '$id', 'mainId', '=', 'sec'),
+                Query::equal('sec.secret', ['combo-secret-alpha']),
+            ];
+            $hiddenSecretFound = $database->find($mCol, $hiddenSecret);
+            $this->assertSame(0, \count($hiddenSecretFound));
+            $this->assertSame(0, $database->count($mCol, $hiddenSecret));
+            $this->assertComboSecretsHidden($hiddenSecretFound);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinComboCollections());
+    }
+
     public function testJoinComboDottedAttributeNameDoesNotSplitAsAlias(): void
     {
         $database = static::getDatabase();

@@ -650,6 +650,68 @@ class FindLogicTest extends TestCase
         $this->assertTrue($authOnFind);
     }
 
+    public function testCountKeepsAuthorizationEnabledOnJoins(): void
+    {
+        $authOnCount = null;
+        $captured = null;
+        $db = null;
+        $db = $this->buildDbWithCapabilities([
+            Capability::Index,
+            Capability::IndexArray,
+            Capability::UniqueIndex,
+            Capability::DefinedAttributes,
+            Capability::Joins,
+        ], function (Adapter&MockObject $adapter) use (&$authOnCount, &$captured, &$db): void {
+            $adapter->method('count')->willReturnCallback(function (Document $collection, array $queries) use (&$authOnCount, &$captured, &$db) {
+                $authOnCount = $db?->getAuthorization()->getStatus();
+                $captured = $queries;
+
+                return 0;
+            });
+        }, extraCollections: ['other' => $this->collectionDoc('other')]);
+
+        $db->skipValidation(fn () => $db->count('testCol', [
+            Query::join('other', 'fk', '$id'),
+            Query::equal('status', ['ok']),
+        ]));
+
+        $this->assertTrue($authOnCount);
+        $this->assertIsArray($captured);
+        $hasJoin = false;
+        foreach ($captured as $query) {
+            if ($query instanceof Query && $query->getMethod()->isJoin()) {
+                $hasJoin = true;
+                break;
+            }
+        }
+        $this->assertTrue($hasJoin);
+    }
+
+    public function testSumKeepsAuthorizationEnabledOnJoins(): void
+    {
+        $authOnSum = null;
+        $db = null;
+        $db = $this->buildDbWithCapabilities([
+            Capability::Index,
+            Capability::IndexArray,
+            Capability::UniqueIndex,
+            Capability::DefinedAttributes,
+            Capability::Joins,
+        ], function (Adapter&MockObject $adapter) use (&$authOnSum, &$db): void {
+            $adapter->method('sum')->willReturnCallback(function () use (&$authOnSum, &$db) {
+                $authOnSum = $db?->getAuthorization()->getStatus();
+
+                return 0;
+            });
+        }, extraCollections: ['other' => $this->collectionDoc('other')]);
+
+        $db->skipValidation(fn () => $db->sum('testCol', 'status', [
+            Query::join('other', 'fk', '$id'),
+        ]));
+
+        $this->assertTrue($authOnSum);
+    }
+
     public function testFindStampsJoinDocumentSecurityForPhysicalIds(): void
     {
         $captured = null;

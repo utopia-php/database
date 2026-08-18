@@ -3185,18 +3185,12 @@ trait Documents
             fn (Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        $queries = Query::groupForDatabase($queries)['filters'];
-        $queries = $this->convertQueries($collection, $queries);
-
-        $convertedQueries = $this->relationshipHook !== null
-            ? $this->relationshipHook->convertQueries($relationships, $queries, $collection)
-            : $queries;
-
-        if ($convertedQueries === null) {
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $skipAuth);
+        if ($prepared === null) {
             return 0;
         }
 
-        $queries = $convertedQueries;
+        [$collection, $queries, $skipAuth] = $prepared;
 
         $getCount = fn () => $this->adapter->count($collection, $queries, $max);
         $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
@@ -3249,17 +3243,12 @@ trait Documents
             fn (Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        $queries = $this->convertQueries($collection, $queries);
-        $convertedQueries = $this->relationshipHook !== null
-            ? $this->relationshipHook->convertQueries($relationships, $queries, $collection)
-            : $queries;
-
-        // If conversion returns null, it means no documents can match (relationship filter found no matches)
-        if ($convertedQueries === null) {
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $skipAuth);
+        if ($prepared === null) {
             return 0;
         }
 
-        $queries = $convertedQueries;
+        [$collection, $queries, $skipAuth] = $prepared;
 
         $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
@@ -3337,6 +3326,50 @@ trait Documents
         }
 
         return \substr($order, $dot + 1);
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param  array<Document>  $relationships
+     * @return array{0: Document, 1: array<Query>, 2: bool}|null
+     */
+    private function prepareFilterJoinQueries(
+        Document $collection,
+        array $queries,
+        array $relationships,
+        bool $skipAuth,
+    ): ?array {
+        $grouped = Query::groupForDatabase($queries);
+        $filters = $grouped['filters'];
+        $joins = $grouped['joins'];
+
+        if (! empty($joins)) {
+            $skipAuth = false;
+
+            if (! $this->adapter->supports(Capability::Joins)) {
+                throw new QueryException('Join queries are not supported by this adapter');
+            }
+
+            $collection = $this->withJoinDocumentSecurity(
+                $collection,
+                $this->authorizeJoins($joins, PermissionType::Read),
+            );
+        }
+
+        $queries = \array_merge(
+            $this->convertQueries($collection, $filters),
+            $joins,
+        );
+
+        $convertedQueries = $this->relationshipHook !== null
+            ? $this->relationshipHook->convertQueries($relationships, $queries, $collection)
+            : $queries;
+
+        if ($convertedQueries === null) {
+            return null;
+        }
+
+        return [$collection, $convertedQueries, $skipAuth];
     }
 
     /**

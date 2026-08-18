@@ -397,6 +397,41 @@ class QueriesTest extends TestCase
         $this->assertSame('Invalid query: Attribute not found in schema: meta', $validator->getDescription());
     }
 
+    public function test_join_alias_reset_between_isValid_calls(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'rank',
+                'key' => 'rank',
+                'type' => ColumnType::Integer->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Filter($attributes, ColumnType::Integer->value),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::join('meta', '$id', 'mainId', '=', 'meta'),
+            Query::equal('meta.score', [10]),
+        ]), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([
+            Query::join('peer', '$id', 'mainId', '=', 'peer'),
+            Query::equal('meta.score', [8686]),
+        ]));
+        $this->assertStringContainsString('Attribute not found', $validator->getDescription());
+        $this->assertStringContainsString('meta', $validator->getDescription());
+    }
+
     public function test_nested_non_string_query_is_rejected(): void
     {
         $attributes = [

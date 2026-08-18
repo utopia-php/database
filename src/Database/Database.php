@@ -1921,16 +1921,13 @@ class Database
                     throw new DuplicateException('Collection ' . $id . ' already exists');
                 }
 
-                // The collection is absent from metadata but present in the
-                // physical schema — an orphan from a prior partial failure.
-                // Drop and recreate to ensure schema matches.
-                try {
-                    $this->adapter->deleteCollection($id);
-                } catch (NotFoundException) {
-                    // Already removed by a concurrent reconciler.
-                }
-                $this->adapter->createCollection($id, $attributes, $indexes);
-                $createdPhysicalTable = true;
+                // Empty metadata is also the in-progress peer state: the table
+                // exists and the metadata insert has not committed. Dropping
+                // here is what destroyed live collections during concurrent
+                // boot. Adopt the existing table and let the metadata unique
+                // key decide the winner. Same-schema orphans are claimed.
+                // Closing the remaining window by inserting metadata first
+                // is #939.
             }
         }
 

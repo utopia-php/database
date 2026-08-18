@@ -1914,4 +1914,60 @@ trait CollectionTests
 
         $this->assertTrue($database->deleteCollection($collection));
     }
+
+    /**
+     * A physical collection with no metadata is indistinguishable from a peer
+     * that has created the table and not yet committed its metadata row.
+     * createCollection must adopt that table, not drop it.
+     */
+    public function testCreateCollectionAdoptsPhysicalTableWithoutDroppingIt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'preCommitCreate';
+        $name = new Document([
+            '$id' => ID::custom('name'),
+            'type' => Database::VAR_STRING,
+            'size' => 128,
+            'required' => false,
+        ]);
+
+        $database->getAdapter()->createCollection($collection, [$name], []);
+
+        $schema = new Document([
+            '$id' => $collection,
+            '$collection' => Database::METADATA,
+            'name' => $collection,
+            'attributes' => [$name],
+            'indexes' => [],
+            'documentSecurity' => true,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $database->getAdapter()->createDocument($schema, new Document([
+            '$id' => ID::custom('written'),
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'peer',
+        ]));
+
+        $created = $database->createCollection($collection, [$name], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $this->assertSame($collection, $created->getId());
+        $this->assertSame(
+            'peer',
+            $database->getDocument($collection, 'written')->getAttribute('name'),
+            'Physical collection was dropped while metadata was still uncommitted'
+        );
+
+        $this->assertTrue($database->deleteCollection($collection));
+    }
 }

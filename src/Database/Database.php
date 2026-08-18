@@ -1908,26 +1908,15 @@ class Database
                 // tenants. A DuplicateException simply means the table already
                 // exists for another tenant — not an orphan.
             } else {
-                // The metadata check above can be served by a negative cache
-                // entry that a concurrent creator has not purged yet, because
-                // the purge only happens once its insert commits. Re-read past
-                // the cache before concluding the table is an orphan: if the
-                // metadata is there, the table belongs to that creator and
-                // dropping it would destroy a live collection.
-                $committed = $this->silent(fn () => $this->getDocument(self::METADATA, $id, forUpdate: true));
-
-                if (!$committed->isEmpty()) {
-                    $this->purgeStaleCollectionCache($id);
-                    throw new DuplicateException('Collection ' . $id . ' already exists');
-                }
-
-                // Empty metadata is also the in-progress peer state: the table
-                // exists and the metadata insert has not committed. Dropping
-                // here is what destroyed live collections during concurrent
-                // boot. Adopt the existing table and let the metadata unique
-                // key decide the winner. Same-schema orphans are claimed.
-                // Closing the remaining window by inserting metadata first
-                // is #939.
+                // The table exists and this process did not create it. It may
+                // belong to a peer that has not committed metadata yet, or it
+                // may be an orphan. Dropping it destroyed live collections
+                // during concurrent boot; attaching this caller's metadata to
+                // an unknown physical schema can invent columns that are not
+                // there. Leave the table and report Duplicate. Claiming the
+                // metadata row first is #939.
+                $this->purgeStaleCollectionCache($id);
+                throw new DuplicateException('Collection ' . $id . ' already exists');
             }
         }
 

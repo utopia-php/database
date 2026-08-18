@@ -8,6 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -55,15 +56,18 @@ class CreateCollectionRaceTest extends TestCase
             'name' => 'peer',
         ]));
 
-        $created = $database->createCollection($collection, [$name], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-        ]);
+        try {
+            $database->createCollection($collection, [$name], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ]);
+            $this->fail('Expected DuplicateException for an existing physical collection');
+        } catch (DuplicateException) {
+        }
 
-        $this->assertSame($collection, $created->getId());
         $this->assertSame(
             'peer',
-            $database->getDocument($collection, 'written')->getAttribute('name'),
+            $adapter->getDocument($schema, 'written')->getAttribute('name'),
             'Physical collection was dropped while metadata was still uncommitted'
         );
     }

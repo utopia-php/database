@@ -1918,9 +1918,9 @@ trait CollectionTests
     /**
      * A physical collection with no metadata is indistinguishable from a peer
      * that has created the table and not yet committed its metadata row.
-     * createCollection must adopt that table, not drop it.
+     * createCollection must leave that table alone.
      */
-    public function testCreateCollectionAdoptsPhysicalTableWithoutDroppingIt(): void
+    public function testCreateCollectionDoesNotDropUncommittedPeerTable(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -1962,18 +1962,21 @@ trait CollectionTests
             'name' => 'peer',
         ]));
 
-        $created = $database->createCollection($collection, [$name], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-        ]);
+        try {
+            $database->createCollection($collection, [$name], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ]);
+            $this->fail('Expected DuplicateException for an existing physical collection');
+        } catch (DuplicateException) {
+        }
 
-        $this->assertSame($collection, $created->getId());
         $this->assertSame(
             'peer',
-            $database->getDocument($collection, 'written')->getAttribute('name'),
+            $database->getAdapter()->getDocument($schema, 'written')->getAttribute('name'),
             'Physical collection was dropped while metadata was still uncommitted'
         );
 
-        $this->assertTrue($database->deleteCollection($collection));
+        $database->getAdapter()->deleteCollection($collection);
     }
 }

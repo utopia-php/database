@@ -1300,7 +1300,6 @@ trait JoinComboTests
             $sum = $database->sum($mCol, 'meta.score', [
                 Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
             ]);
-            $this->assertTrue(\is_numeric($sum));
             $this->assertSame(358, (int) $sum);
 
             $document = $database->getDocument($mCol, 'hm1', $joinedQueries);
@@ -1578,7 +1577,6 @@ trait JoinComboTests
             ]));
 
             $sum = $database->sum($mCol, 'meta.score', $foj);
-            $this->assertTrue(\is_numeric($sum));
             $this->assertSame(400, (int) $sum);
         });
 
@@ -1631,15 +1629,13 @@ trait JoinComboTests
             $this->assertComboSecretsHidden($notEqual);
             $this->assertSame(false, \in_array(8686, $this->comboNumericScores($notEqual), true));
 
-            if (\method_exists(Query::class, 'notContains')) {
-                $notContains = $database->find($mCol, [
-                    Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
-                    Query::notContains('meta.secret', ['combo-hard-alpha']),
-                    Query::select(['name', 'meta.score', 'meta.secret']),
-                ]);
-                $this->assertGreaterThanOrEqual(1, \count($notContains));
-                $this->assertComboSecretsHidden($notContains);
-            }
+            $notContains = $database->find($mCol, [
+                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::notContains('meta.secret', ['combo-hard-alpha']),
+                Query::select(['name', 'meta.score', 'meta.secret']),
+            ]);
+            $this->assertGreaterThanOrEqual(1, \count($notContains));
+            $this->assertComboSecretsHidden($notContains);
         });
 
         $this->cleanupAggCollections($database, $this->joinHardcoreCollections());

@@ -8,8 +8,10 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 trait JoinComboTests
 {
@@ -545,6 +547,670 @@ trait JoinComboTests
         $this->cleanupAggCollections($database, $this->joinComboCollections());
     }
 
+    public function testJoinHardcoreNestedJsonAndJoinAliasSameQuery(): void
+    {
+        $database = static::getDatabase();
+        if (
+            ! $database->getAdapter()->supports(Capability::Joins)
+            || ! $database->getAdapter()->supports(Capability::Objects)
+        ) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
+
+        $database->createAttribute($mCol, new Attribute(key: 'profile', type: ColumnType::Object, size: 0, required: false));
+        if ($database->getAdapter()->supports(Capability::ObjectIndexes)) {
+            $database->createIndex($mCol, new Index(key: 'idx_jh_profile_email', type: IndexType::Key, attributes: ['profile.user.email']));
+        }
+
+        $database->getAuthorization()->skip(function () use ($database, $mCol): void {
+            $main = $database->getDocument($mCol, 'hm1');
+            $main->setAttribute('profile', [
+                'user' => [
+                    'email' => 'alice@hard.example',
+                ],
+            ]);
+            $database->updateDocument($mCol, 'hm1', $main);
+
+            $second = $database->getDocument($mCol, 'hm2');
+            $second->setAttribute('profile', [
+                'user' => [
+                    'email' => 'bob@hard.example',
+                ],
+            ]);
+            $database->updateDocument($mCol, 'hm2', $second);
+        });
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+            $results = $database->find($mCol, [
+                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::select(['name', 'profile', 'meta.score']),
+                Query::equal('profile.user.email', ['alice@hard.example']),
+                Query::equal('meta.score', [10]),
+                Query::orderDesc('meta.score'),
+            ]);
+
+            $this->assertSame(1, \count($results));
+            $this->assertComboSecretsHidden($results);
+            $this->assertSame('hm1', $results[0]->getId());
+            $this->assertSame('Main', $results[0]->getAttribute('name'));
+
+            $profile = $results[0]->getAttribute('profile');
+            $this->assertTrue(\is_array($profile));
+            $user = $profile['user'] ?? null;
+            $this->assertTrue(\is_array($user));
+            $this->assertSame('alice@hard.example', $user['email'] ?? null);
+
+            $score = $results[0]->getAttribute('meta.score') ?? $results[0]->getAttribute('score');
+            $this->assertTrue(\is_numeric($score));
+            $this->assertSame(10, (int) $score);
+            $this->assertSame(false, \in_array(8686, $this->comboNumericScores($results), true));
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreSameTableTwoAliasesIndependentPredicates(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, , $peerCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $peerCol): void {
+            $results = $database->find($mCol, [
+                Query::join($peerCol, '$id', 'mainId', '=', 'alpha'),
+                Query::join($peerCol, 'peerKey', '$id', '=', 'beta'),
+                Query::equal('alpha.label', ['alpha-one']),
+                Query::equal('beta.label', ['beta-key']),
+                Query::select(['name', 'alpha.$id', 'beta.$id', 'alpha.label', 'beta.label', 'alpha.score']),
+                Query::orderDesc('alpha.score'),
+            ]);
+
+            $this->assertSame(1, \count($results));
+            $this->assertComboSecretsHidden($results);
+            $this->assertSame('hm1', $results[0]->getId());
+            $this->assertSame('Main', $results[0]->getAttribute('name'));
+            $this->assertSame('peer-a', $results[0]->getAttribute('alpha.$id'));
+            $this->assertSame('peer-b', $results[0]->getAttribute('beta.$id'));
+            $this->assertSame('alpha-one', $results[0]->getAttribute('alpha.label'));
+            $this->assertSame('beta-key', $results[0]->getAttribute('beta.label'));
+            $this->assertNotSame('peer-a', $results[0]->getId());
+            $this->assertNotSame('peer-b', $results[0]->getId());
+            $this->assertNotSame('peer-hidden', $results[0]->getId());
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreSelfJoinOnIdDoesNotSmashIdentity(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol): void {
+            $results = $database->find($mCol, [
+                Query::join($mCol, '$id', '$id', '=', 'twin'),
+                Query::select(['name', 'rank', 'twin.$id', 'twin.name', 'twin.$permissions']),
+                Query::orderAsc('rank'),
+            ]);
+
+            $this->assertSame(3, \count($results));
+            $this->assertComboSecretsHidden($results);
+
+            $names = [
+                'hm1' => 'Main',
+                'hm2' => 'Second',
+                'hm3' => 'Third',
+            ];
+            $ids = [];
+            foreach ($results as $document) {
+                $id = $document->getId();
+                $ids[] = $id;
+                $this->assertArrayHasKey($id, $names);
+                $this->assertSame($names[$id], $document->getAttribute('name'));
+                $this->assertSame($id, $document->getAttribute('twin.$id'));
+                $this->assertSame($names[$id], $document->getAttribute('twin.name'));
+                $this->assertNotSame('peer-hidden', $id);
+                $this->assertNotSame('hm-meta-secret', $id);
+            }
+            \sort($ids);
+            $this->assertSame(['hm1', 'hm2', 'hm3'], $ids);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreLeftInnerRightMixedDocSec(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol, , , $bCol, $cCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol, $bCol, $cCol): void {
+            $results = $database->find($mCol, [
+                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::join($bCol, '$id', 'mainId', '=', 'mid'),
+                Query::rightJoin($cCol, '$id', 'mainId', '=', 'tail'),
+                Query::select(['name', 'meta.score', 'mid.label', 'tail.secret', 'tail.score']),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+            $this->assertComboSecretsHidden($results);
+
+            $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
+            $this->assertContains('hm1', $ids);
+            $this->assertContains('', $ids);
+            $this->assertSame(false, \in_array('hm2', $ids, true));
+            $this->assertSame(false, \in_array('hm3', $ids, true));
+            $this->assertSame(false, \in_array('hc-hidden', $ids, true));
+            $this->assertSame(false, \in_array('hc-right', $ids, true));
+
+            $labels = [];
+            foreach ($results as $document) {
+                $label = $document->getAttribute('mid.label') ?? $document->getAttribute('label');
+                if (\is_string($label) && $label !== '') {
+                    $labels[] = $label;
+                }
+                $this->assertNotSame('combo-hard-alpha', $document->getAttribute('tail.secret'));
+                $this->assertNotSame('combo-hard-alpha', $document->getAttribute('secret'));
+            }
+            $this->assertContains('b-public', $labels);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreChainAOnBOffCOnHidesC(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [, , , $aCol, $bCol, $cCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $aCol, $bCol, $cCol): void {
+            $results = $database->find($aCol, [
+                Query::distinct(),
+                Query::join($bCol, '$id', 'aId', '=', 'b'),
+                Query::join($cCol, 'b.$id', 'bId', '=', 'c'),
+                Query::select(['$id', 'name', 'b.label', 'c.secret', 'c.score']),
+            ]);
+
+            $this->assertGreaterThanOrEqual(1, \count($results));
+            $this->assertComboSecretsHidden($results);
+
+            $labels = [];
+            foreach ($results as $document) {
+                $this->assertSame('ha1', $document->getId());
+                $label = $document->getAttribute('b.label') ?? $document->getAttribute('label');
+                if (\is_string($label) && $label !== '') {
+                    $labels[] = $label;
+                }
+                $this->assertNotSame('hc-hidden', $document->getId());
+                $this->assertNotSame('combo-hard-alpha', $document->getAttribute('c.secret'));
+                $this->assertNotSame('combo-hard-alpha', $document->getAttribute('secret'));
+                $score = $document->getAttribute('c.score') ?? $document->getAttribute('score');
+                if (\is_numeric($score)) {
+                    $this->assertNotSame(8686, (int) $score);
+                }
+            }
+            $this->assertContains('b-public', $labels);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreFullOuterJoinSideCursorPageWalk(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+            $ordered = [
+                Query::fullOuterJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::orderAsc('meta.score'),
+            ];
+
+            $full = $database->find($mCol, $ordered);
+            $this->assertGreaterThanOrEqual(2, \count($full));
+            $this->assertComboSecretsHidden($full);
+
+            $fullScores = $this->comboNumericScores($full);
+            $this->assertContains(10, $fullScores);
+            $this->assertContains(15, $fullScores);
+            $this->assertContains(20, $fullScores);
+            $this->assertContains(42, $fullScores);
+            $this->assertContains(313, $fullScores);
+            $this->assertSame(false, \in_array(8686, $fullScores, true));
+            $this->assertSame($fullScores, $this->sortedAsc($fullScores));
+
+            $cursor = null;
+            foreach ($full as $document) {
+                $score = $this->comboJoinScore($document);
+                if ($document->getId() !== '' && $score !== null) {
+                    $cursor = $document;
+                    break;
+                }
+            }
+            $this->assertNotNull($cursor);
+            $this->assertInstanceOf(Document::class, $cursor);
+            $this->assertNotSame('', $cursor->getId());
+            $cursorScore = $this->comboJoinScore($cursor);
+            $this->assertNotNull($cursorScore);
+
+            $after = $database->find($mCol, [
+                ...$ordered,
+                Query::cursorAfter($cursor),
+                Query::limit(1),
+            ]);
+            $this->assertSame(1, \count($after));
+            $this->assertComboSecretsHidden($after);
+            $afterScore = $this->comboJoinScore($after[0]);
+            $this->assertNotNull($afterScore);
+
+            $cursorIndex = \array_search($cursorScore, $fullScores, true);
+            $this->assertNotSame(false, $cursorIndex);
+            $nextIndex = (int) $cursorIndex + 1;
+            $this->assertArrayHasKey($nextIndex, $fullScores);
+            $this->assertSame($fullScores[$nextIndex], $afterScore);
+
+            $beforeCursor = null;
+            for ($index = \count($full) - 1; $index >= 0; $index--) {
+                $score = $this->comboJoinScore($full[$index]);
+                if ($full[$index]->getId() !== '' && $score !== null) {
+                    $beforeCursor = $full[$index];
+                    break;
+                }
+            }
+            $this->assertNotNull($beforeCursor);
+            $this->assertInstanceOf(Document::class, $beforeCursor);
+            $this->assertNotSame('', $beforeCursor->getId());
+            $beforeCursorScore = $this->comboJoinScore($beforeCursor);
+            $this->assertNotNull($beforeCursorScore);
+
+            $before = $database->find($mCol, [
+                ...$ordered,
+                Query::cursorBefore($beforeCursor),
+                Query::limit(1),
+            ]);
+            $this->assertSame(1, \count($before));
+            $this->assertComboSecretsHidden($before);
+            $beforeScore = $this->comboJoinScore($before[0]);
+            $this->assertNotNull($beforeScore);
+
+            $beforeIndex = \array_search($beforeCursorScore, $fullScores, true);
+            $this->assertNotSame(false, $beforeIndex);
+            $previousIndex = (int) $beforeIndex - 1;
+            $this->assertArrayHasKey($previousIndex, $fullScores);
+            $this->assertSame($fullScores[$previousIndex], $beforeScore);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreAndOrMixMainAndJoinFilters(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+            $mixed = $database->find($mCol, [
+                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::and([
+                    Query::equal('name', ['Main']),
+                    Query::or([
+                        Query::equal('meta.score', [10]),
+                        Query::equal('rank', [2]),
+                    ]),
+                ]),
+                Query::select(['name', 'meta.score']),
+            ]);
+
+            $this->assertSame(1, \count($mixed));
+            $this->assertComboSecretsHidden($mixed);
+            $this->assertSame('hm1', $mixed[0]->getId());
+            $score = $mixed[0]->getAttribute('meta.score') ?? $mixed[0]->getAttribute('score');
+            $this->assertTrue(\is_numeric($score));
+            $this->assertSame(10, (int) $score);
+
+            $hiddenOnly = $database->find($mCol, [
+                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::and([
+                    Query::equal('name', ['Main']),
+                    Query::or([
+                        Query::equal('meta.score', [8686]),
+                        Query::equal('meta.secret', ['combo-hard-alpha']),
+                    ]),
+                ]),
+            ]);
+            $this->assertSame(0, \count($hiddenOnly));
+            $this->assertComboSecretsHidden($hiddenOnly);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreMixedMainJoinOrderCursor(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+            $ordered = [
+                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::orderAsc('rank'),
+                Query::orderDesc('meta.score'),
+            ];
+
+            $full = $database->find($mCol, $ordered);
+            $this->assertSame(4, \count($full));
+            $this->assertComboSecretsHidden($full);
+            $this->assertSame([313, 15, 10, 20], $this->comboNumericScores($full));
+
+            $first = $database->find($mCol, [
+                ...$ordered,
+                Query::limit(1),
+            ]);
+            $this->assertSame(1, \count($first));
+            $this->assertComboSecretsHidden($first);
+            $this->assertSame('hm1', $first[0]->getId());
+            $this->assertSame(313, $this->comboNumericScores($first)[0]);
+
+            $next = $database->find($mCol, [
+                ...$ordered,
+                Query::cursorAfter($first[0]),
+                Query::limit(1),
+            ]);
+            $this->assertSame(1, \count($next));
+            $this->assertComboSecretsHidden($next);
+            $this->assertSame($full[1]->getId(), $next[0]->getId());
+            $this->assertSame(15, $this->comboNumericScores($next)[0]);
+
+            $before = $database->find($mCol, [
+                ...$ordered,
+                Query::cursorBefore($next[0]),
+                Query::limit(1),
+            ]);
+            $this->assertSame(1, \count($before));
+            $this->assertComboSecretsHidden($before);
+            $this->assertSame($first[0]->getId(), $before[0]->getId());
+            $this->assertSame(313, $this->comboNumericScores($before)[0]);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreJoinSideOperatorsAndInternalAttrs(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+            $results = $database->find($mCol, [
+                Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::containsString('meta.body', ['hard-needle']),
+                Query::between('meta.score', 1, 50),
+                Query::startsWith('meta.label', 'visible'),
+                Query::equal('meta.$id', ['hm-meta-10']),
+                Query::greaterThan('meta.$createdAt', '2000-01-01 00:00:00.000'),
+                Query::select(['name', 'meta.$id', 'meta.score', 'meta.label', 'meta.body']),
+            ]);
+
+            $this->assertSame(1, \count($results));
+            $this->assertComboSecretsHidden($results);
+            $this->assertSame('hm1', $results[0]->getId());
+            $this->assertSame('hm-meta-10', $results[0]->getAttribute('meta.$id'));
+            $score = $results[0]->getAttribute('meta.score') ?? $results[0]->getAttribute('score');
+            $this->assertTrue(\is_numeric($score));
+            $this->assertSame(10, (int) $score);
+
+            if (
+                $database->getAdapter()->supports(Capability::Fulltext)
+                && $this->joinHardcoreHasFulltextIndex($database, $metaCol)
+            ) {
+                $searched = $database->find($mCol, [
+                    Query::leftJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                    Query::search('meta.body', 'needle'),
+                ]);
+                $this->assertGreaterThanOrEqual(1, \count($searched));
+                $this->assertComboSecretsHidden($searched);
+                $this->assertSame('hm1', $searched[0]->getId());
+            }
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreRightUnmatchedMainIdentityAndSelectSubset(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+            $results = $database->find($mCol, [
+                Query::rightJoin($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::select(['name', 'meta.score', 'meta.secret']),
+            ]);
+
+            $this->assertGreaterThanOrEqual(2, \count($results));
+            $this->assertComboSecretsHidden($results);
+
+            $unmatched = null;
+            $ids = [];
+            foreach ($results as $document) {
+                $ids[] = $document->getId();
+                $this->assertNotSame('hm-meta-orphan', $document->getId());
+                $this->assertNotSame('hm-meta-secret', $document->getId());
+                $this->assertNotSame('hm-meta-10', $document->getId());
+                $this->assertNotSame('combo-hard-alpha', $document->getAttribute('meta.secret'));
+                $this->assertNotSame('combo-hard-alpha', $document->getAttribute('secret'));
+                if ($document->getId() === '') {
+                    $unmatched = $document;
+                }
+            }
+
+            $this->assertNotNull($unmatched);
+            $this->assertInstanceOf(Document::class, $unmatched);
+            $this->assertSame('', $unmatched->getId());
+            $this->assertTrue($unmatched->getAttribute('name') === null || $unmatched->getAttribute('name') === '');
+            $orphanScore = $unmatched->getAttribute('meta.score') ?? $unmatched->getAttribute('score');
+            $this->assertTrue(\is_numeric($orphanScore));
+            $this->assertSame(42, (int) $orphanScore);
+            $this->assertSame(false, \in_array('hm-meta-orphan', $ids, true));
+            $this->assertContains('hm1', $ids);
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreCoerceSecret8686AbsentWhenUnauthorized(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
+
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+            $results = $database->find($mCol, [
+                Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
+                Query::equal('meta.score', ['8686']),
+                Query::select(['name', 'meta.score', 'meta.secret']),
+            ]);
+
+            $this->assertSame(0, \count($results));
+            $this->assertComboSecretsHidden($results);
+
+            $encoded = \json_encode(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $results));
+            $this->assertNotFalse($encoded);
+            $this->assertSame(false, \str_contains($encoded, '8686'));
+            $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 8686));
+        });
+
+        $this->cleanupAggCollections($database, $this->joinHardcoreCollections());
+    }
+
+    public function testJoinHardcoreSharedTablesSecret5151NotTenant(): void
+    {
+        $database = static::getDatabase();
+        if (
+            ! $database->getAdapter()->supports(Capability::Joins)
+            || ! $database->getAdapter()->supports(Capability::Schemas)
+        ) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
+
+        $sharedTablesDb = 'sharedTablesJh_'.static::getTestToken();
+        $mCol = 'jh_m';
+        $metaCol = 'jh_meta';
+
+        try {
+            if ($database->exists($sharedTablesDb)) {
+                $database->setDatabase($sharedTablesDb)->delete();
+            }
+
+            $database
+                ->setDatabase($sharedTablesDb)
+                ->setNamespace('')
+                ->setSharedTables(true)
+                ->setTenant(null)
+                ->create();
+
+            $any = [Permission::create(Role::any()), Permission::read(Role::any())];
+            $database->createCollection($mCol, permissions: $any, documentSecurity: false);
+            $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+            $database->createCollection($metaCol, permissions: $any, documentSecurity: true);
+            $database->createAttribute($metaCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+            $database->createAttribute($metaCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+            $database->createAttribute($metaCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: false));
+
+            $database->setTenant(5151);
+            $database->createDocument($mCol, new Document([
+                '$id' => 'hm1',
+                'name' => 'Main',
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($metaCol, new Document([
+                '$id' => 'hm-meta-10',
+                'mainId' => 'hm1',
+                'score' => 10,
+                'secret' => 'visible',
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($metaCol, new Document([
+                '$id' => 'hm-meta-secret',
+                'mainId' => 'hm1',
+                'score' => 5151,
+                'secret' => 'combo-hard-alpha',
+                '$permissions' => [
+                    Permission::read(Role::user('combo-hard-hidden')),
+                ],
+            ]));
+
+            $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
+                $results = $database->find($mCol, [
+                    Query::leftJoin($metaCol, '$id', 'mainId', '=', 'sec'),
+                    Query::select(['name', 'sec.score', 'sec.secret', 'sec.$tenant']),
+                ]);
+
+                $this->assertGreaterThanOrEqual(1, \count($results));
+                $this->assertComboSecretsHidden($results);
+
+                $payloads = [];
+                foreach ($results as $document) {
+                    $this->assertSame('hm1', $document->getId());
+                    $this->assertNotSame('hm-meta-secret', $document->getId());
+                    $score = $document->getAttribute('sec.score') ?? $document->getAttribute('score');
+                    if (\is_numeric($score)) {
+                        $payloads[] = (int) $score;
+                    }
+                    $this->assertNotSame('combo-hard-alpha', $document->getAttribute('sec.secret'));
+                    $this->assertNotSame('combo-hard-alpha', $document->getAttribute('secret'));
+                }
+                $this->assertContains(10, $payloads);
+                $this->assertSame(false, \in_array(5151, $payloads, true));
+
+                $encoded = \json_encode(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $results));
+                $this->assertNotFalse($encoded);
+                $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 5151));
+                $this->assertSame(false, \str_contains($encoded, 'combo-hard-alpha'));
+            });
+        } finally {
+            $database->setTenant(null)->setSharedTables(false);
+            if ($database->exists($sharedTablesDb)) {
+                $database->delete($sharedTablesDb);
+            }
+            $database
+                ->setSharedTables($sharedTables)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
+        }
+    }
+
     /**
      * @return list<string>
      */
@@ -725,22 +1391,35 @@ trait JoinComboTests
     {
         $this->assertNotSame('j-combo-secret', $document->getId());
         $this->assertNotSame('c-combo-secret', $document->getId());
+        $this->assertNotSame('hm-meta-secret', $document->getId());
+        $this->assertNotSame('peer-hidden', $document->getId());
+        $this->assertNotSame('hc-hidden', $document->getId());
 
-        $score = $document->getAttribute('score');
-        if (\is_numeric($score)) {
-            $this->assertNotSame(777, (int) $score);
-        } else {
-            $this->assertNotSame(777, $score);
+        foreach (['score', 'meta.score', 'sec.score', 'pub.score', 'rev.score', 'c.score', 'tail.score', 'alpha.score'] as $scoreKey) {
+            $score = $document->getAttribute($scoreKey);
+            if (\is_numeric($score)) {
+                $this->assertNotSame(777, (int) $score);
+                $this->assertNotSame(8686, (int) $score);
+                $this->assertNotSame(5151, (int) $score);
+            } else {
+                $this->assertNotSame(777, $score);
+                $this->assertNotSame(8686, $score);
+                $this->assertNotSame(5151, $score);
+            }
         }
 
-        $this->assertNotSame('combo-secret-alpha', $document->getAttribute('secret'));
-        $this->assertNotSame('combo-secret-alpha', $document->getAttribute('payload'));
+        foreach (['secret', 'payload', 'meta.secret', 'sec.secret', 'c.secret', 'tail.secret'] as $secretKey) {
+            $this->assertNotSame('combo-secret-alpha', $document->getAttribute($secretKey));
+            $this->assertNotSame('combo-hard-alpha', $document->getAttribute($secretKey));
+        }
 
         foreach ($document->getPermissions() as $permission) {
             $this->assertSame(false, \str_contains($permission, 'j-combo-secret'));
             $this->assertSame(false, \str_contains($permission, 'c-combo-secret'));
             $this->assertSame(false, \str_contains($permission, 'user:combo-hidden'));
             $this->assertSame(false, \str_contains($permission, 'combo-secret-perm'));
+            $this->assertSame(false, \str_contains($permission, 'user:combo-hard-hidden'));
+            $this->assertSame(false, \str_contains($permission, 'combo-hard-alpha'));
         }
 
         $this->assertEncodedComboSecretHidden(\json_encode($document));
@@ -754,7 +1433,12 @@ trait JoinComboTests
         $this->assertSame(false, \str_contains($encoded, 'user:combo-hidden'));
         $this->assertSame(false, \str_contains($encoded, 'combo-secret-perm'));
         $this->assertSame(false, \str_contains($encoded, 'combo-secret-alpha'));
+        $this->assertSame(false, \str_contains($encoded, 'combo-hard-alpha'));
+        $this->assertSame(false, \str_contains($encoded, 'user:combo-hard-hidden'));
+        $this->assertSame(false, \str_contains($encoded, '8686'));
         $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 777));
+        $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 8686));
+        $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 5151));
     }
 
     private function comboEncodedJsonContainsScalar(string $encoded, int $needle): bool
@@ -792,7 +1476,11 @@ trait JoinComboTests
 
     private function isIgnoredJoinComboSecretKey(string|int|null $key): bool
     {
-        return \in_array($key, [
+        $name = \is_string($key) && \str_contains($key, '.')
+            ? \substr($key, (int) \strrpos($key, '.') + 1)
+            : $key;
+
+        return \in_array($name, [
             Document::SEQUENCE,
             Document::CREATED_AT,
             Document::UPDATED_AT,
@@ -814,12 +1502,9 @@ trait JoinComboTests
     {
         $scores = [];
         foreach ($documents as $document) {
-            $score = $document->getAttribute('pub.score')
-                ?? $document->getAttribute('sec.score')
-                ?? $document->getAttribute('rev.score')
-                ?? $document->getAttribute('score');
-            if (\is_numeric($score)) {
-                $scores[] = (int) $score;
+            $score = $this->comboJoinScore($document);
+            if ($score !== null) {
+                $scores[] = $score;
             }
         }
 
@@ -836,5 +1521,267 @@ trait JoinComboTests
         \rsort($sorted, SORT_NUMERIC);
 
         return $sorted;
+    }
+
+    /**
+     * @param list<int> $scores
+     * @return list<int>
+     */
+    private function sortedAsc(array $scores): array
+    {
+        $sorted = $scores;
+        \sort($sorted, SORT_NUMERIC);
+
+        return $sorted;
+    }
+
+    private function comboJoinScore(Document $document): ?int
+    {
+        $score = $document->getAttribute('pub.score')
+            ?? $document->getAttribute('sec.score')
+            ?? $document->getAttribute('rev.score')
+            ?? $document->getAttribute('meta.score')
+            ?? $document->getAttribute('score');
+        if (! \is_numeric($score)) {
+            return null;
+        }
+
+        return (int) $score;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function joinHardcoreCollections(): array
+    {
+        return ['jh_m', 'jh_meta', 'jh_peer', 'jh_a', 'jh_b', 'jh_c'];
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: string, 3: string, 4: string, 5: string}
+     */
+    private function seedJoinHardcoreFixture(Database $database): array
+    {
+        $mCol = 'jh_m';
+        $metaCol = 'jh_meta';
+        $peerCol = 'jh_peer';
+        $aCol = 'jh_a';
+        $bCol = 'jh_b';
+        $cCol = 'jh_c';
+        $this->cleanupAggCollections($database, [$mCol, $metaCol, $peerCol, $aCol, $bCol, $cCol]);
+
+        $any = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $readAny = [Permission::read(Role::any())];
+        $hidden = [Permission::read(Role::user('combo-hard-hidden'))];
+
+        $database->createCollection($mCol, permissions: $any, documentSecurity: false);
+        $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($mCol, new Attribute(key: 'rank', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($mCol, new Attribute(key: 'peerKey', type: ColumnType::String, size: 255, required: false));
+
+        $database->createCollection($metaCol, permissions: $any, documentSecurity: true);
+        $database->createAttribute($metaCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($metaCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($metaCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: false));
+        $database->createAttribute($metaCol, new Attribute(key: 'label', type: ColumnType::String, size: 100, required: false));
+        $database->createAttribute($metaCol, new Attribute(key: 'body', type: ColumnType::String, size: 255, required: false));
+
+        $database->createCollection($peerCol, permissions: $any, documentSecurity: true);
+        $database->createAttribute($peerCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($peerCol, new Attribute(key: 'label', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($peerCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($peerCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: false));
+
+        $database->createCollection($aCol, permissions: $any, documentSecurity: true);
+        $database->createAttribute($aCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($bCol, permissions: $any, documentSecurity: false);
+        $database->createAttribute($bCol, new Attribute(key: 'aId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($bCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($bCol, new Attribute(key: 'label', type: ColumnType::String, size: 100, required: true));
+
+        $database->createCollection($cCol, permissions: $any, documentSecurity: true);
+        $database->createAttribute($cCol, new Attribute(key: 'bId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($cCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute($cCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($cCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+
+        if ($database->getAdapter()->supports(Capability::Fulltext)) {
+            $database->createIndex($metaCol, new Index(key: 'idx_jh_meta_body', type: IndexType::Fulltext, attributes: ['body']));
+        }
+
+        $database->createDocument($mCol, new Document([
+            '$id' => 'hm1',
+            'name' => 'Main',
+            'rank' => 1,
+            'peerKey' => 'peer-b',
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'hm2',
+            'name' => 'Second',
+            'rank' => 2,
+            'peerKey' => 'peer-missing',
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($mCol, new Document([
+            '$id' => 'hm3',
+            'name' => 'Third',
+            'rank' => 1,
+            'peerKey' => 'peer-a',
+            '$permissions' => $readAny,
+        ]));
+
+        $database->createDocument($metaCol, new Document([
+            '$id' => 'hm-meta-10',
+            'mainId' => 'hm1',
+            'score' => 10,
+            'secret' => 'visible',
+            'label' => 'visible-ten',
+            'body' => 'hard-needle visible',
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($metaCol, new Document([
+            '$id' => 'hm-meta-313',
+            'mainId' => 'hm1',
+            'score' => 313,
+            'secret' => 'visible-313',
+            'label' => 'visible-high',
+            'body' => 'other text',
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($metaCol, new Document([
+            '$id' => 'hm-meta-20',
+            'mainId' => 'hm2',
+            'score' => 20,
+            'secret' => 'visible-20',
+            'label' => 'visible-m2',
+            'body' => 'm2 text',
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($metaCol, new Document([
+            '$id' => 'hm-meta-15',
+            'mainId' => 'hm3',
+            'score' => 15,
+            'secret' => 'visible-15',
+            'label' => 'visible-third',
+            'body' => 'third text',
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($metaCol, new Document([
+            '$id' => 'hm-meta-secret',
+            'mainId' => 'hm1',
+            'score' => 8686,
+            'secret' => 'combo-hard-alpha',
+            'label' => 'hidden-label',
+            'body' => 'hidden-search',
+            '$permissions' => $hidden,
+        ]));
+        $database->createDocument($metaCol, new Document([
+            '$id' => 'hm-meta-orphan',
+            'mainId' => 'missing',
+            'score' => 42,
+            'secret' => 'orphan-visible',
+            'label' => 'orphan',
+            'body' => 'orphan text',
+            '$permissions' => $readAny,
+        ]));
+
+        $database->createDocument($peerCol, new Document([
+            '$id' => 'peer-a',
+            'mainId' => 'hm1',
+            'label' => 'alpha-one',
+            'score' => 11,
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($peerCol, new Document([
+            '$id' => 'peer-b',
+            'mainId' => 'hm2',
+            'label' => 'beta-key',
+            'score' => 22,
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($peerCol, new Document([
+            '$id' => 'peer-c',
+            'mainId' => 'hm1',
+            'label' => 'alpha-two',
+            'score' => 33,
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($peerCol, new Document([
+            '$id' => 'peer-hidden',
+            'mainId' => 'hm1',
+            'label' => 'combo-hard-alpha',
+            'score' => 8686,
+            'secret' => 'combo-hard-alpha',
+            '$permissions' => $hidden,
+        ]));
+
+        $database->createDocument($aCol, new Document([
+            '$id' => 'ha1',
+            'name' => 'Alpha',
+            '$permissions' => $readAny,
+        ]));
+
+        $database->createDocument($bCol, new Document([
+            '$id' => 'hb1',
+            'aId' => 'ha1',
+            'mainId' => 'hm1',
+            'label' => 'b-public',
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($bCol, new Document([
+            '$id' => 'hb2',
+            'aId' => 'ha1',
+            'mainId' => 'hm2',
+            'label' => 'b-second',
+            '$permissions' => $readAny,
+        ]));
+
+        $database->createDocument($cCol, new Document([
+            '$id' => 'hc-open',
+            'bId' => 'hb1',
+            'mainId' => 'hm1',
+            'secret' => 'c-open-token',
+            'score' => 1,
+            '$permissions' => $readAny,
+        ]));
+        $database->createDocument($cCol, new Document([
+            '$id' => 'hc-hidden',
+            'bId' => 'hb1',
+            'mainId' => 'hm1',
+            'secret' => 'combo-hard-alpha',
+            'score' => 8686,
+            '$permissions' => $hidden,
+        ]));
+        $database->createDocument($cCol, new Document([
+            '$id' => 'hc-right',
+            'bId' => 'missing',
+            'mainId' => 'missing',
+            'secret' => 'c-right-open',
+            'score' => 7,
+            '$permissions' => $readAny,
+        ]));
+
+        return [$mCol, $metaCol, $peerCol, $aCol, $bCol, $cCol];
+    }
+
+    private function joinHardcoreHasFulltextIndex(Database $database, string $collection): bool
+    {
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+            return false;
+        }
+
+        /** @var array<Document> $indexes */
+        $indexes = $database->getCollection($collection)->getAttribute('indexes', []);
+        foreach ($indexes as $index) {
+            $type = $index->getAttribute('type');
+            $typeValue = $type instanceof IndexType ? $type->value : $type;
+            if ($typeValue === IndexType::Fulltext->value) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

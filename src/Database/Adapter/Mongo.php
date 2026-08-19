@@ -2460,6 +2460,18 @@ class Mongo extends Adapter
         };
     }
 
+    /**
+     * @return list<string>
+     */
+    private function permissionStrings(string $type): array
+    {
+        $permissions = [];
+        foreach ($this->authorization->getRoles() as $role) {
+            $permissions[] = $type . '("' . $role . '")';
+        }
+
+        return $permissions;
+    }
 
     /**
      * Find Documents
@@ -2497,8 +2509,7 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) {
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\"(?:{$roles})\"\\)", 'i')];
+            $filters['_permissions']['$in'] = $this->permissionStrings($forPermission);
         }
 
         $options = [];
@@ -2750,8 +2761,7 @@ class Mongo extends Adapter
 
         // Add permissions filter if authorization is enabled
         if ($this->authorization->getStatus()) {
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\"(?:{$roles})\"\\)", 'i')];
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
         }
 
         /**
@@ -2850,8 +2860,7 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\"(?:{$roles})\"\\)", 'i')];
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
         }
 
         // using aggregation to get sum an attribute as described in

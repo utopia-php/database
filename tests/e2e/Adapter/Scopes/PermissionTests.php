@@ -1312,4 +1312,79 @@ trait PermissionTests
         $database->deleteCollection('childRelationTest');
     }
 
+    public function testDocumentPermissionRolesAreMatchedExactly(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $collection = 'perm_exact_' . uniqid();
+
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true);
+        $database->createAttribute($collection, 'amount', Database::VAR_INTEGER, 0, true);
+
+        $authorization->skip(function () use ($database, $collection): void {
+            $database->createDocument($collection, new Document([
+                '$id' => 'alice0',
+                '$permissions' => [Permission::read(Role::user('alice0'))],
+                'amount' => 10,
+            ]));
+            $database->createDocument($collection, new Document([
+                '$id' => 'alice9',
+                '$permissions' => [Permission::read(Role::user('alice9'))],
+                'amount' => 20,
+            ]));
+            $database->createDocument($collection, new Document([
+                '$id' => 'mass',
+                '$permissions' => [Permission::read(Role::user('a3f9c1e0b2d4a6f8c1e0'))],
+                'amount' => 30,
+            ]));
+            $database->createDocument($collection, new Document([
+                '$id' => 'literal',
+                '$permissions' => [Permission::read(Role::user('alice.'))],
+                'amount' => 40,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::user('alice.')->toString());
+
+        $this->assertSame(['literal'], $this->documentIds($database->find($collection)));
+        $this->assertSame(1, $database->count($collection));
+        $this->assertSame(40, (int) $database->sum($collection, 'amount'));
+        $this->assertTrue($database->getDocument($collection, 'alice0')->isEmpty());
+        $this->assertSame('literal', $database->getDocument($collection, 'literal')->getId());
+
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::user('a' . \str_repeat('.', 19))->toString());
+
+        $this->assertSame([], $this->documentIds($database->find($collection)));
+        $this->assertSame(0, $database->count($collection));
+        $this->assertSame(0, (int) $database->sum($collection, 'amount'));
+        $this->assertTrue($database->getDocument($collection, 'mass')->isEmpty());
+
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::user('alice0')->toString());
+
+        $this->assertSame(['alice0'], $this->documentIds($database->find($collection)));
+        $this->assertSame(1, $database->count($collection));
+        $this->assertSame(10, (int) $database->sum($collection, 'amount'));
+        $this->assertSame('alice0', $database->getDocument($collection, 'alice0')->getId());
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return list<string>
+     */
+    private function documentIds(array $documents): array
+    {
+        return \array_values(\array_map(
+            static fn (Document $document): string => $document->getId(),
+            $documents,
+        ));
+    }
+
 }

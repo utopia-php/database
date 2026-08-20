@@ -9347,6 +9347,14 @@ class Database
             $attributes[] = $attribute;
         }
 
+        $hasRelationshipSelections = false;
+        foreach ($selections as $selection) {
+            if (\str_contains($selection, '.')) {
+                $hasRelationshipSelections = true;
+                break;
+            }
+        }
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
@@ -9379,31 +9387,23 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as $index => $node) {
-                foreach (\array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document, $key);
+            $selected = empty($selections)
+                || \in_array($key, $selections)
+                || \in_array('*', $selections);
+
+            if ($selected || $hasRelationshipSelections) {
+                foreach ($value as $index => $node) {
+                    foreach (\array_reverse($filters) as $filter) {
+                        $node = $this->decodeAttribute($filter, $node, $document, $key);
+                    }
+                    $value[$index] = $node;
                 }
-                $value[$index] = $node;
             }
 
             $filteredValue[$key] = ($array) ? $value : $value[0];
 
-            if (
-                empty($selections)
-                || \in_array($key, $selections)
-                || \in_array('*', $selections)
-            ) {
+            if ($selected) {
                 $document->setAttribute($key, ($array) ? $value : $value[0]);
-            }
-        }
-
-        $hasRelationshipSelections = false;
-        if (!empty($selections)) {
-            foreach ($selections as $selection) {
-                if (\str_contains($selection, '.')) {
-                    $hasRelationshipSelections = true;
-                    break;
-                }
             }
         }
 

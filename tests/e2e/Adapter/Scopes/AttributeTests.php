@@ -1260,6 +1260,78 @@ trait AttributeTests
         }
     }
 
+    /**
+     * A filter can build its value by querying rather than transforming the stored one — that is
+     * what the subQuery filters in Appwrite do, listing a child collection per document. Reading a
+     * document without selecting such an attribute must not run it: the value is dropped anyway,
+     * and it is the filter, not the value, that costs the query.
+     */
+    public function testFilterNotAppliedWhenAttributeNotSelected(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $calls = 0;
+
+        $database->addFilter(
+            'subQueryProbe',
+            fn (mixed $value) => null, // stores nothing, like a subQuery filter
+            function (mixed $value) use (&$calls) {
+                $calls++;
+                return ['fanned', 'out'];
+            }
+        );
+
+        $database->createCollection('filterSelect');
+        $database->createAttribute('filterSelect', 'plain', Database::VAR_STRING, 128, false);
+        $database->createAttribute('filterSelect', 'kids', Database::VAR_STRING, 128, false, filters: ['subQueryProbe']);
+
+        $database->createDocument('filterSelect', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'plain' => 'x',
+        ]));
+
+        $calls = 0;
+        $document = $database->getDocument('filterSelect', 'doc1');
+        $this->assertEquals(1, $calls);
+        $this->assertEquals(['fanned', 'out'], $document->getAttribute('kids'));
+
+        $calls = 0;
+        $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['$id', 'plain'])]);
+        $this->assertEquals(0, $calls);
+        $this->assertNull($document->getAttribute('kids'));
+        $this->assertEquals('x', $document->getAttribute('plain'));
+
+        // Selecting it explicitly, and selecting everything, both still decode it.
+        $calls = 0;
+        $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['$id', 'kids'])]);
+        $this->assertEquals(1, $calls);
+        $this->assertEquals(['fanned', 'out'], $document->getAttribute('kids'));
+
+        $calls = 0;
+        $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['*'])]);
+        $this->assertEquals(1, $calls);
+        $this->assertEquals(['fanned', 'out'], $document->getAttribute('kids'));
+
+        // find() decodes through the same path, once per document returned.
+        $calls = 0;
+        $documents = $database->find('filterSelect', [Query::select(['$id', 'plain'])]);
+        $this->assertCount(1, $documents);
+        $this->assertEquals(0, $calls);
+        $this->assertNull($documents[0]->getAttribute('kids'));
+
+        $calls = 0;
+        $documents = $database->find('filterSelect');
+        $this->assertCount(1, $documents);
+        $this->assertEquals(1, $calls);
+        $this->assertEquals(['fanned', 'out'], $documents[0]->getAttribute('kids'));
+    }
+
     public function updateStringAttributeSize(int $size, Document $document): Document
     {
         /** @var Database $database */

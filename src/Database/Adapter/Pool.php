@@ -368,19 +368,16 @@ class Pool extends Adapter
 
     private function syncWriteHooks(Adapter $adapter): void
     {
+        $current = $adapter->getWriteHooks();
+        if ($current === $this->writeHooks) {
+            return;
+        }
+
+        foreach ($current as $childHook) {
+            $adapter->removeWriteHook($childHook::class);
+        }
+
         foreach ($this->writeHooks as $hook) {
-            $matches = \array_values(\array_filter(
-                $adapter->getWriteHooks(),
-                fn ($childHook) => $childHook::class === $hook::class,
-            ));
-
-            if (\count($matches) === 1 && $matches[0] === $hook) {
-                continue;
-            }
-
-            if ($matches !== []) {
-                $adapter->removeWriteHook($hook::class);
-            }
             $adapter->addWriteHook($hook);
         }
     }

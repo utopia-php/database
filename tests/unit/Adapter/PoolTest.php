@@ -43,11 +43,38 @@ final class PoolTest extends TestCase
         $pool->addWriteHook($hook);
 
         $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
-        $this->assertSame([Permissions::class, Tenancy::class], \array_map(
-            static fn ($childHook): string => $childHook::class,
-            $adapter->getWriteHooks(),
-        ));
+        $this->assertSame([$hook], $adapter->getWriteHooks());
         $this->assertSame($hook, $adapter->getTenantHook());
+    }
+
+    public function testDelegateRemovesWriteHookRemovedFromPool(): void
+    {
+        $adapter = new Memory();
+        $pool = $this->createPool($adapter);
+
+        $hook = new Permissions();
+        $pool->addWriteHook($hook);
+        $this->assertTrue($pool->ping());
+        $this->assertSame([$hook], $adapter->getWriteHooks());
+
+        $pool->removeWriteHook(Permissions::class);
+        $this->assertTrue($pool->ping());
+        $this->assertSame([], $adapter->getWriteHooks());
+    }
+
+    public function testTransactionRemovesWriteHookRemovedFromPool(): void
+    {
+        $adapter = new Memory();
+        $pool = $this->createPool($adapter);
+
+        $hook = new Permissions();
+        $pool->addWriteHook($hook);
+        $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+        $this->assertSame([$hook], $adapter->getWriteHooks());
+
+        $pool->removeWriteHook(Permissions::class);
+        $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+        $this->assertSame([], $adapter->getWriteHooks());
     }
 
     public function testTransactionPropagatesWriteHooksToPinnedAdapter(): void

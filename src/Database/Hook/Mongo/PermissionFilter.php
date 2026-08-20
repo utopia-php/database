@@ -2,14 +2,13 @@
 
 namespace Utopia\Database\Hook\Mongo;
 
-use MongoDB\BSON\Regex;
 use Utopia\Database\Database;
 use Utopia\Database\Hook\Read;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
 /**
- * MongoDB read hook that injects permission-based regex filters into queries.
+ * MongoDB read hook that injects permission-based filters into queries.
  *
  * Unlike SQL adapters which use separate PermissionFilter (read) and Permission (write)
  * hooks, MongoDB stores permissions as an embedded `_permissions` array directly on the
@@ -28,7 +27,7 @@ class PermissionFilter implements Read
     }
 
     /**
-     * Inject a regex filter matching the current user's roles against the _permissions field.
+     * Inject an exact-match `$in` filter of `type("role")` strings against `_permissions`.
      *
      * @param array<string, mixed> $filters The current MongoDB filter array
      * @param string $collection The collection being queried
@@ -45,12 +44,16 @@ class PermissionFilter implements Read
             return $filters;
         }
 
-        $roles = \implode('|', $this->authorization->getRoles());
+        $permissions = [];
+        foreach ($this->authorization->getRoles() as $role) {
+            $permissions[] = $forPermission.'("'.$role.'")';
+        }
+
         /** @var array<string, mixed> $permissionsFilter */
         $permissionsFilter = isset($filters[Storage::PERMISSIONS]) && \is_array($filters[Storage::PERMISSIONS])
             ? $filters[Storage::PERMISSIONS]
             : [];
-        $permissionsFilter['$in'] = [new Regex("{$forPermission}\\(\"(?:{$roles})\"\\)", 'i')];
+        $permissionsFilter['$in'] = $permissions;
         $filters[Storage::PERMISSIONS] = $permissionsFilter;
 
         return $filters;

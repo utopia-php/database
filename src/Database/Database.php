@@ -1646,6 +1646,16 @@ class Database
             ? \array_fill_keys($selections, true)
             : null;
 
+        $hasRelationshipSelections = false;
+        if ($selectionsMap !== null) {
+            foreach ($selections as $selection) {
+                if (\str_contains($selection, '.')) {
+                    $hasRelationshipSelections = true;
+                    break;
+                }
+            }
+        }
+
         foreach ($attributes as $attribute) {
             /** @var string $key */
             $key = $attribute[Document::ID] ?? '';
@@ -1675,52 +1685,41 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            // Reverse filter application without allocating a new array
-            // for each document. Walking the array backwards avoids
-            // array_reverse() per attribute per document.
+            /** @var array<int|string, mixed> $value */
+            $selected = ! $hasSelections
+                || $selectAll
+                || ($selectionsMap !== null && isset($selectionsMap[$key]));
+
             $filterCount = \count($filters);
 
-            /** @var array<int|string, mixed> $value */
-            foreach ($value as $index => $node) {
-                for ($i = $filterCount - 1; $i >= 0; $i--) {
-                    $node = $this->decodeAttribute($filters[$i], $node, $document, $key);
+            if ($filterCount > 0 && ($selected || $hasRelationshipSelections)) {
+                foreach ($value as $index => $node) {
+                    for ($i = $filterCount - 1; $i >= 0; $i--) {
+                        $node = $this->decodeAttribute($filters[$i], $node, $document, $key);
+                    }
+                    $value[$index] = $node;
                 }
-                $value[$index] = $node;
             }
 
             $resolved = $array ? $value : $value[0];
             $filteredValue[$key] = $resolved;
 
-            if (
-                ! $hasSelections
-                || $selectAll
-                || isset($selectionsMap[$key])
-            ) {
+            if ($selected) {
                 $document->setAttribute($key, $resolved);
             }
         }
 
-        if ($hasSelections && ! $selectAll) {
-            $hasRelationshipSelections = false;
-            foreach ($selections as $selection) {
-                if (\str_contains($selection, '.')) {
-                    $hasRelationshipSelections = true;
-                    break;
+        if ($hasRelationshipSelections && $selectionsMap !== null) {
+            foreach ($allAttributes as $attribute) {
+                /** @var string $key */
+                $key = $attribute[Document::ID] ?? '';
+
+                if (($attribute['type'] ?? '') === $relationshipType || $key === Document::PERMISSIONS) {
+                    continue;
                 }
-            }
 
-            if ($hasRelationshipSelections) {
-                foreach ($allAttributes as $attribute) {
-                    /** @var string $key */
-                    $key = $attribute[Document::ID] ?? '';
-
-                    if (($attribute['type'] ?? '') === $relationshipType || $key === Document::PERMISSIONS) {
-                        continue;
-                    }
-
-                    if (! isset($selectionsMap[$key]) && isset($filteredValue[$key])) {
-                        $document->setAttribute($key, $filteredValue[$key]);
-                    }
+                if (! isset($selectionsMap[$key]) && isset($filteredValue[$key])) {
+                    $document->setAttribute($key, $filteredValue[$key]);
                 }
             }
         }

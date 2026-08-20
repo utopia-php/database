@@ -7577,11 +7577,33 @@ class Database
             /**
              * @var array<Change> $chunk
              */
-            $batch = $this->withTransaction(fn () => $this->authorization->skip(fn () => $this->adapter->upsertDocuments(
-                $collection,
-                $attribute,
-                $chunk
-            )));
+            $batch = $this->withTransaction(function () use ($collection, $attribute, $chunk) {
+                // Re-fetch each existing document with FOR UPDATE to lock the rows
+                // and verify no concurrent modification occurred since the initial read.
+                foreach ($chunk as $change) {
+                    $old = $change->getOld();
+                    if ($old->isEmpty()) {
+                        continue;
+                    }
+                    $fresh = $this->authorization->skip(fn () => $this->silent(
+                        fn () => $this->getSharedTables() && $this->getTenantPerDocument()
+                            ? $this->withTenant($old->getTenant(), fn () => $this->getDocument($collection->getId(), $old->getId(), forUpdate: true))
+                            : $this->getDocument($collection->getId(), $old->getId(), forUpdate: true)
+                    ));
+                    if ($fresh->isEmpty()) {
+                        throw new ConflictException('Document was deleted after the request timestamp');
+                    }
+                    if ($fresh->getUpdatedAt() !== $old->getUpdatedAt()) {
+                        throw new ConflictException('Document was updated after the request timestamp');
+                    }
+                }
+
+                return $this->authorization->skip(fn () => $this->adapter->upsertDocuments(
+                    $collection,
+                    $attribute,
+                    $chunk
+                ));
+            });
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 

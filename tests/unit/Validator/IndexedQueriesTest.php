@@ -203,6 +203,79 @@ class IndexedQueriesTest extends TestCase
         );
     }
 
+    public function test_nested_join_on_search_requires_fulltext_index(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('meta', 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::search('name', 'needle'),
+            ]),
+        ]));
+        $this->assertSame(
+            'Searching by attribute "name" requires a fulltext index.',
+            $validator->getDescription()
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('meta', 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::search('meta.body', 'needle'),
+            ]),
+        ]), $validator->getDescription());
+    }
+
+    public function test_nested_join_on_vector_counts_toward_limit(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+
+        $this->assertFalse($validator->isValid([
+            Query::vectorDot('embedding', [0.1, 0.2, 0.3]),
+            Query::leftJoin('meta', 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::vectorCosine('embedding', [0.3, 0.4, 0.5]),
+            ]),
+        ]));
+        $this->assertSame(
+            'Cannot use multiple vector queries in a single request',
+            $validator->getDescription()
+        );
+    }
+
     public function test_two_attributes_fulltext(): void
     {
         $attributes = [

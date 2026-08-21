@@ -80,6 +80,10 @@ class IndexedQueries extends Queries
                 $nestedValues = $query->getValues();
                 $count += $this->countVectorQueries($nestedValues);
             }
+
+            if ($query->isNestedJoin()) {
+                $count += $this->countVectorQueries($query->getJoinOnQueries());
+            }
         }
 
         return $count;
@@ -182,6 +186,12 @@ class IndexedQueries extends Queries
                 /** @var array<Query> $nested */
                 $nested = $query->getValues();
                 if (! $this->validateSearchIndexes($nested, $joinAliases)) {
+                    return false;
+                }
+            }
+
+            if ($query->isNestedJoin()) {
+                if (! $this->validateSearchIndexes($query->getJoinOnQueries(), $joinAliases)) {
                     return false;
                 }
             }

@@ -549,7 +549,7 @@ parameters:
 		-
 			message: '#^Cannot access offset ''\$id'' on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
-			count: 152
+			count: 150
 			path: tests/e2e/Adapter/Base.php
 
 		-
@@ -1011,7 +1011,7 @@ parameters:
 		-
 			message: '#^Cannot access offset ''type'' on mixed\.$#'
 			identifier: offsetAccess.nonOffsetAccessible
-			count: 40
+			count: 38
 			path: tests/e2e/Adapter/Base.php
 
 		-
@@ -1083,7 +1083,7 @@ parameters:
 		-
 			message: '#^Cannot call method getAttribute\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 46
+			count: 43
 			path: tests/e2e/Adapter/Base.php
 
 		-
@@ -1095,7 +1095,7 @@ parameters:
 		-
 			message: '#^Cannot call method getId\(\) on mixed\.$#'
 			identifier: method.nonObject
-			count: 77
+			count: 75
 			path: tests/e2e/Adapter/Base.php
 
 		-
@@ -1305,7 +1305,7 @@ parameters:
 		-
 			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertCount\(\) expects Countable\|iterable, mixed given\.$#'
 			identifier: argument.type
-			count: 87
+			count: 85
 			path: tests/e2e/Adapter/Base.php
 
 		-
@@ -1487,18 +1487,6 @@ parameters:
 			identifier: method.nonObject
 			count: 5
 			path: tests/unit/Cache/QueryCacheTest.php
-
-		-
-			message: '#^Cannot access offset 0 on mixed\.$#'
-			identifier: offsetAccess.nonOffsetAccessible
-			count: 2
-			path: tests/unit/CollectionModelTest.php
-
-		-
-			message: '#^Parameter \#2 \$haystack of method PHPUnit\\Framework\\Assert\:\:assertCount\(\) expects Countable\|iterable, mixed given\.$#'
-			identifier: argument.type
-			count: 4
-			path: tests/unit/CollectionModelTest.php
 
 		-
 			message: '#^Call to an undefined method Utopia\\Database\\Adapter\:\:method\(\)\.$#'
@@ -1852,12 +1840,6 @@ parameters:
 			message: '#^Call to method PHPUnit\\Framework\\Assert\:\:assertNotNull\(\) with Utopia\\Database\\Document will always evaluate to true\.$#'
 			identifier: method.alreadyNarrowedType
 			count: 2
-			path: tests/unit/Relationships/RelationshipValidationTest.php
-
-		-
-			message: '#^Call to new Utopia\\Database\\Relationship\(\) on a separate line has no effect\.$#'
-			identifier: new.resultUnused
-			count: 1
 			path: tests/unit/Relationships/RelationshipValidationTest.php
 
 		-

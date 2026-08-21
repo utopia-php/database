@@ -6,6 +6,14 @@ use Utopia\Database\Helpers\ID;
 
 /**
  * A collection metadata document. Nested attributes and indexes are Attribute and Index models.
+ *
+ * @property string $id
+ * @property string $name
+ * @property array<Attribute> $attributes
+ * @property array<Index> $indexes
+ * @property array<string>|null $permissions
+ * @property bool $documentSecurity
+ * @property array<string, mixed> $metadata
  */
 class Collection extends Document
 {
@@ -55,6 +63,7 @@ class Collection extends Document
 
         $permissions = null;
         if (\array_key_exists(self::PERMISSIONS, $data) && \is_array($data[self::PERMISSIONS])) {
+            /** @var array<string> $permissions */
             $permissions = $data[self::PERMISSIONS];
         }
 
@@ -89,15 +98,25 @@ class Collection extends Document
 
     public function __get(string $name): mixed
     {
-        return match ($name) {
-            'id' => $this->getId(),
-            'name' => (string) $this->getAttribute('name', $this->getId()),
-            'attributes' => $this->getAttribute('attributes', []),
-            'indexes' => $this->getAttribute('indexes', []),
-            'permissions' => $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null,
-            'documentSecurity' => (bool) $this->getAttribute('documentSecurity', true),
-            default => $this->getAttribute($name),
-        };
+        switch ($name) {
+            case 'id':
+                return $this->getId();
+            case 'name':
+                /** @var string $value */
+                $value = $this->getAttribute('name', $this->getId());
+
+                return $value;
+            case 'attributes':
+                return $this->getAttribute('attributes', []);
+            case 'indexes':
+                return $this->getAttribute('indexes', []);
+            case 'permissions':
+                return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
+            case 'documentSecurity':
+                return (bool) $this->getAttribute('documentSecurity', true);
+            default:
+                return $this->getAttribute($name);
+        }
     }
 
     public function __set(string $name, mixed $value): void

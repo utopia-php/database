@@ -1118,7 +1118,7 @@ trait Attributes
      * Checks if attribute can be added to collection without exceeding limits.
      *
      * @param  Document  $collection  The collection document
-     * @param  Document  $attribute  The attribute document to check
+     * @param  Attribute  $attribute  The attribute to check
      * @return bool True if the attribute can be added
      *
      * @throws LimitException
@@ -1405,7 +1405,7 @@ trait Attributes
      * Cleanup (delete) multiple attributes with retry logic
      *
      * @param  string  $collectionId  The collection ID
-     * @param  array<Document>  $attributeDocuments  The attribute documents to cleanup
+     * @param  array<Attribute>  $attributes  The attributes to cleanup
      * @param  int  $maxAttempts  Maximum retry attempts per attribute
      * @return array<string> Array of error messages for failed cleanups (empty if all succeeded)
      */

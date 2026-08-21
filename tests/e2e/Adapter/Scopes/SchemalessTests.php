@@ -2105,7 +2105,8 @@ trait SchemalessTests
         );
 
         $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
+        $this->assertInstanceOf(Collection::class, $collection);
+        $indexes = $collection->indexes;
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
         $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
@@ -2158,7 +2159,8 @@ trait SchemalessTests
         $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 
         $collection2 = $database->getCollection($col2);
-        $indexes2 = $collection2->getAttribute('indexes');
+        $this->assertInstanceOf(Collection::class, $collection2);
+        $indexes2 = $collection2->indexes;
         $this->assertCount(1, $indexes2);
         $ttlIndex2 = $indexes2[0];
         $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());

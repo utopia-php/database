@@ -103,6 +103,16 @@ class Document extends ArrayObject
     }
 
     /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function fromArray(array $data): self
+    {
+        $class = static::class;
+
+        return new $class($data);
+    }
+
+    /**
      * Construct from a raw PDO row.
      *
      * Fast path that skips nested-Document detection. Raw PDO rows from

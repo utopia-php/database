@@ -8,6 +8,19 @@ use Utopia\Query\Schema\ColumnType;
 
 /**
  * Represents a database collection attribute with its type, constraints, and formatting options.
+ *
+ * @property string $key
+ * @property ColumnType $type
+ * @property int $size
+ * @property bool $required
+ * @property mixed $default
+ * @property bool $signed
+ * @property bool $array
+ * @property string|null $format
+ * @property array<string, mixed> $formatOptions
+ * @property array<string> $filters
+ * @property string|null $status
+ * @property array<string, mixed>|null $options
  */
 class Attribute extends Document
 {
@@ -19,49 +32,112 @@ class Attribute extends Document
      * @param  array<string, mixed>|null  $options
      */
     public function __construct(
-        public string $key = '',
-        public ColumnType $type = ColumnType::String,
-        public int $size = 0,
-        public bool $required = false,
-        public mixed $default = null,
-        public bool $signed = true,
-        public bool $array = false,
-        public ?string $format = null,
-        public array $formatOptions = [],
-        public array $filters = [],
-        public ?string $status = null,
-        public ?array $options = null,
+        string $key = '',
+        ColumnType $type = ColumnType::String,
+        int $size = 0,
+        bool $required = false,
+        mixed $default = null,
+        bool $signed = true,
+        bool $array = false,
+        ?string $format = null,
+        array $formatOptions = [],
+        array $filters = [],
+        ?string $status = null,
+        ?array $options = null,
     ) {
-        if (\in_array($this->type, [ColumnType::BigInteger, ColumnType::BigSerial], true)) {
-            $this->size = 0;
+        if (\in_array($type, [ColumnType::BigInteger, ColumnType::BigSerial], true)) {
+            $size = 0;
         }
 
         $data = [
-            self::ID => $this->key,
-            'key' => $this->key,
-            'type' => $this->type->value,
-            'size' => $this->size,
-            'required' => $this->required,
-            'default' => $this->default,
-            'signed' => $this->signed,
-            'array' => $this->array,
-            'format' => $this->format,
-            'formatOptions' => $this->formatOptions,
-            'filters' => $this->filters,
+            self::ID => $key,
+            'key' => $key,
+            'type' => $type->value,
+            'size' => $size,
+            'required' => $required,
+            'default' => $default,
+            'signed' => $signed,
+            'array' => $array,
+            'format' => $format,
+            'formatOptions' => $formatOptions,
+            'filters' => $filters,
         ];
-        if ($this->status !== null) {
-            $data['status'] = $this->status;
+        if ($status !== null) {
+            $data['status'] = $status;
         }
-        if ($this->options !== null) {
-            $data['options'] = $this->options;
+        if ($options !== null) {
+            $data['options'] = $options;
         }
         parent::__construct($data);
     }
 
-    /**
-     * @var array<string, mixed>
-     */
-    private array $extra = [];
+    public function __get(string $name): mixed
+    {
+        switch ($name) {
+            case 'key':
+                /** @var string $key */
+                $key = $this->getAttribute('key', $this->getId());
+
+                return $key;
+            case 'type':
+                /** @var ColumnType|string $type */
+                $type = $this->getAttribute('type', ColumnType::String->value);
+
+                return self::normalizeType($type);
+            case 'size':
+                /** @var int $size */
+                $size = $this->getAttribute('size', 0);
+
+                return $size;
+            case 'required':
+                return (bool) $this->getAttribute('required', false);
+            case 'default':
+                return $this->getAttribute('default');
+            case 'signed':
+                return (bool) $this->getAttribute('signed', true);
+            case 'array':
+                return (bool) $this->getAttribute('array', false);
+            case 'format':
+                return $this->getAttribute('format');
+            case 'formatOptions':
+                return $this->getAttribute('formatOptions', []);
+            case 'filters':
+                return $this->getAttribute('filters', []);
+            case 'status':
+                return $this->getAttribute('status');
+            case 'options':
+                return $this->getAttribute('options');
+            default:
+                return $this->getAttribute($name);
+        }
+    }
+
+    public function __set(string $name, mixed $value): void
+    {
+        match ($name) {
+            'key' => $this->setAttribute('key', $value)->setAttribute(self::ID, $value),
+            'type' => $this->setAttribute('type', $value instanceof ColumnType ? $value->value : $value),
+            'size' => $this->setAttribute('size', $value),
+            'required' => $this->setAttribute('required', $value),
+            'default' => $this->setAttribute('default', $value),
+            'signed' => $this->setAttribute('signed', $value),
+            'array' => $this->setAttribute('array', $value),
+            'format' => $this->setAttribute('format', $value),
+            'formatOptions' => $this->setAttribute('formatOptions', $value),
+            'filters' => $this->setAttribute('filters', $value),
+            'status' => $this->setAttribute('status', $value),
+            'options' => $this->setAttribute('options', $value),
+            default => $this->setAttribute($name, $value),
+        };
+    }
+
+    public function __isset(string $name): bool
+    {
+        return match ($name) {
+            'key', 'type', 'size', 'required', 'default', 'signed', 'array', 'format', 'formatOptions', 'filters', 'status', 'options' => true,
+            default => $this->offsetExists($name),
+        };
+    }
 
     /**
      * @param  array<string, mixed>  $formatOptions

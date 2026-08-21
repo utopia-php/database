@@ -162,7 +162,7 @@ class Relationships implements Hook
             /** @var string $key */
             $key = $relationship->getAttribute('key', $relationship->getId());
             $value = $document->getAttribute($key);
-            $rel = RelationshipVO::fromDocument($collection->getId(), $relationship);
+            $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
             $relatedCollection = $this->db->getCollection($rel->relatedCollection);
             $relationType = $rel->type;
             $twoWay = $rel->twoWay;
@@ -316,7 +316,7 @@ class Relationships implements Hook
             $value = $this->coerceToDocument($document, $key, $value);
 
             $oldValue = $old->getAttribute($key);
-            $rel = RelationshipVO::fromDocument($collection->getId(), $relationship);
+            $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
             $relatedCollection = $this->db->getCollection($rel->relatedCollection);
             $relationType = $rel->type;
             $twoWay = $rel->twoWay;
@@ -751,7 +751,7 @@ class Relationships implements Hook
         foreach ($relationships as $relationship) {
             $key = $relationship->getId();
             $value = $document->getAttribute($key);
-            $rel = RelationshipVO::fromDocument($collection->getId(), $relationship);
+            $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
             $relatedCollection = $this->db->getCollection($rel->relatedCollection);
             $relationType = $rel->type;
             $twoWay = $rel->twoWay;
@@ -775,7 +775,7 @@ class Relationships implements Hook
                         $existingKey = $processedRelationship['key'];
                         /** @var string $existingCollection */
                         $existingCollection = $processedRelationship['collection'];
-                        $existingRel = RelationshipVO::fromDocument($existingCollection, $processedRelationship);
+                        $existingRel = RelationshipVO::fromArray(['collection' => $existingCollection] + $processedRelationship->getArrayCopy());
                         $existingRelatedCollection = $existingRel->relatedCollection;
                         $existingTwoWayKey = $existingRel->twoWayKey;
                         $existingSide = $existingRel->side;
@@ -892,7 +892,7 @@ class Relationships implements Hook
                             continue;
                         }
 
-                        $relVO = RelationshipVO::fromDocument($coll->getId(), $relationship);
+                        $relVO = RelationshipVO::fromArray(['collection' => $coll->getId()] + $relationship->getArrayCopy());
 
                         $relatedDocs = $this->populateSingleRelationshipBatch(
                             $docs,
@@ -1013,7 +1013,7 @@ class Relationships implements Hook
                     $nestedSelections[$selectedKey][] = Query::select([$nestingPath]);
                 }
 
-                $relVO = RelationshipVO::fromDocument('', $relationship);
+                $relVO = RelationshipVO::fromArray(['collection' => ''] + $relationship->getArrayCopy());
 
                 switch ($relVO->type) {
                     case RelationType::ManyToMany:
@@ -1082,7 +1082,7 @@ class Relationships implements Hook
         /** @var array<string, RelationshipVO> $relationshipsByKey */
         $relationshipsByKey = [];
         foreach ($relationships as $relationship) {
-            $relVO = RelationshipVO::fromDocument($collectionId, $relationship);
+            $relVO = RelationshipVO::fromArray(['collection' => $collectionId] + $relationship->getArrayCopy());
             $relationshipsByKey[$relVO->key] = $relVO;
         }
 
@@ -2196,7 +2196,7 @@ class Relationships implements Hook
                 }
 
                 /** @var Document $relationship */
-                $nestedRel = RelationshipVO::fromDocument($currentCollection, $relationship);
+                $nestedRel = RelationshipVO::fromArray(['collection' => $currentCollection] + $relationship->getArrayCopy());
                 $relationshipChain[] = [
                     'key' => $relationshipKey,
                     'fromCollection' => $currentCollection,

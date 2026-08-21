@@ -6,6 +6,10 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionParameter;
+use Utopia\Cache\Adapter\None as NoneAdapter;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
@@ -331,5 +335,147 @@ class RelationshipModelTest extends TestCase
 
         $this->assertSame(Relationship::class, $relationship::class);
         $this->assertSame(RelationType::OneToOne, $relationship->type);
+    }
+
+    public function testExtendsDocument(): void
+    {
+        $relationship = Relationship::oneToOne(
+            collection: 'posts',
+            relatedCollection: 'comments',
+            key: 'comments',
+        );
+
+        $this->assertInstanceOf(Document::class, $relationship);
+        $this->assertSame('comments', $relationship->getId());
+        $this->assertSame('posts', $relationship->getAttribute('collection'));
+    }
+
+    public function testFromArrayHydratesFlatDocument(): void
+    {
+        $relationship = Relationship::fromArray([
+            '$id' => 'comments',
+            'key' => 'comments',
+            'collection' => 'posts',
+            'relatedCollection' => 'comments',
+            'relationType' => RelationType::OneToMany->value,
+            'twoWay' => true,
+            'twoWayKey' => 'post',
+            'onDelete' => ForeignKeyAction::Cascade->value,
+            'side' => RelationSide::Parent->value,
+        ]);
+
+        $this->assertSame('posts', $relationship->collection);
+        $this->assertSame('comments', $relationship->relatedCollection);
+        $this->assertSame(RelationType::OneToMany, $relationship->type);
+        $this->assertTrue($relationship->twoWay);
+        $this->assertSame('comments', $relationship->key);
+        $this->assertSame('post', $relationship->twoWayKey);
+        $this->assertSame(ForeignKeyAction::Cascade, $relationship->onDelete);
+        $this->assertSame(RelationSide::Parent, $relationship->side);
+    }
+
+    public function testFromArrayHydratesAttributeOptions(): void
+    {
+        $relationship = Relationship::fromArray([
+            '$id' => 'author',
+            'key' => 'author',
+            'collection' => 'posts',
+            'type' => 'relationship',
+            'options' => [
+                'relatedCollection' => 'users',
+                'relationType' => RelationType::ManyToOne->value,
+                'twoWay' => false,
+                'twoWayKey' => 'posts',
+                'onDelete' => ForeignKeyAction::Restrict->value,
+                'side' => RelationSide::Child->value,
+            ],
+        ]);
+
+        $this->assertSame('posts', $relationship->collection);
+        $this->assertSame('users', $relationship->relatedCollection);
+        $this->assertSame(RelationType::ManyToOne, $relationship->type);
+        $this->assertFalse($relationship->twoWay);
+        $this->assertSame('author', $relationship->key);
+        $this->assertSame(RelationSide::Child, $relationship->side);
+    }
+
+    public function testFromArrayRoundtrip(): void
+    {
+        $original = Relationship::manyToMany(
+            collection: 'posts',
+            relatedCollection: 'tags',
+            twoWay: true,
+            key: 'tags',
+            twoWayKey: 'posts',
+            onDelete: ForeignKeyAction::SetNull,
+            side: RelationSide::Parent,
+        );
+
+        $restored = Relationship::fromArray($original->getArrayCopy());
+
+        $this->assertSame($original->collection, $restored->collection);
+        $this->assertSame($original->relatedCollection, $restored->relatedCollection);
+        $this->assertSame($original->type, $restored->type);
+        $this->assertSame($original->twoWay, $restored->twoWay);
+        $this->assertSame($original->key, $restored->key);
+        $this->assertSame($original->twoWayKey, $restored->twoWayKey);
+        $this->assertSame($original->onDelete, $restored->onDelete);
+        $this->assertSame($original->side, $restored->side);
+    }
+
+    public function testSetDocumentTypeAcceptsRelationship(): void
+    {
+        $database = $this->database();
+        $database->setDocumentType('rels', Relationship::class);
+
+        $this->assertSame(Relationship::class, $database->getDocumentType('rels'));
+    }
+
+    public function testCreateDocumentInstanceHydratesRelationship(): void
+    {
+        $database = $this->database();
+        $database->setDocumentType('rels', Relationship::class);
+
+        $document = $this->instantiate($database, 'rels', [
+            '$id' => 'comments',
+            '$collection' => 'rels',
+            'key' => 'comments',
+            'collection' => 'posts',
+            'relatedCollection' => 'comments',
+            'relationType' => RelationType::OneToMany->value,
+            'twoWay' => true,
+            'twoWayKey' => 'post',
+            'onDelete' => ForeignKeyAction::Cascade->value,
+            'side' => RelationSide::Parent->value,
+        ]);
+
+        $this->assertInstanceOf(Relationship::class, $document);
+        $this->assertSame('posts', $document->collection);
+        $this->assertSame('comments', $document->relatedCollection);
+        $this->assertSame(RelationType::OneToMany, $document->type);
+        $this->assertTrue($document->twoWay);
+        $this->assertSame('comments', $document->key);
+        $this->assertSame(ForeignKeyAction::Cascade, $document->onDelete);
+    }
+
+    private function database(): Database
+    {
+        return new Database(
+            $this->createStub(Adapter::class),
+            new Cache(new NoneAdapter()),
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function instantiate(Database $database, string $collection, array $data): Document
+    {
+        $method = new ReflectionMethod(Database::class, 'createDocumentInstance');
+
+        /** @var Document $document */
+        $document = $method->invoke($database, $collection, $data);
+
+        return $document;
     }
 }

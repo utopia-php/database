@@ -7,6 +7,13 @@ use Utopia\Query\Schema\IndexType;
 
 /**
  * Represents a database index with its type, target attributes, and configuration.
+ *
+ * @property string $key
+ * @property IndexType $type
+ * @property array<string> $attributes
+ * @property array<int|null> $lengths
+ * @property array<string|null> $orders
+ * @property int $ttl
  */
 class Index extends Document
 {
@@ -16,22 +23,74 @@ class Index extends Document
      * @param  array<string|null>  $orders
      */
     public function __construct(
-        public string $key,
-        public IndexType $type,
-        public array $attributes = [],
-        public array $lengths = [],
-        public array $orders = [],
-        public int $ttl = 1,
+        string $key,
+        IndexType $type,
+        array $attributes = [],
+        array $lengths = [],
+        array $orders = [],
+        int $ttl = 1,
     ) {
         parent::__construct([
-            self::ID => $this->key,
-            'key' => $this->key,
-            'type' => $this->type->value,
-            'attributes' => $this->attributes,
-            'lengths' => $this->lengths,
-            'orders' => $this->orders,
-            'ttl' => $this->ttl,
+            self::ID => $key,
+            'key' => $key,
+            'type' => $type->value,
+            'attributes' => $attributes,
+            'lengths' => $lengths,
+            'orders' => $orders,
+            'ttl' => $ttl,
         ]);
+    }
+
+    public function __get(string $name): mixed
+    {
+        switch ($name) {
+            case 'key':
+                /** @var string $key */
+                $key = $this->getAttribute('key', $this->getId());
+
+                return $key;
+            case 'type':
+                $type = $this->getAttribute('type', IndexType::Key->value);
+                if ($type instanceof IndexType) {
+                    return $type;
+                }
+
+                return IndexType::from(\is_string($type) ? $type : IndexType::Key->value);
+            case 'attributes':
+                return $this->getAttribute('attributes', []);
+            case 'lengths':
+                return $this->getAttribute('lengths', []);
+            case 'orders':
+                return $this->getAttribute('orders', []);
+            case 'ttl':
+                /** @var int $ttl */
+                $ttl = $this->getAttribute('ttl', 1);
+
+                return $ttl;
+            default:
+                return $this->getAttribute($name);
+        }
+    }
+
+    public function __set(string $name, mixed $value): void
+    {
+        match ($name) {
+            'key' => $this->setAttribute('key', $value)->setAttribute(self::ID, $value),
+            'type' => $this->setAttribute('type', $value instanceof IndexType ? $value->value : $value),
+            'attributes' => $this->setAttribute('attributes', $value),
+            'lengths' => $this->setAttribute('lengths', $value),
+            'orders' => $this->setAttribute('orders', $value),
+            'ttl' => $this->setAttribute('ttl', $value),
+            default => $this->setAttribute($name, $value),
+        };
+    }
+
+    public function __isset(string $name): bool
+    {
+        return match ($name) {
+            'key', 'type', 'attributes', 'lengths', 'orders', 'ttl' => true,
+            default => $this->offsetExists($name),
+        };
     }
 
     /**

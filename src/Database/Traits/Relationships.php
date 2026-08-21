@@ -173,7 +173,7 @@ trait Relationships
             }
 
             if ($attribute->type === ColumnType::Relationship) {
-                $existingRel = Relationship::fromDocument($collection->getId(), $attribute);
+                $existingRel = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
                 if (
                     \strtolower($existingRel->twoWayKey) === \strtolower($twoWayKey)
                     && $existingRel->relatedCollection === $relatedCollection->getId()
@@ -454,7 +454,7 @@ trait Relationships
         }
 
         $attribute = $attributes[$attributeIndex];
-        $oldRel = Relationship::fromDocument($collection->getId(), $attribute);
+        $oldRel = Relationship::fromArray(['collection' => $collection->getId()] + $attribute->getArrayCopy());
 
         $relatedCollectionId = $oldRel->relatedCollection;
         $relatedCollection = $this->getCollection($relatedCollectionId);
@@ -785,7 +785,7 @@ trait Relationships
 
         $collection->setAttribute('attributes', \array_values($attributes));
 
-        $rel = Relationship::fromDocument($collection->getId(), $relationship);
+        $rel = Relationship::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
 
         $relatedCollection = $this->silent(fn () => $this->getCollection($rel->relatedCollection));
         /** @var array<int|string, Attribute> $relatedAttributes */

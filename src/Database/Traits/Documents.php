@@ -971,7 +971,7 @@ trait Documents
                             continue;
                         }
 
-                        $rel = Relationship::fromDocument($collection->getId(), $relationships[$key]);
+                        $rel = Relationship::fromArray(['collection' => $collection->getId()] + $relationships[$key]->getArrayCopy());
                         $relationType = $rel->type;
                         $side = $rel->side;
                         switch ($relationType) {

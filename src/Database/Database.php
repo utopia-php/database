@@ -2559,11 +2559,8 @@ class Database
         }
 
         $className = $this->documentTypes[$collection] ?? Document::class;
-        if ($className === Collection::class) {
-            return Collection::fromArray($data);
-        }
 
-        return new $className($data);
+        return $className::fromArray($data);
     }
 
     /**

@@ -10,6 +10,7 @@ use Utopia\Database\Index as IndexVO;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\IndexType;
 
 /**
@@ -64,7 +65,7 @@ class IndexedQueries extends Queries
     /**
      * Count vector queries across entire query tree
      *
-     * @param  array<Query>  $queries
+     * @param  array<BaseQuery>  $queries
      */
     private function countVectorQueries(array $queries): int
     {
@@ -76,7 +77,7 @@ class IndexedQueries extends Queries
             }
 
             if ($query->isNested()) {
-                /** @var array<Query> $nestedValues */
+                /** @var array<BaseQuery> $nestedValues */
                 $nestedValues = $query->getValues();
                 $count += $this->countVectorQueries($nestedValues);
             }
@@ -90,7 +91,7 @@ class IndexedQueries extends Queries
     }
 
     /**
-     * @param  array<Query>  $queries
+     * @param  array<BaseQuery>  $queries
      * @return array<string, true>
      */
     private function joinAliases(array $queries): array
@@ -148,7 +149,7 @@ class IndexedQueries extends Queries
     }
 
     /**
-     * @param  array<Query>  $queries
+     * @param  array<BaseQuery>  $queries
      * @param  array<string, true>  $joinAliases
      */
     private function validateSearchIndexes(array $queries, array $joinAliases): bool
@@ -183,7 +184,7 @@ class IndexedQueries extends Queries
             }
 
             if ($query->isNested() && $query->getMethod() !== Method::Having) {
-                /** @var array<Query> $nested */
+                /** @var array<BaseQuery> $nested */
                 $nested = $query->getValues();
                 if (! $this->validateSearchIndexes($nested, $joinAliases)) {
                     return false;

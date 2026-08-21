@@ -76,14 +76,12 @@ class IndexedQueries extends Queries
                 $count++;
             }
 
-            if ($query->isNested()) {
+            if ($query->isNestedJoin()) {
+                $count += $this->countVectorQueries($query->getJoinOnQueries());
+            } elseif ($query->isNested()) {
                 /** @var array<BaseQuery> $nestedValues */
                 $nestedValues = $query->getValues();
                 $count += $this->countVectorQueries($nestedValues);
-            }
-
-            if ($query->isNestedJoin()) {
-                $count += $this->countVectorQueries($query->getJoinOnQueries());
             }
         }
 
@@ -183,16 +181,14 @@ class IndexedQueries extends Queries
                 }
             }
 
-            if ($query->isNested() && $query->getMethod() !== Method::Having) {
+            if ($query->isNestedJoin()) {
+                if (! $this->validateSearchIndexes($query->getJoinOnQueries(), $joinAliases)) {
+                    return false;
+                }
+            } elseif ($query->isNested() && $query->getMethod() !== Method::Having) {
                 /** @var array<BaseQuery> $nested */
                 $nested = $query->getValues();
                 if (! $this->validateSearchIndexes($nested, $joinAliases)) {
-                    return false;
-                }
-            }
-
-            if ($query->isNestedJoin()) {
-                if (! $this->validateSearchIndexes($query->getJoinOnQueries(), $joinAliases)) {
                     return false;
                 }
             }

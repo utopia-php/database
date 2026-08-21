@@ -276,6 +276,35 @@ class IndexedQueriesTest extends TestCase
         );
     }
 
+    public function testNestedJoinOnSingleVectorIsValid(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'embedding',
+                'key' => 'embedding',
+                'type' => ColumnType::Vector->value,
+                'size' => 3,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new IndexedQueries(
+            $attributes,
+            [],
+            [
+                new Filter($attributes, ColumnType::Integer->value),
+                new Join(),
+            ]
+        );
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('meta', 'meta', [
+                Query::on('$id', 'mainId'),
+                Query::vectorCosine('embedding', [0.3, 0.4, 0.5]),
+            ]),
+        ]), $validator->getDescription());
+    }
+
     public function test_two_attributes_fulltext(): void
     {
         $attributes = [

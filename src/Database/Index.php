@@ -4,6 +4,7 @@ namespace Utopia\Database;
 
 use Utopia\Database\Helpers\ID;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 /**
  * Represents a database index with its type, target attributes, and configuration.
@@ -20,7 +21,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public function __construct(
         string $key,
@@ -36,7 +37,7 @@ class Index extends Document
             'type' => $type->value,
             'attributes' => $attributes,
             'lengths' => $lengths,
-            'orders' => $orders,
+            'orders' => self::encodeOrders($orders),
             'ttl' => $ttl,
         ]);
     }
@@ -79,7 +80,7 @@ class Index extends Document
             'type' => $this->setAttribute('type', $value instanceof IndexType ? $value->value : $value),
             'attributes' => $this->setAttribute('attributes', $value),
             'lengths' => $this->setAttribute('lengths', $value),
-            'orders' => $this->setAttribute('orders', $value),
+            'orders' => $this->setAttribute('orders', self::encodeOrders(\is_array($value) ? $value : [])),
             'ttl' => $this->setAttribute('ttl', $value),
             default => $this->setAttribute($name, $value),
         };
@@ -96,7 +97,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function key(
         string $key,
@@ -118,7 +119,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function index(
         string $key,
@@ -140,7 +141,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function unique(
         string $key,
@@ -162,7 +163,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function fullText(
         string $key,
@@ -184,7 +185,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function spatial(
         string $key,
@@ -206,7 +207,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function object(
         string $key,
@@ -228,7 +229,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function hnswEuclidean(
         string $key,
@@ -250,7 +251,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function hnswCosine(
         string $key,
@@ -272,7 +273,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function hnswDot(
         string $key,
@@ -294,7 +295,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function trigram(
         string $key,
@@ -316,7 +317,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     public static function ttl(
         string $key,
@@ -411,7 +412,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<string|null>  $orders
+     * @param  array<Order|string|null>  $orders
      */
     private static function make(
         string $key,
@@ -500,5 +501,30 @@ class Index extends Document
                 ttl: $ttl,
             ),
         };
+    }
+
+    /**
+     * @param  array<mixed>  $orders
+     * @return array<string|null>
+     */
+    private static function encodeOrders(array $orders): array
+    {
+        $encoded = [];
+
+        foreach ($orders as $order) {
+            if ($order instanceof Order) {
+                $encoded[] = $order->value;
+                continue;
+            }
+
+            if ($order === null || \is_string($order)) {
+                $encoded[] = $order;
+                continue;
+            }
+
+            throw new \InvalidArgumentException('Index order must be Order, string, or null');
+        }
+
+        return $encoded;
     }
 }

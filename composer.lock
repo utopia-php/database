@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "9ff3e93246620585fdcbcb7e0ae72315",
+    "content-hash": "0ef4af3fe084ae5af1533cc7f41b029a",
     "packages": [
         {
             "name": "brick/math",
@@ -2492,16 +2492,16 @@
         },
         {
             "name": "utopia-php/query",
-            "version": "0.5.0",
+            "version": "dev-feat-schema-order",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "802821c6fb0470410e1f0e65561cc16224c343c0"
+                "reference": "08b8e70214ae2d9315762afc1a6135c6864f7f7c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/802821c6fb0470410e1f0e65561cc16224c343c0",
-                "reference": "802821c6fb0470410e1f0e65561cc16224c343c0",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/08b8e70214ae2d9315762afc1a6135c6864f7f7c",
+                "reference": "08b8e70214ae2d9315762afc1a6135c6864f7f7c",
                 "shasum": ""
             },
             "require": {
@@ -2521,7 +2521,38 @@
                     "Utopia\\Query\\": "src/Query"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
+            "autoload-dev": {
+                "psr-4": {
+                    "Tests\\Query\\": "tests/Query",
+                    "Tests\\Integration\\": "tests/Integration"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance"
+                ],
+                "test:coverage": [
+                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance --coverage-php coverage/unit.cov"
+                ],
+                "test:performance": [
+                    "vendor/bin/phpunit --testsuite Query --group=performance"
+                ],
+                "test:integration": [
+                    "vendor/bin/phpunit --testsuite Integration"
+                ],
+                "test:integration:coverage": [
+                    "vendor/bin/phpunit --testsuite Integration --coverage-php coverage/integration.cov"
+                ],
+                "lint": [
+                    "php -d memory_limit=2G ./vendor/bin/pint --test"
+                ],
+                "format": [
+                    "php -d memory_limit=2G ./vendor/bin/pint"
+                ],
+                "check": [
+                    "./vendor/bin/phpstan analyse --level max src tests --memory-limit 2G"
+                ]
+            },
             "license": [
                 "MIT"
             ],
@@ -2534,10 +2565,10 @@
                 "utopia"
             ],
             "support": {
-                "issues": "https://github.com/utopia-php/query/issues",
-                "source": "https://github.com/utopia-php/query/tree/0.5.0"
+                "source": "https://github.com/utopia-php/query/tree/feat-schema-order",
+                "issues": "https://github.com/utopia-php/query/issues"
             },
-            "time": "2026-08-21T06:16:10+00:00"
+            "time": "2026-08-21T10:44:38+00:00"
         },
         {
             "name": "utopia-php/telemetry",
@@ -5427,9 +5458,18 @@
             "time": "2026-02-10T04:21:53+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/query",
+            "version": "dev-feat-schema-order",
+            "alias": "0.5.0",
+            "alias_normalized": "0.5.0.0"
+        }
+    ],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "utopia-php/query": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

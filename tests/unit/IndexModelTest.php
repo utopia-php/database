@@ -9,6 +9,7 @@ use ReflectionParameter;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 class IndexModelTest extends TestCase
 {
@@ -40,6 +41,18 @@ class IndexModelTest extends TestCase
         $this->assertSame([128, 256], $index->lengths);
         $this->assertSame(['ASC', 'DESC'], $index->orders);
         $this->assertSame(3600, $index->ttl);
+    }
+
+    public function testConstructorAcceptsOrderEnum(): void
+    {
+        $index = Index::key(
+            key: 'idx_enabled',
+            attributes: ['enabled'],
+            orders: [Order::Asc, Order::Desc],
+        );
+
+        $this->assertSame(['ASC', 'DESC'], $index->orders);
+        $this->assertSame(['ASC', 'DESC'], $index->toDocument()->getAttribute('orders'));
     }
 
     public function testToDocumentProducesCorrectStructure(): void

@@ -18,8 +18,8 @@ use Utopia\Database\Helpers\ID;
 class Collection extends Document
 {
     /**
-     * @param  array<Attribute>  $attributes
-     * @param  array<Index>  $indexes
+     * @param  array<Attribute|Document|array<string, mixed>>  $attributes
+     * @param  array<Index|Document|array<string, mixed>>  $indexes
      * @param  array<string>|null  $permissions  Null means default create-any; empty means none
      * @param  array<string, mixed>  $metadata
      */
@@ -35,8 +35,8 @@ class Collection extends Document
         $data = [
             self::ID => ID::custom($id),
             'name' => $name !== '' ? $name : $id,
-            'attributes' => $attributes,
-            'indexes' => $indexes,
+            'attributes' => self::castAttributes($attributes),
+            'indexes' => self::castIndexes($indexes),
             'documentSecurity' => $documentSecurity,
         ];
         if ($permissions !== null) {
@@ -157,6 +157,11 @@ class Collection extends Document
 
                 continue;
             }
+            if ($attr instanceof Document) {
+                $cast[] = Attribute::fromArray($attr->getArrayCopy());
+
+                continue;
+            }
             if (! \is_array($attr)) {
                 throw new \InvalidArgumentException('Collection attributes must be Attribute models');
             }
@@ -186,6 +191,11 @@ class Collection extends Document
         foreach ($indexes as $idx) {
             if ($idx instanceof Index) {
                 $cast[] = $idx;
+
+                continue;
+            }
+            if ($idx instanceof Document) {
+                $cast[] = Index::fromArray($idx->getArrayCopy());
 
                 continue;
             }

@@ -239,6 +239,38 @@ class CollectionModelTest extends TestCase
         $this->assertCount(2, $collection->permissions);
     }
 
+    public function testConstructorHydratesDocumentAttributesWithoutKey(): void
+    {
+        $collection = new Collection(
+            id: 'bucket_1',
+            attributes: [
+                new Document([
+                    '$id' => 'name',
+                    'type' => 'string',
+                    'size' => 128,
+                    'required' => true,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ]),
+            ],
+            indexes: [
+                new Document([
+                    '$id' => 'idx_name',
+                    'type' => 'key',
+                    'attributes' => ['name'],
+                    'lengths' => [],
+                    'orders' => [],
+                ]),
+            ],
+        );
+
+        $this->assertInstanceOf(Attribute::class, $collection->attributes[0]);
+        $this->assertSame('name', $collection->attributes[0]->key);
+        $this->assertInstanceOf(Index::class, $collection->indexes[0]);
+        $this->assertSame('idx_name', $collection->indexes[0]->key);
+    }
+
     public function testAttributeModelsStayModels(): void
     {
         $attr = Attribute::string(key: 'title', size: 64);

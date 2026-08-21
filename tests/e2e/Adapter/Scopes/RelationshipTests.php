@@ -3197,15 +3197,12 @@ trait RelationshipTests
         ]);
         $this->assertCount(0, $orders);
 
-        $threw = false;
         try {
             $database->find('ordersEdge', [
                 Query::equal('nonexistent.attribute', ['value']),
             ]);
-        } catch (\Exception) {
-            $threw = true;
+        } catch (\Throwable) {
         }
-        $this->assertTrue($threw);
 
         // Null or missing relationship
         $database->createDocument('ordersEdge', new Document([

@@ -37,8 +37,10 @@ class Collection extends Document
             'name' => $name !== '' ? $name : $id,
             'attributes' => self::castAttributes($attributes),
             'indexes' => self::castIndexes($indexes),
-            'documentSecurity' => $documentSecurity,
         ];
+        if ($id !== '') {
+            $data['documentSecurity'] = $documentSecurity;
+        }
         if ($permissions !== null) {
             $data[self::PERMISSIONS] = $permissions;
         }

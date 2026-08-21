@@ -1544,6 +1544,11 @@ class Database
                 $array = $attribute->array;
                 $default = $attribute->default;
                 $filters = $attribute->filters;
+            } elseif ($attribute instanceof Document) {
+                $key = $attribute->getId();
+                $array = (bool) $attribute->getAttribute('array', false);
+                $default = $attribute->offsetExists('default') ? $attribute['default'] : null;
+                $filters = $attribute->getArray('filters');
             } elseif (\is_array($attribute)) {
                 $key = \is_string($attribute[Document::ID] ?? null) ? $attribute[Document::ID] : '';
                 $array = $attribute['array'] ?? false;

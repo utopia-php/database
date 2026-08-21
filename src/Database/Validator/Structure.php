@@ -121,7 +121,7 @@ class Structure extends Validator
      * 'attributes', ...)` between `isValid()` calls would see a stale memo.
      * Construct a fresh validator if the underlying schema may change.
      *
-     * @var array<array<string, mixed>>|null
+     * @var array<array<string, mixed>|Document>|null
      */
     private ?array $mergedAttributes = null;
 
@@ -245,9 +245,9 @@ class Structure extends Validator
         $keys = [];
         $structure = $document->getArrayCopy();
         if ($this->mergedAttributes === null) {
-            /** @var array<string, mixed> $collectionAttributes */
+            /** @var array<array<string, mixed>|Document> $collectionAttributes */
             $collectionAttributes = $this->collection->getAttribute('attributes', []);
-            /** @var array<array<string, mixed>> $merged */
+            /** @var array<array<string, mixed>|Document> $merged */
             $merged = \array_merge($this->attributes, $collectionAttributes);
             $this->mergedAttributes = $merged;
         }
@@ -272,8 +272,8 @@ class Structure extends Validator
      * Check for all required values
      *
      * @param  array<string, mixed>  $structure
-     * @param  array<array<string, mixed>>  $attributes
-     * @param  array<string, mixed>  $keys
+     * @param  array<array<string, mixed>|Document>  $attributes
+     * @param  array<string, array<string, mixed>|Document>  $keys
      */
     protected function checkForAllRequiredValues(array $structure, array $attributes, array &$keys): bool
     {
@@ -282,7 +282,6 @@ class Structure extends Validator
         }
 
         foreach ($attributes as $attribute) { // Check all required attributes are set
-            /** @var array<string, mixed> $attribute */
             /** @var string $name */
             $name = $attribute[Document::ID] ?? '';
             $required = $attribute['required'] ?? false;
@@ -303,7 +302,7 @@ class Structure extends Validator
      * Check for Unknown Attributes
      *
      * @param  array<string, mixed>  $structure
-     * @param  array<string, mixed>  $keys
+     * @param  array<string, array<string, mixed>|Document>  $keys
      */
     protected function checkForUnknownAttributes(array $structure, array $keys): bool
     {
@@ -325,7 +324,7 @@ class Structure extends Validator
      * Check for invalid attribute values
      *
      * @param  array<string, mixed>  $structure
-     * @param  array<string, mixed>  $keys
+     * @param  array<string, array<string, mixed>|Document>  $keys
      */
     protected function checkForInvalidAttributeValues(Document $document, array $structure, array $keys): bool
     {
@@ -349,7 +348,6 @@ class Structure extends Validator
                 continue;
             }
 
-            /** @var array<string, mixed> $attribute */
             $attribute = $keys[$key] ?? [];
             /** @var string $type */
             $type = $attribute['type'] ?? '';
@@ -474,8 +472,11 @@ class Structure extends Validator
             if ($format) {
                 // Format encoded as json string containing format name and relevant format options
                 $formatDef = self::getFormat($format, Attribute::normalizeType($type));
+                $formatAttribute = $attribute instanceof Document
+                    ? $attribute->getArrayCopy()
+                    : $attribute;
                 /** @var Validator $formatValidator */
-                $formatValidator = $formatDef['callback']($attribute);
+                $formatValidator = $formatDef['callback']($formatAttribute);
                 $validators[] = $formatValidator;
             }
 

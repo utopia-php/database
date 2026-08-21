@@ -58,6 +58,17 @@ class IndexModelTest extends TestCase
         $this->assertSame(1, $doc->getAttribute('ttl'));
     }
 
+    public function testArrayAccessMatchesDocumentShape(): void
+    {
+        $index = Index::unique(key: 'idx_email', attributes: ['email'], lengths: [128], orders: ['ASC']);
+
+        $this->assertSame('idx_email', $index['$id']);
+        $this->assertSame('idx_email', $index['key']);
+        $this->assertSame(IndexType::Unique->value, $index['type']);
+        $this->assertSame(['email'], $index['attributes']);
+        $this->assertSame('idx_email', $index->getId());
+    }
+
     public function testFromDocumentRoundtrip(): void
     {
         $original = Index::key(

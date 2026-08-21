@@ -25,12 +25,8 @@ trait Databases
 
         $this->adapter->create($database);
 
-        /** @var array<Document> $metaAttributes */
-        $metaAttributes = self::collectionMeta()['attributes'];
-        $attributes = [];
-        foreach ($metaAttributes as $attribute) {
-            $attributes[] = Attribute::fromDocument($attribute);
-        }
+        /** @var array<Attribute> $attributes */
+        $attributes = self::collectionMeta()['attributes'];
 
         $this->silent(fn () => $this->createCollection(new Collection(
             id: self::METADATA,

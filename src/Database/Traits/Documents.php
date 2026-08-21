@@ -318,7 +318,7 @@ trait Documents
         $allAttributes = $collection->getAttribute('attributes', []);
         $relationships = \array_filter(
             $allAttributes,
-            fn (Document $attribute) => Attribute::isRelationship($attribute)
+            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
         $grouped = Query::groupForDatabase($queries);
@@ -472,7 +472,7 @@ trait Documents
         $cacheCheckAttrs = $collection->getAttribute('attributes', []);
         $relationships = \array_filter(
             $cacheCheckAttrs,
-            fn (Document $attribute) => Attribute::isRelationship($attribute)
+            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
         // Locking reads happen inside a transaction and must never cache the
@@ -497,15 +497,14 @@ trait Documents
         if (! $this->adapter->supports(Capability::TTLIndexes)) {
             return false;
         }
-        /** @var array<Document> $indexes */
+        /** @var array<IndexModel> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
         foreach ($indexes as $index) {
-            $typedIndex = IndexModel::fromDocument($index);
-            if ($typedIndex->type !== IndexType::Ttl) {
+            if ($index->type !== IndexType::Ttl) {
                 continue;
             }
-            $ttlSeconds = $typedIndex->ttl;
-            $ttlAttr = $typedIndex->attributes[0] ?? null;
+            $ttlSeconds = $index->ttl;
+            $ttlAttr = $index->attributes[0] ?? null;
             if ($ttlSeconds <= 0 || ! $ttlAttr) {
                 return false;
             }
@@ -939,7 +938,7 @@ trait Documents
 
             /** @var array<Document> $updateAttrs */
             $updateAttrs = $collection->getAttribute('attributes', []);
-            $relationships = \array_filter($updateAttrs, function (Document $attribute) {
+            $relationships = \array_filter($updateAttrs, function (Attribute|Document $attribute) {
                 return Attribute::isRelationship($attribute);
             });
 
@@ -949,8 +948,7 @@ trait Documents
                 $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
                 foreach ($relationships as $relationship) {
-                    $typedRel = Attribute::fromDocument($relationship);
-                    $relationships[$typedRel->key] = $relationship;
+                    $relationships[$relationship->getId()] = $relationship;
                 }
 
                 foreach ($document as $key => $value) {
@@ -1891,10 +1889,9 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $numericAttribute = null;
         if ($this->adapter->supports(Capability::DefinedAttributes)) {
-            /** @var array<Document> $allAttrs */
+            /** @var array<Attribute> $allAttrs */
             $allAttrs = $collection->getAttribute('attributes', []);
-            $typedAttrs = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $allAttrs);
-            $matchedAttrs = \array_filter($typedAttrs, function (Attribute $a) use ($attribute) {
+            $matchedAttrs = \array_filter($allAttrs, function (Attribute $a) use ($attribute) {
                 return $a->key === $attribute;
             });
 
@@ -2014,10 +2011,9 @@ trait Documents
 
         $numericAttribute = null;
         if ($this->adapter->supports(Capability::DefinedAttributes)) {
-            /** @var array<Document> $decAllAttrs */
+            /** @var array<Attribute> $decAllAttrs */
             $decAllAttrs = $collection->getAttribute('attributes', []);
-            $typedDecAttrs = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $decAllAttrs);
-            $matchedDecAttrs = \array_filter($typedDecAttrs, function (Attribute $a) use ($attribute) {
+            $matchedDecAttrs = \array_filter($decAllAttrs, function (Attribute $a) use ($attribute) {
                 return $a->key === $attribute;
             });
 
@@ -2750,7 +2746,7 @@ trait Documents
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute) => Attribute::isRelationship($attribute)
+            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
         $grouped = Query::groupForDatabase($queries);
@@ -3020,6 +3016,12 @@ trait Documents
 
         $results = $this->decorateDocuments(Event::DocumentFind, $collection, $results);
 
+        if ($collection->getId() === self::METADATA) {
+            foreach ($results as $index => $node) {
+                $results[$index] = $this->hydrateCollectionModels($node);
+            }
+        }
+
         $this->trigger(Event::DocumentFind, $results);
 
         return $results;
@@ -3182,7 +3184,7 @@ trait Documents
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute) => Attribute::isRelationship($attribute)
+            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
         $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $skipAuth);
@@ -3240,7 +3242,7 @@ trait Documents
         /** @var array<Document> $relationships */
         $relationships = \array_filter(
             $attributes,
-            fn (Document $attribute) => Attribute::isRelationship($attribute)
+            fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
         $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $skipAuth);

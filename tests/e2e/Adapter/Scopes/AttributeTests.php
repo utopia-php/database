@@ -1065,16 +1065,7 @@ trait AttributeTests
 
         $collection = $database->createCollection(new Collection(id: 'attributes_row_size', attributes: $attributes));
 
-        $attribute = new Document([
-            '$id' => ID::custom('breaking'),
-            'type' => ColumnType::String->value,
-            'size' => 200,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
+        $attribute = Attribute::string(key: 'breaking', size: 200, required: true);
 
         try {
             $database->checkAttribute($collection, $attribute);

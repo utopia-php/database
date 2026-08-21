@@ -749,8 +749,7 @@ class Relationships implements Hook
         );
 
         foreach ($relationships as $relationship) {
-            $typedRelAttr = Attribute::fromDocument($relationship);
-            $key = $typedRelAttr->key;
+            $key = $relationship->getId();
             $value = $document->getAttribute($key);
             $rel = RelationshipVO::fromDocument($collection->getId(), $relationship);
             $relatedCollection = $this->db->getCollection($rel->relatedCollection);

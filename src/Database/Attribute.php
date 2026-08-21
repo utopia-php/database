@@ -9,7 +9,7 @@ use Utopia\Query\Schema\ColumnType;
 /**
  * Represents a database collection attribute with its type, constraints, and formatting options.
  */
-class Attribute
+class Attribute extends Document
 {
     public const string LEGACY_BIG_INTEGER = 'bigint';
 
@@ -35,7 +35,33 @@ class Attribute
         if (\in_array($this->type, [ColumnType::BigInteger, ColumnType::BigSerial], true)) {
             $this->size = 0;
         }
+
+        $data = [
+            self::ID => $this->key,
+            'key' => $this->key,
+            'type' => $this->type->value,
+            'size' => $this->size,
+            'required' => $this->required,
+            'default' => $this->default,
+            'signed' => $this->signed,
+            'array' => $this->array,
+            'format' => $this->format,
+            'formatOptions' => $this->formatOptions,
+            'filters' => $this->filters,
+        ];
+        if ($this->status !== null) {
+            $data['status'] = $this->status;
+        }
+        if ($this->options !== null) {
+            $data['options'] = $this->options;
+        }
+        parent::__construct($data);
     }
+
+    /**
+     * @var array<string, mixed>
+     */
+    private array $extra = [];
 
     /**
      * @param  array<string, mixed>  $formatOptions
@@ -1247,8 +1273,12 @@ class Attribute
      * Mirrors the normalization in {@see self::fromDocument()} — accepts both
      * the (always-stored) string form and the defensive ColumnType-enum form.
      */
-    public static function isRelationship(Document $attribute): bool
+    public static function isRelationship(self|Document $attribute): bool
     {
+        if ($attribute instanceof self) {
+            return $attribute->type === ColumnType::Relationship;
+        }
+
         $type = $attribute->getAttribute('type');
 
         if ($type instanceof ColumnType) {
@@ -1285,6 +1315,10 @@ class Attribute
         $formatOptions = $data['formatOptions'] ?? [];
         /** @var array<string> $filters */
         $filters = $data['filters'] ?? [];
+        /** @var string|null $status */
+        $status = $data['status'] ?? null;
+        /** @var array<string, mixed>|null $options */
+        $options = $data['options'] ?? null;
 
         return self::make(
             key: $key,
@@ -1297,8 +1331,11 @@ class Attribute
             format: $format,
             formatOptions: $formatOptions,
             filters: $filters,
+            status: $status,
+            options: $options,
         );
     }
+
 
     /**
      * @param  array<string, mixed>  $formatOptions

@@ -146,7 +146,9 @@ trait CollectionTests
 
         $this->assertIsArray($collection->getAttribute('attributes'));
         $this->assertCount(4, $collection->getAttribute('attributes'));
+        $this->assertInstanceOf(Attribute::class, $collection->getAttribute('attributes')[0]);
         $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
+        $this->assertSame('attribute1', $collection->getAttribute('attributes')[0]->key);
         $this->assertEquals(ColumnType::String->value, $collection->getAttribute('attributes')[0]['type']);
         $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['$id']);
         $this->assertEquals(ColumnType::Integer->value, $collection->getAttribute('attributes')[1]['type']);
@@ -157,7 +159,9 @@ trait CollectionTests
 
         $this->assertIsArray($collection->getAttribute('indexes'));
         $this->assertCount(4, $collection->getAttribute('indexes'));
+        $this->assertInstanceOf(Index::class, $collection->getAttribute('indexes')[0]);
         $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
+        $this->assertSame('index1', $collection->getAttribute('indexes')[0]->key);
         $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[0]['type']);
         $this->assertEquals('index2', $collection->getAttribute('indexes')[1]['$id']);
         $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[1]['type']);
@@ -165,6 +169,11 @@ trait CollectionTests
         $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[2]['type']);
         $this->assertEquals('index4', $collection->getAttribute('indexes')[3]['$id']);
         $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[3]['type']);
+
+        $fetched = $database->getCollection('withSchema');
+        $this->assertInstanceOf(Attribute::class, $fetched->getAttribute('attributes')[0]);
+        $this->assertInstanceOf(Index::class, $fetched->getAttribute('indexes')[0]);
+        $this->assertSame('attribute1', $fetched->getAttribute('attributes')[0]->key);
 
         $database->deleteCollection('withSchema');
 

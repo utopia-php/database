@@ -327,6 +327,7 @@ class Database
         $this->instanceFilters = $filters;
 
         $this->setAuthorization(new Authorization());
+        $this->documentTypes[self::METADATA] = Collection::class;
 
         self::addFilter(
             'json',
@@ -347,7 +348,7 @@ class Database
              *
              * @throws Exception
              */
-            function (mixed $value) {
+            function (mixed $value, mixed $document = null, mixed $database = null, string $attribute = '') {
                 if (! is_string($value)) {
                     return $value;
                 }
@@ -360,16 +361,22 @@ class Database
                 /** @var array<string, mixed> $decoded */
                 if (array_key_exists(Document::ID, $decoded)) {
                     return new Document($decoded);
-                } else {
-                    $decoded = array_map(function ($item) {
-                        if (is_array($item) && array_key_exists(Document::ID, $item)) { // if `$id` exists, create a Document instance
-                            /** @var array<string, mixed> $item */
-                            return new Document($item);
-                        }
-
-                        return $item;
-                    }, $decoded);
                 }
+
+                $decoded = array_map(function ($item) use ($document, $attribute) {
+                    if (! is_array($item) || ! array_key_exists(Document::ID, $item)) {
+                        return $item;
+                    }
+                    /** @var array<string, mixed> $item */
+                    if ($document instanceof Collection && $attribute === 'attributes') {
+                        return Attribute::fromArray($item);
+                    }
+                    if ($document instanceof Collection && $attribute === 'indexes') {
+                        return Index::fromArray($item);
+                    }
+
+                    return new Document($item);
+                }, $decoded);
 
                 return $decoded;
             }
@@ -1210,7 +1217,7 @@ class Database
      */
     public function clearAllDocumentTypes(): static
     {
-        $this->documentTypes = [];
+        $this->documentTypes = [self::METADATA => Collection::class];
 
         return $this;
     }
@@ -2102,11 +2109,11 @@ class Database
     protected static function collectionMeta(): array
     {
         $collection = self::collectionDefinition();
-        $documents = [];
+        $attributes = [];
         foreach (self::documentArrays($collection['attributes'] ?? []) as $attribute) {
-            $documents[] = new Document($attribute);
+            $attributes[] = Attribute::fromArray($attribute);
         }
-        $collection['attributes'] = $documents;
+        $collection['attributes'] = $attributes;
 
         return $collection;
     }
@@ -2122,6 +2129,10 @@ class Database
 
         $arrays = [];
         foreach ($values as $value) {
+            if ($value instanceof Attribute || $value instanceof Index) {
+                $arrays[] = $value->getArrayCopy();
+                continue;
+            }
             if ($value instanceof Document) {
                 $arrays[] = $value->getArrayCopy();
                 continue;
@@ -2151,7 +2162,7 @@ class Database
     {
         if (self::$internalAttributes === null) {
             self::$internalAttributes = \array_map(
-                fn (array $attr): Attribute => Attribute::fromDocument(new Document($attr)),
+                fn (array $attr): Attribute => Attribute::fromArray($attr),
                 self::INTERNAL_ATTRIBUTES
             );
         }
@@ -2599,9 +2610,9 @@ class Database
         }
 
         if (array_key_exists($filter, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this);
+            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this, $attribute);
         } else {
-            $value = self::$filters[$filter]['decode']($value, $document, $this);
+            $value = self::$filters[$filter]['decode']($value, $document, $this, $attribute);
         }
 
         return $value;

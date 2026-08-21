@@ -165,15 +165,14 @@ trait Relationships
         $twoWayKey = ! empty($relationship->twoWayKey) ? $relationship->twoWayKey : $this->adapter->filter($collection->getId());
         $onDelete = $relationship->onDelete;
 
-        /** @var array<Document> $attributes */
+        /** @var array<Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         foreach ($attributes as $attribute) {
-            $typedAttr = Attribute::fromDocument($attribute);
-            if (\strtolower($typedAttr->key) === \strtolower($id)) {
+            if (\strtolower($attribute->key) === \strtolower($id)) {
                 throw new DuplicateException('Attribute already exists');
             }
 
-            if ($typedAttr->type === ColumnType::Relationship) {
+            if ($attribute->type === ColumnType::Relationship) {
                 $existingRel = Relationship::fromDocument($collection->getId(), $attribute);
                 if (
                     \strtolower($existingRel->twoWayKey) === \strtolower($twoWayKey)
@@ -184,37 +183,29 @@ trait Relationships
             }
         }
 
-        $relationship = new Document([
-            Document::ID => ID::custom($id),
-            'key' => $id,
-            'type' => ColumnType::Relationship->value,
-            'required' => false,
-            'default' => null,
-            'options' => [
+        $relationship = Attribute::relationship(
+            key: $id,
+            options: [
                 'relatedCollection' => $relatedCollection->getId(),
-                'relationType' => $type,
+                'relationType' => $type->value,
                 'twoWay' => $twoWay,
                 'twoWayKey' => $twoWayKey,
-                'onDelete' => $onDelete,
-                'side' => RelationSide::Parent,
+                'onDelete' => $onDelete->value,
+                'side' => RelationSide::Parent->value,
             ],
-        ]);
+        );
 
-        $twoWayRelationship = new Document([
-            Document::ID => ID::custom($twoWayKey),
-            'key' => $twoWayKey,
-            'type' => ColumnType::Relationship->value,
-            'required' => false,
-            'default' => null,
-            'options' => [
+        $twoWayRelationship = Attribute::relationship(
+            key: $twoWayKey,
+            options: [
                 'relatedCollection' => $collection->getId(),
-                'relationType' => $type,
+                'relationType' => $type->value,
                 'twoWay' => $twoWay,
                 'twoWayKey' => $id,
-                'onDelete' => $onDelete,
-                'side' => RelationSide::Child,
+                'onDelete' => $onDelete->value,
+                'side' => RelationSide::Child->value,
             ],
-        ]);
+        );
 
         $this->checkAttribute($collection, $relationship);
         $this->checkAttribute($relatedCollection, $twoWayRelationship);
@@ -361,14 +352,14 @@ trait Relationships
 
                 try {
                     $this->skipValidation(fn () => $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
-                        /** @var array<Document> $attributes */
+                        /** @var array<Attribute> $attributes */
                         $attributes = $collection->getAttribute('attributes', []);
-                        $collection->setAttribute('attributes', array_filter($attributes, fn (Document $attr) => $attr->getId() !== $id));
+                        $collection->setAttribute('attributes', array_filter($attributes, fn (Attribute $attr) => $attr->getId() !== $id));
                         $this->updateDocument(self::METADATA, $collection->getId(), $collection);
 
-                        /** @var array<Document> $relatedAttributes */
+                        /** @var array<Attribute> $relatedAttributes */
                         $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
-                        $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn (Document $attr) => $attr->getId() !== $twoWayKey));
+                        $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn (Attribute $attr) => $attr->getId() !== $twoWayKey));
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     }));
                 } catch (Throwable $cleanupError) {
@@ -446,23 +437,22 @@ trait Relationships
         }
 
         $collection = $this->getCollection($collection);
-        /** @var array<Document> $attributes */
+        /** @var array<Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
 
         if (
             $newKey !== null
-            && \in_array($newKey, \array_map(fn (Document $attribute) => Attribute::fromDocument($attribute)->key, $attributes))
+            && \in_array($newKey, \array_map(fn (Attribute $attribute) => $attribute->key, $attributes), true)
         ) {
             throw new DuplicateException('Relationship already exists');
         }
 
-        $attributeIndex = array_search($id, array_map(fn (Document $attribute) => Attribute::fromDocument($attribute)->key, $attributes));
+        $attributeIndex = array_search($id, array_map(fn (Attribute $attribute) => $attribute->key, $attributes), true);
 
         if ($attributeIndex === false) {
             throw new NotFoundException('Relationship not found');
         }
 
-        /** @var Document $attribute */
         $attribute = $attributes[$attributeIndex];
         $oldRel = Relationship::fromDocument($collection->getId(), $attribute);
 
@@ -475,11 +465,11 @@ trait Relationships
             || ($newTwoWayKey !== null && $newTwoWayKey !== $oldTwoWayKey);
 
         // Validate new keys don't already exist
-        /** @var array<Document> $relatedAttrs */
+        /** @var array<Attribute> $relatedAttrs */
         $relatedAttrs = $relatedCollection->getAttribute('attributes', []);
         if (
             $newTwoWayKey !== null
-            && \in_array($newTwoWayKey, \array_map(fn (Document $attribute) => Attribute::fromDocument($attribute)->key, $relatedAttrs))
+            && \in_array($newTwoWayKey, \array_map(fn (Attribute $attribute) => $attribute->key, $relatedAttrs), true)
         ) {
             throw new DuplicateException('Related attribute already exists');
         }
@@ -777,13 +767,12 @@ trait Relationships
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
-        /** @var array<int|string, Document> $attributes */
+        /** @var array<int|string, Attribute> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         $relationship = null;
 
         foreach ($attributes as $name => $attribute) {
-            $typedAttr = Attribute::fromDocument($attribute);
-            if ($typedAttr->key === $id) {
+            if ($attribute->key === $id) {
                 $relationship = $attribute;
                 unset($attributes[$name]);
                 break;
@@ -799,12 +788,11 @@ trait Relationships
         $rel = Relationship::fromDocument($collection->getId(), $relationship);
 
         $relatedCollection = $this->silent(fn () => $this->getCollection($rel->relatedCollection));
-        /** @var array<int|string, Document> $relatedAttributes */
+        /** @var array<int|string, Attribute> $relatedAttributes */
         $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
 
         foreach ($relatedAttributes as $name => $attribute) {
-            $typedRelAttr = Attribute::fromDocument($attribute);
-            if ($typedRelAttr->key === $rel->twoWayKey) {
+            if ($attribute->key === $rel->twoWayKey) {
                 unset($relatedAttributes[$name]);
                 break;
             }

@@ -126,10 +126,10 @@ class Relationship
      * Create a Relationship instance from a collection ID and attribute Document.
      *
      * @param string $collection The parent collection ID
-     * @param Document $attribute The attribute document containing relationship options
+     * @param Attribute|Document $attribute The relationship attribute
      * @return self
      */
-    public static function fromDocument(string $collection, Document $attribute): self
+    public static function fromDocument(string $collection, Attribute|Document $attribute): self
     {
         $options = $attribute->getAttribute('options', []);
 

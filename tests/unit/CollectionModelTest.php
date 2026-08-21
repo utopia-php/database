@@ -90,7 +90,9 @@ class CollectionModelTest extends TestCase
         $this->assertSame('Accounts', $doc->getAttribute('name'));
         $this->assertTrue($doc->getAttribute('documentSecurity'));
         $this->assertCount(1, $doc->getAttribute('attributes'));
+        $this->assertInstanceOf(Attribute::class, $doc->getAttribute('attributes')[0]);
         $this->assertCount(1, $doc->getAttribute('indexes'));
+        $this->assertInstanceOf(Index::class, $doc->getAttribute('indexes')[0]);
         $this->assertCount(2, $doc->getPermissions());
     }
 
@@ -135,6 +137,8 @@ class CollectionModelTest extends TestCase
         $this->assertSame($original->attributes[0]->key, $restored->attributes[0]->key);
         $this->assertSame($original->indexes[0]->key, $restored->indexes[0]->key);
         $this->assertInstanceOf(StringType::class, $restored->attributes[0]);
+        $this->assertInstanceOf(Attribute::class, $doc->getAttribute('attributes')[0]);
+        $this->assertInstanceOf(Index::class, $doc->getAttribute('indexes')[0]);
     }
 
     public function testFromDocumentWithEmptyDocument(): void
@@ -146,7 +150,7 @@ class CollectionModelTest extends TestCase
         $this->assertSame('', $collection->name);
         $this->assertSame([], $collection->attributes);
         $this->assertSame([], $collection->indexes);
-        $this->assertSame([], $collection->permissions);
+        $this->assertNull($collection->permissions);
         $this->assertTrue($collection->documentSecurity);
     }
 
@@ -246,29 +250,29 @@ class CollectionModelTest extends TestCase
         $this->assertCount(2, $collection->permissions);
     }
 
-    public function testAttributeDocumentsAreProperDocuments(): void
+    public function testAttributeModelsStayModels(): void
     {
         $attr = Attribute::string(key: 'title', size: 64);
         $collection = new Collection(id: 'articles', attributes: [$attr]);
 
         $doc = $collection->toDocument();
-        $attrDocs = $doc->getAttribute('attributes');
+        $attributes = $doc->getAttribute('attributes');
 
-        $this->assertInstanceOf(Document::class, $attrDocs[0]);
-        $this->assertSame('title', $attrDocs[0]->getAttribute('key'));
-        $this->assertSame('string', $attrDocs[0]->getAttribute('type'));
+        $this->assertInstanceOf(Attribute::class, $attributes[0]);
+        $this->assertSame('title', $attributes[0]->key);
+        $this->assertSame('string', $attributes[0]->getAttribute('type'));
     }
 
-    public function testIndexDocumentsAreProperDocuments(): void
+    public function testIndexModelsStayModels(): void
     {
         $idx = Index::fullText(key: 'idx_test', attributes: ['body']);
         $collection = new Collection(id: 'articles', indexes: [$idx]);
 
         $doc = $collection->toDocument();
-        $idxDocs = $doc->getAttribute('indexes');
+        $indexes = $doc->getAttribute('indexes');
 
-        $this->assertInstanceOf(Document::class, $idxDocs[0]);
-        $this->assertSame('idx_test', $idxDocs[0]->getAttribute('key'));
-        $this->assertSame('fulltext', $idxDocs[0]->getAttribute('type'));
+        $this->assertInstanceOf(Index::class, $indexes[0]);
+        $this->assertSame('idx_test', $indexes[0]->key);
+        $this->assertSame('fulltext', $indexes[0]->getAttribute('type'));
     }
 }

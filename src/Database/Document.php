@@ -90,10 +90,6 @@ class Document extends ArrayObject
             }
 
             foreach ($value as $childKey => $child) {
-                // An array value is either a list of nested sub-documents or a list of
-                // plain items (dates, numbers, strings): wrap the former, leave the latter.
-                // is_array() tells them apart and avoids array-accessing a non-array
-                // value (e.g. a UTCDateTime), which would otherwise fatal.
                 if (\is_array($child) && (isset($child[self::ID]) || isset($child[self::COLLECTION]))) {
                     /** @var array<string, mixed> $child */
                     $value[$childKey] = new self($child);

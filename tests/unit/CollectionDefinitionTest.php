@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 
@@ -105,7 +106,13 @@ final class CollectionDefinitionTest extends TestCase
      */
     private function fields(mixed $attribute): array
     {
-        if ($attribute instanceof Document) {
+        if ($attribute instanceof Attribute) {
+            $key = $attribute->key;
+            $type = $attribute->type->value;
+            $size = $attribute->size;
+            $required = $attribute->required;
+            $filters = $attribute->filters;
+        } elseif ($attribute instanceof Document) {
             $key = $attribute->getAttribute('key', $attribute->getId());
             $type = $attribute->getAttribute('type', '');
             $size = $attribute->getAttribute('size', 0);

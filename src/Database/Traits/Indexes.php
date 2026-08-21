@@ -71,9 +71,8 @@ trait Indexes
             throw new LimitException('Index limit reached. Cannot create new index.');
         }
 
-        /** @var array<Document> $collectionAttributes */
+        /** @var array<Attribute> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
-        $typedCollectionAttributes = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $collectionAttributes);
         $indexAttributesWithTypes = [];
         foreach ($attributes as $i => $attr) {
             // Support nested paths on object attributes using dot notation:
@@ -83,7 +82,7 @@ trait Indexes
                 $baseAttr = \explode('.', $attr, 2)[0];
             }
 
-            foreach ($typedCollectionAttributes as $typedAttr) {
+            foreach ($collectionAttributes as $typedAttr) {
                 if ($typedAttr->key === $baseAttr) {
 
                     $indexAttributesWithTypes[$attr] = $typedAttr->type->value;
@@ -118,20 +117,15 @@ trait Indexes
             ttl: $ttl
         );
 
-        $indexDoc = $index->toDocument();
-
         if ($this->validate) {
-            /** @var array<Document> $collectionAttrsForValidation */
+            /** @var array<Attribute> $collectionAttrsForValidation */
             $collectionAttrsForValidation = $collection->getAttribute('attributes', []);
-            /** @var array<Document> $collectionIdxsForValidation */
+            /** @var array<Index> $collectionIdxsForValidation */
             $collectionIdxsForValidation = $collection->getAttribute('indexes', []);
 
-            $typedAttrsForValidation = array_map(fn (Document $doc) => Attribute::fromDocument($doc), $collectionAttrsForValidation);
-            $typedIdxsForValidation = array_map(fn (Document $doc) => Index::fromDocument($doc), $collectionIdxsForValidation);
-
             $validator = new IndexValidator(
-                $typedAttrsForValidation,
-                $typedIdxsForValidation,
+                $collectionAttrsForValidation,
+                $collectionIdxsForValidation,
                 $this->adapter->getMaxIndexLength(),
                 $this->adapter->getInternalIndexesKeys(),
                 $this->adapter->supports(Capability::IndexArray),
@@ -170,7 +164,7 @@ trait Indexes
             // partial failure. Skip creation and proceed to metadata update.
         }
 
-        $collection->setAttribute('indexes', $indexDoc, SetType::Append);
+        $collection->setAttribute('indexes', $index, SetType::Append);
 
         $this->updateMetadata(
             collection: $collection,
@@ -183,7 +177,7 @@ trait Indexes
 
         $this->triggerHooks(
             Event::IndexCreate,
-            (clone $indexDoc)->setAttribute(Document::COLLECTION, $collection->getId()),
+            $index->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return true;
@@ -294,10 +288,10 @@ trait Indexes
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        /** @var array<Document> $indexes */
+        /** @var array<Index> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
 
-        /** @var Document|null $indexDeleted */
+        /** @var Index|null $indexDeleted */
         $indexDeleted = null;
         foreach ($indexes as $key => $value) {
             if ($value->getId() === $id) {
@@ -327,17 +321,16 @@ trait Indexes
         $collection->setAttribute('indexes', \array_values($indexes));
 
         // Build indexAttributeTypes from collection attributes for rollback
-        /** @var array<Document> $collectionAttributes */
+        /** @var array<Attribute> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
-        $typedDeletedIndex = Index::fromDocument($indexDeleted);
+        $typedDeletedIndex = $indexDeleted;
         /** @var array<string, string> $indexAttributeTypes */
         $indexAttributeTypes = [];
         foreach ($typedDeletedIndex->attributes as $attr) {
             $baseAttr = \str_contains($attr, '.') ? \explode('.', $attr, 2)[0] : $attr;
             foreach ($collectionAttributes as $collectionAttribute) {
-                $typedCollAttr = Attribute::fromDocument($collectionAttribute);
-                if ($typedCollAttr->key === $baseAttr) {
-                    $indexAttributeTypes[$attr] = $typedCollAttr->type->value;
+                if ($collectionAttribute->key === $baseAttr) {
+                    $indexAttributeTypes[$attr] = $collectionAttribute->type->value;
                     break;
                 }
             }
@@ -367,7 +360,7 @@ trait Indexes
 
         $this->triggerHooks(
             Event::IndexDelete,
-            (clone $indexDeleted)->setAttribute(Document::COLLECTION, $collection->getId()),
+            $indexDeleted->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
         );
 
         return $deleted;
@@ -376,12 +369,12 @@ trait Indexes
     /**
      * Update index metadata. Utility method for update index methods.
      *
-     * @param  callable(Document, Document, int|string): void  $updateCallback  method that receives document, and returns it with changes applied
+     * @param  callable(Index, Document, int|string): void  $updateCallback
      *
      * @throws ConflictException
      * @throws DatabaseException
      */
-    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Document
+    protected function updateIndexMeta(string $collection, string $id, callable $updateCallback): Index
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -389,20 +382,18 @@ trait Indexes
             throw new DatabaseException('Cannot update metadata indexes');
         }
 
-        /** @var array<Document> $indexes */
+        /** @var array<Index> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
-        $index = \array_search($id, \array_map(fn ($idx) => $idx[Document::ID], $indexes));
+        $index = \array_search($id, \array_map(fn (Index $idx) => $idx->key, $indexes), true);
 
         if ($index === false) {
             throw new NotFoundException('Index not found');
         }
 
-        /** @var Document $indexDoc */
-        $indexDoc = $indexes[$index];
+        $indexModel = $indexes[$index];
 
-        // Execute update from callback
-        $updateCallback($indexDoc, $collection, $index);
-        $indexes[$index] = $indexDoc;
+        $updateCallback($indexModel, $collection, $index);
+        $indexes[$index] = $indexModel;
 
         $collection->setAttribute('indexes', $indexes);
 
@@ -415,7 +406,7 @@ trait Indexes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        return $indexDoc;
+        return $indexModel;
     }
 
     /**

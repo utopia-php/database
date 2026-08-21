@@ -8,7 +8,7 @@ use Utopia\Query\Schema\IndexType;
 /**
  * Represents a database index with its type, target attributes, and configuration.
  */
-class Index
+class Index extends Document
 {
     /**
      * @param  array<string>  $attributes
@@ -23,6 +23,15 @@ class Index
         public array $orders = [],
         public int $ttl = 1,
     ) {
+        parent::__construct([
+            self::ID => $this->key,
+            'key' => $this->key,
+            'type' => $this->type->value,
+            'attributes' => $this->attributes,
+            'lengths' => $this->lengths,
+            'orders' => $this->orders,
+            'ttl' => $this->ttl,
+        ]);
     }
 
     /**

@@ -41,10 +41,10 @@ class Operator extends Validator
         $this->collection = $collection;
         $this->currentDocument = $currentDocument;
 
-        /** @var array<Document> $collectionAttributes */
+        /** @var array<AttributeVO|Document> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
         foreach ($collectionAttributes as $attribute) {
-            $typed = AttributeVO::fromDocument($attribute);
+            $typed = $attribute instanceof AttributeVO ? $attribute : AttributeVO::fromDocument($attribute);
             $this->attributes[$typed->key] = $typed;
         }
     }

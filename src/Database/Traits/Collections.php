@@ -59,6 +59,7 @@ trait Collections
                 $attribute->filters = array_values(
                     array_unique(array_merge($existingFilters, [$attribute->type->value]))
                 );
+                $attribute->setAttribute('filters', $attribute->filters);
             }
         }
 
@@ -119,16 +120,12 @@ trait Collections
             $indexes[$key] = $index;
         }
 
-        // Convert models to Documents for collection metadata
-        $attributeDocs = array_map(fn (Attribute $attr) => $attr->toDocument(), $attributes);
-        $indexDocs = array_map(fn (Index $idx) => $idx->toDocument(), $indexes);
-
         $collection = new Document(\array_merge([
             Document::ID => ID::custom($id),
             Document::PERMISSIONS => $permissions,
             'name' => $name,
-            'attributes' => $attributeDocs,
-            'indexes' => $indexDocs,
+            'attributes' => $attributes,
+            'indexes' => $indexes,
             'documentSecurity' => $documentSecurity,
         ], $metadata));
 
@@ -226,7 +223,7 @@ trait Collections
         }
 
         if ($id === self::METADATA) {
-            return new Document(self::collectionMeta());
+            return $this->hydrateCollectionModels(new Document(self::collectionMeta()));
         }
 
         try {
@@ -254,7 +251,7 @@ trait Collections
 
         $this->triggerHooks(Event::CollectionCreate, $createdCollection);
 
-        return $createdCollection;
+        return $this->hydrateCollectionModels($createdCollection);
     }
 
     /**
@@ -322,7 +319,70 @@ trait Collections
             return new Document();
         }
 
+        $this->hydrateCollectionModels($collection);
+
         $this->trigger(Event::CollectionRead, $collection);
+
+        return $collection;
+    }
+
+    private function hydrateCollectionModels(Document $collection): Document
+    {
+        if ($collection->isEmpty()) {
+            return $collection;
+        }
+
+        $attributes = $collection->getAttribute('attributes', []);
+        if (\is_array($attributes)) {
+            $hydrated = [];
+            $changed = false;
+            foreach ($attributes as $attr) {
+                if ($attr instanceof Attribute) {
+                    $hydrated[] = $attr;
+                    continue;
+                }
+                if (! \is_array($attr)) {
+                    throw new DatabaseException('Collection attributes must be Attribute models');
+                }
+                $changed = true;
+                $typed = [];
+                foreach ($attr as $name => $item) {
+                    if (\is_string($name)) {
+                        $typed[$name] = $item;
+                    }
+                }
+                $hydrated[] = Attribute::fromArray($typed);
+            }
+            if ($changed) {
+                $collection->setAttribute('attributes', $hydrated);
+            }
+        }
+
+        $indexes = $collection->getAttribute('indexes', []);
+        if (\is_array($indexes)) {
+            $hydrated = [];
+            $changed = false;
+            foreach ($indexes as $idx) {
+                if ($idx instanceof Index) {
+                    $hydrated[] = $idx;
+                    continue;
+                }
+                if (! \is_array($idx)) {
+                    throw new DatabaseException('Collection indexes must be Index models');
+                }
+                $changed = true;
+                $typed = [];
+                foreach ($idx as $name => $item) {
+                    if (\is_string($name)) {
+                        $typed[$name] = $item;
+                    }
+                }
+                $hydrated[] = Index::fromArray($typed);
+            }
+            if ($changed) {
+                $collection->setAttribute('indexes', $hydrated);
+            }
+        }
 
         return $collection;
     }
@@ -342,6 +402,10 @@ trait Collections
             Query::limit($limit),
             Query::offset($offset),
         ]));
+
+        foreach ($result as $i => $listed) {
+            $result[$i] = $this->hydrateCollectionModels($listed);
+        }
 
         $this->trigger(Event::CollectionList, $result);
 
@@ -420,7 +484,7 @@ trait Collections
      */
     public function deleteCollection(string $id): bool
     {
-        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $collection = $this->silent(fn () => $this->getCollection($id));
 
         if ($collection->isEmpty()) {
             throw new NotFoundException('Collection not found');
@@ -430,25 +494,23 @@ trait Collections
             throw new NotFoundException('Collection not found');
         }
 
-        /** @var array<Document> $allAttributes */
+        /** @var array<Attribute> $allAttributes */
         $allAttributes = $collection->getAttribute('attributes', []);
         $relationships = \array_filter(
             $allAttributes,
-            fn (Document $attribute) => Attribute::fromDocument($attribute)->type === ColumnType::Relationship
+            fn (Attribute $attribute) => $attribute->type === ColumnType::Relationship
         );
 
         foreach ($relationships as $relationship) {
-            $this->deleteRelationship($collection->getId(), $relationship->getId());
+            $this->deleteRelationship($collection->getId(), $relationship->key);
         }
 
         // Re-fetch collection to get current state after relationship deletions
-        $currentCollection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
-        /** @var array<Document> $currentAttrDocs */
-        $currentAttrDocs = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('attributes', []);
-        /** @var array<Document> $currentIdxDocs */
-        $currentIdxDocs = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('indexes', []);
-        $currentAttributes = array_map(fn (Document $d) => Attribute::fromDocument($d), $currentAttrDocs);
-        $currentIndexes = array_map(fn (Document $d) => Index::fromDocument($d), $currentIdxDocs);
+        $currentCollection = $this->silent(fn () => $this->getCollection($id));
+        /** @var array<Attribute> $currentAttributes */
+        $currentAttributes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('attributes', []);
+        /** @var array<Index> $currentIndexes */
+        $currentIndexes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('indexes', []);
 
         $schemaDeleted = false;
         try {

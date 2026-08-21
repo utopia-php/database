@@ -121,6 +121,20 @@ class AttributeModelTest extends TestCase
         $this->assertNull($doc->getAttribute('options'));
     }
 
+    public function testArrayAccessMatchesDocumentShape(): void
+    {
+        $attr = Attribute::string(key: 'title', size: 128, required: true, status: 'available');
+
+        $this->assertSame('title', $attr['$id']);
+        $this->assertSame('title', $attr['key']);
+        $this->assertSame(ColumnType::String->value, $attr['type']);
+        $this->assertSame(128, $attr['size']);
+        $this->assertTrue($attr['required']);
+        $this->assertSame('available', $attr['status']);
+        $this->assertSame('title', $attr->getId());
+        $this->assertSame(ColumnType::String->value, $attr->getAttribute('type'));
+    }
+
     public function testFromDocumentRoundtrip(): void
     {
         $original = Attribute::string(key: 'tags', size: 64, array: true, filters: ['json']);

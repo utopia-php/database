@@ -79,6 +79,8 @@ final class CLITasksTest extends TestCase
         $source = \file_get_contents(__DIR__.'/../../bin/cli.php');
         $this->assertIsString($source);
         $this->assertStringContainsString("include 'tasks/migrate.php';", $source);
+        $this->assertStringContainsString('if (! $database->exists()) {', $source);
+        $this->assertStringContainsString('$database->create();', $source);
     }
 
     public function testOperatorSetupUsesDatabaseAuthorization(): void

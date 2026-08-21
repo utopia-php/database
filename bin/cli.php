@@ -51,10 +51,16 @@ $database
             $class::getPDOAttributes(),
         );
 
-        return (new Database(new $class($pdo), new Cache(new NoCache())))
+        $database = (new Database(new $class($pdo), new Cache(new NoCache())))
             ->setDatabase($name)
             ->setNamespace($namespace)
             ->setSharedTables($sharedTables);
+
+        if (! $database->exists()) {
+            $database->create();
+        }
+
+        return $database;
     });
 $cli->setResource($database);
 

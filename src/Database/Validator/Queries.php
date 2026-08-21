@@ -123,13 +123,8 @@ class Queries extends Validator
             if (! $query->getMethod()->isJoin()) {
                 continue;
             }
-            $values = $query->getValues();
-            $method = $query->getMethod();
-            $alias = match ($method) {
-                Method::CrossJoin, Method::NaturalJoin => $values[0] ?? '',
-                default => $values[3] ?? '',
-            };
-            if (\is_string($alias) && $alias !== '') {
+            $alias = $query->getJoinAlias();
+            if ($alias !== '') {
                 $joinAliases[] = $alias;
             }
         }
@@ -142,6 +137,14 @@ class Queries extends Validator
                 ) {
                     $validator->allowJoinAliases($joinAliases);
                 }
+            }
+        }
+
+        $hasFilterValidator = false;
+        foreach ($this->validators as $validator) {
+            if ($validator->getMethodType() === Base::METHOD_TYPE_FILTER) {
+                $hasFilterValidator = true;
+                break;
             }
         }
 
@@ -167,6 +170,15 @@ class Queries extends Validator
                         }
                     }
                     $pending[] = $nested;
+                }
+            }
+
+            if ($hasFilterValidator && $query->getMethod()->isJoin() && $query->isNestedJoin()) {
+                foreach ($query->getJoinOnQueries() as $onQuery) {
+                    if ($onQuery->getMethod() === Method::On) {
+                        continue;
+                    }
+                    $pending[] = $onQuery;
                 }
             }
 

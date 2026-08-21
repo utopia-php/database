@@ -5666,4 +5666,63 @@ trait JoinTests
 
         return $scores;
     }
+
+    public function testLeftJoinOnFilterKeepsUnmatchedMainRows(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $pCol = 'ljon_p';
+        $rCol = 'ljon_r';
+        $cols = [$pCol, $rCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($pCol, Attribute::string(key: 'name', size: 100, required: true));
+
+        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createAttribute($rCol, Attribute::string(key: 'prod_uid', required: true));
+        $database->createAttribute($rCol, Attribute::integer(key: 'score', required: true));
+
+        foreach (['p1' => 'Alpha', 'p2' => 'Beta', 'p3' => 'Gamma'] as $id => $name) {
+            $database->createDocument($pCol, new Document([
+                '$id' => $id,
+                'name' => $name,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([
+            ['prod_uid' => 'p1', 'score' => 5],
+            ['prod_uid' => 'p2', 'score' => 2],
+        ] as $review) {
+            $database->createDocument($rCol, new Document(array_merge($review, [
+                '$permissions' => [Permission::read(Role::any())],
+            ])));
+        }
+
+        $results = $database->find($pCol, [
+            Query::leftJoin($rCol, 'rev', [
+                Query::on('$id', 'prod_uid'),
+                Query::greaterThanEqual('rev.score', 4),
+            ]),
+            Query::select(['name', 'rev.score']),
+        ]);
+
+        $this->assertCount(3, $results);
+        $mapped = [];
+        foreach ($results as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc->getAttribute('rev.score');
+        }
+        $this->assertEquals(5, $mapped['Alpha']);
+        $this->assertTrue($mapped['Beta'] === null || $mapped['Beta'] === '');
+        $this->assertTrue($mapped['Gamma'] === null || $mapped['Gamma'] === '');
+
+        $this->cleanupAggCollections($database, $cols);
+    }
 }

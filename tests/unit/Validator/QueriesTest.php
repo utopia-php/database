@@ -248,6 +248,57 @@ class QueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
+    public function test_nested_join_alias_is_collected(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Select($attributes),
+            new Filter($attributes, ColumnType::Integer->value),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::select(['ord.amount']),
+            Query::leftJoin('orders', 'ord', [
+                Query::on('$id', 'customer_uid'),
+                Query::equal('ord.status', ['paid']),
+            ]),
+        ]), $validator->getDescription());
+    }
+
+    public function test_nested_join_on_filter_unknown_alias_is_invalid(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => ColumnType::String->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Filter($attributes, ColumnType::Integer->value),
+            new Join(),
+        ]);
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('orders', 'ord', [
+                Query::on('$id', 'customer_uid'),
+                Query::equal('missing.status', ['paid']),
+            ]),
+        ]));
+        $this->assertStringContainsString('Attribute not found in schema', $validator->getDescription());
+    }
+
     public function test_order_before_join_accepts_dotted_alias(): void
     {
         $attributes = [

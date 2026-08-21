@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6c32de508f93aa0e9269bdd86779b3ae",
+    "content-hash": "06e557629ca5035c6833b8a457e340c7",
     "packages": [
         {
             "name": "brick/math",
@@ -2492,16 +2492,16 @@
         },
         {
             "name": "utopia-php/query",
-            "version": "0.4.0",
+            "version": "dev-feat-join-on-queries",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/query.git",
-                "reference": "c334515035a2ab0aa49176eeca96de3e1c096e22"
+                "reference": "5ae83aa9f1f42d2c54e61b985da9789c1209efbf"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/query/zipball/c334515035a2ab0aa49176eeca96de3e1c096e22",
-                "reference": "c334515035a2ab0aa49176eeca96de3e1c096e22",
+                "url": "https://api.github.com/repos/utopia-php/query/zipball/5ae83aa9f1f42d2c54e61b985da9789c1209efbf",
+                "reference": "5ae83aa9f1f42d2c54e61b985da9789c1209efbf",
                 "shasum": ""
             },
             "require": {
@@ -2535,9 +2535,9 @@
             ],
             "support": {
                 "issues": "https://github.com/utopia-php/query/issues",
-                "source": "https://github.com/utopia-php/query/tree/0.4.0"
+                "source": "https://github.com/utopia-php/query/tree/feat-join-on-queries"
             },
-            "time": "2026-08-14T01:42:36+00:00"
+            "time": "2026-08-21T05:05:30+00:00"
         },
         {
             "name": "utopia-php/telemetry",
@@ -5427,9 +5427,18 @@
             "time": "2026-02-10T04:21:53+00:00"
         }
     ],
-    "aliases": [],
+    "aliases": [
+        {
+            "package": "utopia-php/query",
+            "version": "dev-feat-join-on-queries",
+            "alias": "0.4.99",
+            "alias_normalized": "0.4.99.0"
+        }
+    ],
     "minimum-stability": "dev",
-    "stability-flags": {},
+    "stability-flags": {
+        "utopia-php/query": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

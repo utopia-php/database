@@ -98,11 +98,8 @@ class IndexedQueries extends Queries
                 continue;
             }
 
-            $method = $query->getMethod();
-            $values = $query->getValues();
-            $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
-            $alias = $values[$aliasIndex] ?? '';
-            if (\is_string($alias) && $alias !== '') {
+            $alias = $query->getJoinAlias();
+            if ($alias !== '') {
                 $aliases[$alias] = true;
             }
         }

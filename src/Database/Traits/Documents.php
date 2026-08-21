@@ -1255,7 +1255,7 @@ trait Documents
         }
 
         $updatedAt = $updates->getUpdatedAt();
-        $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::nowAfter($updates->getUpdatedAt()) : $updatedAt;
+        $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
 
         $updates = $this->encode(
             $collection,

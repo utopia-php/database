@@ -18,7 +18,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\OrderDirection;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 trait SchemalessTests
@@ -2152,25 +2151,9 @@ trait SchemalessTests
 
         $col2 = uniqid('sl_ttl_collection');
 
-        $expiresAtAttr = new Document([
-            '$id' => ID::custom('expiresAt'),
-            'type' => ColumnType::Datetime->value,
-            'size' => 0,
-            'signed' => false,
-            'required' => false,
-            'default' => null,
-            'array' => false,
-            'filters' => ['datetime'],
-        ]);
+        $expiresAtAttr = Attribute::datetime(key: 'expiresAt', signed: false, filters: ['datetime']);
 
-        $ttlIndexDoc = new Document([
-            '$id' => ID::custom('idx_ttl_collection'),
-            'type' => IndexType::Ttl->value,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [OrderDirection::Asc->value],
-            'ttl' => 7200, // 2 hours
-        ]);
+        $ttlIndexDoc = Index::ttl(key: 'idx_ttl_collection', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 7200);
 
         $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 

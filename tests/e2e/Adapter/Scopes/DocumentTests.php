@@ -7317,18 +7317,8 @@ trait DocumentTests
         }
 
         $database->createCollection(new Collection(id: 'bulk_delete', attributes: [
-            new Document([
-                '$id' => 'text',
-                'type' => ColumnType::String,
-                'size' => 100,
-                'required' => true,
-            ]),
-            new Document([
-                '$id' => 'integer',
-                'type' => ColumnType::Integer,
-                'size' => 10,
-                'required' => true,
-            ])
+            Attribute::string(key: 'text', size: 100, required: true),
+            Attribute::integer(key: 'integer', size: 10, required: true)
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -7453,18 +7443,8 @@ trait DocumentTests
         }
 
         $database->createCollection(new Collection(id: 'bulk_delete_queries', attributes: [
-            new Document([
-                '$id' => 'text',
-                'type' => ColumnType::String,
-                'size' => 100,
-                'required' => true,
-            ]),
-            new Document([
-                '$id' => 'integer',
-                'type' => ColumnType::Integer,
-                'size' => 10,
-                'required' => true,
-            ])
+            Attribute::string(key: 'text', size: 100, required: true),
+            Attribute::integer(key: 'integer', size: 10, required: true)
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -7513,18 +7493,8 @@ trait DocumentTests
         }
 
         $database->createCollection(new Collection(id: 'bulk_delete_with_callback', attributes: [
-            new Document([
-                '$id' => 'text',
-                'type' => ColumnType::String,
-                'size' => 100,
-                'required' => true,
-            ]),
-            new Document([
-                '$id' => 'integer',
-                'type' => ColumnType::Integer,
-                'size' => 10,
-                'required' => true,
-            ])
+            Attribute::string(key: 'text', size: 100, required: true),
+            Attribute::integer(key: 'integer', size: 10, required: true)
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -7634,18 +7604,8 @@ trait DocumentTests
         $collection = 'testUpdateDocumentsQueries';
 
         $database->createCollection(new Collection(id: $collection, attributes: [
-            new Document([
-                '$id' => ID::custom('text'),
-                'type' => ColumnType::String,
-                'size' => 64,
-                'required' => true,
-            ]),
-            new Document([
-                '$id' => ID::custom('integer'),
-                'type' => ColumnType::Integer,
-                'size' => 64,
-                'required' => true,
-            ]),
+            Attribute::string(key: 'text', size: 64, required: true),
+            Attribute::integer(key: 'integer', size: 64, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),

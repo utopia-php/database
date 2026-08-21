@@ -16,8 +16,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 /**
  * E2E tests for the in-memory adapter. Inherits the standard adapter scopes
@@ -209,15 +207,7 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'nested', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => ColumnType::String->value,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'name', size: 64, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -255,15 +245,7 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'lists', attributes: [
-            new Document([
-                '$id' => 'tags',
-                'type' => ColumnType::String->value,
-                'size' => 64,
-                'required' => false,
-                'signed' => true,
-                'array' => true,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'tags', size: 64, array: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -311,21 +293,9 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'optional', attributes: [
-            new Document([
-                '$id' => 'token',
-                'type' => ColumnType::String->value,
-                'size' => 64,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'token', size: 64),
         ], indexes: [
-            new Document([
-                '$id' => 'unique_token',
-                'type' => IndexType::Unique->value,
-                'attributes' => ['token'],
-            ]),
+            Index::unique(key: 'unique_token', attributes: ['token']),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -428,21 +398,9 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'handles', attributes: [
-            new Document([
-                '$id' => 'handle',
-                'type' => ColumnType::String->value,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'handle', size: 64, required: true),
         ], indexes: [
-            new Document([
-                '$id' => 'unique_handle',
-                'type' => IndexType::Unique->value,
-                'attributes' => ['handle'],
-            ]),
+            Index::unique(key: 'unique_handle', attributes: ['handle']),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -485,21 +443,9 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'siblings', attributes: [
-            new Document([
-                '$id' => 'handle',
-                'type' => ColumnType::String->value,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'handle', size: 64, required: true),
         ], indexes: [
-            new Document([
-                '$id' => 'unique_handle',
-                'type' => IndexType::Unique->value,
-                'attributes' => ['handle'],
-            ]),
+            Index::unique(key: 'unique_handle', attributes: ['handle']),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -540,15 +486,7 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'cleanup', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => ColumnType::String->value,
-                'size' => 64,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'name', size: 64, required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
@@ -817,21 +755,9 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'flags', attributes: [
-            new Document([
-                '$id' => 'active',
-                'type' => ColumnType::Boolean->value,
-                'size' => 0,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::boolean(key: 'active', required: true),
         ], indexes: [
-            new Document([
-                '$id' => 'unique_active',
-                'type' => IndexType::Unique->value,
-                'attributes' => ['active'],
-            ]),
+            Index::unique(key: 'unique_active', attributes: ['active']),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -892,30 +818,11 @@ class MemoryTest extends Base
         $database = $this->freshDatabase();
 
         $database->createCollection(new Collection(id: 'nullable', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => ColumnType::String->value,
-                'size' => 64,
-                'required' => false,
-            ]),
-            new Document([
-                '$id' => 'score',
-                'type' => ColumnType::Integer->value,
-                'size' => 0,
-                'required' => false,
-            ]),
-            new Document([
-                '$id' => 'bio',
-                'type' => ColumnType::String->value,
-                'size' => 1024,
-                'required' => false,
-            ]),
+            Attribute::string(key: 'name', size: 64),
+            Attribute::integer(key: 'score'),
+            Attribute::string(key: 'bio', size: 1024),
         ], indexes: [
-            new Document([
-                '$id' => 'bio_ft',
-                'type' => IndexType::Fulltext->value,
-                'attributes' => ['bio'],
-            ]),
+            Index::fullText(key: 'bio_ft', attributes: ['bio']),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

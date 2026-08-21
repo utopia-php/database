@@ -11,7 +11,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -398,25 +397,9 @@ trait IndexTests
 
         $col2 = uniqid('sl_ttl_collection');
 
-        $expiresAtAttr = new Document([
-            '$id' => ID::custom('expiresAt'),
-            'type' => ColumnType::Datetime->value,
-            'size' => 0,
-            'signed' => false,
-            'required' => false,
-            'default' => null,
-            'array' => false,
-            'filters' => ['datetime'],
-        ]);
+        $expiresAtAttr = Attribute::datetime(key: 'expiresAt', signed: false, filters: ['datetime']);
 
-        $ttlIndexDoc = new Document([
-            '$id' => ID::custom('idx_ttl_collection'),
-            'type' => IndexType::Ttl->value,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [OrderDirection::Asc->value],
-            'ttl' => 7200, // 2 hours
-        ]);
+        $ttlIndexDoc = Index::ttl(key: 'idx_ttl_collection', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 7200);
 
         $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 

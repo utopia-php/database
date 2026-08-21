@@ -16,7 +16,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait PermissionTests
@@ -631,12 +630,7 @@ trait PermissionTests
         $collection = 'testUpdateDocumentsPerms';
 
         $database->createCollection(new Collection(id: $collection, attributes: [
-            new Document([
-                '$id' => ID::custom('string'),
-                'type' => ColumnType::String->value,
-                'size' => 767,
-                'required' => true,
-            ])
+            Attribute::string(key: 'string', size: 767, required: true)
         ]));
 
         // Test we can bulk update permissions we have access to

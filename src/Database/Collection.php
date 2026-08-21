@@ -10,38 +10,20 @@ use Utopia\Database\Helpers\ID;
 class Collection
 {
     /**
-     * @var array<Attribute>
-     */
-    public array $attributes = [];
-
-    /**
-     * @var array<Index>
-     */
-    public array $indexes = [];
-
-    /**
-     * @param  array<Attribute|Document>  $attributes
-     * @param  array<Index|Document>  $indexes
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
      * @param  array<string>  $permissions
      * @param  array<string, mixed>  $metadata
      */
     public function __construct(
         public string $id = '',
         public string $name = '',
-        array $attributes = [],
-        array $indexes = [],
+        public array $attributes = [],
+        public array $indexes = [],
         public array $permissions = [],
         public bool $documentSecurity = true,
         public array $metadata = [],
     ) {
-        $this->attributes = array_values(array_map(
-            fn (Attribute|Document $attr): Attribute => $attr instanceof Attribute ? $attr : Attribute::fromDocument($attr),
-            $attributes,
-        ));
-        $this->indexes = array_values(array_map(
-            fn (Index|Document $idx): Index => $idx instanceof Index ? $idx : Index::fromDocument($idx),
-            $indexes,
-        ));
     }
 
     /**

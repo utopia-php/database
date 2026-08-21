@@ -28,27 +28,15 @@ class CollectionModelTest extends TestCase
         $this->assertSame([], $collection->metadata);
     }
 
-    public function testConstructorNormalizesDocumentAttributesAndIndexes(): void
+    public function testConstructorRequiresAttributeAndIndexModels(): void
     {
         $collection = new Collection(
             id: 'nested',
             attributes: [
-                new Document([
-                    '$id' => 'name',
-                    'type' => 'string',
-                    'size' => 64,
-                    'required' => true,
-                ]),
+                Attribute::string(key: 'name', size: 64, required: true),
             ],
             indexes: [
-                new Document([
-                    '$id' => 'idx_name',
-                    'key' => 'idx_name',
-                    'type' => 'key',
-                    'attributes' => ['name'],
-                    'lengths' => [64],
-                    'orders' => ['ASC'],
-                ]),
+                Index::key(key: 'idx_name', attributes: ['name'], lengths: [64], orders: ['ASC']),
             ],
         );
 

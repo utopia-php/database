@@ -946,12 +946,7 @@ trait CollectionTests
             $database->setTenant($tenant1);
 
             $database->createCollection(new Collection(id: $colName, attributes: [
-                new Document([
-                    '$id' => 'name',
-                    'type' => ColumnType::String->value,
-                    'size' => 128,
-                    'required' => true,
-                ]),
+                Attribute::string(key: 'name', size: 128, required: true),
             ]));
 
             $col1 = $database->getCollection($colName);
@@ -961,12 +956,7 @@ trait CollectionTests
             $database->setTenant($tenant2);
 
             $database->createCollection(new Collection(id: $colName, attributes: [
-                new Document([
-                    '$id' => 'name',
-                    'type' => ColumnType::String->value,
-                    'size' => 128,
-                    'required' => true,
-                ]),
+                Attribute::string(key: 'name', size: 128, required: true),
             ]));
 
             $col2 = $database->getCollection($colName);
@@ -1218,12 +1208,7 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         $database->createCollection(new Collection(id: 'docs', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => ColumnType::String->value,
-                'size' => 767,
-                'required' => true,
-            ]),
+            Attribute::string(key: 'name', size: 767, required: true),
         ]));
 
         $database->createDocument('docs', new Document([

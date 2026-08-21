@@ -1046,27 +1046,9 @@ trait AttributeTests
 
         $attributes = [];
 
-        $attributes[] = new Document([
-            '$id' => ID::custom('varchar_16000'),
-            'type' => ColumnType::String->value,
-            'size' => 16000,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
+        $attributes[] = Attribute::string(key: 'varchar_16000', size: 16000, required: true);
 
-        $attributes[] = new Document([
-            '$id' => ID::custom('varchar_200'),
-            'type' => ColumnType::String->value,
-            'size' => 200,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'filters' => [],
-        ]);
+        $attributes[] = Attribute::string(key: 'varchar_200', size: 200, required: true);
 
         try {
             $database->createCollection(new Collection(id: 'attributes_row_size', attributes: $attributes));

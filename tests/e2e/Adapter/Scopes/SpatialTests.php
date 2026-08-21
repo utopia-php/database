@@ -34,41 +34,13 @@ trait SpatialTests
             return;
         }
         $attributes = [
-            new Document([
-                '$id' => ID::custom('attribute1'),
-                'type' => ColumnType::String->value,
-                'size' => 256,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute2'),
-                'type' => ColumnType::Point->value,
-                'size' => 0,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'attribute1', size: 256),
+            Attribute::point(key: 'attribute2', required: true),
         ];
 
         $indexes = [
-            new Document([
-                '$id' => ID::custom('index1'),
-                'type' => IndexType::Key->value,
-                'attributes' => ['attribute1'],
-                'lengths' => [256],
-                'orders' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('index2'),
-                'type' => IndexType::Spatial->value,
-                'attributes' => ['attribute2'],
-                'lengths' => [],
-                'orders' => [],
-            ]),
+            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256]),
+            Index::spatial(key: 'index2', attributes: ['attribute2']),
         ];
 
         $col = $database->createCollection(new Collection(id: $collectionName, attributes: $attributes, indexes: $indexes));
@@ -762,22 +734,12 @@ trait SpatialTests
         // createCollection with orders
         $collOrderCreate = 'spatial_idx_order_create';
         try {
-            $attributes = [new Document([
-                '$id' => ID::custom('loc'),
-                'type' => ColumnType::Point->value,
-                'size' => 0,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ])];
-            $indexes = [new Document([
-                '$id' => ID::custom('idx_loc'),
-                'type' => IndexType::Spatial->value,
-                'attributes' => ['loc'],
-                'lengths' => [],
-                'orders' => $orderSupported ? [OrderDirection::Asc->value] : ['ASC'],
-            ])];
+            $attributes = [Attribute::point(key: 'loc', required: true)];
+            $indexes = [Index::spatial(
+                key: 'idx_loc',
+                attributes: ['loc'],
+                orders: $orderSupported ? [OrderDirection::Asc->value] : ['ASC'],
+            )];
 
             if ($orderSupported) {
                 $database->createCollection(new Collection(id: $collOrderCreate, attributes: $attributes, indexes: $indexes));
@@ -826,22 +788,8 @@ trait SpatialTests
         // createCollection with required=false
         $collNullCreate = 'spatial_idx_null_create_'.uniqid();
         try {
-            $attributes = [new Document([
-                '$id' => ID::custom('loc'),
-                'type' => ColumnType::Point->value,
-                'size' => 0,
-                'required' => false, // edge case
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ])];
-            $indexes = [new Document([
-                '$id' => ID::custom('idx_loc'),
-                'type' => IndexType::Spatial->value,
-                'attributes' => ['loc'],
-                'lengths' => [],
-                'orders' => [],
-            ])];
+            $attributes = [Attribute::point(key: 'loc')];
+            $indexes = [Index::spatial(key: 'idx_loc', attributes: ['loc'])];
 
             if ($nullSupported) {
                 $database->createCollection(new Collection(id: $collNullCreate, attributes: $attributes, indexes: $indexes));
@@ -1555,40 +1503,13 @@ trait SpatialTests
 
         // Create collection with spatial attributes
         $attributes = [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => ColumnType::String->value,
-                'size' => 256,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-            ]),
-            new Document([
-                '$id' => ID::custom('location'),
-                'type' => ColumnType::Point->value,
-                'size' => 0,
-                'required' => true,
-                'signed' => true,
-                'array' => false,
-            ]),
-            new Document([
-                '$id' => ID::custom('area'),
-                'type' => ColumnType::Polygon->value,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-            ]),
+            Attribute::string(key: 'name', size: 256, required: true),
+            Attribute::point(key: 'location', required: true),
+            Attribute::polygon(key: 'area'),
         ];
 
         $indexes = [
-            new Document([
-                '$id' => ID::custom('spatial_idx'),
-                'type' => IndexType::Spatial->value,
-                'attributes' => ['location'],
-                'lengths' => [],
-                'orders' => [],
-            ]),
+            Index::spatial(key: 'spatial_idx', attributes: ['location']),
         ];
 
         $database->createCollection(new Collection(id: $collectionName, attributes: $attributes, indexes: $indexes));

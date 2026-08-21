@@ -203,7 +203,7 @@ class IndexedQueriesTest extends TestCase
         );
     }
 
-    public function test_nested_join_on_search_requires_fulltext_index(): void
+    public function testNestedJoinOnSearchRequiresFulltextIndex(): void
     {
         $attributes = [
             new Document([
@@ -242,7 +242,7 @@ class IndexedQueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
-    public function test_nested_join_on_vector_counts_toward_limit(): void
+    public function testNestedJoinOnVectorCountsTowardLimit(): void
     {
         $attributes = [
             new Document([

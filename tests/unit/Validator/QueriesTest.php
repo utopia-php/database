@@ -248,7 +248,7 @@ class QueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
-    public function test_nested_join_alias_is_collected(): void
+    public function testNestedJoinAliasIsCollected(): void
     {
         $attributes = [
             new Document([
@@ -274,7 +274,7 @@ class QueriesTest extends TestCase
         ]), $validator->getDescription());
     }
 
-    public function test_nested_join_on_filter_unknown_alias_is_invalid(): void
+    public function testNestedJoinOnFilterUnknownAliasIsInvalid(): void
     {
         $attributes = [
             new Document([

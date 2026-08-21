@@ -544,15 +544,15 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $this->execute($this->prepare($permissions, event: Event::CollectionCreate));
 
-            $this->createIndex($id, new Index(key: Storage::INDEX_1, type: IndexType::Unique, attributes: [Storage::UID]), event: Event::CollectionCreate);
-            $this->createIndex($id, new Index(key: Storage::INDEX_CREATED_AT, type: IndexType::Key, attributes: [Storage::CREATED_AT]), event: Event::CollectionCreate);
-            $this->createIndex($id, new Index(key: Storage::INDEX_UPDATED_AT, type: IndexType::Key, attributes: [Storage::UPDATED_AT]), event: Event::CollectionCreate);
+            $this->createIndex($id, Index::unique(key: Storage::INDEX_1, attributes: [Storage::UID]), event: Event::CollectionCreate);
+            $this->createIndex($id, Index::key(key: Storage::INDEX_CREATED_AT, attributes: [Storage::CREATED_AT]), event: Event::CollectionCreate);
+            $this->createIndex($id, Index::key(key: Storage::INDEX_UPDATED_AT, attributes: [Storage::UPDATED_AT]), event: Event::CollectionCreate);
 
-            $this->createIndex(Storage::permissionsTable($id), new Index(key: self::INDEX_1, type: IndexType::Unique, attributes: [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION]), event: Event::CollectionCreate);
-            $this->createIndex(Storage::permissionsTable($id), new Index(key: self::INDEX_2, type: IndexType::Key, attributes: [Storage::PERM_PERMISSION, Storage::PERM_TYPE]), event: Event::CollectionCreate);
+            $this->createIndex(Storage::permissionsTable($id), Index::unique(key: self::INDEX_1, attributes: [Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION]), event: Event::CollectionCreate);
+            $this->createIndex(Storage::permissionsTable($id), Index::key(key: self::INDEX_2, attributes: [Storage::PERM_PERMISSION, Storage::PERM_TYPE]), event: Event::CollectionCreate);
 
             if ($this->sharedTables) {
-                $this->createIndex($id, new Index(key: Storage::INDEX_TENANT_ID, type: IndexType::Key, attributes: [Storage::SEQUENCE]), event: Event::CollectionCreate);
+                $this->createIndex($id, Index::key(key: Storage::INDEX_TENANT_ID, attributes: [Storage::SEQUENCE]), event: Event::CollectionCreate);
             }
 
             foreach ($indexes as $index) {
@@ -1115,7 +1115,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return true;
     }
 
-
     /**
      * Resolve the FTS5 table for index `$id` via metadata. Returns null
      * when metadata doesn't reach a candidate.
@@ -1590,7 +1589,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         return 0;
     }
-
 
     /**
      * Override getSpatialGeomFromText to return placeholder unchanged for SQLite

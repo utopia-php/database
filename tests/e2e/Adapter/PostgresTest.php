@@ -12,7 +12,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
-use Utopia\Query\Schema\ColumnType;
 
 class PostgresTest extends Base
 {
@@ -94,12 +93,7 @@ class PostgresTest extends Base
         );
 
         $database->createCollection($collection, [
-            new Attribute(
-                key: 'name',
-                type: ColumnType::String,
-                size: 128,
-                required: true,
-            ),
+            Attribute::string(key: 'name', size: 128, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),

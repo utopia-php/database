@@ -43,7 +43,7 @@ class OperatorValidationTest extends TestCase
     public function testIncrementOnInteger(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'count', [3]);
@@ -54,7 +54,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['count' => Database::MAX_INT - 5]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Increment, 'count', [10]);
@@ -65,7 +65,7 @@ class OperatorValidationTest extends TestCase
     public function testDecrementOnInteger(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Decrement, 'count', [3]);
@@ -76,7 +76,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['count' => Database::MIN_INT + 5]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Decrement, 'count', [10]);
@@ -87,7 +87,7 @@ class OperatorValidationTest extends TestCase
     public function testMultiplyOnInteger(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Multiply, 'value', [3]);
@@ -97,7 +97,7 @@ class OperatorValidationTest extends TestCase
     public function testMultiplyOnFloat(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'score'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Multiply, 'score', [2.5]);
@@ -108,7 +108,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => Database::MAX_INT]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Multiply, 'value', [2]);
@@ -120,7 +120,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => Database::MAX_INT]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Multiply, 'value', [-2]);
@@ -131,7 +131,7 @@ class OperatorValidationTest extends TestCase
     public function testDivideOnInteger(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Divide, 'value', [2]);
@@ -141,7 +141,7 @@ class OperatorValidationTest extends TestCase
     public function testDivideOnFloat(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'score'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Divide, 'score', [3.0]);
@@ -158,7 +158,7 @@ class OperatorValidationTest extends TestCase
     public function testDivideByZeroValidator(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Divide, 'value', [0]);
@@ -169,7 +169,7 @@ class OperatorValidationTest extends TestCase
     public function testModuloOnInteger(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Modulo, 'value', [3]);
@@ -186,7 +186,7 @@ class OperatorValidationTest extends TestCase
     public function testModuloByZeroValidator(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Modulo, 'value', [0]);
@@ -197,7 +197,7 @@ class OperatorValidationTest extends TestCase
     public function testModuloNegative(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Modulo, 'value', [-3]);
@@ -207,7 +207,7 @@ class OperatorValidationTest extends TestCase
     public function testPowerOnInteger(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Power, 'value', [3]);
@@ -217,7 +217,7 @@ class OperatorValidationTest extends TestCase
     public function testPowerFractional(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Power, 'value', [0.5]);
@@ -227,7 +227,7 @@ class OperatorValidationTest extends TestCase
     public function testPowerNegativeExponent(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Power, 'value', [-2]);
@@ -238,7 +238,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => 100]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Power, 'value', [10]);
@@ -249,7 +249,7 @@ class OperatorValidationTest extends TestCase
     public function testStringConcat(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'title', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'title'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'title', [' World']);
@@ -260,7 +260,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['title' => str_repeat('a', 95)]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'title', type: ColumnType::String, size: 100),
+            Attribute::string(key: 'title', size: 100),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'title', [str_repeat('b', 10)]);
@@ -272,7 +272,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['title' => str_repeat('a', 90)]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'title', type: ColumnType::String, size: 100),
+            Attribute::string(key: 'title', size: 100),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'title', [str_repeat('b', 10)]);
@@ -282,7 +282,7 @@ class OperatorValidationTest extends TestCase
     public function testStringConcatRequiresStringValue(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'title', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'title'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'title', []);
@@ -293,7 +293,7 @@ class OperatorValidationTest extends TestCase
     public function testStringConcatNonStringValue(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'title', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'title'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'title', [123]);
@@ -304,7 +304,7 @@ class OperatorValidationTest extends TestCase
     public function testStringReplace(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'text', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'text'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringReplace, 'text', ['old', 'new']);
@@ -314,7 +314,7 @@ class OperatorValidationTest extends TestCase
     public function testStringReplaceMultipleOccurrences(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'text', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'text'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringReplace, 'text', ['test', 'demo']);
@@ -324,7 +324,7 @@ class OperatorValidationTest extends TestCase
     public function testStringReplaceValidation(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'text', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'text'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringReplace, 'text', ['only_search']);
@@ -335,7 +335,7 @@ class OperatorValidationTest extends TestCase
     public function testStringReplaceWithNonStringValues(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'text', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'text'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringReplace, 'text', [123, 456]);
@@ -346,7 +346,7 @@ class OperatorValidationTest extends TestCase
     public function testStringReplaceOnNonStringField(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'number', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'number'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringReplace, 'number', ['old', 'new']);
@@ -357,7 +357,7 @@ class OperatorValidationTest extends TestCase
     public function testToggleBoolean(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'active', type: ColumnType::Boolean, size: 0),
+            Attribute::boolean(key: 'active'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Toggle, 'active', []);
@@ -367,7 +367,7 @@ class OperatorValidationTest extends TestCase
     public function testToggleFromDefault(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, default: false),
+            Attribute::boolean(key: 'active', default: false),
         ]);
 
         $op = $this->makeOperator(OperatorType::Toggle, 'active', []);
@@ -377,7 +377,7 @@ class OperatorValidationTest extends TestCase
     public function testToggleOnNonBoolean(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Toggle, 'count', []);
@@ -388,7 +388,7 @@ class OperatorValidationTest extends TestCase
     public function testToggleOnStringField(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Toggle, 'name', []);
@@ -399,7 +399,7 @@ class OperatorValidationTest extends TestCase
     public function testDateAddDays(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'date', type: ColumnType::Datetime, size: 0),
+            Attribute::datetime(key: 'date'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateAddDays, 'date', [5]);
@@ -409,7 +409,7 @@ class OperatorValidationTest extends TestCase
     public function testDateSubDays(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'date', type: ColumnType::Datetime, size: 0),
+            Attribute::datetime(key: 'date'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateSubDays, 'date', [3]);
@@ -419,7 +419,7 @@ class OperatorValidationTest extends TestCase
     public function testDateSetNow(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'timestamp', type: ColumnType::Datetime, size: 0),
+            Attribute::datetime(key: 'timestamp'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateSetNow, 'timestamp', []);
@@ -429,7 +429,7 @@ class OperatorValidationTest extends TestCase
     public function testDateAtYearBoundaries(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'date', type: ColumnType::Datetime, size: 0),
+            Attribute::datetime(key: 'date'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateAddDays, 'date', [365]);
@@ -445,7 +445,7 @@ class OperatorValidationTest extends TestCase
     public function testDateAddDaysOnNonDateField(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateAddDays, 'name', [5]);
@@ -456,7 +456,7 @@ class OperatorValidationTest extends TestCase
     public function testDateAddDaysRequiresIntValue(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'date', type: ColumnType::Datetime, size: 0),
+            Attribute::datetime(key: 'date'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateAddDays, 'date', []);
@@ -467,7 +467,7 @@ class OperatorValidationTest extends TestCase
     public function testDateAddDaysNonIntegerValue(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'date', type: ColumnType::Datetime, size: 0),
+            Attribute::datetime(key: 'date'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateAddDays, 'date', [3.5]);
@@ -478,7 +478,7 @@ class OperatorValidationTest extends TestCase
     public function testDateSetNowOnNonDateField(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::DateSetNow, 'name', []);
@@ -489,7 +489,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayAppend(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayAppend, 'tags', ['new', 'items']);
@@ -499,7 +499,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayAppendViolatesConstraints(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255, array: false),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayAppend, 'name', ['item']);
@@ -510,7 +510,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayAppendIntegerBounds(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayAppend, 'numbers', [Database::MAX_INT + 1]);
@@ -521,7 +521,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayPrepend(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayPrepend, 'tags', ['first', 'second']);
@@ -531,7 +531,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayPrependOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayPrepend, 'name', ['item']);
@@ -543,7 +543,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['numbers' => [1, 2, 3]]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::ArrayInsert, 'numbers', [1, 99]);
@@ -554,7 +554,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['numbers' => [1, 2, 3]]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ], $currentDoc);
 
         $opStart = $this->makeOperator(OperatorType::ArrayInsert, 'numbers', [0, 0]);
@@ -568,7 +568,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['items' => ['a', 'b', 'c']]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::ArrayInsert, 'items', [10, 'new']);
@@ -579,7 +579,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayInsertNegativeIndex(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayInsert, 'items', [-1, 'new']);
@@ -590,7 +590,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayInsertMissingValues(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayInsert, 'items', [0]);
@@ -601,7 +601,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayInsertOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayInsert, 'name', [0, 'val']);
@@ -612,7 +612,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayRemove(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayRemove, 'tags', ['unwanted']);
@@ -622,7 +622,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayRemoveOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayRemove, 'name', ['val']);
@@ -633,7 +633,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayRemoveEmptyValues(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayRemove, 'tags', []);
@@ -644,7 +644,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilter(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'numbers', ['greaterThan', 5]);
@@ -654,7 +654,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterNumeric(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $opGt = $this->makeOperator(OperatorType::ArrayFilter, 'numbers', ['greaterThan', 10]);
@@ -673,7 +673,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterValidation(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'numbers', ['invalidCondition', 5]);
@@ -684,7 +684,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'name', ['equal', 'test']);
@@ -695,7 +695,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterEmptyValues(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'numbers', []);
@@ -706,7 +706,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterTooManyValues(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'numbers', ['greaterThan', 5, 'extra']);
@@ -717,7 +717,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterConditionNotString(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'numbers', [123, 5]);
@@ -728,7 +728,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterNullConditions(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $opNull = $this->makeOperator(OperatorType::ArrayFilter, 'tags', ['isNull']);
@@ -741,7 +741,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayDiff(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayDiff, 'tags', ['remove_me', 'and_me']);
@@ -751,7 +751,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayDiffOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayDiff, 'name', ['val']);
@@ -762,7 +762,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayIntersect(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayIntersect, 'items', ['a', 'b', 'c']);
@@ -772,7 +772,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayIntersectEmpty(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayIntersect, 'items', []);
@@ -783,7 +783,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayIntersectOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayIntersect, 'name', ['val']);
@@ -794,7 +794,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayUnique(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayUnique, 'items', []);
@@ -804,7 +804,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayUniqueOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayUnique, 'name', []);
@@ -816,7 +816,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['items' => []]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ], $currentDoc);
 
         $opAppend = $this->makeOperator(OperatorType::ArrayAppend, 'items', ['first']);
@@ -836,7 +836,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['items' => ['only']]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ], $currentDoc);
 
         $opInsert0 = $this->makeOperator(OperatorType::ArrayInsert, 'items', [0, 'before']);
@@ -853,7 +853,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['items' => null]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
         ], $currentDoc);
 
         $opAppend = $this->makeOperator(OperatorType::ArrayAppend, 'items', ['first']);
@@ -863,7 +863,7 @@ class OperatorValidationTest extends TestCase
     public function testIncrementOnFloat(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'score'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'score', [1.5]);
@@ -873,7 +873,7 @@ class OperatorValidationTest extends TestCase
     public function testIncrementWithPreciseFloats(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'score'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'score', [0.1]);
@@ -886,7 +886,7 @@ class OperatorValidationTest extends TestCase
     public function testFloatPrecisionLoss(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'score'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'score', [0.000000001]);
@@ -899,9 +899,9 @@ class OperatorValidationTest extends TestCase
     public function testSequentialOperators(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::integer(key: 'count'),
+            Attribute::double(key: 'score'),
+            Attribute::string(key: 'name'),
         ]);
 
         $op1 = $this->makeOperator(OperatorType::Increment, 'count', [1]);
@@ -924,11 +924,11 @@ class OperatorValidationTest extends TestCase
         ]);
 
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
-            new Attribute(key: 'active', type: ColumnType::Boolean, size: 0),
-            new Attribute(key: 'date', type: ColumnType::Datetime, size: 0),
+            Attribute::integer(key: 'count'),
+            Attribute::string(key: 'tags', size: 50, array: true),
+            Attribute::string(key: 'name'),
+            Attribute::boolean(key: 'active'),
+            Attribute::datetime(key: 'date'),
         ], $currentDoc);
 
         $this->assertTrue($validator->isValid($this->makeOperator(OperatorType::Increment, 'count', [10])));
@@ -941,7 +941,7 @@ class OperatorValidationTest extends TestCase
     public function testErrorHandling(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'nonexistent', [1]);
@@ -953,8 +953,8 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['count' => null, 'name' => null]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
-            new Attribute(key: 'name', type: ColumnType::String, size: 100),
+            Attribute::integer(key: 'count'),
+            Attribute::string(key: 'name', size: 100),
         ], $currentDoc);
 
         $opInc = $this->makeOperator(OperatorType::Increment, 'count', [5]);
@@ -967,7 +967,7 @@ class OperatorValidationTest extends TestCase
     public function testValueLimits(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'counter', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'counter'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'counter', [5, 50]);
@@ -986,7 +986,7 @@ class OperatorValidationTest extends TestCase
     public function testValueLimitsNonNumeric(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'counter', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'counter'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'counter', [5, 'not_a_number']);
@@ -997,8 +997,8 @@ class OperatorValidationTest extends TestCase
     public function testAttributeConstraints(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::double(key: 'score'),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $opNumericOnArray = $this->makeOperator(OperatorType::Increment, 'tags', [1]);
@@ -1011,7 +1011,7 @@ class OperatorValidationTest extends TestCase
     public function testEmptyStrings(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'text', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'text'),
         ]);
 
         $opConcat = $this->makeOperator(OperatorType::StringConcat, 'text', ['']);
@@ -1025,7 +1025,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => 0]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $opMaxInc = $this->makeOperator(OperatorType::Increment, 'value', [Database::MAX_INT]);
@@ -1033,7 +1033,7 @@ class OperatorValidationTest extends TestCase
 
         $currentDoc2 = new Document(['value' => 1]);
         $validator2 = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc2);
 
         $opOverflow = $this->makeOperator(OperatorType::Increment, 'value', [Database::MAX_INT]);
@@ -1043,7 +1043,7 @@ class OperatorValidationTest extends TestCase
     public function testUnicodeCharacters(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'text', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'text'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'text', [' mundo']);
@@ -1057,7 +1057,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['text' => '']);
         $validator = $this->makeValidator([
-            new Attribute(key: 'text', type: ColumnType::String, size: 100),
+            Attribute::string(key: 'text', size: 100),
         ], $currentDoc);
 
         $opFits = $this->makeOperator(OperatorType::StringConcat, 'text', [str_repeat('x', 100)]);
@@ -1071,8 +1071,8 @@ class OperatorValidationTest extends TestCase
     public function testZeroValues(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::integer(key: 'count'),
+            Attribute::double(key: 'score'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'count', [0]);
@@ -1088,12 +1088,12 @@ class OperatorValidationTest extends TestCase
     public function testBatchOperators(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
-            new Attribute(key: 'title', type: ColumnType::String, size: 255),
-            new Attribute(key: 'active', type: ColumnType::Boolean, size: 0),
-            new Attribute(key: 'date', type: ColumnType::Datetime, size: 0),
+            Attribute::integer(key: 'count'),
+            Attribute::double(key: 'score'),
+            Attribute::string(key: 'tags', size: 50, array: true),
+            Attribute::string(key: 'title'),
+            Attribute::boolean(key: 'active'),
+            Attribute::datetime(key: 'date'),
         ]);
 
         $operators = [
@@ -1113,7 +1113,7 @@ class OperatorValidationTest extends TestCase
     public function testIncrementOnTextAttribute(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'text_field', type: ColumnType::String, size: 100),
+            Attribute::string(key: 'text_field', size: 100),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'text_field', [1]);
@@ -1124,7 +1124,7 @@ class OperatorValidationTest extends TestCase
     public function testIncrementOnArrayAttribute(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'tags', [1]);
@@ -1135,7 +1135,7 @@ class OperatorValidationTest extends TestCase
     public function testIncrementOnBooleanAttribute(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'active', type: ColumnType::Boolean, size: 0),
+            Attribute::boolean(key: 'active'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'active', [1]);
@@ -1146,7 +1146,7 @@ class OperatorValidationTest extends TestCase
     public function testNumericOperatorNonNumericValue(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'count', ['not_a_number']);
@@ -1157,7 +1157,7 @@ class OperatorValidationTest extends TestCase
     public function testNumericOperatorEmptyValues(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'count', []);
@@ -1168,7 +1168,7 @@ class OperatorValidationTest extends TestCase
     public function testStringConcatOnNonStringField(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'count', [' suffix']);
@@ -1179,7 +1179,7 @@ class OperatorValidationTest extends TestCase
     public function testStringConcatOnArrayField(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::StringConcat, 'tags', [' suffix']);
@@ -1190,7 +1190,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayInsertIntegerBounds(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, array: true),
+            Attribute::integer(key: 'numbers', array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayInsert, 'numbers', [0, Database::MAX_INT + 1]);
@@ -1202,7 +1202,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['count' => Database::MIN_INT + 2]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Decrement, 'count', [5]);
@@ -1213,7 +1213,7 @@ class OperatorValidationTest extends TestCase
     public function testModuloOnFloat(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'score'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Modulo, 'score', [3.5]);
@@ -1223,7 +1223,7 @@ class OperatorValidationTest extends TestCase
     public function testPowerWithMaxLimit(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Power, 'value', [2, 1000]);
@@ -1233,7 +1233,7 @@ class OperatorValidationTest extends TestCase
     public function testDivideWithMinLimit(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'value'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Divide, 'value', [2.0, 1.0]);
@@ -1243,7 +1243,7 @@ class OperatorValidationTest extends TestCase
     public function testIncrementWithMaxCap(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'counter', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'counter'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'counter', [100, 50]);
@@ -1253,7 +1253,7 @@ class OperatorValidationTest extends TestCase
     public function testDecrementWithMinCap(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'counter', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'counter'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Decrement, 'counter', [100, 0]);
@@ -1263,7 +1263,7 @@ class OperatorValidationTest extends TestCase
     public function testOperatorOnNonexistentAttribute(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'count'),
         ]);
 
         $op = $this->makeOperator(OperatorType::Increment, 'nonexistent', [1]);
@@ -1274,7 +1274,7 @@ class OperatorValidationTest extends TestCase
     public function testAllNumericOperatorsOnString(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $numericTypes = [
@@ -1296,7 +1296,7 @@ class OperatorValidationTest extends TestCase
     public function testAllArrayOperatorsOnNonArray(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::string(key: 'name'),
         ]);
 
         $opAppend = $this->makeOperator(OperatorType::ArrayAppend, 'name', ['val']);
@@ -1327,9 +1327,9 @@ class OperatorValidationTest extends TestCase
     public function testDateOperatorsOnNonDateFields(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
-            new Attribute(key: 'active', type: ColumnType::Boolean, size: 0),
+            Attribute::integer(key: 'count'),
+            Attribute::string(key: 'name'),
+            Attribute::boolean(key: 'active'),
         ]);
 
         foreach (['count', 'name', 'active'] as $field) {
@@ -1360,9 +1360,9 @@ class OperatorValidationTest extends TestCase
         $this->assertCount(1, $result['updates']);
 
         $validator = $this->makeValidator([
-            new Attribute(key: 'count', type: ColumnType::Integer, size: 0),
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
-            new Attribute(key: 'name', type: ColumnType::String, size: 255),
+            Attribute::integer(key: 'count'),
+            Attribute::string(key: 'tags', size: 50, array: true),
+            Attribute::string(key: 'name'),
         ]);
 
         foreach ($result['operators'] as $op) {
@@ -1434,7 +1434,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterEqualCondition(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'tags', ['equal', 'active']);
@@ -1444,7 +1444,7 @@ class OperatorValidationTest extends TestCase
     public function testArrayFilterNotEqualCondition(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, array: true),
+            Attribute::string(key: 'tags', size: 50, array: true),
         ]);
 
         $op = $this->makeOperator(OperatorType::ArrayFilter, 'tags', ['notEqual', 'inactive']);
@@ -1455,7 +1455,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => 42]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Multiply, 'value', [0]);
@@ -1466,7 +1466,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => 0]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Decrement, 'value', [1]);
@@ -1477,7 +1477,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => Database::MAX_INT - 1]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Increment, 'value', [1]);
@@ -1488,7 +1488,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => Database::MIN_INT + 1]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Decrement, 'value', [1]);
@@ -1499,7 +1499,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['score' => PHP_FLOAT_MAX / 2]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0),
+            Attribute::double(key: 'score'),
         ], $currentDoc);
 
         $op = $this->makeOperator(OperatorType::Increment, 'score', [PHP_FLOAT_MAX / 2]);
@@ -1510,7 +1510,7 @@ class OperatorValidationTest extends TestCase
     {
         $currentDoc = new Document(['value' => Database::MAX_INT - 5]);
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::Integer, size: 0),
+            Attribute::integer(key: 'value'),
         ], $currentDoc);
 
         $opWithCap = $this->makeOperator(OperatorType::Increment, 'value', [100, Database::MAX_INT]);
@@ -1558,7 +1558,7 @@ class OperatorValidationTest extends TestCase
     public function testBigIntegerOperatorRejectsOverflow(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::BigInteger),
+            Attribute::bigInteger(key: 'value'),
         ], new Document(['value' => PHP_INT_MAX]));
 
         $this->assertFalse($validator->isValid(
@@ -1570,7 +1570,7 @@ class OperatorValidationTest extends TestCase
     public function testUnsignedBigIntegerOperatorRejectsUnderflow(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false),
+            Attribute::bigInteger(key: 'value', signed: false),
         ], new Document(['value' => 0]));
 
         $this->assertFalse($validator->isValid(
@@ -1582,7 +1582,7 @@ class OperatorValidationTest extends TestCase
     public function testUnsignedBigIntegerOperatorCrossesPhpIntegerBoundary(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false),
+            Attribute::bigInteger(key: 'value', signed: false),
         ], new Document(['value' => PHP_INT_MAX]));
 
         $this->assertTrue($validator->isValid(
@@ -1592,7 +1592,7 @@ class OperatorValidationTest extends TestCase
 
     public function testUnsignedBigIntegerOperatorAcceptsAndProtectsExactMaximum(): void
     {
-        $attribute = new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false);
+        $attribute = Attribute::bigInteger(key: 'value', signed: false);
         $atBoundary = $this->makeValidator([$attribute], new Document(['value' => '18446744073709551614']));
         $overflow = $this->makeValidator([$attribute], new Document(['value' => '18446744073709551615']));
 
@@ -1609,7 +1609,7 @@ class OperatorValidationTest extends TestCase
     {
         $validator = new OperatorValidator(
             $this->makeCollection([
-                new Attribute(key: 'value', type: ColumnType::BigInteger, signed: false),
+                Attribute::bigInteger(key: 'value', signed: false),
             ]),
             new Document(['value' => 1]),
             false,
@@ -1624,7 +1624,7 @@ class OperatorValidationTest extends TestCase
     public function testUnsignedBigIntegerArrayOperatorUsesExactBounds(): void
     {
         $validator = $this->makeValidator([
-            new Attribute(key: 'values', type: ColumnType::BigInteger, signed: false, array: true),
+            Attribute::bigInteger(key: 'values', signed: false, array: true),
         ]);
 
         $this->assertTrue($validator->isValid(

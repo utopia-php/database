@@ -19,7 +19,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait RelationshipTests
@@ -41,28 +40,28 @@ trait RelationshipTests
         }
 
         $database->createCollection('zoo');
-        $database->createAttribute('zoo', new Attribute(key: 'name', type: ColumnType::String, size: 256, required: true));
+        $database->createAttribute('zoo', Attribute::string(key: 'name', size: 256, required: true));
 
         $database->createCollection('veterinarians');
-        $database->createAttribute('veterinarians', new Attribute(key: 'fullname', type: ColumnType::String, size: 256, required: true));
+        $database->createAttribute('veterinarians', Attribute::string(key: 'fullname', size: 256, required: true));
 
         $database->createCollection('presidents');
-        $database->createAttribute('presidents', new Attribute(key: 'firstName', type: ColumnType::String, size: 256, required: true));
-        $database->createAttribute('presidents', new Attribute(key: 'lastName', type: ColumnType::String, size: 256, required: true));
+        $database->createAttribute('presidents', Attribute::string(key: 'firstName', size: 256, required: true));
+        $database->createAttribute('presidents', Attribute::string(key: 'lastName', size: 256, required: true));
         $database->createRelationship(new Relationship(collection: 'presidents', relatedCollection: 'veterinarians', type: RelationType::ManyToMany, twoWay: true, key: 'votes', twoWayKey: 'presidents'));
 
         $database->createCollection('__animals');
-        $database->createAttribute('__animals', new Attribute(key: 'name', type: ColumnType::String, size: 256, required: true));
-        $database->createAttribute('__animals', new Attribute(key: 'age', type: ColumnType::Integer, size: 0, required: false));
-        $database->createAttribute('__animals', new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: false));
-        $database->createAttribute('__animals', new Attribute(key: 'dateOfBirth', type: ColumnType::Datetime, size: 0, required: true, filters: ['datetime']));
-        $database->createAttribute('__animals', new Attribute(key: 'longtext', type: ColumnType::String, size: 100000000, required: false));
-        $database->createAttribute('__animals', new Attribute(key: 'isActive', type: ColumnType::Boolean, size: 0, required: false, default: true));
-        $database->createAttribute('__animals', new Attribute(key: 'integers', type: ColumnType::Integer, size: 0, required: false, array: true));
-        $database->createAttribute('__animals', new Attribute(key: 'email', type: ColumnType::String, size: 255, required: false));
-        $database->createAttribute('__animals', new Attribute(key: 'ip', type: ColumnType::String, size: 255, required: false));
-        $database->createAttribute('__animals', new Attribute(key: 'url', type: ColumnType::String, size: 255, required: false));
-        $database->createAttribute('__animals', new Attribute(key: 'enum', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute('__animals', Attribute::string(key: 'name', size: 256, required: true));
+        $database->createAttribute('__animals', Attribute::integer(key: 'age'));
+        $database->createAttribute('__animals', Attribute::double(key: 'price'));
+        $database->createAttribute('__animals', Attribute::datetime(key: 'dateOfBirth', required: true, filters: ['datetime']));
+        $database->createAttribute('__animals', Attribute::string(key: 'longtext', size: 100000000));
+        $database->createAttribute('__animals', Attribute::boolean(key: 'isActive', default: true));
+        $database->createAttribute('__animals', Attribute::integer(key: 'integers', array: true));
+        $database->createAttribute('__animals', Attribute::string(key: 'email'));
+        $database->createAttribute('__animals', Attribute::string(key: 'ip'));
+        $database->createAttribute('__animals', Attribute::string(key: 'url'));
+        $database->createAttribute('__animals', Attribute::string(key: 'enum'));
 
         $database->createRelationship(new Relationship(collection: 'presidents', relatedCollection: '__animals', type: RelationType::OneToOne, twoWay: true, key: 'animal', twoWayKey: 'president'));
 
@@ -391,8 +390,8 @@ trait RelationshipTests
         $database->createCollection('usersSimple');
         $database->createCollection('postsSimple');
 
-        $database->createAttribute('usersSimple', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('postsSimple', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('usersSimple', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('postsSimple', Attribute::string(key: 'title', required: true));
 
         $database->createRelationship(new Relationship(collection: 'usersSimple', relatedCollection: 'postsSimple', type: RelationType::OneToMany, twoWay: true, key: 'posts', twoWayKey: 'author'));
 
@@ -1002,7 +1001,7 @@ trait RelationshipTests
         $database->createCollection('rnRsTestA');
         $database->createCollection('rnRsTestB');
 
-        $database->createAttribute('rnRsTestB', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('rnRsTestB', Attribute::string(key: 'name', required: true));
 
         $database->createRelationship(new Relationship(
             collection: 'rnRsTestA',
@@ -1062,10 +1061,10 @@ trait RelationshipTests
         $database->createCollection('make');
         $database->createCollection('model');
 
-        $database->createAttribute('make', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('make', new Attribute(key: 'origin', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('model', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('model', new Attribute(key: 'year', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('make', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('make', Attribute::string(key: 'origin', required: true));
+        $database->createAttribute('model', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('model', Attribute::integer(key: 'year', required: true));
 
         $database->createRelationship(new Relationship(collection: 'make', relatedCollection: 'model', type: RelationType::OneToMany, twoWay: true, key: 'models', twoWayKey: 'make'));
 
@@ -1351,9 +1350,9 @@ trait RelationshipTests
         $database->createCollection('trees', permissions: [Permission::create(Role::any())], documentSecurity: true);
         $database->createCollection('birds', permissions: [Permission::create(Role::any())], documentSecurity: true);
 
-        $database->createAttribute('lawns', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('trees', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('birds', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('lawns', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('trees', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('birds', Attribute::string(key: 'name', required: true));
 
         $database->createRelationship(new Relationship(collection: 'lawns', relatedCollection: 'trees', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'lawn', onDelete: ForeignKeyAction::Cascade));
         $database->createRelationship(new Relationship(collection: 'trees', relatedCollection: 'birds', type: RelationType::ManyToMany, twoWay: true, onDelete: ForeignKeyAction::SetNull));
@@ -1412,7 +1411,7 @@ trait RelationshipTests
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         $this->getDatabase()->createCollection('testUpdateDocumentsRelationships1', attributes: [
-            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true),
+            Attribute::string(key: 'string', size: 767, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1421,7 +1420,7 @@ trait RelationshipTests
         ]);
 
         $this->getDatabase()->createCollection('testUpdateDocumentsRelationships2', attributes: [
-            new Attribute(key: 'string', type: ColumnType::String, size: 767, required: true),
+            Attribute::string(key: 'string', size: 767, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1504,7 +1503,7 @@ trait RelationshipTests
             return;
         }
         $database->createCollection('userProfiles', [
-            new Attribute(key: 'username', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'username', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1512,7 +1511,7 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ]);
         $database->createCollection('links', [
-            new Attribute(key: 'title', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'title', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1520,7 +1519,7 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ]);
         $database->createCollection('videos', [
-            new Attribute(key: 'title', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'title', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1528,7 +1527,7 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ]);
         $database->createCollection('products', [
-            new Attribute(key: 'title', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'title', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1536,7 +1535,7 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ]);
         $database->createCollection('settings', [
-            new Attribute(key: 'metaTitle', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'metaTitle', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1544,7 +1543,7 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ]);
         $database->createCollection('appearance', [
-            new Attribute(key: 'metaTitle', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'metaTitle', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1552,7 +1551,7 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ]);
         $database->createCollection('group', [
-            new Attribute(key: 'name', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'name', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1560,7 +1559,7 @@ trait RelationshipTests
             Permission::delete(Role::any()),
         ]);
         $database->createCollection('community', [
-            new Attribute(key: 'name', type: ColumnType::String, size: 700, required: false, default: null, signed: true, array: false, format: '', filters: []),
+            Attribute::string(key: 'name', size: 700, format: ''),
         ], [], [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -1696,13 +1695,13 @@ trait RelationshipTests
 
         // Create collections: car -> customer -> inspection
         $database->createCollection('car');
-        $database->createAttribute('car', new Attribute(key: 'plateNumber', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('car', Attribute::string(key: 'plateNumber', required: true));
 
         $database->createCollection('customer');
-        $database->createAttribute('customer', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('customer', Attribute::string(key: 'name', required: true));
 
         $database->createCollection('inspection');
-        $database->createAttribute('inspection', new Attribute(key: 'type', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('inspection', Attribute::string(key: 'type', required: true));
 
         // Create relationships
         // car -> customer (many to one, one-way to avoid circular references)
@@ -1908,9 +1907,9 @@ trait RelationshipTests
         $database->createCollection('productDepthTest');
         $database->createCollection('storeDepthTest');
 
-        $database->createAttribute('orderDepthTest', new Attribute(key: 'orderNumber', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('productDepthTest', new Attribute(key: 'productName', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('storeDepthTest', new Attribute(key: 'storeName', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('orderDepthTest', Attribute::string(key: 'orderNumber', required: true));
+        $database->createAttribute('productDepthTest', Attribute::string(key: 'productName', required: true));
+        $database->createAttribute('storeDepthTest', Attribute::string(key: 'storeName', required: true));
 
         // Order -> Product (many-to-one)
         $database->createRelationship(new Relationship(collection: 'orderDepthTest', relatedCollection: 'productDepthTest', type: RelationType::ManyToOne, twoWay: true, key: 'product', twoWayKey: 'orders'));
@@ -2029,10 +2028,10 @@ trait RelationshipTests
         $database->createCollection('authorsFilter');
         $database->createCollection('postsFilter');
 
-        $database->createAttribute('authorsFilter', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('authorsFilter', new Attribute(key: 'age', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('postsFilter', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('postsFilter', new Attribute(key: 'published', type: ColumnType::Boolean, size: 0, required: true));
+        $database->createAttribute('authorsFilter', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('authorsFilter', Attribute::integer(key: 'age', required: true));
+        $database->createAttribute('postsFilter', Attribute::string(key: 'title', required: true));
+        $database->createAttribute('postsFilter', Attribute::boolean(key: 'published', required: true));
 
         $database->createRelationship(new Relationship(collection: 'authorsFilter', relatedCollection: 'postsFilter', type: RelationType::OneToMany, twoWay: true, key: 'posts', twoWayKey: 'author'));
 
@@ -2103,8 +2102,8 @@ trait RelationshipTests
         $database->createCollection('usersOto');
         $database->createCollection('profilesOto');
 
-        $database->createAttribute('usersOto', new Attribute(key: 'username', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('profilesOto', new Attribute(key: 'bio', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('usersOto', Attribute::string(key: 'username', required: true));
+        $database->createAttribute('profilesOto', Attribute::string(key: 'bio', required: true));
 
         // ONE_TO_ONE with twoWay=true
         $database->createRelationship(new Relationship(collection: 'usersOto', relatedCollection: 'profilesOto', type: RelationType::OneToOne, twoWay: true, key: 'profile', twoWayKey: 'user'));
@@ -2143,8 +2142,8 @@ trait RelationshipTests
         $database->createCollection('commentsMto');
         $database->createCollection('usersMto');
 
-        $database->createAttribute('commentsMto', new Attribute(key: 'content', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('usersMto', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('commentsMto', Attribute::string(key: 'content', required: true));
+        $database->createAttribute('usersMto', Attribute::string(key: 'name', required: true));
 
         // MANY_TO_ONE with twoWay=true
         $database->createRelationship(new Relationship(collection: 'commentsMto', relatedCollection: 'usersMto', type: RelationType::ManyToOne, twoWay: true, key: 'commenter', twoWayKey: 'comments'));
@@ -2189,8 +2188,8 @@ trait RelationshipTests
         $database->createCollection('studentsMtm');
         $database->createCollection('coursesMtm');
 
-        $database->createAttribute('studentsMtm', new Attribute(key: 'studentName', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('coursesMtm', new Attribute(key: 'courseName', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('studentsMtm', Attribute::string(key: 'studentName', required: true));
+        $database->createAttribute('coursesMtm', Attribute::string(key: 'courseName', required: true));
 
         // MANY_TO_MANY
         $database->createRelationship(new Relationship(collection: 'studentsMtm', relatedCollection: 'coursesMtm', type: RelationType::ManyToMany, twoWay: true, key: 'enrolledCourses', twoWayKey: 'students'));
@@ -2244,8 +2243,8 @@ trait RelationshipTests
         $database->createCollection('usersRelId');
         $database->createCollection('postsRelId');
 
-        $database->createAttribute('usersRelId', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('postsRelId', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('usersRelId', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('postsRelId', Attribute::string(key: 'title', required: true));
 
         $database->createRelationship(new Relationship(collection: 'postsRelId', relatedCollection: 'usersRelId', type: RelationType::ManyToOne, twoWay: true, key: 'user', twoWayKey: 'posts'));
 
@@ -2335,8 +2334,8 @@ trait RelationshipTests
         $database->createCollection('usersOtoId');
         $database->createCollection('profilesOtoId');
 
-        $database->createAttribute('usersOtoId', new Attribute(key: 'username', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('profilesOtoId', new Attribute(key: 'bio', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('usersOtoId', Attribute::string(key: 'username', required: true));
+        $database->createAttribute('profilesOtoId', Attribute::string(key: 'bio', required: true));
 
         $database->createRelationship(new Relationship(collection: 'usersOtoId', relatedCollection: 'profilesOtoId', type: RelationType::OneToOne, twoWay: true, key: 'profile', twoWayKey: 'user'));
 
@@ -2381,8 +2380,8 @@ trait RelationshipTests
         $database->createCollection('developersMtmId');
         $database->createCollection('projectsMtmId');
 
-        $database->createAttribute('developersMtmId', new Attribute(key: 'devName', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('projectsMtmId', new Attribute(key: 'projectName', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('developersMtmId', Attribute::string(key: 'devName', required: true));
+        $database->createAttribute('projectsMtmId', Attribute::string(key: 'projectName', required: true));
 
         $database->createRelationship(new Relationship(collection: 'developersMtmId', relatedCollection: 'projectsMtmId', type: RelationType::ManyToMany, twoWay: true, key: 'projects', twoWayKey: 'developers'));
 
@@ -2533,12 +2532,12 @@ trait RelationshipTests
         $database->createCollection('productsQt');
         $database->createCollection('vendorsQt');
 
-        $database->createAttribute('productsQt', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('productsQt', new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute('vendorsQt', new Attribute(key: 'company', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vendorsQt', new Attribute(key: 'rating', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute('vendorsQt', new Attribute(key: 'email', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vendorsQt', new Attribute(key: 'verified', type: ColumnType::Boolean, size: 0, required: true));
+        $database->createAttribute('productsQt', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('productsQt', Attribute::double(key: 'price', required: true));
+        $database->createAttribute('vendorsQt', Attribute::string(key: 'company', required: true));
+        $database->createAttribute('vendorsQt', Attribute::double(key: 'rating', required: true));
+        $database->createAttribute('vendorsQt', Attribute::string(key: 'email', required: true));
+        $database->createAttribute('vendorsQt', Attribute::boolean(key: 'verified', required: true));
 
         $database->createRelationship(new Relationship(collection: 'productsQt', relatedCollection: 'vendorsQt', type: RelationType::ManyToOne, twoWay: true, key: 'vendor', twoWayKey: 'products'));
 
@@ -2700,13 +2699,13 @@ trait RelationshipTests
         $database->createCollection('restaurantsSpatial');
         $database->createCollection('suppliersSpatial');
 
-        $database->createAttribute('restaurantsSpatial', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('restaurantsSpatial', new Attribute(key: 'location', type: ColumnType::Point, size: 0, required: true));
+        $database->createAttribute('restaurantsSpatial', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('restaurantsSpatial', Attribute::point(key: 'location', required: true));
 
-        $database->createAttribute('suppliersSpatial', new Attribute(key: 'company', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('suppliersSpatial', new Attribute(key: 'warehouseLocation', type: ColumnType::Point, size: 0, required: true));
-        $database->createAttribute('suppliersSpatial', new Attribute(key: 'deliveryArea', type: ColumnType::Polygon, size: 0, required: true));
-        $database->createAttribute('suppliersSpatial', new Attribute(key: 'deliveryRoute', type: ColumnType::Linestring, size: 0, required: true));
+        $database->createAttribute('suppliersSpatial', Attribute::string(key: 'company', required: true));
+        $database->createAttribute('suppliersSpatial', Attribute::point(key: 'warehouseLocation', required: true));
+        $database->createAttribute('suppliersSpatial', Attribute::polygon(key: 'deliveryArea', required: true));
+        $database->createAttribute('suppliersSpatial', Attribute::linestring(key: 'deliveryRoute', required: true));
 
         $database->createRelationship(new Relationship(collection: 'restaurantsSpatial', relatedCollection: 'suppliersSpatial', type: RelationType::ManyToOne, twoWay: true, key: 'supplier', twoWayKey: 'restaurants'));
 
@@ -2943,11 +2942,11 @@ trait RelationshipTests
         $database->createCollection('teamsParent');
         $database->createCollection('membersParent');
 
-        $database->createAttribute('teamsParent', new Attribute(key: 'teamName', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('teamsParent', new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: true));
-        $database->createAttribute('membersParent', new Attribute(key: 'memberName', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('membersParent', new Attribute(key: 'role', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('membersParent', new Attribute(key: 'senior', type: ColumnType::Boolean, size: 0, required: true));
+        $database->createAttribute('teamsParent', Attribute::string(key: 'teamName', required: true));
+        $database->createAttribute('teamsParent', Attribute::boolean(key: 'active', required: true));
+        $database->createAttribute('membersParent', Attribute::string(key: 'memberName', required: true));
+        $database->createAttribute('membersParent', Attribute::string(key: 'role', required: true));
+        $database->createAttribute('membersParent', Attribute::boolean(key: 'senior', required: true));
 
         $database->createRelationship(new Relationship(collection: 'teamsParent', relatedCollection: 'membersParent', type: RelationType::OneToMany, twoWay: true, key: 'members', twoWayKey: 'team'));
 
@@ -3046,10 +3045,10 @@ trait RelationshipTests
         $database->createCollection('ordersEdge');
         $database->createCollection('customersEdge');
 
-        $database->createAttribute('ordersEdge', new Attribute(key: 'orderNumber', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('ordersEdge', new Attribute(key: 'total', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute('customersEdge', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('customersEdge', new Attribute(key: 'age', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('ordersEdge', Attribute::string(key: 'orderNumber', required: true));
+        $database->createAttribute('ordersEdge', Attribute::double(key: 'total', required: true));
+        $database->createAttribute('customersEdge', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('customersEdge', Attribute::integer(key: 'age', required: true));
 
         $database->createRelationship(new Relationship(collection: 'ordersEdge', relatedCollection: 'customersEdge', type: RelationType::ManyToOne, twoWay: true, key: 'customer', twoWayKey: 'orders'));
 
@@ -3145,11 +3144,11 @@ trait RelationshipTests
         $database->createCollection('developersMtm');
         $database->createCollection('projectsMtm');
 
-        $database->createAttribute('developersMtm', new Attribute(key: 'devName', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('developersMtm', new Attribute(key: 'experience', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('projectsMtm', new Attribute(key: 'projectName', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('projectsMtm', new Attribute(key: 'budget', type: ColumnType::Double, size: 0, required: true));
-        $database->createAttribute('projectsMtm', new Attribute(key: 'priority', type: ColumnType::String, size: 50, required: true));
+        $database->createAttribute('developersMtm', Attribute::string(key: 'devName', required: true));
+        $database->createAttribute('developersMtm', Attribute::integer(key: 'experience', required: true));
+        $database->createAttribute('projectsMtm', Attribute::string(key: 'projectName', required: true));
+        $database->createAttribute('projectsMtm', Attribute::double(key: 'budget', required: true));
+        $database->createAttribute('projectsMtm', Attribute::string(key: 'priority', size: 50, required: true));
 
         $database->createRelationship(new Relationship(collection: 'developersMtm', relatedCollection: 'projectsMtm', type: RelationType::ManyToMany, twoWay: true, key: 'assignedProjects', twoWayKey: 'assignedDevelopers'));
 
@@ -3242,29 +3241,29 @@ trait RelationshipTests
 
         // Level 0: Companies
         $database->createCollection('companiesNested');
-        $database->createAttribute('companiesNested', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('companiesNested', new Attribute(key: 'industry', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('companiesNested', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('companiesNested', Attribute::string(key: 'industry', required: true));
 
         // Level 1: Employees
         $database->createCollection('employeesNested');
-        $database->createAttribute('employeesNested', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('employeesNested', new Attribute(key: 'role', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('employeesNested', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('employeesNested', Attribute::string(key: 'role', required: true));
 
         // Level 1b: Departments (for MANY_TO_ONE)
         $database->createCollection('departmentsNested');
-        $database->createAttribute('departmentsNested', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('departmentsNested', new Attribute(key: 'budget', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('departmentsNested', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('departmentsNested', Attribute::integer(key: 'budget', required: true));
 
         // Level 2: Projects
         $database->createCollection('projectsNested');
-        $database->createAttribute('projectsNested', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('projectsNested', new Attribute(key: 'status', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('projectsNested', Attribute::string(key: 'title', required: true));
+        $database->createAttribute('projectsNested', Attribute::string(key: 'status', required: true));
 
         // Level 3: Tasks
         $database->createCollection('tasksNested');
-        $database->createAttribute('tasksNested', new Attribute(key: 'description', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('tasksNested', new Attribute(key: 'priority', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('tasksNested', new Attribute(key: 'completed', type: ColumnType::Boolean, size: 0, required: true));
+        $database->createAttribute('tasksNested', Attribute::string(key: 'description', required: true));
+        $database->createAttribute('tasksNested', Attribute::string(key: 'priority', required: true));
+        $database->createAttribute('tasksNested', Attribute::boolean(key: 'completed', required: true));
 
         // Create relationships
         // Companies -> Employees (ONE_TO_MANY)
@@ -3469,11 +3468,11 @@ trait RelationshipTests
         $database->createCollection('authorsCount');
         $database->createCollection('postsCount');
 
-        $database->createAttribute('authorsCount', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('authorsCount', new Attribute(key: 'age', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('postsCount', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('postsCount', new Attribute(key: 'views', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('postsCount', new Attribute(key: 'published', type: ColumnType::Boolean, size: 0, required: true));
+        $database->createAttribute('authorsCount', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('authorsCount', Attribute::integer(key: 'age', required: true));
+        $database->createAttribute('postsCount', Attribute::string(key: 'title', required: true));
+        $database->createAttribute('postsCount', Attribute::integer(key: 'views', required: true));
+        $database->createAttribute('postsCount', Attribute::boolean(key: 'published', required: true));
 
         $database->createRelationship(new Relationship(collection: 'authorsCount', relatedCollection: 'postsCount', type: RelationType::OneToMany, twoWay: true, key: 'posts', twoWayKey: 'author'));
 
@@ -3622,11 +3621,11 @@ trait RelationshipTests
         $database->createCollection('authorsOrder');
         $database->createCollection('postsOrder');
 
-        $database->createAttribute('authorsOrder', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('authorsOrder', new Attribute(key: 'age', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('authorsOrder', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('authorsOrder', Attribute::integer(key: 'age', required: true));
 
-        $database->createAttribute('postsOrder', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('postsOrder', new Attribute(key: 'views', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('postsOrder', Attribute::string(key: 'title', required: true));
+        $database->createAttribute('postsOrder', Attribute::integer(key: 'views', required: true));
 
         $database->createRelationship(new Relationship(collection: 'postsOrder', relatedCollection: 'authorsOrder', type: RelationType::ManyToOne, twoWay: true, key: 'author', twoWayKey: 'postsOrder'));
 

@@ -29,7 +29,7 @@ final class SQLiteOperatorBehaviorTest extends TestCase
             'attributes' => [new Document(['$id' => 'value', 'type' => ColumnType::Double->value])],
         ]);
         $this->adapter->createCollection('operators', [
-            new Attribute(key: 'value', type: ColumnType::Double),
+            Attribute::double(key: 'value'),
         ]);
     }
 

@@ -11,7 +11,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Query\Schema\ColumnType;
 
 trait AggregationTests
 {
@@ -40,11 +39,11 @@ trait AggregationTests
         }
 
         $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
-        $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'price', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'stock', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'rating', type: ColumnType::Double, size: 0, required: false, default: 0.0));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'category', size: 50, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'price', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'stock', required: true));
+        $database->createAttribute($collection, Attribute::double(key: 'rating', default: 0.0));
 
         $products = [
             ['$id' => 'laptop', 'name' => 'Laptop', 'category' => 'electronics', 'price' => 1200, 'stock' => 50, 'rating' => 4.5],
@@ -76,11 +75,11 @@ trait AggregationTests
         }
 
         $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
-        $database->createAttribute($collection, new Attribute(key: 'product_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'customer_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'quantity', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'total', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'status', type: ColumnType::String, size: 20, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'product_uid', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'customer_uid', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'quantity', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'total', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'status', size: 20, required: true));
 
         $orders = [
             ['$id' => 'ord1', 'product_uid' => 'laptop', 'customer_uid' => 'alice', 'quantity' => 1, 'total' => 1200, 'status' => 'completed'],
@@ -113,10 +112,10 @@ trait AggregationTests
         }
 
         $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
-        $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'email', type: ColumnType::String, size: 200, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'country', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'tier', type: ColumnType::String, size: 20, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'email', size: 200, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'country', size: 50, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'tier', size: 20, required: true));
 
         $customers = [
             ['$id' => 'alice', 'name' => 'Alice', 'email' => 'alice@test.com', 'country' => 'US', 'tier' => 'premium'],
@@ -144,10 +143,10 @@ trait AggregationTests
         }
 
         $database->createCollection($collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
-        $database->createAttribute($collection, new Attribute(key: 'product_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'customer_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'comment', type: ColumnType::String, size: 500, required: false, default: ''));
+        $database->createAttribute($collection, Attribute::string(key: 'product_uid', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'customer_uid', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'score', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'comment', size: 500, default: ''));
 
         $reviews = [
             ['product_uid' => 'laptop', 'customer_uid' => 'alice', 'score' => 5, 'comment' => 'Excellent'],
@@ -183,7 +182,6 @@ trait AggregationTests
             }
         }
     }
-
 
     public function testCountAll(): void
     {
@@ -260,7 +258,7 @@ trait AggregationTests
             $database->deleteCollection($col);
         }
         $database->createCollection($col, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
-        $database->createAttribute($col, new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($col, Attribute::integer(key: 'value', required: true));
 
         $results = $database->find($col, [Query::count('*', 'total')]);
         $this->assertCount(1, $results);
@@ -322,7 +320,6 @@ trait AggregationTests
         $this->assertEquals(3, $results[0]->getAttribute('unique_cats'));
         $database->deleteCollection('cnt_dist_f');
     }
-
 
     public function testSumAll(): void
     {
@@ -388,7 +385,6 @@ trait AggregationTests
         $database->deleteCollection('sum_stock');
     }
 
-
     public function testAvgAll(): void
     {
         $database = static::getDatabase();
@@ -439,7 +435,6 @@ trait AggregationTests
         $this->assertEqualsWithDelta(4.09, $avgRating, 0.1);
         $database->deleteCollection('avg_rating');
     }
-
 
     public function testMinAll(): void
     {
@@ -522,7 +517,6 @@ trait AggregationTests
         $database->deleteCollection('minmax');
     }
 
-
     public function testMultipleAggregationsTogether(): void
     {
         $database = static::getDatabase();
@@ -571,7 +565,6 @@ trait AggregationTests
         $this->assertEqualsWithDelta(143.33, (float) $results[0]->getAttribute('avg_stock'), 1.0);
         $database->deleteCollection('multi_agg_f');
     }
-
 
     public function testGroupBySingleColumn(): void
     {
@@ -789,7 +782,6 @@ trait AggregationTests
         $database->deleteCollection('grp_cust');
     }
 
-
     public function testHavingGreaterThan(): void
     {
         $database = static::getDatabase();
@@ -857,7 +849,6 @@ trait AggregationTests
         $this->assertNotContains('jacket', $productIds);
         $database->deleteCollection('having_cnt');
     }
-
 
     public function testInnerJoinBasic(): void
     {
@@ -1000,7 +991,6 @@ trait AggregationTests
         $this->cleanupAggCollections($database, ['ij_prs_p', 'ij_prs_r']);
     }
 
-
     public function testLeftJoinBasic(): void
     {
         $database = static::getDatabase();
@@ -1097,7 +1087,6 @@ trait AggregationTests
         $this->cleanupAggCollections($database, ['lj_cos_c', 'lj_cos_o']);
     }
 
-
     public function testJoinAggregationWithPermissionsGrouped(): void
     {
         $database = static::getDatabase();
@@ -1110,10 +1099,10 @@ trait AggregationTests
         $this->cleanupAggCollections($database, $cols);
 
         $database->createCollection('jp_apg_c', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::read(Role::user('viewer'))]);
-        $database->createAttribute('jp_apg_c', new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute('jp_apg_c', Attribute::string(key: 'name', size: 100, required: true));
         $database->createCollection('jp_apg_o', permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
-        $database->createAttribute('jp_apg_o', new Attribute(key: 'customer_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('jp_apg_o', new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('jp_apg_o', Attribute::string(key: 'customer_uid', required: true));
+        $database->createAttribute('jp_apg_o', Attribute::integer(key: 'amount', required: true));
 
         foreach (['u1', 'u2'] as $uid) {
             $database->createDocument('jp_apg_c', new Document([
@@ -1177,10 +1166,10 @@ trait AggregationTests
         $this->cleanupAggCollections($database, $cols);
 
         $database->createCollection('jp_ljpf_p', permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: true);
-        $database->createAttribute('jp_ljpf_p', new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute('jp_ljpf_p', Attribute::string(key: 'name', size: 100, required: true));
         $database->createCollection('jp_ljpf_r', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::read(Role::user('tester'))]);
-        $database->createAttribute('jp_ljpf_r', new Attribute(key: 'product_uid', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('jp_ljpf_r', new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('jp_ljpf_r', Attribute::string(key: 'product_uid', required: true));
+        $database->createAttribute('jp_ljpf_r', Attribute::integer(key: 'score', required: true));
 
         $database->createDocument('jp_ljpf_p', new Document([
             '$id' => 'visible', 'name' => 'Visible Product',

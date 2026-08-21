@@ -107,7 +107,7 @@ final class BigIntegerTest extends TestCase
         ]);
 
         $this->assertTrue($adapter->createCollection('bigints', [
-            new Attribute(key: 'value', type: ColumnType::BigInteger),
+            Attribute::bigInteger(key: 'value'),
         ]));
         $this->assertInstanceOf(Document::class, $adapter->createDocument($collection, new Document([
             '$id' => 'maximum',

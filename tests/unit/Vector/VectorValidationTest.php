@@ -18,7 +18,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 class VectorValidationTest extends TestCase
 {
@@ -165,12 +164,7 @@ class VectorValidationTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Vector dimensions must be a positive integer');
 
-        $this->database->createAttribute('vectorError', new Attribute(
-            key: 'bad_embedding',
-            type: ColumnType::Vector,
-            size: 0,
-            required: true
-        ));
+        $this->database->createAttribute('vectorError', Attribute::vector(key: 'bad_embedding', required: true));
     }
 
     public function testVectorTooManyDimensions(): void
@@ -181,12 +175,7 @@ class VectorValidationTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Vector dimensions cannot exceed 16000');
 
-        $this->database->createAttribute('vectorLimit', new Attribute(
-            key: 'huge_embedding',
-            type: ColumnType::Vector,
-            size: 16001,
-            required: true
-        ));
+        $this->database->createAttribute('vectorLimit', Attribute::vector(key: 'huge_embedding', size: 16001, required: true));
     }
 
     public function testVectorQueryValidation(): void
@@ -434,11 +423,7 @@ class VectorValidationTest extends TestCase
         $this->setupCollections([$col]);
 
         try {
-            $this->database->createIndex('vectorIdxFail', new Index(
-                key: 'bad_idx',
-                type: IndexType::HnswCosine,
-                attributes: ['text']
-            ));
+            $this->database->createIndex('vectorIdxFail', Index::hnswCosine(key: 'bad_idx', attributes: ['text']));
             $this->fail('Should not allow vector index on non-vector attribute');
         } catch (DatabaseException $e) {
             $this->assertStringContainsString('vector', strtolower($e->getMessage()));

@@ -19,7 +19,6 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\IndexType;
 
 class IndexValidationTest extends TestCase
 {
@@ -137,11 +136,7 @@ class IndexValidationTest extends TestCase
         $this->setupCollection('testCol');
 
         $this->expectException(IndexException::class);
-        $this->database->createIndex('testCol', new Index(
-            key: 'idx1',
-            type: IndexType::Key,
-            attributes: ['nonexistent'],
-        ));
+        $this->database->createIndex('testCol', Index::key(key: 'idx1', attributes: ['nonexistent']));
     }
 
     public function testCreateIndexEnforcesIndexCountLimit(): void
@@ -203,11 +198,7 @@ class IndexValidationTest extends TestCase
 
         $this->expectException(LimitException::class);
         $this->expectExceptionMessage('Index limit');
-        $db->createIndex('testCol', new Index(
-            key: 'idx_name',
-            type: IndexType::Key,
-            attributes: ['name'],
-        ));
+        $db->createIndex('testCol', Index::key(key: 'idx_name', attributes: ['name']));
     }
 
     public function testCreateIndexRejectsDuplicateKey(): void
@@ -222,11 +213,7 @@ class IndexValidationTest extends TestCase
 
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('Index already exists');
-        $this->database->createIndex('testCol', new Index(
-            key: 'idx_name',
-            type: IndexType::Key,
-            attributes: ['name'],
-        ));
+        $this->database->createIndex('testCol', Index::key(key: 'idx_name', attributes: ['name']));
     }
 
     public function testCreateIndexMissingAttributesThrows(): void
@@ -234,11 +221,7 @@ class IndexValidationTest extends TestCase
         $this->setupCollection('testCol');
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Missing attributes');
-        $this->database->createIndex('testCol', new Index(
-            key: 'idx_empty',
-            type: IndexType::Key,
-            attributes: [],
-        ));
+        $this->database->createIndex('testCol', Index::key(key: 'idx_empty'));
     }
 
     public function testCreateIndexSucceedsWithValidConfig(): void
@@ -248,11 +231,7 @@ class IndexValidationTest extends TestCase
         ];
         $this->setupCollection('testCol', $attributes);
 
-        $result = $this->database->createIndex('testCol', new Index(
-            key: 'idx_name',
-            type: IndexType::Key,
-            attributes: ['name'],
-        ));
+        $result = $this->database->createIndex('testCol', Index::key(key: 'idx_name', attributes: ['name']));
         $this->assertTrue($result);
     }
 

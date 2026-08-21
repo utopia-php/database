@@ -14,7 +14,6 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 trait VectorTests
 {
@@ -33,10 +32,10 @@ trait VectorTests
         $database->createCollection('vectorCollection');
 
         // Create a vector attribute with 3 dimensions
-        $database->createAttribute('vectorCollection', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorCollection', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create a vector attribute with 128 dimensions
-        $database->createAttribute('vectorCollection', new Attribute(key: 'large_embedding', type: ColumnType::Vector, size: 128, required: false, default: null));
+        $database->createAttribute('vectorCollection', Attribute::vector(key: 'large_embedding', size: 128));
 
         // Verify the attributes were created
         $collection = $database->getCollection('vectorCollection');
@@ -66,8 +65,6 @@ trait VectorTests
         $database->deleteCollection('vectorCollection');
     }
 
-
-
     public function testVectorDocuments(): void
     {
         /** @var Database $database */
@@ -80,8 +77,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorDocuments');
-        $database->createAttribute('vectorDocuments', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorDocuments', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorDocuments', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('vectorDocuments', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create documents with vector data
         $doc1 = $database->createDocument('vectorDocuments', new Document([
@@ -132,8 +129,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorQueries');
-        $database->createAttribute('vectorQueries', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorQueries', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorQueries', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('vectorQueries', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create test documents with read permissions
         $doc1 = $database->createDocument('vectorQueries', new Document([
@@ -273,7 +270,6 @@ trait VectorTests
         $database->deleteCollection('vectorQueries');
     }
 
-
     public function testVectorIndexes(): void
     {
         /** @var Database $database */
@@ -286,17 +282,17 @@ trait VectorTests
         }
 
         $database->createCollection('vectorIndexes');
-        $database->createAttribute('vectorIndexes', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorIndexes', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create different types of vector indexes
         // Euclidean distance index (L2 distance)
-        $database->createIndex('vectorIndexes', new Index(key: 'embedding_euclidean', type: IndexType::HnswEuclidean, attributes: ['embedding']));
+        $database->createIndex('vectorIndexes', Index::hnswEuclidean(key: 'embedding_euclidean', attributes: ['embedding']));
 
         // Cosine distance index
-        $database->createIndex('vectorIndexes', new Index(key: 'embedding_cosine', type: IndexType::HnswCosine, attributes: ['embedding']));
+        $database->createIndex('vectorIndexes', Index::hnswCosine(key: 'embedding_cosine', attributes: ['embedding']));
 
         // Inner product (dot product) index
-        $database->createIndex('vectorIndexes', new Index(key: 'embedding_dot', type: IndexType::HnswDot, attributes: ['embedding']));
+        $database->createIndex('vectorIndexes', Index::hnswDot(key: 'embedding_dot', attributes: ['embedding']));
 
         // Verify indexes were created
         $collection = $database->getCollection('vectorIndexes');
@@ -331,8 +327,6 @@ trait VectorTests
         $database->deleteCollection('vectorIndexes');
     }
 
-
-
     public function testVectorWithNullAndEmpty(): void
     {
         /** @var Database $database */
@@ -345,7 +339,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorNullEmpty');
-        $database->createAttribute('vectorNullEmpty', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: false)); // Not required
+        $database->createAttribute('vectorNullEmpty', Attribute::vector(key: 'embedding', size: 3)); // Not required
 
         // Test with null vector (should work for non-required attribute)
         $doc1 = $database->createDocument('vectorNullEmpty', new Document([
@@ -387,7 +381,7 @@ trait VectorTests
 
         // Test with maximum allowed dimensions (16000 for pgvector)
         $database->createCollection('vectorLarge');
-        $database->createAttribute('vectorLarge', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 1536, required: true)); // Common embedding size
+        $database->createAttribute('vectorLarge', Attribute::vector(key: 'embedding', size: 1536, required: true)); // Common embedding size
 
         // Create a large vector
         $largeVector = array_fill(0, 1536, 0.1);
@@ -431,7 +425,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorUpdates');
-        $database->createAttribute('vectorUpdates', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorUpdates', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create initial document
         $doc = $database->createDocument('vectorUpdates', new Document([
@@ -474,9 +468,9 @@ trait VectorTests
         }
 
         $database->createCollection('multiVector');
-        $database->createAttribute('multiVector', new Attribute(key: 'embedding1', type: ColumnType::Vector, size: 3, required: true));
-        $database->createAttribute('multiVector', new Attribute(key: 'embedding2', type: ColumnType::Vector, size: 5, required: true));
-        $database->createAttribute('multiVector', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('multiVector', Attribute::vector(key: 'embedding1', size: 3, required: true));
+        $database->createAttribute('multiVector', Attribute::vector(key: 'embedding2', size: 5, required: true));
+        $database->createAttribute('multiVector', Attribute::string(key: 'name', required: true));
 
         // Create documents with multiple vector attributes
         $doc1 = $database->createDocument('multiVector', new Document([
@@ -529,8 +523,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorPagination');
-        $database->createAttribute('vectorPagination', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: false));
-        $database->createAttribute('vectorPagination', new Attribute(key: 'index', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('vectorPagination', Attribute::vector(key: 'embedding', size: 3));
+        $database->createAttribute('vectorPagination', Attribute::integer(key: 'index', required: true));
 
         // Insert documents in an order deliberately unrelated to vector rank.
         // Cursor pagination must continue from distance + sequence, not from
@@ -625,12 +619,12 @@ trait VectorTests
         }
 
         $database->createCollection('vectorTextSearch');
-        $database->createAttribute('vectorTextSearch', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorTextSearch', new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute('vectorTextSearch', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorTextSearch', Attribute::string(key: 'title', required: true));
+        $database->createAttribute('vectorTextSearch', Attribute::string(key: 'category', size: 50, required: true));
+        $database->createAttribute('vectorTextSearch', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create fulltext index for title
-        $database->createIndex('vectorTextSearch', new Index(key: 'title_fulltext', type: IndexType::Fulltext, attributes: ['title']));
+        $database->createIndex('vectorTextSearch', Index::fullText(key: 'title_fulltext', attributes: ['title']));
 
         // Create test documents
         $docs = [
@@ -701,7 +695,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorSpecialFloats');
-        $database->createAttribute('vectorSpecialFloats', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorSpecialFloats', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Test with very small values (near zero)
         $doc1 = $database->createDocument('vectorSpecialFloats', new Document([
@@ -766,8 +760,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorPerf');
-        $database->createAttribute('vectorPerf', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 128, required: true));
-        $database->createAttribute('vectorPerf', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('vectorPerf', Attribute::vector(key: 'embedding', size: 128, required: true));
+        $database->createAttribute('vectorPerf', Attribute::string(key: 'name', required: true));
 
         // Create documents
         $numDocs = 100;
@@ -799,7 +793,7 @@ trait VectorTests
         $this->assertCount(10, $results1);
 
         // Create HNSW index
-        $database->createIndex('vectorPerf', new Index(key: 'embedding_hnsw', type: IndexType::HnswCosine, attributes: ['embedding']));
+        $database->createIndex('vectorPerf', Index::hnswCosine(key: 'embedding_hnsw', attributes: ['embedding']));
 
         // Query with index (should be faster for larger datasets)
         $startTime = microtime(true);
@@ -821,7 +815,6 @@ trait VectorTests
         $database->deleteCollection('vectorPerf');
     }
 
-
     public function testVectorNormalization(): void
     {
         /** @var Database $database */
@@ -834,7 +827,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorNorm');
-        $database->createAttribute('vectorNorm', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorNorm', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create documents with normalized and non-normalized vectors
         $doc1 = $database->createDocument('vectorNorm', new Document([
@@ -878,7 +871,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorInfinity');
-        $database->createAttribute('vectorInfinity', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorInfinity', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Test with INF value - should fail
         try {
@@ -922,7 +915,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorNaN');
-        $database->createAttribute('vectorNaN', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorNaN', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Test with NaN value - should fail
         try {
@@ -941,11 +934,6 @@ trait VectorTests
         $database->deleteCollection('vectorNaN');
     }
 
-
-
-
-
-
     public function testVectorWithRelationships(): void
     {
         /** @var Database $database */
@@ -959,12 +947,12 @@ trait VectorTests
 
         // Create parent collection with vectors
         $database->createCollection('vectorParent');
-        $database->createAttribute('vectorParent', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorParent', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorParent', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('vectorParent', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create child collection
         $database->createCollection('vectorChild');
-        $database->createAttribute('vectorChild', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
+        $database->createAttribute('vectorChild', Attribute::string(key: 'title', required: true));
         $database->createRelationship(new Relationship(
             collection: 'vectorChild',
             relatedCollection: 'vectorParent',
@@ -1051,12 +1039,12 @@ trait VectorTests
 
         // Create two collections with two-way relationship and vectors
         $database->createCollection('vectorAuthors');
-        $database->createAttribute('vectorAuthors', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorAuthors', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorAuthors', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('vectorAuthors', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         $database->createCollection('vectorBooks');
-        $database->createAttribute('vectorBooks', new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorBooks', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorBooks', Attribute::string(key: 'title', required: true));
+        $database->createAttribute('vectorBooks', Attribute::vector(key: 'embedding', size: 3, required: true));
         $database->createRelationship(new Relationship(
             collection: 'vectorBooks',
             relatedCollection: 'vectorAuthors',
@@ -1124,7 +1112,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorZeros');
-        $database->createAttribute('vectorZeros', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorZeros', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create document with all-zeros vector
         $doc = $database->createDocument('vectorZeros', new Document([
@@ -1163,7 +1151,6 @@ trait VectorTests
         $database->deleteCollection('vectorZeros');
     }
 
-
     public function testDeleteVectorAttribute(): void
     {
         /** @var Database $database */
@@ -1176,8 +1163,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorDeleteAttr');
-        $database->createAttribute('vectorDeleteAttr', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorDeleteAttr', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorDeleteAttr', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('vectorDeleteAttr', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create document with vector
         $doc = $database->createDocument('vectorDeleteAttr', new Document([
@@ -1223,11 +1210,11 @@ trait VectorTests
         }
 
         $database->createCollection('vectorDeleteIndexedAttr');
-        $database->createAttribute('vectorDeleteIndexedAttr', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorDeleteIndexedAttr', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create multiple indexes on the vector attribute
-        $database->createIndex('vectorDeleteIndexedAttr', new Index(key: 'idx1', type: IndexType::HnswCosine, attributes: ['embedding']));
-        $database->createIndex('vectorDeleteIndexedAttr', new Index(key: 'idx2', type: IndexType::HnswEuclidean, attributes: ['embedding']));
+        $database->createIndex('vectorDeleteIndexedAttr', Index::hnswCosine(key: 'idx1', attributes: ['embedding']));
+        $database->createIndex('vectorDeleteIndexedAttr', Index::hnswEuclidean(key: 'idx2', attributes: ['embedding']));
 
         // Create document
         $database->createDocument('vectorDeleteIndexedAttr', new Document([
@@ -1250,8 +1237,6 @@ trait VectorTests
         $database->deleteCollection('vectorDeleteIndexedAttr');
     }
 
-
-
     public function testVectorCursorBeforePagination(): void
     {
         /** @var Database $database */
@@ -1264,8 +1249,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorCursorBefore');
-        $database->createAttribute('vectorCursorBefore', new Attribute(key: 'index', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('vectorCursorBefore', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorCursorBefore', Attribute::integer(key: 'index', required: true));
+        $database->createAttribute('vectorCursorBefore', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create 10 documents
         for ($i = 0; $i < 10; $i++) {
@@ -1315,8 +1300,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorBackward');
-        $database->createAttribute('vectorBackward', new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('vectorBackward', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorBackward', Attribute::integer(key: 'value', required: true));
+        $database->createAttribute('vectorBackward', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create documents
         for ($i = 0; $i < 20; $i++) {
@@ -1373,7 +1358,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorDimUpdate');
-        $database->createAttribute('vectorDimUpdate', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorDimUpdate', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create document
         $doc = $database->createDocument('vectorDimUpdate', new Document([
@@ -1398,7 +1383,6 @@ trait VectorTests
         $database->deleteCollection('vectorDimUpdate');
     }
 
-
     public function testVectorConcurrentUpdates(): void
     {
         /** @var Database $database */
@@ -1411,8 +1395,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorConcurrent');
-        $database->createAttribute('vectorConcurrent', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
-        $database->createAttribute('vectorConcurrent', new Attribute(key: 'version', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('vectorConcurrent', Attribute::vector(key: 'embedding', size: 3, required: true));
+        $database->createAttribute('vectorConcurrent', Attribute::integer(key: 'version', required: true));
 
         // Create initial document
         $doc = $database->createDocument('vectorConcurrent', new Document([
@@ -1456,10 +1440,10 @@ trait VectorTests
         }
 
         $database->createCollection('vectorDeleteIdx');
-        $database->createAttribute('vectorDeleteIdx', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorDeleteIdx', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create index
-        $database->createIndex('vectorDeleteIdx', new Index(key: 'idx_cosine', type: IndexType::HnswCosine, attributes: ['embedding']));
+        $database->createIndex('vectorDeleteIdx', Index::hnswCosine(key: 'idx_cosine', attributes: ['embedding']));
 
         // Verify index exists
         $collection = $database->getCollection('vectorDeleteIdx');
@@ -1506,12 +1490,12 @@ trait VectorTests
         }
 
         $database->createCollection('vectorMultiIdx');
-        $database->createAttribute('vectorMultiIdx', new Attribute(key: 'embedding1', type: ColumnType::Vector, size: 3, required: true));
-        $database->createAttribute('vectorMultiIdx', new Attribute(key: 'embedding2', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorMultiIdx', Attribute::vector(key: 'embedding1', size: 3, required: true));
+        $database->createAttribute('vectorMultiIdx', Attribute::vector(key: 'embedding2', size: 3, required: true));
 
         // Create multiple indexes on different vector attributes
-        $database->createIndex('vectorMultiIdx', new Index(key: 'idx1_cosine', type: IndexType::HnswCosine, attributes: ['embedding1']));
-        $database->createIndex('vectorMultiIdx', new Index(key: 'idx2_euclidean', type: IndexType::HnswEuclidean, attributes: ['embedding2']));
+        $database->createIndex('vectorMultiIdx', Index::hnswCosine(key: 'idx1_cosine', attributes: ['embedding1']));
+        $database->createIndex('vectorMultiIdx', Index::hnswEuclidean(key: 'idx2_euclidean', attributes: ['embedding2']));
 
         // Verify both indexes exist
         $collection = $database->getCollection('vectorMultiIdx');
@@ -1543,7 +1527,6 @@ trait VectorTests
         $database->deleteCollection('vectorMultiIdx');
     }
 
-
     public function testVectorQueryWithoutIndex(): void
     {
         /** @var Database $database */
@@ -1556,7 +1539,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorNoIndex');
-        $database->createAttribute('vectorNoIndex', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorNoIndex', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create documents without any index
         $database->createDocument('vectorNoIndex', new Document([
@@ -1596,7 +1579,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorEmptyQuery');
-        $database->createAttribute('vectorEmptyQuery', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorEmptyQuery', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // No documents in collection
         $results = $database->find('vectorEmptyQuery', [
@@ -1621,7 +1604,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorSingleDim');
-        $database->createAttribute('vectorSingleDim', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 1, required: true));
+        $database->createAttribute('vectorSingleDim', Attribute::vector(key: 'embedding', size: 1, required: true));
 
         // Create documents with single-dimension vectors
         $doc1 = $database->createDocument('vectorSingleDim', new Document([
@@ -1664,7 +1647,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorLongResults');
-        $database->createAttribute('vectorLongResults', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorLongResults', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create 100 documents
         for ($i = 0; $i < 100; $i++) {
@@ -1704,7 +1687,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorMultiQuery');
-        $database->createAttribute('vectorMultiQuery', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorMultiQuery', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create documents
         for ($i = 0; $i < 10; $i++) {
@@ -1751,7 +1734,6 @@ trait VectorTests
         $database->deleteCollection('vectorMultiQuery');
     }
 
-
     public function testVectorLargeValues(): void
     {
         /** @var Database $database */
@@ -1764,7 +1746,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorLargeVals');
-        $database->createAttribute('vectorLargeVals', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorLargeVals', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Test with very large float values (but not INF)
         $doc = $database->createDocument('vectorLargeVals', new Document([
@@ -1799,7 +1781,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorPrecision');
-        $database->createAttribute('vectorPrecision', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorPrecision', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create vector with high precision values
         $highPrecision = [0.123456789012345, 0.987654321098765, 0.555555555555555];
@@ -1836,7 +1818,7 @@ trait VectorTests
 
         // Test exactly 16000 dimensions (pgvector limit)
         $database->createCollection('vector16000');
-        $database->createAttribute('vector16000', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 16000, required: true));
+        $database->createAttribute('vector16000', Attribute::vector(key: 'embedding', size: 16000, required: true));
 
         // Create a vector with exactly 16000 dimensions
         $largeVector = array_fill(0, 16000, 0.1);
@@ -1880,7 +1862,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorLargeDataset');
-        $database->createAttribute('vectorLargeDataset', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 128, required: true));
+        $database->createAttribute('vectorLargeDataset', Attribute::vector(key: 'embedding', size: 128, required: true));
 
         // Create 200 documents
         for ($i = 0; $i < 200; $i++) {
@@ -1898,7 +1880,7 @@ trait VectorTests
         }
 
         // Create index on large dataset
-        $database->createIndex('vectorLargeDataset', new Index(key: 'idx_hnsw', type: IndexType::HnswCosine, attributes: ['embedding']));
+        $database->createIndex('vectorLargeDataset', Index::hnswCosine(key: 'idx_hnsw', attributes: ['embedding']));
 
         // Verify queries work
         $searchVector = array_fill(0, 128, 0.5);
@@ -1925,8 +1907,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorFilterDisabled');
-        $database->createAttribute('vectorFilterDisabled', new Attribute(key: 'status', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute('vectorFilterDisabled', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorFilterDisabled', Attribute::string(key: 'status', size: 50, required: true));
+        $database->createAttribute('vectorFilterDisabled', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create documents
         $database->createDocument('vectorFilterDisabled', new Document([
@@ -1980,9 +1962,9 @@ trait VectorTests
         }
 
         $database->createCollection('vectorFilterOverride');
-        $database->createAttribute('vectorFilterOverride', new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute('vectorFilterOverride', new Attribute(key: 'priority', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute('vectorFilterOverride', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorFilterOverride', Attribute::string(key: 'category', size: 50, required: true));
+        $database->createAttribute('vectorFilterOverride', Attribute::integer(key: 'priority', required: true));
+        $database->createAttribute('vectorFilterOverride', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         // Create documents
         for ($i = 0; $i < 5; $i++) {
@@ -2027,9 +2009,9 @@ trait VectorTests
         }
 
         $database->createCollection('vectorMultiFilters');
-        $database->createAttribute('vectorMultiFilters', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorMultiFilters', new Attribute(key: 'embedding1', type: ColumnType::Vector, size: 3, required: true));
-        $database->createAttribute('vectorMultiFilters', new Attribute(key: 'embedding2', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorMultiFilters', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('vectorMultiFilters', Attribute::vector(key: 'embedding1', size: 3, required: true));
+        $database->createAttribute('vectorMultiFilters', Attribute::vector(key: 'embedding2', size: 3, required: true));
 
         // Create documents
         $database->createDocument('vectorMultiFilters', new Document([
@@ -2068,9 +2050,9 @@ trait VectorTests
         }
 
         $database->createCollection('vectorNested');
-        $database->createAttribute('vectorNested', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute('vectorNested', new Attribute(key: 'embedding1', type: ColumnType::Vector, size: 3, required: true));
-        $database->createAttribute('vectorNested', new Attribute(key: 'embedding2', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorNested', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('vectorNested', Attribute::vector(key: 'embedding1', size: 3, required: true));
+        $database->createAttribute('vectorNested', Attribute::vector(key: 'embedding2', size: 3, required: true));
 
         // Create document
         $database->createDocument('vectorNested', new Document([
@@ -2112,7 +2094,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorCount');
-        $database->createAttribute('vectorCount', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorCount', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         $database->createDocument('vectorCount', new Document([
             '$permissions' => [
@@ -2142,8 +2124,8 @@ trait VectorTests
         }
 
         $database->createCollection('vectorSum');
-        $database->createAttribute('vectorSum', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
-        $database->createAttribute('vectorSum', new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute('vectorSum', Attribute::vector(key: 'embedding', size: 3, required: true));
+        $database->createAttribute('vectorSum', Attribute::integer(key: 'value', required: true));
 
         // Create documents with different values
         $database->createDocument('vectorSum', new Document([
@@ -2200,7 +2182,7 @@ trait VectorTests
         }
 
         $database->createCollection('vectorUpsert');
-        $database->createAttribute('vectorUpsert', new Attribute(key: 'embedding', type: ColumnType::Vector, size: 3, required: true));
+        $database->createAttribute('vectorUpsert', Attribute::vector(key: 'embedding', size: 3, required: true));
 
         $insertedDoc = $database->upsertDocument('vectorUpsert', new Document([
             '$id' => 'vectorUpsert',

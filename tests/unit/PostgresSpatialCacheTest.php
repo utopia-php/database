@@ -51,7 +51,7 @@ final class PostgresSpatialCacheTest extends TestCase
         try {
             $adapter->updateAttribute(
                 'locations',
-                new Attribute(key: 'position', type: ColumnType::Point),
+                Attribute::point(key: 'position'),
                 'coordinates'
             );
             $this->fail('Expected the type alteration to fail.');
@@ -96,7 +96,7 @@ final class PostgresSpatialCacheTest extends TestCase
         $collection = new Document([
             '$id' => 'mixed',
             'attributes' => [
-                new Attribute(key: 'loc', type: ColumnType::Point),
+                Attribute::point(key: 'loc'),
                 new Document(['$id' => 'route', 'key' => 'route', 'type' => ColumnType::Linestring]),
                 ['$id' => 'area', 'key' => 'area', 'type' => ColumnType::Polygon->value],
                 new Document(['$id' => 'name', 'key' => 'name', 'type' => ColumnType::String->value]),
@@ -132,7 +132,7 @@ final class PostgresSpatialCacheTest extends TestCase
                 new Document(['$id' => 'body', 'key' => 'body', 'type' => ColumnType::MediumText->value, 'size' => 0, 'array' => false]),
                 new Document(['$id' => 'notes', 'key' => 'notes', 'type' => ColumnType::LongText->value, 'size' => 0, 'array' => false]),
                 new Document(['$id' => 'count', 'key' => 'count', 'type' => ColumnType::BigInteger, 'size' => 0, 'array' => false]),
-                new Attribute(key: 'loc', type: ColumnType::Point),
+                Attribute::point(key: 'loc'),
             ],
         ]);
 

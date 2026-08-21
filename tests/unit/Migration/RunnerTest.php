@@ -14,8 +14,6 @@ use Utopia\Database\Migration\Tracker;
 use Utopia\Database\Schema\Change;
 use Utopia\Database\Schema\ChangeType;
 use Utopia\Database\Schema\DiffResult;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 class RunnerTest extends TestCase
 {
@@ -272,7 +270,7 @@ class RunnerTest extends TestCase
         $diff = new DiffResult([
             new Change(
                 type: ChangeType::AddAttribute,
-                attribute: new Attribute(key: 'email', type: ColumnType::String, size: 255),
+                attribute: Attribute::string(key: 'email'),
             ),
         ]);
 
@@ -328,7 +326,7 @@ class RunnerTest extends TestCase
         $diff = new DiffResult([
             new Change(
                 type: ChangeType::DropAttribute,
-                attribute: new Attribute(key: 'legacy', type: ColumnType::String, size: 100),
+                attribute: Attribute::string(key: 'legacy', size: 100),
             ),
         ]);
 
@@ -344,7 +342,7 @@ class RunnerTest extends TestCase
         $diff = new DiffResult([
             new Change(
                 type: ChangeType::AddIndex,
-                index: new Index(key: 'idx_email', type: IndexType::Index, attributes: ['email']),
+                index: Index::index(key: 'idx_email', attributes: ['email']),
             ),
         ]);
 

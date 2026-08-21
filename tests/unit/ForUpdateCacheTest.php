@@ -11,7 +11,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Query\Schema\ColumnType;
 
 class ForUpdateCacheTest extends TestCase
 {
@@ -29,8 +28,8 @@ class ForUpdateCacheTest extends TestCase
 
         $this->database->create();
         $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', new Attribute(key: 'name', type: ColumnType::String, size: 255));
-        $this->database->createAttribute('projects', new Attribute(key: 'description', type: ColumnType::String, size: 255));
+        $this->database->createAttribute('projects', Attribute::string(key: 'name'));
+        $this->database->createAttribute('projects', Attribute::string(key: 'description'));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [

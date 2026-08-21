@@ -20,7 +20,6 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Query\Schema\ColumnType;
 
 class CollectionValidationTest extends TestCase
 {
@@ -222,7 +221,7 @@ class CollectionValidationTest extends TestCase
         $this->expectExceptionMessage('Spatial attributes are not supported');
 
         $database->createCollection('places', [
-            new Attribute(key: 'location', type: ColumnType::Point),
+            Attribute::point(key: 'location'),
         ]);
     }
 
@@ -236,20 +235,8 @@ class CollectionValidationTest extends TestCase
         $database->create();
 
         $collection = $database->createCollection('users', [
-            new Attribute(
-                key: 'prefs',
-                type: ColumnType::String,
-                size: 65535,
-                default: new \stdClass(),
-                filters: ['json'],
-            ),
-            new Attribute(
-                key: 'status',
-                type: ColumnType::String,
-                size: 32,
-                required: true,
-                default: 'active',
-            ),
+            Attribute::string(key: 'prefs', size: 65535, default: new \stdClass(), filters: ['json']),
+            Attribute::string(key: 'status', size: 32, required: true, default: 'active'),
         ]);
 
         $this->assertSame('users', $collection->getId());

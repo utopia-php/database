@@ -27,8 +27,6 @@ use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Query\CursorDirection;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 final class DatabaseQueryCacheTest extends TestCase
 {
@@ -118,7 +116,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
-        $database->createAttribute('users', new Attribute('name', ColumnType::String, 255));
+        $database->createAttribute('users', Attribute::string(key: 'name'));
         $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
@@ -126,7 +124,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
-        $database->createIndex('users', new Index('name', IndexType::Key, ['name']));
+        $database->createIndex('users', Index::key(key: 'name', attributes: ['name']));
         $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
 
         $queryAdapter->resetPurges();
@@ -201,12 +199,12 @@ final class DatabaseQueryCacheTest extends TestCase
         $adapter = new ObservedMemory();
         [$database] = $this->createDatabase($adapter, queryCache: false);
         $database->createCollection('users', [
-            new Attribute('name', ColumnType::String, 255),
+            Attribute::string(key: 'name'),
         ], permissions: $this->permissions(), documentSecurity: false);
         $database->getCollection('users');
 
         $adapter->observeValidators(
-            fn () => $database->createAttribute('users', new Attribute('age', ColumnType::Integer)),
+            fn () => $database->createAttribute('users', Attribute::integer(key: 'age')),
         );
         $database->find('users', [Query::equal('name', ['first'])]);
         $database->find('users', [Query::equal('name', ['second'])]);
@@ -262,8 +260,8 @@ final class DatabaseQueryCacheTest extends TestCase
     {
         [$database] = $this->createDatabase(queryCache: false, dataAdapter: new MemoryCache());
         $database->createCollection('users', [
-            new Attribute('name', ColumnType::String, 255),
-            new Attribute('email', ColumnType::String, 255),
+            Attribute::string(key: 'name'),
+            Attribute::string(key: 'email'),
         ], permissions: $this->permissions(), documentSecurity: false);
         $database->createDocument('users', new Document([
             '$id' => 'user',
@@ -509,7 +507,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->createCollection('users', [
-            new Attribute('name', ColumnType::String, 255),
+            Attribute::string(key: 'name'),
         ], permissions: $this->permissions(), documentSecurity: false);
         $database->createDocument('users', new Document([
             '$id' => 'user',
@@ -581,7 +579,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->createCollection('users', [
-            new Attribute('name', ColumnType::String, 255, required: true),
+            Attribute::string(key: 'name', required: true),
         ], permissions: $this->permissions(), documentSecurity: false);
         $database->createDocument('users', new Document([
             '$id' => 'existing',
@@ -645,7 +643,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $writer->getAuthorization()->addRole(Role::any()->toString());
         $reader->getAuthorization()->addRole(Role::any()->toString());
         $writer->createCollection('users', [
-            new Attribute('name', ColumnType::String, 255, required: true),
+            Attribute::string(key: 'name', required: true),
         ], permissions: $this->permissions(), documentSecurity: false);
         $writer->createDocument('users', new Document([
             '$id' => 'existing',

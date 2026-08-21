@@ -31,14 +31,10 @@ class AttributeModelTest extends TestCase
 
     public function testConstructorWithAllValues(): void
     {
-        $attr = new Attribute(
+        $attr = Attribute::double(
             key: 'score',
-            type: ColumnType::Double,
-            size: 0,
             required: true,
             default: 0.0,
-            signed: true,
-            array: false,
             format: 'number',
             formatOptions: ['min' => 0, 'max' => 100],
             filters: ['range'],
@@ -62,14 +58,10 @@ class AttributeModelTest extends TestCase
 
     public function testToDocumentProducesCorrectStructure(): void
     {
-        $attr = new Attribute(
+        $attr = Attribute::string(
             key: 'email',
-            type: ColumnType::String,
             size: 256,
             required: true,
-            default: null,
-            signed: true,
-            array: false,
             format: 'email',
             formatOptions: ['allowPlus' => true],
             filters: ['lowercase'],
@@ -93,7 +85,7 @@ class AttributeModelTest extends TestCase
 
     public function testToDocumentIncludesStatusWhenSet(): void
     {
-        $attr = new Attribute(key: 'name', type: ColumnType::String, status: 'processing');
+        $attr = Attribute::string(key: 'name', size: 0, status: 'processing');
 
         $doc = $attr->toDocument();
         $this->assertSame('processing', $doc->getAttribute('status'));
@@ -101,7 +93,7 @@ class AttributeModelTest extends TestCase
 
     public function testToDocumentExcludesStatusWhenNull(): void
     {
-        $attr = new Attribute(key: 'name', type: ColumnType::String);
+        $attr = Attribute::string(key: 'name', size: 0);
 
         $doc = $attr->toDocument();
         $this->assertNull($doc->getAttribute('status'));
@@ -115,7 +107,7 @@ class AttributeModelTest extends TestCase
             'twoWay' => true,
             'twoWayKey' => 'posts',
         ];
-        $attr = new Attribute(key: 'author', type: ColumnType::Relationship, options: $options);
+        $attr = Attribute::relationship(key: 'author', options: $options);
 
         $doc = $attr->toDocument();
         $this->assertSame($options, $doc->getAttribute('options'));
@@ -123,7 +115,7 @@ class AttributeModelTest extends TestCase
 
     public function testToDocumentExcludesOptionsWhenNull(): void
     {
-        $attr = new Attribute(key: 'name', type: ColumnType::String);
+        $attr = Attribute::string(key: 'name', size: 0);
 
         $doc = $attr->toDocument();
         $this->assertNull($doc->getAttribute('options'));
@@ -131,18 +123,7 @@ class AttributeModelTest extends TestCase
 
     public function testFromDocumentRoundtrip(): void
     {
-        $original = new Attribute(
-            key: 'tags',
-            type: ColumnType::String,
-            size: 64,
-            required: false,
-            default: null,
-            signed: true,
-            array: true,
-            format: null,
-            formatOptions: [],
-            filters: ['json'],
-        );
+        $original = Attribute::string(key: 'tags', size: 64, array: true, filters: ['json']);
 
         $doc = $original->toDocument();
         $restored = Attribute::fromDocument($doc);
@@ -268,13 +249,7 @@ class AttributeModelTest extends TestCase
 
     public function testWithFormatAndFormatOptions(): void
     {
-        $attr = new Attribute(
-            key: 'url',
-            type: ColumnType::String,
-            size: 2048,
-            format: 'url',
-            formatOptions: ['allowedSchemes' => ['http', 'https']],
-        );
+        $attr = Attribute::string(key: 'url', size: 2048, format: 'url', formatOptions: ['allowedSchemes' => ['http', 'https']]);
 
         $doc = $attr->toDocument();
         $this->assertSame('url', $doc->getAttribute('format'));
@@ -287,12 +262,7 @@ class AttributeModelTest extends TestCase
 
     public function testWithFilters(): void
     {
-        $attr = new Attribute(
-            key: 'content',
-            type: ColumnType::String,
-            size: 65535,
-            filters: ['json', 'encrypt'],
-        );
+        $attr = Attribute::string(key: 'content', size: 65535, filters: ['json', 'encrypt']);
 
         $doc = $attr->toDocument();
         $this->assertSame(['json', 'encrypt'], $doc->getAttribute('filters'));
@@ -312,11 +282,7 @@ class AttributeModelTest extends TestCase
             'side' => 'parent',
         ];
 
-        $attr = new Attribute(
-            key: 'comments',
-            type: ColumnType::Relationship,
-            options: $options,
-        );
+        $attr = Attribute::relationship(key: 'comments', options: $options);
 
         $doc = $attr->toDocument();
         $restored = Attribute::fromDocument($doc);
@@ -326,19 +292,19 @@ class AttributeModelTest extends TestCase
 
     public function testWithDefaultValueTypes(): void
     {
-        $stringAttr = new Attribute(key: 's', type: ColumnType::String, size: 32, default: 'hello');
+        $stringAttr = Attribute::string(key: 's', size: 32, default: 'hello');
         $this->assertSame('hello', $stringAttr->default);
 
-        $intAttr = new Attribute(key: 'i', type: ColumnType::Integer, default: 42);
+        $intAttr = Attribute::integer(key: 'i', default: 42);
         $this->assertSame(42, $intAttr->default);
 
-        $boolAttr = new Attribute(key: 'b', type: ColumnType::Boolean, default: true);
+        $boolAttr = Attribute::boolean(key: 'b', default: true);
         $this->assertTrue($boolAttr->default);
 
-        $doubleAttr = new Attribute(key: 'd', type: ColumnType::Double, default: 3.14);
+        $doubleAttr = Attribute::double(key: 'd', default: 3.14);
         $this->assertSame(3.14, $doubleAttr->default);
 
-        $nullAttr = new Attribute(key: 'n', type: ColumnType::String, size: 32, default: null);
+        $nullAttr = Attribute::string(key: 'n', size: 32);
         $this->assertNull($nullAttr->default);
     }
 

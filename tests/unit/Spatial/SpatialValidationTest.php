@@ -21,7 +21,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 /** @internal */
 abstract class SpatialAdapter extends Adapter implements Feature\Spatial
@@ -279,11 +278,7 @@ class SpatialValidationTest extends TestCase
         $this->setupCollections([$col]);
 
         try {
-            $this->database->createIndex('spatial_idx_single', new Index(
-                key: 'idx_multi',
-                type: IndexType::Spatial,
-                attributes: ['loc', 'loc2']
-            ));
+            $this->database->createIndex('spatial_idx_single', Index::spatial(key: 'idx_multi', attributes: ['loc', 'loc2']));
             $this->fail('Expected exception for spatial index on multiple attributes');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(IndexException::class, $e);
@@ -307,22 +302,14 @@ class SpatialValidationTest extends TestCase
         $this->setupCollections([$col]);
 
         try {
-            $this->database->createIndex('spatial_nonspatial', new Index(
-                key: 'idx_name_spatial',
-                type: IndexType::Spatial,
-                attributes: ['name']
-            ));
+            $this->database->createIndex('spatial_nonspatial', Index::spatial(key: 'idx_name_spatial', attributes: ['name']));
             $this->fail('Expected exception for spatial index on non-spatial attribute');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(IndexException::class, $e);
         }
 
         try {
-            $this->database->createIndex('spatial_nonspatial', new Index(
-                key: 'idx_loc_key',
-                type: IndexType::Key,
-                attributes: ['loc']
-            ));
+            $this->database->createIndex('spatial_nonspatial', Index::key(key: 'idx_loc_key', attributes: ['loc']));
             $this->fail('Expected exception for non-spatial index on spatial attribute');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(IndexException::class, $e);

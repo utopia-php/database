@@ -30,7 +30,6 @@ use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 use Utopia\Validator\Range;
 
 trait AttributeTests
@@ -113,58 +112,58 @@ trait AttributeTests
 
         $database->createCollection($this->getAttributesCollection());
 
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string1', type: ColumnType::String, size: 128, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string2', type: ColumnType::String, size: 16382 + 1, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string3', type: ColumnType::String, size: 65535 + 1, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string4', type: ColumnType::String, size: 16777215 + 1, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'integer', type: ColumnType::Integer, size: 0, required: true)));
-        $this->assertTrue($database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'bigint', type: ColumnType::BigInteger, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'float', type: ColumnType::Double, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'boolean', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'id', type: ColumnType::Id, size: 0, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string1', size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string2', size: 16382 + 1, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string3', size: 65535 + 1, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string4', size: 16777215 + 1, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::integer(key: 'integer', required: true)));
+        $this->assertTrue($database->createAttribute($this->getAttributesCollection(), Attribute::bigInteger(key: 'bigint', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::double(key: 'float', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'boolean', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::id(key: 'id', required: true)));
 
         // New string types
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'varchar1', type: ColumnType::Varchar, size: 255, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'varchar2', type: ColumnType::Varchar, size: 128, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'text1', type: ColumnType::Text, size: 65535, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'mediumtext1', type: ColumnType::MediumText, size: 16777215, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'longtext1', type: ColumnType::LongText, size: 4294967295, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::varchar(key: 'varchar1', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::varchar(key: 'varchar2', size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::text(key: 'text1', size: 65535, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::mediumText(key: 'mediumtext1', size: 16777215, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::longText(key: 'longtext1', size: 4294967295, required: true)));
 
-        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), new Index(key: 'id_index', type: IndexType::Key, attributes: ['id'])));
-        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), new Index(key: 'string1_index', type: IndexType::Key, attributes: ['string1'])));
-        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), new Index(key: 'string2_index', type: IndexType::Key, attributes: ['string2'], lengths: [255])));
-        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), new Index(key: 'multi_index', type: IndexType::Key, attributes: ['string1', 'string2', 'string3'], lengths: [128, 128, 128])));
-        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), new Index(key: 'varchar1_index', type: IndexType::Key, attributes: ['varchar1'])));
-        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), new Index(key: 'varchar2_index', type: IndexType::Key, attributes: ['varchar2'])));
-        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), new Index(key: 'text1_index', type: IndexType::Key, attributes: ['text1'], lengths: [255])));
+        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), Index::key(key: 'id_index', attributes: ['id'])));
+        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), Index::key(key: 'string1_index', attributes: ['string1'])));
+        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), Index::key(key: 'string2_index', attributes: ['string2'], lengths: [255])));
+        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), Index::key(key: 'multi_index', attributes: ['string1', 'string2', 'string3'], lengths: [128, 128, 128])));
+        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), Index::key(key: 'varchar1_index', attributes: ['varchar1'])));
+        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), Index::key(key: 'varchar2_index', attributes: ['varchar2'])));
+        $this->assertEquals(true, $database->createIndex($this->getAttributesCollection(), Index::key(key: 'text1_index', attributes: ['text1'], lengths: [255])));
 
         $collection = $database->getCollection($this->getAttributesCollection());
         $this->assertCount(14, $collection->getAttribute('attributes'));
         $this->assertCount(7, $collection->getAttribute('indexes'));
 
         // Array
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string_list', type: ColumnType::String, size: 128, required: true, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'integer_list', type: ColumnType::Integer, size: 0, required: true, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'float_list', type: ColumnType::Double, size: 0, required: true, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'boolean_list', type: ColumnType::Boolean, size: 0, required: true, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'varchar_list', type: ColumnType::Varchar, size: 128, required: true, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'text_list', type: ColumnType::Text, size: 65535, required: true, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'mediumtext_list', type: ColumnType::MediumText, size: 16777215, required: true, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'longtext_list', type: ColumnType::LongText, size: 4294967295, required: true, default: null, signed: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string_list', size: 128, required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::integer(key: 'integer_list', required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::double(key: 'float_list', required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'boolean_list', required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::varchar(key: 'varchar_list', size: 128, required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::text(key: 'text_list', size: 65535, required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::mediumText(key: 'mediumtext_list', size: 16777215, required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::longText(key: 'longtext_list', size: 4294967295, required: true, array: true)));
 
         $collection = $database->getCollection($this->getAttributesCollection());
         $this->assertCount(22, $collection->getAttribute('attributes'));
 
         // Default values
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string_default', type: ColumnType::String, size: 256, required: false, default: 'test')));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'integer_default', type: ColumnType::Integer, size: 0, required: false, default: 1)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'float_default', type: ColumnType::Double, size: 0, required: false, default: 1.5)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'boolean_default', type: ColumnType::Boolean, size: 0, required: false, default: false)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'datetime_default', type: ColumnType::Datetime, size: 0, required: false, default: '2000-06-12T14:12:55.000+00:00', signed: true, array: false, format: null, formatOptions: [], filters: ['datetime'])));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'varchar_default', type: ColumnType::Varchar, size: 255, required: false, default: 'varchar default')));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'text_default', type: ColumnType::Text, size: 65535, required: false, default: 'text default')));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'mediumtext_default', type: ColumnType::MediumText, size: 16777215, required: false, default: 'mediumtext default')));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'longtext_default', type: ColumnType::LongText, size: 4294967295, required: false, default: 'longtext default')));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string_default', size: 256, default: 'test')));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::integer(key: 'integer_default', default: 1)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::double(key: 'float_default', default: 1.5)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'boolean_default', default: false)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::datetime(key: 'datetime_default', default: '2000-06-12T14:12:55.000+00:00', filters: ['datetime'])));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::varchar(key: 'varchar_default', default: 'varchar default')));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::text(key: 'text_default', size: 65535, default: 'text default')));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::mediumText(key: 'mediumtext_default', size: 16777215, default: 'mediumtext default')));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::longText(key: 'longtext_default', size: 4294967295, default: 'longtext default')));
 
         $collection = $database->getCollection($this->getAttributesCollection());
         $this->assertCount(31, $collection->getAttribute('attributes'));
@@ -217,26 +216,26 @@ trait AttributeTests
         $this->assertCount(0, $collection->getAttribute('attributes'));
 
         // Test for custom chars in ID
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'as_5dasdasdas', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'as5dasdasdas_', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: '.as5dasdasdas', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: '-as5dasdasdas', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'as-5dasdasdas', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'as5dasdasdas-', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'socialAccountForYoutubeSubscribersss', type: ColumnType::Boolean, size: 0, required: true)));
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: '5f058a89258075f058a89258075f058t9214', type: ColumnType::Boolean, size: 0, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'as_5dasdasdas', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'as5dasdasdas_', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: '.as5dasdasdas', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: '-as5dasdasdas', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'as-5dasdasdas', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'as5dasdasdas-', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: 'socialAccountForYoutubeSubscribersss', required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::boolean(key: '5f058a89258075f058a89258075f058t9214', required: true)));
 
         // Test non-shared tables duplicates throw duplicate
-        $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'duplicate', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'duplicate', size: 128, required: true));
         try {
-            $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'duplicate', type: ColumnType::String, size: 128, required: true));
+            $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'duplicate', size: 128, required: true));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
         // Test delete attribute when column does not exist
-        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), new Attribute(key: 'string1', type: ColumnType::String, size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string1', size: 128, required: true)));
         sleep(1);
 
         $this->assertEquals(true, $this->deleteColumn($this->getAttributesCollection(), 'string1'));
@@ -281,7 +280,7 @@ trait AttributeTests
 
         $database->createCollection('attributesWithKeys');
 
-        $this->assertEquals(true, $database->createAttribute('attributesWithKeys', new Attribute(key: 'key_with.sym$bols', type: ColumnType::String, size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute('attributesWithKeys', Attribute::string(key: 'key_with.sym$bols', size: 128, required: true)));
 
         $document = $database->createDocument('attributesWithKeys', new Document([
             'key_with.sym$bols' => 'value',
@@ -309,7 +308,7 @@ trait AttributeTests
 
         $database->createCollection('dots.parent');
 
-        $this->assertTrue($database->createAttribute('dots.parent', new Attribute(key: 'dots.name', type: ColumnType::String, size: 255, required: false)));
+        $this->assertTrue($database->createAttribute('dots.parent', Attribute::string(key: 'dots.name')));
 
         $document = $database->find('dots.parent', [
             Query::select(['dots.name']),
@@ -318,7 +317,7 @@ trait AttributeTests
 
         $database->createCollection('dots');
 
-        $this->assertTrue($database->createAttribute('dots', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: false)));
+        $this->assertTrue($database->createAttribute('dots', Attribute::string(key: 'name')));
 
         $database->createRelationship(new Relationship(collection: 'dots.parent', relatedCollection: 'dots', type: RelationType::OneToOne));
 
@@ -356,9 +355,9 @@ trait AttributeTests
         $collection = $this->getFlowersCollection();
 
         $flowers = $database->createCollection($collection);
-        $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'inStock', type: ColumnType::Integer, size: 0, required: false));
-        $database->createAttribute($collection, new Attribute(key: 'date', type: ColumnType::String, size: 128, required: false));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'inStock'));
+        $database->createAttribute($collection, Attribute::string(key: 'date', size: 128));
 
         $database->createDocument($collection, new Document([
             '$id' => 'flowerWithDate',
@@ -411,10 +410,10 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $colors = $database->createCollection($this->getColorsCollection());
-        $database->createAttribute($this->getColorsCollection(), new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute($this->getColorsCollection(), new Attribute(key: 'hex', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($this->getColorsCollection(), Attribute::string(key: 'name', size: 128, required: true));
+        $database->createAttribute($this->getColorsCollection(), Attribute::string(key: 'hex', size: 128, required: true));
 
-        $database->createIndex($this->getColorsCollection(), new Index(key: 'index1', type: IndexType::Key, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($this->getColorsCollection(), Index::key(key: 'index1', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
 
         $database->createDocument($this->getColorsCollection(), new Document([
             '$permissions' => [
@@ -465,9 +464,9 @@ trait AttributeTests
 
         $collection = $this->getFlowersCollection();
         $database->createCollection($collection);
-        $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'inStock', type: ColumnType::Integer, size: 0, required: false));
-        $database->createAttribute($collection, new Attribute(key: 'date', type: ColumnType::String, size: 128, required: false));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'inStock'));
+        $database->createAttribute($collection, Attribute::string(key: 'date', size: 128));
 
         $database->createDocument($collection, new Document([
             '$id' => 'flowerWithDate',
@@ -530,7 +529,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createAttribute($this->getFlowersCollection(), new Attribute(key: 'cartModel', type: ColumnType::String, size: 2000, required: false));
+        $database->createAttribute($this->getFlowersCollection(), Attribute::string(key: 'cartModel', size: 2000));
 
         $doc = $database->createDocument($this->getFlowersCollection(), new Document([
             '$permissions' => [
@@ -571,12 +570,12 @@ trait AttributeTests
 
         // Ensure cartModel attribute exists (created by testUpdateAttributeFilter in sequential mode)
         try {
-            $database->createAttribute($this->getFlowersCollection(), new Attribute(key: 'cartModel', type: ColumnType::String, size: 2000, required: false));
+            $database->createAttribute($this->getFlowersCollection(), Attribute::string(key: 'cartModel', size: 2000));
         } catch (\Exception $e) {
             // Already exists
         }
 
-        $database->createAttribute($this->getFlowersCollection(), new Attribute(key: 'price', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($this->getFlowersCollection(), Attribute::integer(key: 'price'));
 
         $doc = $database->createDocument($this->getFlowersCollection(), new Document([
             '$permissions' => [
@@ -639,14 +638,14 @@ trait AttributeTests
 
         // Add cartModel attribute (from testUpdateAttributeFilter)
         try {
-            $database->createAttribute($this->getFlowersCollection(), new Attribute(key: 'cartModel', type: ColumnType::String, size: 2000, required: false));
+            $database->createAttribute($this->getFlowersCollection(), Attribute::string(key: 'cartModel', size: 2000));
         } catch (\Exception $e) {
             // Already exists
         }
 
         // Add price attribute and set format (from testUpdateAttributeFormat)
         try {
-            $database->createAttribute($this->getFlowersCollection(), new Attribute(key: 'price', type: ColumnType::Integer, size: 0, required: false));
+            $database->createAttribute($this->getFlowersCollection(), Attribute::integer(key: 'price'));
         } catch (\Exception $e) {
             // Already exists
         }
@@ -845,7 +844,7 @@ trait AttributeTests
 
         $database->createCollection('rename_test');
 
-        $this->assertEquals(true, $database->createAttribute('rename_test', new Attribute(key: 'rename_me', type: ColumnType::String, size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute('rename_test', Attribute::string(key: 'rename_me', size: 128, required: true)));
 
         $doc = $database->createDocument('rename_test', new Document([
             '$permissions' => [
@@ -860,7 +859,7 @@ trait AttributeTests
         $this->assertEquals('string', $doc->getAttribute('rename_me'));
 
         // Create an index to check later
-        $database->createIndex('rename_test', new Index(key: 'renameIndexes', type: IndexType::Key, attributes: ['rename_me'], lengths: [], orders: [OrderDirection::Desc->value, OrderDirection::Desc->value]));
+        $database->createIndex('rename_test', Index::key(key: 'renameIndexes', attributes: ['rename_me'], orders: [OrderDirection::Desc->value, OrderDirection::Desc->value]));
 
         $database->updateAttribute(
             collection: 'rename_test',
@@ -988,9 +987,9 @@ trait AttributeTests
 
         $collection = $this->getColorsCollection();
         $database->createCollection($collection);
-        $database->createAttribute($collection, new Attribute(key: 'name', type: ColumnType::String, size: 128, required: true));
-        $database->createAttribute($collection, new Attribute(key: 'hex', type: ColumnType::String, size: 128, required: true));
-        $database->createIndex($collection, new Index(key: 'index1', type: IndexType::Key, attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'hex', size: 128, required: true));
+        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
         $database->createDocument($collection, new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -1106,7 +1105,7 @@ trait AttributeTests
         }
 
         try {
-            $database->createAttribute($collection->getId(), new Attribute(key: 'breaking', type: ColumnType::String, size: 200, required: true));
+            $database->createAttribute($collection->getId(), Attribute::string(key: 'breaking', size: 200, required: true));
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
@@ -1129,7 +1128,7 @@ trait AttributeTests
 
         $database->createCollection('resize_test');
 
-        $this->assertEquals(true, $database->createAttribute('resize_test', new Attribute(key: 'resize_me', type: ColumnType::String, size: 128, required: true)));
+        $this->assertEquals(true, $database->createAttribute('resize_test', Attribute::string(key: 'resize_me', size: 128, required: true)));
         $document = $database->createDocument('resize_test', new Document([
             '$id' => ID::unique(),
             '$permissions' => [
@@ -1176,13 +1175,13 @@ trait AttributeTests
         if ($database->getAdapter()->getMaxIndexLength() > 0) {
             $length = intval($database->getAdapter()->getMaxIndexLength() / 2);
 
-            $this->assertEquals(true, $database->createAttribute('resize_test', new Attribute(key: 'attr1', type: ColumnType::String, size: $length, required: true)));
-            $this->assertEquals(true, $database->createAttribute('resize_test', new Attribute(key: 'attr2', type: ColumnType::String, size: $length, required: true)));
+            $this->assertEquals(true, $database->createAttribute('resize_test', Attribute::string(key: 'attr1', size: $length, required: true)));
+            $this->assertEquals(true, $database->createAttribute('resize_test', Attribute::string(key: 'attr2', size: $length, required: true)));
 
             /**
              * No index length provided, we are able to validate
              */
-            $database->createIndex('resize_test', new Index(key: 'index1', type: IndexType::Key, attributes: ['attr1', 'attr2']));
+            $database->createIndex('resize_test', Index::key(key: 'index1', attributes: ['attr1', 'attr2']));
 
             try {
                 $database->updateAttribute('resize_test', 'attr1', ColumnType::String->value, 5000);
@@ -1197,7 +1196,7 @@ trait AttributeTests
              * Index lengths are provided, We are able to validate
              * Index $length === attr1, $length === attr2, so $length is removed, so we are able to validate
              */
-            $database->createIndex('resize_test', new Index(key: 'index1', type: IndexType::Key, attributes: ['attr1', 'attr2'], lengths: [$length, $length]));
+            $database->createIndex('resize_test', Index::key(key: 'index1', attributes: ['attr1', 'attr2'], lengths: [$length, $length]));
 
             $collection = $database->getCollection('resize_test');
             $indexes = $collection->getAttribute('indexes', []);
@@ -1217,7 +1216,7 @@ trait AttributeTests
              * Index lengths are provided
              * We are able to increase size because index length remains 50
              */
-            $database->createIndex('resize_test', new Index(key: 'index1', type: IndexType::Key, attributes: ['attr1', 'attr2'], lengths: [50, 50]));
+            $database->createIndex('resize_test', Index::key(key: 'index1', attributes: ['attr1', 'attr2'], lengths: [50, 50]));
 
             $collection = $database->getCollection('resize_test');
             $indexes = $collection->getAttribute('indexes', []);
@@ -1272,8 +1271,8 @@ trait AttributeTests
         $col = $database->createCollection(__FUNCTION__);
         $this->assertNotNull($col->getId());
 
-        $database->createAttribute($col->getId(), new Attribute(key: 'title', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($col->getId(), new Attribute(key: 'encrypt', type: ColumnType::String, size: 128, required: true, filters: ['encrypt']));
+        $database->createAttribute($col->getId(), Attribute::string(key: 'title', required: true));
+        $database->createAttribute($col->getId(), Attribute::string(key: 'encrypt', size: 128, required: true, filters: ['encrypt']));
 
         $database->createDocument($col->getId(), new Document([
             'title' => 'Sample Title',
@@ -1319,8 +1318,8 @@ trait AttributeTests
         );
 
         $database->createCollection('filterSelect');
-        $database->createAttribute('filterSelect', new Attribute(key: 'plain', type: ColumnType::String, size: 128, required: false));
-        $database->createAttribute('filterSelect', new Attribute(key: 'kids', type: ColumnType::String, size: 128, required: false, filters: ['subQueryProbe']));
+        $database->createAttribute('filterSelect', Attribute::string(key: 'plain', size: 128));
+        $database->createAttribute('filterSelect', Attribute::string(key: 'kids', size: 128, filters: ['subQueryProbe']));
 
         $database->createDocument('filterSelect', new Document([
             '$id' => 'doc1',
@@ -1407,21 +1406,21 @@ trait AttributeTests
             Permission::create(Role::any()),
         ]);
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'booleans', type: ColumnType::Boolean, size: 0, required: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::boolean(key: 'booleans', required: true, array: true)));
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'names', type: ColumnType::String, size: 255, required: false, array: true)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::string(key: 'names', array: true)));
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'cards', type: ColumnType::String, size: 5000, required: false, array: true)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::string(key: 'cards', size: 5000, array: true)));
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, array: true)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::integer(key: 'numbers', array: true)));
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'age', type: ColumnType::Integer, size: 0, required: false, signed: false)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::integer(key: 'age', signed: false)));
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'tv_show', type: ColumnType::String, size: $database->getAdapter()->getMaxIndexLength() - 68, required: false, signed: false)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::string(key: 'tv_show', size: $database->getAdapter()->getMaxIndexLength() - 68, signed: false)));
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'short', type: ColumnType::String, size: 5, required: false, signed: false, array: true)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::string(key: 'short', size: 5, signed: false, array: true)));
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'pref', type: ColumnType::String, size: 16384, required: false, signed: false, filters: ['json'])));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::string(key: 'pref', size: 16384, signed: false, filters: ['json'])));
 
         try {
             $database->createDocument($collection, new Document([]));
@@ -1513,7 +1512,7 @@ trait AttributeTests
             /**
              * Functional index dependency cannot be dropped or rename
              */
-            $database->createIndex($collection, new Index(key: 'idx_cards', type: IndexType::Key, attributes: ['cards'], lengths: [100]));
+            $database->createIndex($collection, Index::key(key: 'idx_cards', attributes: ['cards'], lengths: [100]));
         }
 
         if ($database->getAdapter()->supports(Capability::CastIndexArray)) {
@@ -1557,7 +1556,7 @@ trait AttributeTests
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
             try {
-                $database->createIndex($collection, new Index(key: 'indx', type: IndexType::Fulltext, attributes: ['names']));
+                $database->createIndex($collection, Index::fullText(key: 'indx', attributes: ['names']));
                 if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
                     $this->fail('Failed to throw exception');
                 }
@@ -1570,7 +1569,7 @@ trait AttributeTests
             }
 
             try {
-                $database->createIndex($collection, new Index(key: 'indx', type: IndexType::Key, attributes: ['numbers', 'names'], lengths: [100, 100]));
+                $database->createIndex($collection, Index::key(key: 'indx', attributes: ['numbers', 'names'], lengths: [100, 100]));
                 if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
                     $this->fail('Failed to throw exception');
                 }
@@ -1583,17 +1582,17 @@ trait AttributeTests
             }
         }
 
-        $this->assertEquals(true, $database->createAttribute($collection, new Attribute(key: 'long_size', type: ColumnType::String, size: 2000, required: false, array: true)));
+        $this->assertEquals(true, $database->createAttribute($collection, Attribute::string(key: 'long_size', size: 2000, array: true)));
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
             if ($database->getAdapter()->supports(Capability::DefinedAttributes) && $database->getAdapter()->getMaxIndexLength() > 0) {
                 // If getMaxIndexLength() > 0 We clear length for array attributes
-                $database->createIndex($collection, new Index(key: 'indx1', type: IndexType::Key, attributes: ['long_size'], lengths: [], orders: []));
+                $database->createIndex($collection, Index::key(key: 'indx1', attributes: ['long_size']));
                 $database->deleteIndex($collection, 'indx1');
-                $database->createIndex($collection, new Index(key: 'indx2', type: IndexType::Key, attributes: ['long_size'], lengths: [1000], orders: []));
+                $database->createIndex($collection, Index::key(key: 'indx2', attributes: ['long_size'], lengths: [1000]));
 
                 try {
-                    $database->createIndex($collection, new Index(key: 'indx_numbers', type: IndexType::Key, attributes: ['tv_show', 'numbers'], lengths: [], orders: [])); // [700, 255]
+                    $database->createIndex($collection, Index::key(key: 'indx_numbers', attributes: ['tv_show', 'numbers'])); // [700, 255]
                     $this->fail('Failed to throw exception');
                 } catch (Throwable $e) {
                     $this->assertEquals('Index length is longer than the maximum: '.$database->getAdapter()->getMaxIndexLength(), $e->getMessage());
@@ -1602,15 +1601,15 @@ trait AttributeTests
 
             try {
                 if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-                    $database->createIndex($collection, new Index(key: 'indx4', type: IndexType::Key, attributes: ['age', 'names'], lengths: [10, 255], orders: []));
+                    $database->createIndex($collection, Index::key(key: 'indx4', attributes: ['age', 'names'], lengths: [10, 255]));
                     $this->fail('Failed to throw exception');
                 }
             } catch (Throwable $e) {
                 $this->assertEquals('Cannot set a length on "integer" attributes', $e->getMessage());
             }
 
-            $this->assertTrue($database->createIndex($collection, new Index(key: 'indx6', type: IndexType::Key, attributes: ['age', 'names'], lengths: [null, 999], orders: [])));
-            $this->assertTrue($database->createIndex($collection, new Index(key: 'indx7', type: IndexType::Key, attributes: ['age', 'booleans'], lengths: [0, 999], orders: [])));
+            $this->assertTrue($database->createIndex($collection, Index::key(key: 'indx6', attributes: ['age', 'names'], lengths: [null, 999])));
+            $this->assertTrue($database->createIndex($collection, Index::key(key: 'indx7', attributes: ['age', 'booleans'], lengths: [0, 999])));
         }
 
         if ($this->getDatabase()->getAdapter()->supports(Capability::QueryContains)) {
@@ -1743,8 +1742,8 @@ trait AttributeTests
 
         $database->createCollection('datetime');
         if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
-            $this->assertEquals(true, $database->createAttribute('datetime', new Attribute(key: 'date', type: ColumnType::Datetime, size: 0, required: true, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime'])));
-            $this->assertEquals(true, $database->createAttribute('datetime', new Attribute(key: 'date2', type: ColumnType::Datetime, size: 0, required: false, default: null, signed: true, array: false, format: null, formatOptions: [], filters: ['datetime'])));
+            $this->assertEquals(true, $database->createAttribute('datetime', Attribute::datetime(key: 'date', required: true, filters: ['datetime'])));
+            $this->assertEquals(true, $database->createAttribute('datetime', Attribute::datetime(key: 'date2', filters: ['datetime'])));
         }
 
         try {
@@ -1892,7 +1891,7 @@ trait AttributeTests
         $database->createCollection('datetime_auto_filter');
 
         $this->expectException(Exception::class);
-        $database->createAttribute('datetime_auto', new Attribute(key: 'date_auto', type: ColumnType::Datetime, size: 0, required: false, filters: ['json']));
+        $database->createAttribute('datetime_auto', Attribute::datetime(key: 'date_auto', filters: ['json']));
         $collection = $database->getCollection('datetime_auto_filter');
         $attribute = $collection->getAttribute('attributes')[0];
         $this->assertEquals([ColumnType::Datetime->value, 'json'], $attribute['filters']);
@@ -1902,7 +1901,6 @@ trait AttributeTests
         $this->assertEquals([ColumnType::Datetime->value, 'json'], $attribute['filters']);
         $database->deleteCollection('datetime_auto_filter');
     }
-
 
     public function testCreateAttributesBigIntIgnoresSizeMetadata(): void
     {
@@ -1917,11 +1915,7 @@ trait AttributeTests
         $collectionName = 'bigint_ignores_size_limit';
         $database->createCollection($collectionName);
 
-        $attributes = [new Attribute(
-            key: 'foo',
-            type: ColumnType::BigInteger,
-            size: 9999,
-        )];
+        $attributes = [Attribute::bigInteger(key: 'foo', size: 9999)];
 
         $result = $database->createAttributes($collectionName, $attributes);
         $this->assertTrue($result);
@@ -1954,11 +1948,11 @@ trait AttributeTests
 
         $this->assertTrue($database->createAttribute(
             $collectionName,
-            new Attribute(key: 'signed_bigint', type: ColumnType::BigInteger),
+            Attribute::bigInteger(key: 'signed_bigint'),
         ));
         $this->assertTrue($database->createAttribute(
             $collectionName,
-            new Attribute(key: 'unsigned_bigint', type: ColumnType::BigInteger, signed: false),
+            Attribute::bigInteger(key: 'unsigned_bigint', signed: false),
         ));
 
         $collection = $database->getCollection($collectionName);
@@ -1984,12 +1978,7 @@ trait AttributeTests
         $this->assertSame(0, $signedAttribute->getAttribute('size'));
         $this->assertSame(0, $unsignedAttribute->getAttribute('size'));
 
-        $largeUnsignedAttribute = [new Attribute(
-            key: 'unsigned_bigint_large',
-            type: ColumnType::BigInteger,
-            default: '18446744073709551615',
-            signed: false,
-        )];
+        $largeUnsignedAttribute = [Attribute::bigInteger(key: 'unsigned_bigint_large', default: '18446744073709551615', signed: false)];
         if ($database->getAdapter()->supports(Capability::UnsignedBigInt)) {
             $this->assertTrue($database->createAttributes($collectionName, $largeUnsignedAttribute));
         } else {
@@ -2015,7 +2004,7 @@ trait AttributeTests
 
         $database->createCollection(__FUNCTION__);
 
-        $attributes = [new Attribute(key: 'a', type: ColumnType::String, size: 10, required: false), new Attribute(key: 'b', type: ColumnType::Integer, size: 0, required: false)];
+        $attributes = [Attribute::string(key: 'a', size: 10), Attribute::integer(key: 'b')];
 
         $result = $database->createAttributes(__FUNCTION__, $attributes);
         $this->assertTrue($result);
@@ -2048,7 +2037,7 @@ trait AttributeTests
 
         $database->createCollection(__FUNCTION__);
 
-        $attributes = [new Attribute(key: 'a', type: ColumnType::String, size: 10, required: false), new Attribute(key: 'b', type: ColumnType::Integer, size: 0, required: false)];
+        $attributes = [Attribute::string(key: 'a', size: 10), Attribute::integer(key: 'b')];
 
         $result = $database->createAttributes(__FUNCTION__, $attributes);
         $this->assertTrue($result);
@@ -2075,14 +2064,14 @@ trait AttributeTests
         $database->createCollection('stringTypes');
 
         // Create attributes with different string types
-        $this->assertEquals(true, $database->createAttribute('stringTypes', new Attribute(key: 'varchar_field', type: ColumnType::Varchar, size: 255, required: false, default: 'default varchar')));
-        $this->assertEquals(true, $database->createAttribute('stringTypes', new Attribute(key: 'text_field', type: ColumnType::Text, size: 65535, required: false)));
-        $this->assertEquals(true, $database->createAttribute('stringTypes', new Attribute(key: 'mediumtext_field', type: ColumnType::MediumText, size: 16777215, required: false)));
-        $this->assertEquals(true, $database->createAttribute('stringTypes', new Attribute(key: 'longtext_field', type: ColumnType::LongText, size: 4294967295, required: false)));
+        $this->assertEquals(true, $database->createAttribute('stringTypes', Attribute::varchar(key: 'varchar_field', default: 'default varchar')));
+        $this->assertEquals(true, $database->createAttribute('stringTypes', Attribute::text(key: 'text_field', size: 65535)));
+        $this->assertEquals(true, $database->createAttribute('stringTypes', Attribute::mediumText(key: 'mediumtext_field', size: 16777215)));
+        $this->assertEquals(true, $database->createAttribute('stringTypes', Attribute::longText(key: 'longtext_field', size: 4294967295)));
 
         // Test with array types
-        $this->assertEquals(true, $database->createAttribute('stringTypes', new Attribute(key: 'varchar_array', type: ColumnType::Varchar, size: 128, required: false, default: null, signed: true, array: true)));
-        $this->assertEquals(true, $database->createAttribute('stringTypes', new Attribute(key: 'text_array', type: ColumnType::Text, size: 65535, required: false, default: null, signed: true, array: true)));
+        $this->assertEquals(true, $database->createAttribute('stringTypes', Attribute::varchar(key: 'varchar_array', size: 128, array: true)));
+        $this->assertEquals(true, $database->createAttribute('stringTypes', Attribute::text(key: 'text_array', size: 65535, array: true)));
 
         $collection = $database->getCollection('stringTypes');
         $this->assertCount(6, $collection->getAttribute('attributes'));
@@ -2174,7 +2163,7 @@ trait AttributeTests
         }
 
         // Test querying by VARCHAR field
-        $this->assertEquals(true, $database->createIndex('stringTypes', new Index(key: 'varchar_index', type: IndexType::Key, attributes: ['varchar_field'])));
+        $this->assertEquals(true, $database->createIndex('stringTypes', Index::key(key: 'varchar_index', attributes: ['varchar_field'])));
 
         $results = $database->find('stringTypes', [
             Query::equal('varchar_field', ['This is a varchar field with 255 max length']),

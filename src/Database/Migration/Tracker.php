@@ -7,7 +7,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Query;
-use Utopia\Query\Schema\ColumnType;
 
 class Tracker
 {
@@ -37,10 +36,10 @@ class Tracker
         $this->db->createCollection(
             id: self::COLLECTION,
             attributes: [
-                new Attribute(key: 'version', type: ColumnType::String, size: 255, required: true),
-                new Attribute(key: 'name', type: ColumnType::String, size: 255, required: true),
-                new Attribute(key: 'batch', type: ColumnType::Integer, size: 0, required: true),
-                new Attribute(key: 'appliedAt', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']),
+                Attribute::string(key: 'version', required: true),
+                Attribute::string(key: 'name', required: true),
+                Attribute::integer(key: 'batch', required: true),
+                Attribute::datetime(key: 'appliedAt', filters: ['datetime']),
             ],
         );
 

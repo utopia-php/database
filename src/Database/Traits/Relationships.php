@@ -223,30 +223,12 @@ trait Relationships
         if ($type === RelationType::ManyToMany) {
             $junctionCollection = '_'.$collection->getSequence().'_'.$relatedCollection->getSequence();
             $junctionAttributes = [
-                new Attribute(
-                    key: $id,
-                    type: ColumnType::String,
-                    size: Database::LENGTH_KEY,
-                    required: true,
-                ),
-                new Attribute(
-                    key: $twoWayKey,
-                    type: ColumnType::String,
-                    size: Database::LENGTH_KEY,
-                    required: true,
-                ),
+                Attribute::string(key: $id, required: true),
+                Attribute::string(key: $twoWayKey, required: true),
             ];
             $junctionIndexes = [
-                new Index(
-                    key: '_index_'.$id,
-                    type: IndexType::Key,
-                    attributes: [$id],
-                ),
-                new Index(
-                    key: '_index_'.$twoWayKey,
-                    type: IndexType::Key,
-                    attributes: [$twoWayKey],
-                ),
+                Index::key(key: '_index_'.$id, attributes: [$id]),
+                Index::key(key: '_index_'.$twoWayKey, attributes: [$twoWayKey]),
             ];
             try {
                 $this->silent(fn () => $this->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes));
@@ -346,19 +328,19 @@ trait Relationships
             try {
                 switch ($type) {
                     case RelationType::OneToOne:
-                        $this->createIndex($collection->getId(), new Index(key: $indexKey, type: IndexType::Unique, attributes: [$id]));
+                        $this->createIndex($collection->getId(), Index::unique(key: $indexKey, attributes: [$id]));
                         $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
                         if ($twoWay) {
-                            $this->createIndex($relatedCollection->getId(), new Index(key: $twoWayIndexKey, type: IndexType::Unique, attributes: [$twoWayKey]));
+                            $this->createIndex($relatedCollection->getId(), Index::unique(key: $twoWayIndexKey, attributes: [$twoWayKey]));
                             $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
                         }
                         break;
                     case RelationType::OneToMany:
-                        $this->createIndex($relatedCollection->getId(), new Index(key: $twoWayIndexKey, type: IndexType::Key, attributes: [$twoWayKey]));
+                        $this->createIndex($relatedCollection->getId(), Index::key(key: $twoWayIndexKey, attributes: [$twoWayKey]));
                         $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
                         break;
                     case RelationType::ManyToOne:
-                        $this->createIndex($collection->getId(), new Index(key: $indexKey, type: IndexType::Key, attributes: [$id]));
+                        $this->createIndex($collection->getId(), Index::key(key: $indexKey, attributes: [$id]));
                         $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
                         break;
                     case RelationType::ManyToMany:

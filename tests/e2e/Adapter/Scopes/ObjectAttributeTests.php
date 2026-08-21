@@ -18,7 +18,6 @@ use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 trait ObjectAttributeTests
 {
@@ -593,7 +592,7 @@ trait ObjectAttributeTests
         $this->createAttribute($database, $collectionId, 'data', ColumnType::Object, 0, false);
 
         // Test 1: Create Object index on object attribute
-        $ginIndex = $database->createIndex($collectionId, new Index(key: 'idx_data_gin', type: IndexType::Object, attributes: ['data']));
+        $ginIndex = $database->createIndex($collectionId, Index::object(key: 'idx_data_gin', attributes: ['data']));
         $this->assertTrue($ginIndex);
 
         // Test 2: Create documents with JSONB data
@@ -649,7 +648,7 @@ trait ObjectAttributeTests
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, new Index(key: 'idx_name_gin', type: IndexType::Object, attributes: ['name']));
+            $database->createIndex($collectionId, Index::object(key: 'idx_name_gin', attributes: ['name']));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -662,7 +661,7 @@ trait ObjectAttributeTests
 
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, new Index(key: 'idx_multi_gin', type: IndexType::Object, attributes: ['data', 'metadata']));
+            $database->createIndex($collectionId, Index::object(key: 'idx_multi_gin', attributes: ['data', 'metadata']));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -673,7 +672,7 @@ trait ObjectAttributeTests
         // Test 8: Try to create Object index with orders (should fail)
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, new Index(key: 'idx_ordered_gin', type: IndexType::Object, attributes: ['metadata'], lengths: [], orders: [OrderDirection::Asc->value]));
+            $database->createIndex($collectionId, Index::object(key: 'idx_ordered_gin', attributes: ['metadata'], orders: [OrderDirection::Asc->value]));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);
@@ -684,8 +683,6 @@ trait ObjectAttributeTests
         // Clean up
         $database->deleteCollection($collectionId);
     }
-
-
 
     public function testObjectAttributeIntegersBeyondInt32(): void
     {
@@ -1024,7 +1021,7 @@ trait ObjectAttributeTests
         // 1) KEY index on a nested object path (dot notation)
 
         // 2) UNIQUE index on a nested object path should enforce uniqueness on insert
-        $created = $database->createIndex($collectionId, new Index(key: 'idx_profile_email_unique', type: IndexType::Unique, attributes: ['profile.user.email']));
+        $created = $database->createIndex($collectionId, Index::unique(key: 'idx_profile_email_unique', attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         $database->createDocument($collectionId, new Document([
@@ -1060,14 +1057,14 @@ trait ObjectAttributeTests
 
         // 3) INDEX_OBJECT must NOT be allowed on nested paths
         try {
-            $database->createIndex($collectionId, new Index(key: 'idx_profile_nested_object', type: IndexType::Object, attributes: ['profile.user.email']));
+            $database->createIndex($collectionId, Index::object(key: 'idx_profile_nested_object', attributes: ['profile.user.email']));
         } catch (Exception $e) {
             $this->assertInstanceOf(IndexException::class, $e);
         }
 
         // 4) Nested path indexes must only be allowed when base attribute is VAR_OBJECT
         try {
-            $database->createIndex($collectionId, new Index(key: 'idx_name_nested', type: IndexType::Key, attributes: ['name.first']));
+            $database->createIndex($collectionId, Index::key(key: 'idx_name_nested', attributes: ['name.first']));
             $this->fail('Expected Type exception for nested index on non-object base attribute');
         } catch (Exception $e) {
             $this->assertInstanceOf(IndexException::class, $e);
@@ -1097,7 +1094,7 @@ trait ObjectAttributeTests
         $this->createAttribute($database, $collectionId, 'name', ColumnType::String, 255, false);
 
         // Create index on nested email path
-        $created = $database->createIndex($collectionId, new Index(key: 'idx_profile_email', type: IndexType::Key, attributes: ['profile.user.email']));
+        $created = $database->createIndex($collectionId, Index::key(key: 'idx_profile_email', attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         // Seed documents with different nested values
@@ -1224,7 +1221,7 @@ trait ObjectAttributeTests
         $this->createAttribute($database, $collectionId, 'age', ColumnType::Integer, 0, false);
 
         // Edge Case 1: Deep nesting (5 levels deep)
-        $created = $database->createIndex($collectionId, new Index(key: 'idx_deep_nest', type: IndexType::Key, attributes: ['profile.level1.level2.level3.level4.value']));
+        $created = $database->createIndex($collectionId, Index::key(key: 'idx_deep_nest', attributes: ['profile.level1.level2.level3.level4.value']));
         $this->assertTrue($created);
 
         $database->createDocuments($collectionId, [
@@ -1279,11 +1276,11 @@ trait ObjectAttributeTests
         $this->assertEquals('deep1', $results[0]->getId());
 
         // Edge Case 2: Multiple nested indexes on same base attribute
-        $created = $database->createIndex($collectionId, new Index(key: 'idx_email', type: IndexType::Key, attributes: ['profile.user.email']));
+        $created = $database->createIndex($collectionId, Index::key(key: 'idx_email', attributes: ['profile.user.email']));
         $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, new Index(key: 'idx_country', type: IndexType::Key, attributes: ['profile.user.info.country']));
+        $created = $database->createIndex($collectionId, Index::key(key: 'idx_country', attributes: ['profile.user.info.country']));
         $this->assertTrue($created);
-        $created = $database->createIndex($collectionId, new Index(key: 'idx_city', type: IndexType::Key, attributes: ['profile.user.info.city']));
+        $created = $database->createIndex($collectionId, Index::key(key: 'idx_city', attributes: ['profile.user.info.city']));
         $this->assertTrue($created);
 
         $database->createDocuments($collectionId, [
@@ -1413,8 +1410,8 @@ trait ObjectAttributeTests
         ]);
 
         // Create indexes on regular attributes
-        $database->createIndex($collectionId, new Index(key: 'idx_name', type: IndexType::Key, attributes: ['name']));
-        $database->createIndex($collectionId, new Index(key: 'idx_age', type: IndexType::Key, attributes: ['age']));
+        $database->createIndex($collectionId, Index::key(key: 'idx_name', attributes: ['name']));
+        $database->createIndex($collectionId, Index::key(key: 'idx_age', attributes: ['age']));
 
         // Combined query: nested path + regular attribute
         $results = $database->find($collectionId, [
@@ -1686,7 +1683,7 @@ trait ObjectAttributeTests
         $this->assertGreaterThanOrEqual(1, count($results));
 
         // Re-create index
-        $created = $database->createIndex($collectionId, new Index(key: 'idx_email_recreated', type: IndexType::Key, attributes: ['profile.user.email']));
+        $created = $database->createIndex($collectionId, Index::key(key: 'idx_email_recreated', attributes: ['profile.user.email']));
         $this->assertTrue($created);
 
         // Query should still work with recreated index
@@ -1697,7 +1694,7 @@ trait ObjectAttributeTests
 
         // Edge Case 11: UNIQUE index with updates (duplicate prevention)
         if ($database->getAdapter()->supports(Capability::IdenticalIndexes)) {
-            $created = $database->createIndex($collectionId, new Index(key: 'idx_unique_email', type: IndexType::Unique, attributes: ['profile.user.email']));
+            $created = $database->createIndex($collectionId, Index::unique(key: 'idx_unique_email', attributes: ['profile.user.email']));
             $this->assertTrue($created);
 
             // Try to create duplicate

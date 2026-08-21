@@ -12,7 +12,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Query\Schema\IndexType;
 
 class CollectionModelTest extends TestCase
 {
@@ -94,7 +93,7 @@ class CollectionModelTest extends TestCase
     public function testFromDocumentRoundtrip(): void
     {
         $attr = Attribute::string(key: 'status', size: 32, required: false, default: 'active');
-        $idx = new Index(key: 'idx_status', type: IndexType::Key, attributes: ['status']);
+        $idx = Index::key(key: 'idx_status', attributes: ['status']);
 
         $original = new Collection(
             id: 'projects',

@@ -21,7 +21,6 @@ use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\Schema\ColumnType;
 
 final class SQLTimeoutScopeTest extends TestCase
 {
@@ -94,8 +93,8 @@ final class SQLTimeoutScopeTest extends TestCase
         $transform->events = [];
 
         $this->assertTrue($adapter->createAttributes('movies', [
-            new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: false),
-            new Attribute(key: 'label', type: ColumnType::String, size: 32, required: false),
+            Attribute::integer(key: 'score'),
+            Attribute::string(key: 'label', size: 32),
         ]));
         $this->assertContains(Event::AttributesCreate, $transform->events);
         $this->assertNotContains(Event::AttributeCreate, $transform->events);

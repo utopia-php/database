@@ -8,8 +8,6 @@ use Utopia\Database\Collection;
 use Utopia\Database\Index;
 use Utopia\Database\Schema\ChangeType;
 use Utopia\Database\Schema\Diff;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 class DiffTest extends TestCase
 {
@@ -25,7 +23,7 @@ class DiffTest extends TestCase
         $collection = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 255),
+                Attribute::string(key: 'name'),
             ],
         );
 
@@ -40,15 +38,15 @@ class DiffTest extends TestCase
         $source = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 255),
+                Attribute::string(key: 'name'),
             ],
         );
 
         $target = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 255),
-                new Attribute(key: 'email', type: ColumnType::String, size: 255),
+                Attribute::string(key: 'name'),
+                Attribute::string(key: 'email'),
             ],
         );
 
@@ -67,15 +65,15 @@ class DiffTest extends TestCase
         $source = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 255),
-                new Attribute(key: 'email', type: ColumnType::String, size: 255),
+                Attribute::string(key: 'name'),
+                Attribute::string(key: 'email'),
             ],
         );
 
         $target = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 255),
+                Attribute::string(key: 'name'),
             ],
         );
 
@@ -93,14 +91,14 @@ class DiffTest extends TestCase
         $source = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 100),
+                Attribute::string(key: 'name', size: 100),
             ],
         );
 
         $target = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 255),
+                Attribute::string(key: 'name'),
             ],
         );
 
@@ -120,7 +118,7 @@ class DiffTest extends TestCase
         $target = new Collection(
             id: 'test',
             indexes: [
-                new Index(key: 'idx_name', type: IndexType::Index, attributes: ['name']),
+                Index::index(key: 'idx_name', attributes: ['name']),
             ],
         );
 
@@ -138,7 +136,7 @@ class DiffTest extends TestCase
         $source = new Collection(
             id: 'test',
             indexes: [
-                new Index(key: 'idx_name', type: IndexType::Index, attributes: ['name']),
+                Index::index(key: 'idx_name', attributes: ['name']),
             ],
         );
         $target = new Collection(id: 'test');
@@ -156,22 +154,22 @@ class DiffTest extends TestCase
         $source = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 100),
-                new Attribute(key: 'old_field', type: ColumnType::String, size: 50),
+                Attribute::string(key: 'name', size: 100),
+                Attribute::string(key: 'old_field', size: 50),
             ],
             indexes: [
-                new Index(key: 'idx_old', type: IndexType::Index, attributes: ['old_field']),
+                Index::index(key: 'idx_old', attributes: ['old_field']),
             ],
         );
 
         $target = new Collection(
             id: 'test',
             attributes: [
-                new Attribute(key: 'name', type: ColumnType::String, size: 255),
-                new Attribute(key: 'new_field', type: ColumnType::Integer, size: 0),
+                Attribute::string(key: 'name'),
+                Attribute::integer(key: 'new_field'),
             ],
             indexes: [
-                new Index(key: 'idx_new', type: IndexType::Index, attributes: ['new_field']),
+                Index::index(key: 'idx_new', attributes: ['new_field']),
             ],
         );
 

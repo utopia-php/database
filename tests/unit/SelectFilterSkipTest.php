@@ -12,7 +12,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
-use Utopia\Query\Schema\ColumnType;
 
 class SelectFilterSkipTest extends TestCase
 {
@@ -37,8 +36,8 @@ class SelectFilterSkipTest extends TestCase
         );
 
         $database->createCollection('filterSelect');
-        $database->createAttribute('filterSelect', new Attribute(key: 'plain', type: ColumnType::String, size: 128, required: false));
-        $database->createAttribute('filterSelect', new Attribute(key: 'kids', type: ColumnType::String, size: 128, required: false, filters: ['subQueryProbeUnit']));
+        $database->createAttribute('filterSelect', Attribute::string(key: 'plain', size: 128));
+        $database->createAttribute('filterSelect', Attribute::string(key: 'kids', size: 128, filters: ['subQueryProbeUnit']));
 
         $database->createDocument('filterSelect', new Document([
             '$id' => 'doc1',

@@ -12,7 +12,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Query\Schema\ColumnType;
 
 class WithCacheLeaseTest extends TestCase
 {
@@ -32,7 +31,7 @@ class WithCacheLeaseTest extends TestCase
 
         $this->database->create();
         $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', new Attribute(key: 'name', type: ColumnType::String, size: 255));
+        $this->database->createAttribute('projects', Attribute::string(key: 'name'));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [

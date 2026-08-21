@@ -16,7 +16,6 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
-use Utopia\Query\Schema\IndexType;
 
 /**
  * Wraps a source Database and replicates write operations to an optional destination Database.
@@ -1302,33 +1301,12 @@ class Mirror extends Database
         $this->source->createCollection(
             id: 'upgrades',
             attributes: [
-                new Attribute(
-                    key: 'collectionId',
-                    type: ColumnType::String,
-                    size: Database::LENGTH_KEY,
-                    required: true,
-                ),
-                new Attribute(
-                    key: 'status',
-                    type: ColumnType::String,
-                    size: Database::LENGTH_KEY,
-                    required: false,
-                ),
+                Attribute::string(key: 'collectionId', required: true),
+                Attribute::string(key: 'status'),
             ],
             indexes: [
-                new Index(
-                    key: '_unique_collection',
-                    type: IndexType::Unique,
-                    attributes: ['collectionId'],
-                    lengths: [Database::LENGTH_KEY],
-                ),
-                new Index(
-                    key: '_status_index',
-                    type: IndexType::Key,
-                    attributes: ['status'],
-                    lengths: [Database::LENGTH_KEY],
-                    orders: [OrderDirection::Asc->value],
-                ),
+                Index::unique(key: '_unique_collection', attributes: ['collectionId'], lengths: [Database::LENGTH_KEY]),
+                Index::key(key: '_status_index', attributes: ['status'], lengths: [Database::LENGTH_KEY], orders: [OrderDirection::Asc->value]),
             ],
         );
     }

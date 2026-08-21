@@ -11,7 +11,6 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator;
-use Utopia\Query\Schema\ColumnType;
 
 final class UpdateDocumentsCastingTest extends TestCase
 {
@@ -69,7 +68,7 @@ final class UpdateDocumentsCastingTest extends TestCase
         $database->setNamespace('casting');
         $this->assertTrue($database->create());
         $database->createCollection('counters', [
-            new Attribute(key: 'value', type: ColumnType::Integer),
+            Attribute::integer(key: 'value'),
         ]);
         $database->createDocuments('counters', [
             new Document(['$id' => 'first', 'value' => 1]),

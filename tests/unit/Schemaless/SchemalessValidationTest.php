@@ -18,7 +18,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Query\OrderDirection;
-use Utopia\Query\Schema\IndexType;
 
 class SchemalessValidationTest extends TestCase
 {
@@ -195,13 +194,13 @@ class SchemalessValidationTest extends TestCase
 
         $this->assertTrue($this->database->createIndex(
             'sl_idx_dup',
-            new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])
+            Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])
         ));
 
         try {
             $this->database->createIndex(
                 'sl_idx_dup',
-                new Index(key: 'duplicate', type: IndexType::Key, attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])
+                Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])
             );
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
@@ -242,13 +241,13 @@ class SchemalessValidationTest extends TestCase
 
         $this->assertTrue($this->database->createIndex(
             'sl_ttl_dup',
-            new Index(key: 'idx_ttl_expires', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 3600)
+            Index::ttl(key: 'idx_ttl_expires', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 3600)
         ));
 
         try {
             $this->database->createIndex(
                 'sl_ttl_dup',
-                new Index(key: 'idx_ttl_expires_duplicate', type: IndexType::Ttl, attributes: ['expiresAt'], lengths: [], orders: [OrderDirection::Asc->value], ttl: 7200)
+                Index::ttl(key: 'idx_ttl_expires_duplicate', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 7200)
             );
             $this->fail('Expected exception for duplicate TTL index');
         } catch (\Exception $e) {

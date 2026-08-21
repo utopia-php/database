@@ -13,8 +13,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 
 trait GeneralTests
 {
@@ -46,7 +44,7 @@ trait GeneralTests
 
         $this->assertEquals(
             true,
-            $database->createAttribute('global-timeouts', new Attribute(key: 'longtext', type: ColumnType::String, size: 100000000, required: true))
+            $database->createAttribute('global-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true))
         );
 
         for ($i = 0; $i < 20; $i++) {
@@ -169,8 +167,8 @@ trait GeneralTests
             Permission::update(Role::any()),
         ], documentSecurity: false);
 
-        $database->createAttribute(__FUNCTION__, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false));
-        $database->createIndex(__FUNCTION__, new Index(key: 'nameIndex', type: IndexType::Key, attributes: ['name']));
+        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
+        $database->createIndex(__FUNCTION__, Index::key(key: 'nameIndex', attributes: ['name']));
 
         $doc1Id = ID::unique();
 
@@ -350,7 +348,7 @@ trait GeneralTests
         $collection = 'cacheFallback_'.uniqid();
 
         $database->createCollection($collection, attributes: [
-            new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true),
+            Attribute::string(key: 'title', size: 128, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -396,7 +394,7 @@ trait GeneralTests
         $database = $this->getDatabase();
 
         $database->createCollection('transactionAtomicity');
-        $database->createAttribute('transactionAtomicity', new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute('transactionAtomicity', Attribute::string(key: 'title', size: 128, required: true));
 
         // Verify a successful transaction commits
         $doc = $database->withTransaction(function () use ($database) {
@@ -447,7 +445,7 @@ trait GeneralTests
         $database = $this->getDatabase();
 
         $database->createCollection('txKnownException');
-        $database->createAttribute('txKnownException', new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute('txKnownException', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txKnownException', new Document([
             '$id' => 'existing_doc',
@@ -544,7 +542,7 @@ trait GeneralTests
         }
 
         $database->createCollection('txNested');
-        $database->createAttribute('txNested', new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute('txNested', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txNested', new Document([
             '$id' => 'nested_existing',

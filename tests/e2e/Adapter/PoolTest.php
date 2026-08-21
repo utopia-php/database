@@ -20,7 +20,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
-use Utopia\Query\Schema\ColumnType;
 
 class PoolTest extends Base
 {
@@ -149,7 +148,7 @@ class PoolTest extends Base
         $collection = 'orphanedPermsRecovery';
 
         $database->createCollection($collection);
-        $database->createAttribute($collection, new Attribute(key: 'title', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'title', size: 128, required: true));
 
         // Step 1: Create a document with permissions
         $doc = $database->createDocument($collection, new Document([

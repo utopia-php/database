@@ -11,7 +11,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 
 trait JoinComboTests
@@ -540,7 +539,7 @@ trait JoinComboTests
         }
 
         [$mCol, $pubCol] = $this->seedJoinComboFixture($database);
-        $database->createAttribute($mCol, new Attribute(key: 'rev.score', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($mCol, Attribute::integer(key: 'rev.score'));
         $database->getAuthorization()->skip(function () use ($database, $mCol): void {
             $database->deleteDocument($mCol, 'm1');
             $database->deleteDocument($mCol, 'm2');
@@ -609,9 +608,9 @@ trait JoinComboTests
 
         [$mCol, $metaCol] = $this->seedJoinHardcoreFixture($database);
 
-        $database->createAttribute($mCol, new Attribute(key: 'profile', type: ColumnType::Object, size: 0, required: false));
+        $database->createAttribute($mCol, Attribute::object(key: 'profile'));
         if ($database->getAdapter()->supports(Capability::ObjectIndexes)) {
-            $database->createIndex($mCol, new Index(key: 'idx_jh_profile_email', type: IndexType::Key, attributes: ['profile.user.email']));
+            $database->createIndex($mCol, Index::key(key: 'idx_jh_profile_email', attributes: ['profile.user.email']));
         }
 
         $database->getAuthorization()->skip(function () use ($database, $mCol): void {
@@ -1189,12 +1188,12 @@ trait JoinComboTests
 
             $any = [Permission::create(Role::any()), Permission::read(Role::any())];
             $database->createCollection($mCol, permissions: $any, documentSecurity: false);
-            $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+            $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
 
             $database->createCollection($metaCol, permissions: $any, documentSecurity: true);
-            $database->createAttribute($metaCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
-            $database->createAttribute($metaCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
-            $database->createAttribute($metaCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: false));
+            $database->createAttribute($metaCol, Attribute::string(key: 'mainId', required: true));
+            $database->createAttribute($metaCol, Attribute::integer(key: 'score', required: true));
+            $database->createAttribute($metaCol, Attribute::string(key: 'secret', size: 100));
 
             $database->setTenant(5151);
             $database->createDocument($mCol, new Document([
@@ -1699,25 +1698,25 @@ trait JoinComboTests
         $any = [Permission::create(Role::any()), Permission::read(Role::any())];
 
         $database->createCollection($mCol, permissions: $any, documentSecurity: false);
-        $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
 
         $database->createCollection($pubCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($pubCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($pubCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($pubCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($pubCol, Attribute::integer(key: 'score', required: true));
 
         $database->createCollection($secCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($secCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($secCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($secCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: false));
+        $database->createAttribute($secCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($secCol, Attribute::integer(key: 'score', required: true));
+        $database->createAttribute($secCol, Attribute::string(key: 'secret', size: 100));
 
         $database->createCollection($selfCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($selfCol, new Attribute(key: 'payload', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($selfCol, new Attribute(key: 'tag', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute($selfCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($selfCol, Attribute::string(key: 'payload', size: 100, required: true));
+        $database->createAttribute($selfCol, Attribute::string(key: 'tag', size: 50, required: true));
+        $database->createAttribute($selfCol, Attribute::string(key: 'mainId'));
 
         $database->createCollection($cCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($cCol, new Attribute(key: 'selfId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($cCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($cCol, Attribute::string(key: 'selfId', required: true));
+        $database->createAttribute($cCol, Attribute::string(key: 'secret', size: 100, required: true));
 
         $readAny = [Permission::read(Role::any())];
         $hidden = [
@@ -2043,39 +2042,39 @@ trait JoinComboTests
         $hidden = [Permission::read(Role::user('combo-hard-hidden'))];
 
         $database->createCollection($mCol, permissions: $any, documentSecurity: false);
-        $database->createAttribute($mCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($mCol, new Attribute(key: 'rank', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($mCol, new Attribute(key: 'peerKey', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createAttribute($mCol, Attribute::integer(key: 'rank', required: true));
+        $database->createAttribute($mCol, Attribute::string(key: 'peerKey'));
 
         $database->createCollection($metaCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($metaCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($metaCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($metaCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: false));
-        $database->createAttribute($metaCol, new Attribute(key: 'label', type: ColumnType::String, size: 100, required: false));
-        $database->createAttribute($metaCol, new Attribute(key: 'body', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($metaCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($metaCol, Attribute::integer(key: 'score', required: true));
+        $database->createAttribute($metaCol, Attribute::string(key: 'secret', size: 100));
+        $database->createAttribute($metaCol, Attribute::string(key: 'label', size: 100));
+        $database->createAttribute($metaCol, Attribute::string(key: 'body'));
 
         $database->createCollection($peerCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($peerCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: false));
-        $database->createAttribute($peerCol, new Attribute(key: 'label', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($peerCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($peerCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: false));
+        $database->createAttribute($peerCol, Attribute::string(key: 'mainId'));
+        $database->createAttribute($peerCol, Attribute::string(key: 'label', size: 100, required: true));
+        $database->createAttribute($peerCol, Attribute::integer(key: 'score', required: true));
+        $database->createAttribute($peerCol, Attribute::string(key: 'secret', size: 100));
 
         $database->createCollection($aCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($aCol, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($aCol, Attribute::string(key: 'name', size: 100, required: true));
 
         $database->createCollection($bCol, permissions: $any, documentSecurity: false);
-        $database->createAttribute($bCol, new Attribute(key: 'aId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($bCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($bCol, new Attribute(key: 'label', type: ColumnType::String, size: 100, required: true));
+        $database->createAttribute($bCol, Attribute::string(key: 'aId', required: true));
+        $database->createAttribute($bCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($bCol, Attribute::string(key: 'label', size: 100, required: true));
 
         $database->createCollection($cCol, permissions: $any, documentSecurity: true);
-        $database->createAttribute($cCol, new Attribute(key: 'bId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($cCol, new Attribute(key: 'mainId', type: ColumnType::String, size: 255, required: true));
-        $database->createAttribute($cCol, new Attribute(key: 'secret', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($cCol, new Attribute(key: 'score', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($cCol, Attribute::string(key: 'bId', required: true));
+        $database->createAttribute($cCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($cCol, Attribute::string(key: 'secret', size: 100, required: true));
+        $database->createAttribute($cCol, Attribute::integer(key: 'score', required: true));
 
         if ($database->getAdapter()->supports(Capability::Fulltext)) {
-            $database->createIndex($metaCol, new Index(key: 'idx_jh_meta_body', type: IndexType::Fulltext, attributes: ['body']));
+            $database->createIndex($metaCol, Index::fullText(key: 'idx_jh_meta_body', attributes: ['body']));
         }
 
         $database->createDocument($mCol, new Document([

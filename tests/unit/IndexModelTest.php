@@ -14,7 +14,7 @@ class IndexModelTest extends TestCase
 {
     public function testConstructorDefaults(): void
     {
-        $index = new Index(key: 'idx_test', type: IndexType::Key);
+        $index = Index::key(key: 'idx_test');
 
         $this->assertSame('idx_test', $index->key);
         $this->assertSame(IndexType::Key, $index->type);
@@ -26,9 +26,8 @@ class IndexModelTest extends TestCase
 
     public function testConstructorWithAllValues(): void
     {
-        $index = new Index(
+        $index = Index::unique(
             key: 'idx_compound',
-            type: IndexType::Unique,
             attributes: ['name', 'email'],
             lengths: [128, 256],
             orders: ['ASC', 'DESC'],
@@ -45,14 +44,7 @@ class IndexModelTest extends TestCase
 
     public function testToDocumentProducesCorrectStructure(): void
     {
-        $index = new Index(
-            key: 'idx_email',
-            type: IndexType::Unique,
-            attributes: ['email'],
-            lengths: [256],
-            orders: ['ASC'],
-            ttl: 1,
-        );
+        $index = Index::unique(key: 'idx_email', attributes: ['email'], lengths: [256], orders: ['ASC']);
 
         $doc = $index->toDocument();
 
@@ -68,9 +60,8 @@ class IndexModelTest extends TestCase
 
     public function testFromDocumentRoundtrip(): void
     {
-        $original = new Index(
+        $original = Index::key(
             key: 'idx_status_name',
-            type: IndexType::Key,
             attributes: ['status', 'name'],
             lengths: [32, 128],
             orders: ['ASC', 'ASC'],
@@ -143,12 +134,7 @@ class IndexModelTest extends TestCase
 
     public function testWithTTL(): void
     {
-        $index = new Index(
-            key: 'idx_ttl',
-            type: IndexType::Ttl,
-            attributes: ['expiresAt'],
-            ttl: 86400,
-        );
+        $index = Index::ttl(key: 'idx_ttl', attributes: ['expiresAt'], ttl: 86400);
 
         $doc = $index->toDocument();
         $this->assertSame(86400, $doc->getAttribute('ttl'));
@@ -159,13 +145,7 @@ class IndexModelTest extends TestCase
 
     public function testWithNullLengthsAndOrders(): void
     {
-        $index = new Index(
-            key: 'idx_mixed',
-            type: IndexType::Key,
-            attributes: ['a', 'b'],
-            lengths: [128, null],
-            orders: ['ASC', null],
-        );
+        $index = Index::key(key: 'idx_mixed', attributes: ['a', 'b'], lengths: [128, null], orders: ['ASC', null]);
 
         $doc = $index->toDocument();
         $this->assertSame([128, null], $doc->getAttribute('lengths'));
@@ -178,13 +158,7 @@ class IndexModelTest extends TestCase
 
     public function testMultipleAttributeIndex(): void
     {
-        $index = new Index(
-            key: 'idx_multi',
-            type: IndexType::Key,
-            attributes: ['firstName', 'lastName', 'email'],
-            lengths: [64, 64, 256],
-            orders: ['ASC', 'ASC', 'DESC'],
-        );
+        $index = Index::key(key: 'idx_multi', attributes: ['firstName', 'lastName', 'email'], lengths: [64, 64, 256], orders: ['ASC', 'ASC', 'DESC']);
 
         $doc = $index->toDocument();
         $restored = Index::fromDocument($doc);

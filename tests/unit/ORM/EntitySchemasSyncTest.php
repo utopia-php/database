@@ -185,7 +185,7 @@ class EntitySchemasSyncTest extends TestCase
         $attrDocs = array_map(fn (Attribute $a) => $a->toDocument(), $desired->attributes);
         $indexDocs = array_map(fn (\Utopia\Database\Index $i) => $i->toDocument(), $desired->indexes);
 
-        $extraAttr = new Attribute(key: 'obsolete_field', type: ColumnType::String, size: 100);
+        $extraAttr = Attribute::string(key: 'obsolete_field', size: 100);
         $attrDocs[] = $extraAttr->toDocument();
 
         $collectionDoc = new Document([

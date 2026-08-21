@@ -15,7 +15,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
-use Utopia\Query\Schema\ColumnType;
 
 trait OperatorTests
 {
@@ -33,11 +32,11 @@ trait OperatorTests
         $collectionId = 'test_operators';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: 'test'));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'name', size: 100, default: 'test'));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -138,9 +137,9 @@ trait OperatorTests
         $collectionId = 'test_batch_operators';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'category', size: 50, required: true));
 
         // Create multiple test documents
         $docs = [];
@@ -215,26 +214,26 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create attributes for all operator types
-        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 10));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 5.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'multiplier', type: ColumnType::Double, size: 0, required: false, default: 2.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'divisor', type: ColumnType::Double, size: 0, required: false, default: 100.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'remainder', type: ColumnType::Integer, size: 0, required: false, default: 20));
-        $database->createAttribute($collectionId, new Attribute(key: 'power_val', type: ColumnType::Double, size: 0, required: false, default: 2.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: false, default: 'Title'));
-        $database->createAttribute($collectionId, new Attribute(key: 'content', type: ColumnType::String, size: 500, required: false, default: 'old content'));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'categories', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'duplicates', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'intersect_items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'diff_items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'filter_numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false, default: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'last_update', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
-        $database->createAttribute($collectionId, new Attribute(key: 'next_update', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
-        $database->createAttribute($collectionId, new Attribute(key: 'now_field', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'counter', default: 10));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 5.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'multiplier', default: 2.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'divisor', default: 100.0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'remainder', default: 20));
+        $database->createAttribute($collectionId, Attribute::double(key: 'power_val', default: 2.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'title', default: 'Title'));
+        $database->createAttribute($collectionId, Attribute::string(key: 'content', size: 500, default: 'old content'));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'categories', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'duplicates', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'intersect_items', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'diff_items', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'filter_numbers', array: true));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'active', default: false));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'last_update', filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'next_update', filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'now_field', filters: ['datetime']));
 
         // Create test documents
         $docs = [];
@@ -363,10 +362,10 @@ trait OperatorTests
         $collectionId = 'test_operators_with_queries';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false, default: false));
+        $database->createAttribute($collectionId, Attribute::string(key: 'category', size: 50, required: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'active', default: false));
 
         // Create test documents
         for ($i = 1; $i <= 5; $i++) {
@@ -443,9 +442,9 @@ trait OperatorTests
         $collectionId = 'test_operators_with_select';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, default: 0.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'category', size: 50, required: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
 
         for ($i = 1; $i <= 3; $i++) {
             $database->createDocument($collectionId, new Document([
@@ -505,7 +504,7 @@ trait OperatorTests
         $collectionId = 'test_operators_large_batch';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, default: 0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
 
         // More documents than find()'s default limit (25) so the refetch must page/limit correctly.
         $total = 60;
@@ -594,8 +593,8 @@ trait OperatorTests
 
         $collectionId = 'test_operator_double_decode';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'secret', type: ColumnType::String, size: 128, filters: ['operator_double_decode']));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'secret', size: 128, filters: ['operator_double_decode']));
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'doc1',
@@ -634,9 +633,9 @@ trait OperatorTests
         $collectionId = 'test_operator_errors';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'text_field', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'number_field', type: ColumnType::Integer, size: 0, required: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text_field', size: 100, required: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'number_field', required: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'array_field', size: 50, array: true));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -672,8 +671,8 @@ trait OperatorTests
         $collectionId = 'test_array_operator_errors';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'text_field', type: ColumnType::String, size: 100, required: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text_field', size: 100, required: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'array_field', size: 50, array: true));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -708,7 +707,7 @@ trait OperatorTests
         $collectionId = 'test_insert_operator_errors';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'array_field', size: 50, array: true));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -746,12 +745,12 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create various attribute types for testing
-        $database->createAttribute($collectionId, new Attribute(key: 'string_field', type: ColumnType::String, size: 100, required: false, default: 'default'));
-        $database->createAttribute($collectionId, new Attribute(key: 'int_field', type: ColumnType::Integer, size: 0, required: false, default: 10));
-        $database->createAttribute($collectionId, new Attribute(key: 'float_field', type: ColumnType::Double, size: 0, required: false, default: 1.5));
-        $database->createAttribute($collectionId, new Attribute(key: 'bool_field', type: ColumnType::Boolean, size: 0, required: false, default: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'array_field', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'date_field', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::string(key: 'string_field', size: 100, default: 'default'));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'int_field', default: 10));
+        $database->createAttribute($collectionId, Attribute::double(key: 'float_field', default: 1.5));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'bool_field', default: false));
+        $database->createAttribute($collectionId, Attribute::string(key: 'array_field', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'date_field', filters: ['datetime']));
 
         // Create test document
         $doc = $database->createDocument($collectionId, new Document([
@@ -831,7 +830,7 @@ trait OperatorTests
 
         $collectionId = 'test_division_zero';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Double, size: 0, required: false, default: 100.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'number', default: 100.0));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'zero_test_doc',
@@ -886,7 +885,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_bounds';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'bounds_test_doc',
@@ -931,8 +930,8 @@ trait OperatorTests
 
         $collectionId = 'test_operator_limits';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 10));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 5.0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'counter', default: 10));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 5.0));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'limits_test_doc',
@@ -987,8 +986,8 @@ trait OperatorTests
 
         $collectionId = 'test_array_filter';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'filter_test_doc',
@@ -1024,8 +1023,8 @@ trait OperatorTests
 
         $collectionId = 'test_replace';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: 'default text'));
-        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text', default: 'default text'));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'number', default: 0));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'replace_test_doc',
@@ -1071,9 +1070,9 @@ trait OperatorTests
 
         $collectionId = 'test_null_handling';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'nullable_int', type: ColumnType::Integer, size: 0, required: false, signed: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'nullable_string', type: ColumnType::String, size: 100, required: false, signed: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'nullable_bool', type: ColumnType::Boolean, size: 0, required: false, signed: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'nullable_int', signed: false));
+        $database->createAttribute($collectionId, Attribute::string(key: 'nullable_string', size: 100, signed: false));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'nullable_bool', signed: false));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'null_test_doc',
@@ -1127,10 +1126,10 @@ trait OperatorTests
 
         $collectionId = 'test_complex_operators';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'stats', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'metadata', type: ColumnType::String, size: 100, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'stats', array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'metadata', size: 100, array: true));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'name', default: ''));
 
         // Create document with complex data
         $doc = $database->createDocument($collectionId, new Document([
@@ -1186,7 +1185,7 @@ trait OperatorTests
 
         $collectionId = 'test_increment_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1227,7 +1226,7 @@ trait OperatorTests
 
         $collectionId = 'test_string_concat_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'title', type: ColumnType::String, size: 255, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::string(key: 'title', default: ''));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1268,7 +1267,7 @@ trait OperatorTests
 
         $collectionId = 'test_modulo_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'number', default: 0));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1297,7 +1296,7 @@ trait OperatorTests
 
         $collectionId = 'test_toggle_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false, default: false));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'active', default: false));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1333,7 +1332,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_unique_operator';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1368,9 +1367,9 @@ trait OperatorTests
         // Setup collection
         $collectionId = 'operator_increment_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count'));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score'));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text'));
 
         // Success case - integer
         $doc = $database->createDocument($collectionId, new Document([
@@ -1425,7 +1424,7 @@ trait OperatorTests
 
         $collectionId = 'operator_decrement_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count'));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1469,7 +1468,7 @@ trait OperatorTests
 
         $collectionId = 'operator_multiply_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value'));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1503,7 +1502,7 @@ trait OperatorTests
 
         $collectionId = 'operator_divide_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value'));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1537,7 +1536,7 @@ trait OperatorTests
 
         $collectionId = 'operator_modulo_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Integer, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'number'));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1565,7 +1564,7 @@ trait OperatorTests
 
         $collectionId = 'operator_power_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'number', type: ColumnType::Double, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::double(key: 'number'));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -1606,7 +1605,7 @@ trait OperatorTests
 
         $collectionId = 'operator_bounded_shrink';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, default: 0.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', default: 0.0));
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'shrink_doc',
@@ -1659,9 +1658,9 @@ trait OperatorTests
 
         $collectionId = 'operator_guard_per_column';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 100, default: ''));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'name', size: 100, default: ''));
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'doc',
@@ -1701,8 +1700,8 @@ trait OperatorTests
 
         $collectionId = 'operator_guard_per_row';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, default: 0.0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
 
         foreach ([['d1', 10], ['d2', 48]] as [$id, $count]) {
             $database->createDocument($collectionId, new Document([
@@ -1744,7 +1743,7 @@ trait OperatorTests
 
         $collectionId = 'operator_bound_inclusive';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, default: 0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'counter', default: 0));
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'doc',
@@ -1791,7 +1790,7 @@ trait OperatorTests
 
         $collectionId = 'operator_power_edge';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, default: 0.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', default: 0.0));
 
         // The square root of a negative number is not a real number, so -4 is left as -4.
         $database->createDocument($collectionId, new Document([
@@ -1842,7 +1841,7 @@ trait OperatorTests
 
         $collectionId = 'operator_power_undefined';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, default: 0.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', default: 0.0));
 
         // [id, starting value, operator]. Each result is mathematically undefined.
         $undefined = [
@@ -1914,7 +1913,7 @@ trait OperatorTests
 
         $collectionId = 'operator_bounded_power';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, default: 0.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', default: 0.0));
 
         // [id, starting value, operator, expected stored value].
         $cases = [
@@ -1961,12 +1960,7 @@ trait OperatorTests
 
         $collectionId = 'operator_array_size_limit';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(
-            key: 'tags',
-            type: ColumnType::String,
-            size: 50,
-            array: true,
-        ));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'doc',
@@ -2015,12 +2009,7 @@ trait OperatorTests
 
         $collectionId = 'operator_filter_unknown_cond';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(
-            key: 'tags',
-            type: ColumnType::String,
-            size: 50,
-            array: true,
-        ));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
 
         $database->createDocument($collectionId, new Document([
             '$id' => 'doc',
@@ -2056,11 +2045,7 @@ trait OperatorTests
 
         $collectionId = 'operator_filter_all_conditions';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(
-            key: 'numbers',
-            type: ColumnType::Integer,
-            array: true,
-        ));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
         $database->createDocument($collectionId, new Document([
             '$id' => 'doc',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2102,7 +2087,7 @@ trait OperatorTests
 
         $collectionId = 'operator_concat_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text'));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2140,7 +2125,7 @@ trait OperatorTests
 
         $collectionId = 'operator_replace_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text'));
 
         // Success case - single replacement
         $doc = $database->createDocument($collectionId, new Document([
@@ -2180,7 +2165,7 @@ trait OperatorTests
 
         $collectionId = 'operator_append_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2228,7 +2213,7 @@ trait OperatorTests
 
         $collectionId = 'operator_prepend_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2256,7 +2241,7 @@ trait OperatorTests
 
         $collectionId = 'operator_insert_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
 
         // Success case - middle insertion
         $doc = $database->createDocument($collectionId, new Document([
@@ -2299,7 +2284,7 @@ trait OperatorTests
 
         $collectionId = 'operator_remove_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Success case - single occurrence
         $doc = $database->createDocument($collectionId, new Document([
@@ -2346,7 +2331,7 @@ trait OperatorTests
 
         $collectionId = 'operator_unique_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Success case - with duplicates
         $doc = $database->createDocument($collectionId, new Document([
@@ -2388,7 +2373,7 @@ trait OperatorTests
 
         $collectionId = 'operator_intersect_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2425,7 +2410,7 @@ trait OperatorTests
 
         $collectionId = 'operator_diff_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2464,8 +2449,8 @@ trait OperatorTests
 
         $collectionId = 'operator_filter_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'mixed', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'mixed', size: 50, array: true));
 
         // Success case - equals condition
         $doc = $database->createDocument($collectionId, new Document([
@@ -2523,8 +2508,8 @@ trait OperatorTests
 
         $collectionId = 'operator_filter_numeric_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'integers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'floats', type: ColumnType::Double, size: 0, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'integers', array: true));
+        $database->createAttribute($collectionId, Attribute::double(key: 'floats', array: true));
 
         // Create document with various numeric values
         $doc = $database->createDocument($collectionId, new Document([
@@ -2579,7 +2564,7 @@ trait OperatorTests
 
         $collectionId = 'operator_toggle_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'active'));
 
         // Success case - true to false
         $doc = $database->createDocument($collectionId, new Document([
@@ -2626,7 +2611,7 @@ trait OperatorTests
 
         $collectionId = 'operator_date_add_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'date', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'date', filters: ['datetime']));
 
         // Success case - positive days
         $doc = $database->createDocument($collectionId, new Document([
@@ -2661,7 +2646,7 @@ trait OperatorTests
 
         $collectionId = 'operator_date_sub_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'date', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'date', filters: ['datetime']));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2689,7 +2674,7 @@ trait OperatorTests
 
         $collectionId = 'operator_date_now_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'timestamp', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'timestamp', filters: ['datetime']));
 
         // Success case
         $doc = $database->createDocument($collectionId, new Document([
@@ -2724,11 +2709,11 @@ trait OperatorTests
 
         $collectionId = 'mixed_operators_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 255, required: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count'));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score'));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'name'));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'active'));
 
         // Test multiple operators in one update
         $doc = $database->createDocument($collectionId, new Document([
@@ -2768,8 +2753,8 @@ trait OperatorTests
 
         $collectionId = 'batch_operators_test';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false));
-        $database->createAttribute($collectionId, new Attribute(key: 'category', type: ColumnType::String, size: 50, required: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count'));
+        $database->createAttribute($collectionId, Attribute::string(key: 'category', size: 50));
 
         // Create multiple documents
         $docs = [];
@@ -2819,7 +2804,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_beginning';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2862,7 +2847,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_middle';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'items', array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2905,7 +2890,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_end';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -2949,7 +2934,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_multiple';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
@@ -3029,7 +3014,7 @@ trait OperatorTests
 
         // Create an integer attribute with a maximum value of 100
         // Using size=4 (signed int) with max constraint through Range validator
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Integer, size: 4, required: false, default: 0, signed: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'score', size: 4, default: 0, signed: false));
 
         // Get the collection to verify attribute was created
         $collection = $database->getCollection($collectionId);
@@ -3115,7 +3100,7 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create a string attribute with max length of 20 characters
-        $database->createAttribute($collectionId, new Attribute(key: 'title', type: ColumnType::String, size: 20, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::string(key: 'title', size: 20, default: ''));
 
         // Create a document with a 15-character title (within limit)
         $doc = $database->createDocument($collectionId, new Document([
@@ -3173,7 +3158,7 @@ trait OperatorTests
         $database->createCollection($collectionId);
 
         // Create a signed integer attribute (max value = Database::MAX_INT = 2147483647)
-        $database->createAttribute($collectionId, new Attribute(key: 'quantity', type: ColumnType::Integer, size: 4, required: false, default: 1, signed: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'quantity', size: 4, default: 1, signed: false));
 
         // Create a document with quantity that when multiplied will exceed MAX_INT
         $doc = $database->createDocument($collectionId, new Document([
@@ -3232,7 +3217,7 @@ trait OperatorTests
 
         $collectionId = 'test_multiply_negative';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value'));
 
         // Test negative multiplier without max limit
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -3313,7 +3298,7 @@ trait OperatorTests
 
         $collectionId = 'test_divide_negative';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value'));
 
         // Test negative divisor without min limit
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -3387,7 +3372,7 @@ trait OperatorTests
 
         // Create an array attribute for integers with max value constraint
         // Each item should be an integer within the valid range
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 4, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', size: 4, array: true));
 
         // Create a document with valid integer array
         $doc = $database->createDocument($collectionId, new Document([
@@ -3490,8 +3475,8 @@ trait OperatorTests
 
         $collectionId = 'test_extreme_integers';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'bigint_max', type: ColumnType::BigInteger, required: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'bigint_min', type: ColumnType::BigInteger, required: true));
+        $database->createAttribute($collectionId, Attribute::bigInteger(key: 'bigint_max', required: true));
+        $database->createAttribute($collectionId, Attribute::bigInteger(key: 'bigint_min', required: true));
 
         $maxValue = PHP_INT_MAX - 1000; // Near max but with room
         $minValue = PHP_INT_MIN + 1000; // Near min but with room
@@ -3538,7 +3523,7 @@ trait OperatorTests
 
         $collectionId = 'test_negative_power';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', required: true));
 
         // Create document with value 8
         $doc = $database->createDocument($collectionId, new Document([
@@ -3573,7 +3558,7 @@ trait OperatorTests
 
         $collectionId = 'test_fractional_power';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', required: true));
 
         // Create document with value 16
         $doc = $database->createDocument($collectionId, new Document([
@@ -3619,7 +3604,7 @@ trait OperatorTests
 
         $collectionId = 'test_empty_strings';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text', default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_str_doc',
@@ -3675,7 +3660,7 @@ trait OperatorTests
 
         $collectionId = 'test_unicode';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 500, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text', size: 500, default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'unicode_doc',
@@ -3724,7 +3709,7 @@ trait OperatorTests
 
         $collectionId = 'test_empty_arrays';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_array_doc',
@@ -3793,7 +3778,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_special_values';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'mixed', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'mixed', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'special_values_doc',
@@ -3840,7 +3825,7 @@ trait OperatorTests
 
         $collectionId = 'test_negative_modulo';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'value', required: true));
 
         // Test -17 % 5 (different languages handle this differently)
         $doc = $database->createDocument($collectionId, new Document([
@@ -3887,7 +3872,7 @@ trait OperatorTests
 
         $collectionId = 'test_float_precision';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'precision_doc',
@@ -3938,7 +3923,7 @@ trait OperatorTests
 
         $collectionId = 'test_long_strings';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 70000, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text', size: 70000, default: ''));
 
         // Create a long string (10k characters)
         $longString = str_repeat('A', 10000);
@@ -3987,7 +3972,7 @@ trait OperatorTests
 
         $collectionId = 'test_date_boundaries';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'date', type: ColumnType::Datetime, size: 0, required: false, signed: true, filters: ['datetime']));
+        $database->createAttribute($collectionId, Attribute::datetime(key: 'date', filters: ['datetime']));
 
         // Test date at end of year
         $doc = $database->createDocument($collectionId, new Document([
@@ -4059,7 +4044,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_insert_boundaries';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'boundary_insert_doc',
@@ -4102,8 +4087,8 @@ trait OperatorTests
 
         $collectionId = 'test_sequential_ops';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'counter', default: 0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text', default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'sequential_doc',
@@ -4168,7 +4153,7 @@ trait OperatorTests
 
         $collectionId = 'test_zero_values';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'zero_doc',
@@ -4223,7 +4208,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_empty_results';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'empty_result_doc',
@@ -4272,7 +4257,7 @@ trait OperatorTests
 
         $collectionId = 'test_replace_multiple';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'text', type: ColumnType::String, size: 255, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::string(key: 'text', default: ''));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'replace_multi_doc',
@@ -4315,7 +4300,7 @@ trait OperatorTests
 
         $collectionId = 'test_precise_floats';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: true));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'precise_doc',
@@ -4358,7 +4343,7 @@ trait OperatorTests
 
         $collectionId = 'test_single_element';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'single_elem_doc',
@@ -4417,7 +4402,7 @@ trait OperatorTests
 
         $collectionId = 'test_toggle_default';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'flag', type: ColumnType::Boolean, size: 0, required: false, default: false));
+        $database->createAttribute($collectionId, Attribute::boolean(key: 'flag', default: false));
 
         // Create doc without setting flag (should use default false)
         $doc = $database->createDocument($collectionId, new Document([
@@ -4460,7 +4445,7 @@ trait OperatorTests
         $collectionId = 'test_attribute_constraints';
         $database->createCollection($collectionId);
         // Integer with size 0 (32-bit INT)
-        $database->createAttribute($collectionId, new Attribute(key: 'small_int', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'small_int', required: true));
 
         $doc = $database->createDocument($collectionId, new Document([
             '$id' => 'constraint_doc',
@@ -4501,9 +4486,9 @@ trait OperatorTests
         $collectionId = 'test_bulk_callback';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
 
         // Create multiple test documents
         for ($i = 1; $i <= 5; $i++) {
@@ -4566,9 +4551,9 @@ trait OperatorTests
         $collectionId = 'test_upsert_callback';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'value', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'value', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Create existing documents
         $database->createDocument($collectionId, new Document([
@@ -4662,9 +4647,9 @@ trait OperatorTests
         $collectionId = 'test_single_upsert';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'count', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
 
         // Test upsert with operators on new document (insert)
         $doc = $database->upsertDocument($collectionId, new Document([
@@ -4728,13 +4713,13 @@ trait OperatorTests
         $collectionId = 'test_upsert_new_ops';
         $database->createCollection($collectionId);
 
-        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'price', type: ColumnType::Double, size: 0, required: false, default: 0.0));
-        $database->createAttribute($collectionId, new Attribute(key: 'quantity', type: ColumnType::Integer, size: 0, required: false, default: 0));
-        $database->createAttribute($collectionId, new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, signed: true, array: true));
-        $database->createAttribute($collectionId, new Attribute(key: 'name', type: ColumnType::String, size: 100, required: false, default: ''));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'counter', default: 0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'score', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::double(key: 'price', default: 0.0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'quantity', default: 0));
+        $database->createAttribute($collectionId, Attribute::string(key: 'tags', size: 50, array: true));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'numbers', array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'name', size: 100, default: ''));
 
         // Test 1: INCREMENT on new document (should use 0 as default)
         $doc1 = $database->upsertDocument($collectionId, new Document([
@@ -4858,26 +4843,26 @@ trait OperatorTests
 
         $collectionId = 'test_upsert_all_operators';
         $attributes = [
-            new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 10),
-            new Attribute(key: 'score', type: ColumnType::Double, size: 0, required: false, default: 5.0),
-            new Attribute(key: 'multiplier', type: ColumnType::Double, size: 0, required: false, default: 2.0),
-            new Attribute(key: 'divisor', type: ColumnType::Double, size: 0, required: false, default: 100.0),
-            new Attribute(key: 'remainder', type: ColumnType::Integer, size: 0, required: false, default: 20),
-            new Attribute(key: 'power_val', type: ColumnType::Double, size: 0, required: false, default: 2.0),
-            new Attribute(key: 'title', type: ColumnType::String, size: 255, required: false, default: 'Title'),
-            new Attribute(key: 'content', type: ColumnType::String, size: 500, required: false, default: 'old content'),
-            new Attribute(key: 'tags', type: ColumnType::String, size: 50, required: false, array: true),
-            new Attribute(key: 'categories', type: ColumnType::String, size: 50, required: false, array: true),
-            new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, array: true),
-            new Attribute(key: 'duplicates', type: ColumnType::String, size: 50, required: false, array: true),
-            new Attribute(key: 'numbers', type: ColumnType::Integer, size: 0, required: false, array: true),
-            new Attribute(key: 'intersect_items', type: ColumnType::String, size: 50, required: false, array: true),
-            new Attribute(key: 'diff_items', type: ColumnType::String, size: 50, required: false, array: true),
-            new Attribute(key: 'filter_numbers', type: ColumnType::Integer, size: 0, required: false, array: true),
-            new Attribute(key: 'active', type: ColumnType::Boolean, size: 0, required: false, default: false),
-            new Attribute(key: 'date_field1', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']),
-            new Attribute(key: 'date_field2', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']),
-            new Attribute(key: 'date_field3', type: ColumnType::Datetime, size: 0, required: false, filters: ['datetime']),
+            Attribute::integer(key: 'counter', default: 10),
+            Attribute::double(key: 'score', default: 5.0),
+            Attribute::double(key: 'multiplier', default: 2.0),
+            Attribute::double(key: 'divisor', default: 100.0),
+            Attribute::integer(key: 'remainder', default: 20),
+            Attribute::double(key: 'power_val', default: 2.0),
+            Attribute::string(key: 'title', default: 'Title'),
+            Attribute::string(key: 'content', size: 500, default: 'old content'),
+            Attribute::string(key: 'tags', size: 50, array: true),
+            Attribute::string(key: 'categories', size: 50, array: true),
+            Attribute::string(key: 'items', size: 50, array: true),
+            Attribute::string(key: 'duplicates', size: 50, array: true),
+            Attribute::integer(key: 'numbers', array: true),
+            Attribute::string(key: 'intersect_items', size: 50, array: true),
+            Attribute::string(key: 'diff_items', size: 50, array: true),
+            Attribute::integer(key: 'filter_numbers', array: true),
+            Attribute::boolean(key: 'active', default: false),
+            Attribute::datetime(key: 'date_field1', filters: ['datetime']),
+            Attribute::datetime(key: 'date_field2', filters: ['datetime']),
+            Attribute::datetime(key: 'date_field3', filters: ['datetime']),
         ];
         $database->createCollection($collectionId, $attributes);
 
@@ -5089,7 +5074,7 @@ trait OperatorTests
 
         $collectionId = 'test_array_not_null';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'items', type: ColumnType::String, size: 50, required: false, signed: true, array: true));
+        $database->createAttribute($collectionId, Attribute::string(key: 'items', size: 50, array: true));
 
         // Test ARRAY_UNIQUE on empty array returns [] not NULL
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -5150,7 +5135,7 @@ trait OperatorTests
 
         $collectionId = 'test_operator_cache';
         $database->createCollection($collectionId);
-        $database->createAttribute($collectionId, new Attribute(key: 'counter', type: ColumnType::Integer, size: 0, required: false, default: 0));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'counter', default: 0));
 
         // Create a document
         $doc = $database->createDocument($collectionId, new Document([

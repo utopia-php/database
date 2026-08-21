@@ -298,7 +298,7 @@ class MemoryTest extends Base
         );
 
         $this->expectException(DuplicateException::class);
-        $adapter->createIndex('emails', new Index(key: 'unique_addr', type: IndexType::Unique, attributes: ['addr']));
+        $adapter->createIndex('emails', Index::unique(key: 'unique_addr', attributes: ['addr']));
     }
 
     /**
@@ -353,9 +353,9 @@ class MemoryTest extends Base
         $adapter = new Memory();
         $adapter->setNamespace('rename_' . \uniqid());
         $adapter->createCollection('renames', [], []);
-        $adapter->createAttribute('renames', new Attribute(key: 'old', type: ColumnType::String, size: 64));
+        $adapter->createAttribute('renames', Attribute::string(key: 'old', size: 64));
 
-        $adapter->updateAttribute('renames', new Attribute(key: 'old', type: ColumnType::String, size: 256), 'fresh');
+        $adapter->updateAttribute('renames', Attribute::string(key: 'old', size: 256), 'fresh');
 
         $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
         $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_renames';
@@ -378,8 +378,8 @@ class MemoryTest extends Base
         $adapter = new Memory();
         $adapter->setNamespace('idxrn_' . \uniqid());
         $adapter->createCollection('indexed', [], []);
-        $adapter->createAttribute('indexed', new Attribute(key: 'name', type: ColumnType::String, size: 64));
-        $adapter->createIndex('indexed', new Index(key: 'idx_name', type: IndexType::Key, attributes: ['name']));
+        $adapter->createAttribute('indexed', Attribute::string(key: 'name', size: 64));
+        $adapter->createIndex('indexed', Index::key(key: 'idx_name', attributes: ['name']));
 
         $adapter->renameAttribute('indexed', 'name', 'title');
 
@@ -402,9 +402,9 @@ class MemoryTest extends Base
         $adapter = new Memory();
         $adapter->setNamespace('idxdrop_' . \uniqid());
         $adapter->createCollection('drops', [], []);
-        $adapter->createAttribute('drops', new Attribute(key: 'a', type: ColumnType::String, size: 64));
-        $adapter->createAttribute('drops', new Attribute(key: 'b', type: ColumnType::String, size: 64));
-        $adapter->createIndex('drops', new Index(key: 'idx_ab', type: IndexType::Key, attributes: ['a', 'b']));
+        $adapter->createAttribute('drops', Attribute::string(key: 'a', size: 64));
+        $adapter->createAttribute('drops', Attribute::string(key: 'b', size: 64));
+        $adapter->createIndex('drops', Index::key(key: 'idx_ab', attributes: ['a', 'b']));
 
         $adapter->deleteAttribute('drops', 'a');
 
@@ -619,7 +619,7 @@ class MemoryTest extends Base
         $database = $this->getDatabase();
         $collection = 'single_date_operations_memory';
         $database->createCollection($collection);
-        $database->createAttribute($collection, new Attribute(key: 'string', type: ColumnType::String, size: 128, required: false));
+        $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
 
         $database->setPreserveDates(true);
         $created = $database->createDocument($collection, new Document([
@@ -654,8 +654,8 @@ class MemoryTest extends Base
         $adapter->setSharedTables(true);
         $adapter->setTenant(1);
         $adapter->createCollection('emails', [], []);
-        $adapter->createAttribute('emails', new Attribute(key: 'addr', type: ColumnType::String, size: 128, required: true, signed: true, array: false));
-        $adapter->createIndex('emails', new Index(key: 'unique_addr', type: IndexType::Unique, attributes: ['addr']));
+        $adapter->createAttribute('emails', Attribute::string(key: 'addr', size: 128, required: true));
+        $adapter->createIndex('emails', Index::unique(key: 'unique_addr', attributes: ['addr']));
 
         $collection = new Document(['$id' => 'emails']);
 
@@ -861,8 +861,8 @@ class MemoryTest extends Base
         $adapter = new Memory();
         $adapter->setNamespace('numstr_' . \uniqid());
         $adapter->createCollection('codes', [], []);
-        $adapter->createAttribute('codes', new Attribute(key: 'code', type: ColumnType::String, size: 16, required: true, signed: true, array: false));
-        $adapter->createIndex('codes', new Index(key: 'unique_code', type: IndexType::Unique, attributes: ['code']));
+        $adapter->createAttribute('codes', Attribute::string(key: 'code', size: 16, required: true));
+        $adapter->createIndex('codes', Index::unique(key: 'unique_code', attributes: ['code']));
 
         $collection = new Document(['$id' => 'codes']);
 

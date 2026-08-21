@@ -119,7 +119,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ], documentSecurity: false);
 
-        $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collection->getId(), Attribute::string(key: 'test'));
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -179,7 +179,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ], documentSecurity: true);
 
-        $database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collection->getId(), Attribute::string(key: 'test'));
 
         $collectionOneToOne = $database->createCollection($this->getCollSecurityOneToOneCollection(), permissions: [
             Permission::create(Role::users()),
@@ -188,7 +188,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ], documentSecurity: true);
 
-        $database->createAttribute($collectionOneToOne->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test'));
 
         $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), type: RelationType::OneToOne, key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade));
 
@@ -199,7 +199,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ], documentSecurity: true);
 
-        $database->createAttribute($collectionOneToMany->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test'));
 
         $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), type: RelationType::OneToMany, key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade));
 
@@ -311,7 +311,7 @@ trait PermissionTests
 
         $this->assertInstanceOf(Document::class, $collection);
 
-        $this->assertTrue($database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false)));
+        $this->assertTrue($database->createAttribute($collection->getId(), Attribute::string(key: 'test')));
 
         $collectionOneToOne = $database->createCollection($this->getCollSecurityOneToOneCollection(), permissions: [
             Permission::create(Role::users()),
@@ -322,7 +322,7 @@ trait PermissionTests
 
         $this->assertInstanceOf(Document::class, $collectionOneToOne);
 
-        $this->assertTrue($database->createAttribute($collectionOneToOne->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false)));
+        $this->assertTrue($database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test')));
 
         $this->assertTrue($database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), type: RelationType::OneToOne, key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade)));
 
@@ -335,7 +335,7 @@ trait PermissionTests
 
         $this->assertInstanceOf(Document::class, $collectionOneToMany);
 
-        $this->assertTrue($database->createAttribute($collectionOneToMany->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false)));
+        $this->assertTrue($database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test')));
 
         $this->assertTrue($database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), type: RelationType::OneToMany, key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade)));
     }
@@ -346,7 +346,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $database->createCollection(__FUNCTION__);
-        $this->assertTrue($database->createAttribute(__FUNCTION__, new Attribute(key: 'president', type: ColumnType::String, size: 255, required: false)));
+        $this->assertTrue($database->createAttribute(__FUNCTION__, Attribute::string(key: 'president')));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -755,7 +755,7 @@ trait PermissionTests
 
         $this->assertInstanceOf(Document::class, $collection);
 
-        $this->assertTrue($database->createAttribute($collection->getId(), new Attribute(key: 'test', type: ColumnType::String, size: 255, required: false)));
+        $this->assertTrue($database->createAttribute($collection->getId(), Attribute::string(key: 'test')));
     }
 
     public function testCollectionPermissionsCountThrowsException(): void
@@ -1405,7 +1405,7 @@ trait PermissionTests
             Permission::create(Role::any()),
         ], documentSecurity: true);
 
-        $database->createAttribute('animals', new Attribute(key: 'type', type: ColumnType::String, size: 128, required: true));
+        $database->createAttribute('animals', Attribute::string(key: 'type', size: 128, required: true));
 
         $dog = $database->createDocument('animals', new Document([
             '$id' => 'dog',
@@ -1493,8 +1493,8 @@ trait PermissionTests
             Permission::create(Role::user('a')),
             Permission::read(Role::user('a')),
         ]);
-        $database->createAttribute('parentRelationTest', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: false));
-        $database->createAttribute('childRelationTest', new Attribute(key: 'name', type: ColumnType::String, size: 255, required: false));
+        $database->createAttribute('parentRelationTest', Attribute::string(key: 'name'));
+        $database->createAttribute('childRelationTest', Attribute::string(key: 'name'));
 
         $database->createRelationship(new Relationship(collection: 'parentRelationTest', relatedCollection: 'childRelationTest', type: RelationType::OneToMany, key: 'children'));
 
@@ -1533,7 +1533,7 @@ trait PermissionTests
         $database->createCollection($collection, permissions: [
             Permission::create(Role::any()),
         ], documentSecurity: true);
-        $database->createAttribute($collection, new Attribute(key: 'amount', type: ColumnType::Integer, size: 0, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'amount', required: true));
 
         $authorization->skip(function () use ($database, $collection): void {
             $database->createDocument($collection, new Document([

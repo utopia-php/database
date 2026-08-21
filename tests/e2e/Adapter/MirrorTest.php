@@ -19,7 +19,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
 use Utopia\Database\PDO;
-use Utopia\Query\Schema\ColumnType;
 
 class MirrorTest extends Base
 {
@@ -227,7 +226,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
 
         $database->createCollection('testCreateMirroredDocument', attributes: [
-            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
+            Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -266,7 +265,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
 
         $database->createCollection('testUpdateMirroredDocument', attributes: [
-            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
+            Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -303,7 +302,7 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
 
         $database->createCollection('testDeleteMirroredDocument', attributes: [
-            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
+            Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -330,7 +329,7 @@ class MirrorTest extends Base
         $collection = 'mirrorSkipDup';
 
         $database->createCollection($collection, attributes: [
-            new Attribute(key: 'name', type: ColumnType::String, size: Database::LENGTH_KEY, required: true),
+            Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),

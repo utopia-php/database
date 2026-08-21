@@ -15,7 +15,6 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
-use Utopia\Query\Schema\ColumnType;
 
 /**
  * Drives Database::find(), the entry point the HTTP layer calls, rather than the
@@ -39,7 +38,7 @@ class SelectProjectionTest extends TestCase
 
         $this->database->create();
         $this->database->createCollection('widgets');
-        $this->database->createAttribute('widgets', new Attribute(key: 'sku', type: ColumnType::String, size: 255));
+        $this->database->createAttribute('widgets', Attribute::string(key: 'sku'));
         $this->database->createDocument('widgets', new Document([
             '$id' => 'widget',
             '$permissions' => [Permission::read(Role::any())],

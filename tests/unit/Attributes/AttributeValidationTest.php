@@ -18,7 +18,6 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Query\Schema\ColumnType;
 
 class AttributeValidationTest extends TestCase
 {
@@ -131,11 +130,7 @@ class AttributeValidationTest extends TestCase
         $this->adapter->method('getDocument')->willReturn(new Document());
 
         $this->expectException(NotFoundException::class);
-        $this->database->createAttribute('nonexistent', new Attribute(
-            key: 'name',
-            type: ColumnType::String,
-            size: 128,
-        ));
+        $this->database->createAttribute('nonexistent', Attribute::string(key: 'name', size: 128));
     }
 
     public function testCreateAttributeRejectsDuplicateKey(): void
@@ -146,11 +141,7 @@ class AttributeValidationTest extends TestCase
         $this->setupCollection('testCol', $existingAttrs);
 
         $this->expectException(DuplicateException::class);
-        $this->database->createAttribute('testCol', new Attribute(
-            key: 'title',
-            type: ColumnType::String,
-            size: 128,
-        ));
+        $this->database->createAttribute('testCol', Attribute::string(key: 'title', size: 128));
     }
 
     public function testCreateAttributeValidatesSizeLimitsForStrings(): void
@@ -161,22 +152,14 @@ class AttributeValidationTest extends TestCase
         $this->expectExceptionMessage('Max size allowed for string');
 
         $tooBig = $this->adapter->getLimitForString() + 1;
-        $this->database->createAttribute('testCol', new Attribute(
-            key: 'bigstr',
-            type: ColumnType::String,
-            size: $tooBig,
-        ));
+        $this->database->createAttribute('testCol', Attribute::string(key: 'bigstr', size: $tooBig));
     }
 
     public function testCreateAttributeSucceedsWithValidString(): void
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', new Attribute(
-            key: 'name',
-            type: ColumnType::String,
-            size: 128,
-        ));
+        $result = $this->database->createAttribute('testCol', Attribute::string(key: 'name', size: 128));
         $this->assertTrue($result);
     }
 
@@ -184,11 +167,7 @@ class AttributeValidationTest extends TestCase
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', new Attribute(
-            key: 'age',
-            type: ColumnType::Integer,
-            size: 0,
-        ));
+        $result = $this->database->createAttribute('testCol', Attribute::integer(key: 'age'));
         $this->assertTrue($result);
     }
 
@@ -196,11 +175,7 @@ class AttributeValidationTest extends TestCase
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', new Attribute(
-            key: 'active',
-            type: ColumnType::Boolean,
-            size: 0,
-        ));
+        $result = $this->database->createAttribute('testCol', Attribute::boolean(key: 'active'));
         $this->assertTrue($result);
     }
 
@@ -208,11 +183,7 @@ class AttributeValidationTest extends TestCase
     {
         $this->setupCollection('testCol');
 
-        $result = $this->database->createAttribute('testCol', new Attribute(
-            key: 'score',
-            type: ColumnType::Double,
-            size: 0,
-        ));
+        $result = $this->database->createAttribute('testCol', Attribute::double(key: 'score'));
         $this->assertTrue($result);
     }
 
@@ -274,11 +245,7 @@ class AttributeValidationTest extends TestCase
         $db->getAuthorization()->addRole(Role::any()->toString());
 
         $this->expectException(LimitException::class);
-        $db->createAttribute('testCol', new Attribute(
-            key: 'extra',
-            type: ColumnType::String,
-            size: 128,
-        ));
+        $db->createAttribute('testCol', Attribute::string(key: 'extra', size: 128));
     }
 
     public function testCreateAttributeEnforcesRowWidthLimit(): void
@@ -339,11 +306,7 @@ class AttributeValidationTest extends TestCase
         $db->getAuthorization()->addRole(Role::any()->toString());
 
         $this->expectException(LimitException::class);
-        $db->createAttribute('testCol', new Attribute(
-            key: 'wide',
-            type: ColumnType::String,
-            size: 128,
-        ));
+        $db->createAttribute('testCol', Attribute::string(key: 'wide', size: 128));
     }
 
     public function testDeleteAttributeRemovesFromCollection(): void
@@ -395,7 +358,7 @@ class AttributeValidationTest extends TestCase
 
         $this->expectException(DuplicateException::class);
         $this->database->createAttributes('testCol', [
-            new Attribute(key: 'name', type: ColumnType::String, size: 128),
+            Attribute::string(key: 'name', size: 128),
         ]);
     }
 

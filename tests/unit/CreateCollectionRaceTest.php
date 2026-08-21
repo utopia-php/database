@@ -13,7 +13,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Query\Schema\ColumnType;
 
 class CreateCollectionRaceTest extends TestCase
 {
@@ -28,7 +27,7 @@ class CreateCollectionRaceTest extends TestCase
         $database->create();
 
         $collection = 'preCommitCreate';
-        $name = new Attribute(key: 'name', type: ColumnType::String, size: 128, required: false);
+        $name = Attribute::string(key: 'name', size: 128);
 
         $adapter->createCollection($collection, [$name], []);
 
@@ -93,7 +92,7 @@ class CreateCollectionRaceTest extends TestCase
         $database->create();
 
         $collection = 'preCommitCreatePurgeFail';
-        $name = new Attribute(key: 'name', type: ColumnType::String, size: 128, required: false);
+        $name = Attribute::string(key: 'name', size: 128);
 
         $adapter->createCollection($collection, [$name], []);
 

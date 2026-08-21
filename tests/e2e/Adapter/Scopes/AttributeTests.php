@@ -25,7 +25,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\OrderDirection;
@@ -319,7 +318,7 @@ trait AttributeTests
 
         $this->assertTrue($database->createAttribute('dots', Attribute::string(key: 'name')));
 
-        $database->createRelationship(new Relationship(collection: 'dots.parent', relatedCollection: 'dots', type: RelationType::OneToOne));
+        $database->createRelationship(Relationship::oneToOne(collection: 'dots.parent', relatedCollection: 'dots'));
 
         $database->createDocument('dots.parent', new Document([
             '$id' => ID::custom('father'),

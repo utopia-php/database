@@ -16,7 +16,6 @@ use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -286,7 +285,7 @@ trait SpatialTests
             'area' => 'Manhattan',
         ]));
 
-        $database->createRelationship(new Relationship(collection: 'location', relatedCollection: 'building', type: RelationType::OneToOne, key: 'building', twoWay: false));
+        $database->createRelationship(Relationship::oneToOne(collection: 'location', relatedCollection: 'building', key: 'building'));
 
         // Create location with spatial data and relationship
         $location1 = $database->createDocument('location', new Document([
@@ -422,7 +421,13 @@ trait SpatialTests
             $database->createAttribute($child, Attribute::point(key: 'coord', required: true));
             $database->createIndex($child, Index::spatial(key: 'coord_spatial', attributes: ['coord']));
 
-            $database->createRelationship(new Relationship(collection: $parent, relatedCollection: $child, type: RelationType::OneToMany, twoWay: true, key: 'places', twoWayKey: 'region'));
+            $database->createRelationship(Relationship::oneToMany(
+                collection: $parent,
+                relatedCollection: $child,
+                twoWay: true,
+                key: 'places',
+                twoWayKey: 'region'
+            ));
 
             $r1 = $database->createDocument($parent, new Document([
                 '$id' => 'r1',
@@ -528,7 +533,13 @@ trait SpatialTests
             $database->createAttribute($child, Attribute::point(key: 'coord', required: true));
             $database->createIndex($child, Index::spatial(key: 'coord_spatial', attributes: ['coord']));
 
-            $database->createRelationship(new Relationship(collection: $child, relatedCollection: $parent, type: RelationType::ManyToOne, twoWay: true, key: 'city', twoWayKey: 'stops'));
+            $database->createRelationship(Relationship::manyToOne(
+                collection: $child,
+                relatedCollection: $parent,
+                twoWay: true,
+                key: 'city',
+                twoWayKey: 'stops'
+            ));
 
             $c1 = $database->createDocument($parent, new Document([
                 '$id' => 'c1',
@@ -629,7 +640,13 @@ trait SpatialTests
             $database->createAttribute($b, Attribute::polygon(key: 'area', required: true));
             $database->createIndex($b, Index::spatial(key: 'area_spatial', attributes: ['area']));
 
-            $database->createRelationship(new Relationship(collection: $a, relatedCollection: $b, type: RelationType::ManyToMany, twoWay: true, key: 'routes', twoWayKey: 'drivers'));
+            $database->createRelationship(Relationship::manyToMany(
+                collection: $a,
+                relatedCollection: $b,
+                twoWay: true,
+                key: 'routes',
+                twoWayKey: 'drivers'
+            ));
 
             $d1 = $database->createDocument($a, new Document([
                 '$id' => 'd1',

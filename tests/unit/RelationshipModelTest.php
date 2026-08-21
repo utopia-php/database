@@ -2,7 +2,10 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use ReflectionMethod;
+use ReflectionParameter;
 use Utopia\Database\Document;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
@@ -13,10 +16,9 @@ class RelationshipModelTest extends TestCase
 {
     public function testConstructor(): void
     {
-        $rel = new Relationship(
+        $rel = Relationship::oneToMany(
             collection: 'posts',
             relatedCollection: 'comments',
-            type: RelationType::OneToMany,
             twoWay: true,
             key: 'comments',
             twoWayKey: 'post',
@@ -36,10 +38,9 @@ class RelationshipModelTest extends TestCase
 
     public function testConstructorDefaults(): void
     {
-        $rel = new Relationship(
+        $rel = Relationship::oneToOne(
             collection: 'a',
             relatedCollection: 'b',
-            type: RelationType::OneToOne,
         );
 
         $this->assertFalse($rel->twoWay);
@@ -51,10 +52,9 @@ class RelationshipModelTest extends TestCase
 
     public function testToDocumentProducesCorrectStructure(): void
     {
-        $rel = new Relationship(
+        $rel = Relationship::oneToOne(
             collection: 'users',
             relatedCollection: 'profiles',
-            type: RelationType::OneToOne,
             twoWay: true,
             key: 'profile',
             twoWayKey: 'user',
@@ -75,10 +75,9 @@ class RelationshipModelTest extends TestCase
 
     public function testToDocumentDoesNotIncludeCollectionOrKey(): void
     {
-        $rel = new Relationship(
+        $rel = Relationship::manyToMany(
             collection: 'posts',
             relatedCollection: 'tags',
-            type: RelationType::ManyToMany,
             key: 'tags',
         );
 
@@ -257,5 +256,80 @@ class RelationshipModelTest extends TestCase
         $this->assertSame(RelationType::ManyToMany, $rel->type);
         $this->assertSame(ForeignKeyAction::Cascade, $rel->onDelete);
         $this->assertSame(RelationSide::Child, $rel->side);
+    }
+
+    /**
+     * @return array<string, array{string, RelationType}>
+     */
+    public static function factories(): array
+    {
+        return [
+            'oneToOne' => ['oneToOne', RelationType::OneToOne],
+            'oneToMany' => ['oneToMany', RelationType::OneToMany],
+            'manyToOne' => ['manyToOne', RelationType::ManyToOne],
+            'manyToMany' => ['manyToMany', RelationType::ManyToMany],
+        ];
+    }
+
+    #[DataProvider('factories')]
+    public function testFactorySetsTypeAndDefaults(string $factory, RelationType $type): void
+    {
+        $relationship = Relationship::{$factory}(
+            collection: 'posts',
+            relatedCollection: 'comments',
+        );
+
+        $this->assertInstanceOf(Relationship::class, $relationship);
+        $this->assertSame('posts', $relationship->collection);
+        $this->assertSame('comments', $relationship->relatedCollection);
+        $this->assertSame($type, $relationship->type);
+        $this->assertFalse($relationship->twoWay);
+        $this->assertSame('', $relationship->key);
+        $this->assertSame('', $relationship->twoWayKey);
+        $this->assertSame(ForeignKeyAction::Restrict, $relationship->onDelete);
+        $this->assertSame(RelationSide::Parent, $relationship->side);
+    }
+
+    public function testFactoryOmitsTypeParameter(): void
+    {
+        $names = array_map(
+            static fn (ReflectionParameter $parameter): string => $parameter->getName(),
+            (new ReflectionMethod(Relationship::class, 'oneToOne'))->getParameters(),
+        );
+
+        $this->assertSame(false, in_array('type', $names, true));
+    }
+
+    public function testFactoryForwardsOptionalArguments(): void
+    {
+        $relationship = Relationship::manyToOne(
+            collection: 'reviews',
+            relatedCollection: 'movies',
+            twoWay: true,
+            key: 'movie',
+            twoWayKey: 'reviews',
+            onDelete: ForeignKeyAction::Cascade,
+            side: RelationSide::Child,
+        );
+
+        $this->assertSame(RelationType::ManyToOne, $relationship->type);
+        $this->assertTrue($relationship->twoWay);
+        $this->assertSame('movie', $relationship->key);
+        $this->assertSame('reviews', $relationship->twoWayKey);
+        $this->assertSame(ForeignKeyAction::Cascade, $relationship->onDelete);
+        $this->assertSame(RelationSide::Child, $relationship->side);
+    }
+
+    public function testBaseConstructorWithDynamicType(): void
+    {
+        $type = RelationType::OneToOne;
+        $relationship = new Relationship(
+            collection: 'a',
+            relatedCollection: 'b',
+            type: $type,
+        );
+
+        $this->assertSame(Relationship::class, $relationship::class);
+        $this->assertSame(RelationType::OneToOne, $relationship->type);
     }
 }

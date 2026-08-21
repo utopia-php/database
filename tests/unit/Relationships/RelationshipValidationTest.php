@@ -336,12 +336,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(NotFoundException::class);
         $this->expectExceptionMessage('Collection not found');
 
-        $db->createRelationship(new Relationship(
-            collection: 'missing',
-            relatedCollection: 'missing',
-            type: RelationType::OneToMany,
-            twoWay: true
-        ));
+        $db->createRelationship(Relationship::oneToMany(collection: 'missing', relatedCollection: 'missing', twoWay: true));
     }
 
     public function testCreateRelationshipMissingRelatedCollection(): void
@@ -351,12 +346,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(NotFoundException::class);
         $this->expectExceptionMessage('Related collection not found');
 
-        $db->createRelationship(new Relationship(
-            collection: 'test',
-            relatedCollection: 'missing',
-            type: RelationType::OneToMany,
-            twoWay: true
-        ));
+        $db->createRelationship(Relationship::oneToMany(collection: 'test', relatedCollection: 'missing', twoWay: true));
     }
 
     public function testCreateDuplicateRelationship(): void
@@ -382,12 +372,7 @@ class RelationshipValidationTest extends TestCase
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('Attribute already exists');
 
-        $db->createRelationship(new Relationship(
-            collection: 'test1',
-            relatedCollection: 'test2',
-            type: RelationType::OneToMany,
-            twoWay: true
-        ));
+        $db->createRelationship(Relationship::oneToMany(collection: 'test1', relatedCollection: 'test2', twoWay: true));
     }
 
     public function testCreateInvalidRelationship(): void

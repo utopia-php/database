@@ -21,6 +21,90 @@ class Relationship
     ) {
     }
 
+    public static function oneToOne(
+        string $collection,
+        string $relatedCollection,
+        bool $twoWay = false,
+        string $key = '',
+        string $twoWayKey = '',
+        ForeignKeyAction $onDelete = ForeignKeyAction::Restrict,
+        RelationSide $side = RelationSide::Parent,
+    ): self {
+        return new self(
+            collection: $collection,
+            relatedCollection: $relatedCollection,
+            type: RelationType::OneToOne,
+            twoWay: $twoWay,
+            key: $key,
+            twoWayKey: $twoWayKey,
+            onDelete: $onDelete,
+            side: $side,
+        );
+    }
+
+    public static function oneToMany(
+        string $collection,
+        string $relatedCollection,
+        bool $twoWay = false,
+        string $key = '',
+        string $twoWayKey = '',
+        ForeignKeyAction $onDelete = ForeignKeyAction::Restrict,
+        RelationSide $side = RelationSide::Parent,
+    ): self {
+        return new self(
+            collection: $collection,
+            relatedCollection: $relatedCollection,
+            type: RelationType::OneToMany,
+            twoWay: $twoWay,
+            key: $key,
+            twoWayKey: $twoWayKey,
+            onDelete: $onDelete,
+            side: $side,
+        );
+    }
+
+    public static function manyToOne(
+        string $collection,
+        string $relatedCollection,
+        bool $twoWay = false,
+        string $key = '',
+        string $twoWayKey = '',
+        ForeignKeyAction $onDelete = ForeignKeyAction::Restrict,
+        RelationSide $side = RelationSide::Parent,
+    ): self {
+        return new self(
+            collection: $collection,
+            relatedCollection: $relatedCollection,
+            type: RelationType::ManyToOne,
+            twoWay: $twoWay,
+            key: $key,
+            twoWayKey: $twoWayKey,
+            onDelete: $onDelete,
+            side: $side,
+        );
+    }
+
+    public static function manyToMany(
+        string $collection,
+        string $relatedCollection,
+        bool $twoWay = false,
+        string $key = '',
+        string $twoWayKey = '',
+        ForeignKeyAction $onDelete = ForeignKeyAction::Restrict,
+        RelationSide $side = RelationSide::Parent,
+    ): self {
+        return new self(
+            collection: $collection,
+            relatedCollection: $relatedCollection,
+            type: RelationType::ManyToMany,
+            twoWay: $twoWay,
+            key: $key,
+            twoWayKey: $twoWayKey,
+            onDelete: $onDelete,
+            side: $side,
+        );
+    }
+
     /**
      * Convert this relationship to a Document representation.
      *
@@ -72,7 +156,7 @@ class Relationship
         /** @var RelationSide|string $side */
         $side = $options['side'] ?? RelationSide::Parent;
 
-        return new self(
+        return self::make(
             collection: $collection,
             relatedCollection: $relatedCollection,
             type: $relationType instanceof RelationType ? $relationType : RelationType::from($relationType),
@@ -82,5 +166,55 @@ class Relationship
             onDelete: $onDelete instanceof ForeignKeyAction ? $onDelete : ForeignKeyAction::from($onDelete),
             side: $side instanceof RelationSide ? $side : RelationSide::from($side),
         );
+    }
+
+    private static function make(
+        string $collection,
+        string $relatedCollection,
+        RelationType $type,
+        bool $twoWay,
+        string $key,
+        string $twoWayKey,
+        ForeignKeyAction $onDelete,
+        RelationSide $side,
+    ): self {
+        return match ($type) {
+            RelationType::OneToOne => self::oneToOne(
+                collection: $collection,
+                relatedCollection: $relatedCollection,
+                twoWay: $twoWay,
+                key: $key,
+                twoWayKey: $twoWayKey,
+                onDelete: $onDelete,
+                side: $side,
+            ),
+            RelationType::OneToMany => self::oneToMany(
+                collection: $collection,
+                relatedCollection: $relatedCollection,
+                twoWay: $twoWay,
+                key: $key,
+                twoWayKey: $twoWayKey,
+                onDelete: $onDelete,
+                side: $side,
+            ),
+            RelationType::ManyToOne => self::manyToOne(
+                collection: $collection,
+                relatedCollection: $relatedCollection,
+                twoWay: $twoWay,
+                key: $key,
+                twoWayKey: $twoWayKey,
+                onDelete: $onDelete,
+                side: $side,
+            ),
+            RelationType::ManyToMany => self::manyToMany(
+                collection: $collection,
+                relatedCollection: $relatedCollection,
+                twoWay: $twoWay,
+                key: $key,
+                twoWayKey: $twoWayKey,
+                onDelete: $onDelete,
+                side: $side,
+            ),
+        };
     }
 }

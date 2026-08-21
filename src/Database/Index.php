@@ -294,14 +294,24 @@ class Index
     {
         /** @var IndexType|string $type */
         $type = $data['type'] ?? 'key';
+        /** @var string $key */
+        $key = $data[Document::ID] ?? $data['key'] ?? '';
+        /** @var array<string> $attributes */
+        $attributes = $data['attributes'] ?? [];
+        /** @var array<int|null> $lengths */
+        $lengths = $data['lengths'] ?? [];
+        /** @var array<string|null> $orders */
+        $orders = $data['orders'] ?? [];
+        /** @var int $ttl */
+        $ttl = $data['ttl'] ?? 1;
 
-        return new self(
-            key: $data[Document::ID] ?? $data['key'] ?? '',
+        return self::make(
+            key: $key,
             type: $type instanceof IndexType ? $type : IndexType::from((string) $type),
-            attributes: $data['attributes'] ?? [],
-            lengths: $data['lengths'] ?? [],
-            orders: $data['orders'] ?? [],
-            ttl: $data['ttl'] ?? 1,
+            attributes: $attributes,
+            lengths: $lengths,
+            orders: $orders,
+            ttl: $ttl,
         );
     }
 
@@ -320,7 +330,7 @@ class Index
         /** @var int $ttl */
         $ttl = $document->getAttribute('ttl', 1);
 
-        return new self(
+        return self::make(
             key: $key,
             type: IndexType::from($type),
             attributes: $attributes,
@@ -328,5 +338,99 @@ class Index
             orders: $orders,
             ttl: $ttl,
         );
+    }
+
+    /**
+     * @param  array<string>  $attributes
+     * @param  array<int|null>  $lengths
+     * @param  array<string|null>  $orders
+     */
+    private static function make(
+        string $key,
+        IndexType $type,
+        array $attributes,
+        array $lengths,
+        array $orders,
+        int $ttl,
+    ): self {
+        return match ($type) {
+            IndexType::Key => self::key(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::Index => self::index(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::Unique => self::unique(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::Fulltext => self::fullText(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::Spatial => self::spatial(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::Object => self::object(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::HnswEuclidean => self::hnswEuclidean(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::HnswCosine => self::hnswCosine(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::HnswDot => self::hnswDot(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::Trigram => self::trigram(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+            IndexType::Ttl => self::ttl(
+                key: $key,
+                attributes: $attributes,
+                lengths: $lengths,
+                orders: $orders,
+                ttl: $ttl,
+            ),
+        };
     }
 }

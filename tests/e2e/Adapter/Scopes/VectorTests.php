@@ -12,7 +12,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 
 trait VectorTests
@@ -953,10 +952,9 @@ trait VectorTests
         // Create child collection
         $database->createCollection('vectorChild');
         $database->createAttribute('vectorChild', Attribute::string(key: 'title', required: true));
-        $database->createRelationship(new Relationship(
+        $database->createRelationship(Relationship::manyToOne(
             collection: 'vectorChild',
             relatedCollection: 'vectorParent',
-            type: RelationType::ManyToOne,
             twoWay: true,
             key: 'parent',
             twoWayKey: 'children',
@@ -1045,10 +1043,9 @@ trait VectorTests
         $database->createCollection('vectorBooks');
         $database->createAttribute('vectorBooks', Attribute::string(key: 'title', required: true));
         $database->createAttribute('vectorBooks', Attribute::vector(key: 'embedding', size: 3, required: true));
-        $database->createRelationship(new Relationship(
+        $database->createRelationship(Relationship::manyToOne(
             collection: 'vectorBooks',
             relatedCollection: 'vectorAuthors',
-            type: RelationType::ManyToOne,
             twoWay: true,
             key: 'author',
             twoWayKey: 'books',

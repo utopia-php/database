@@ -190,7 +190,7 @@ trait PermissionTests
 
         $database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test'));
 
-        $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), type: RelationType::OneToOne, key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade));
+        $database->createRelationship(Relationship::oneToOne(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade));
 
         $collectionOneToMany = $database->createCollection($this->getCollSecurityOneToManyCollection(), permissions: [
             Permission::create(Role::users()),
@@ -201,7 +201,7 @@ trait PermissionTests
 
         $database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test'));
 
-        $database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), type: RelationType::OneToMany, key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade));
+        $database->createRelationship(Relationship::oneToMany(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade));
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -324,7 +324,7 @@ trait PermissionTests
 
         $this->assertTrue($database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test')));
 
-        $this->assertTrue($database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), type: RelationType::OneToOne, key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade)));
+        $this->assertTrue($database->createRelationship(Relationship::oneToOne(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade)));
 
         $collectionOneToMany = $database->createCollection($this->getCollSecurityOneToManyCollection(), permissions: [
             Permission::create(Role::users()),
@@ -337,7 +337,7 @@ trait PermissionTests
 
         $this->assertTrue($database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test')));
 
-        $this->assertTrue($database->createRelationship(new Relationship(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), type: RelationType::OneToMany, key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade)));
+        $this->assertTrue($database->createRelationship(Relationship::oneToMany(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade)));
     }
 
     public function testUnsetPermissions(): void
@@ -1496,7 +1496,7 @@ trait PermissionTests
         $database->createAttribute('parentRelationTest', Attribute::string(key: 'name'));
         $database->createAttribute('childRelationTest', Attribute::string(key: 'name'));
 
-        $database->createRelationship(new Relationship(collection: 'parentRelationTest', relatedCollection: 'childRelationTest', type: RelationType::OneToMany, key: 'children'));
+        $database->createRelationship(Relationship::oneToMany(collection: 'parentRelationTest', relatedCollection: 'childRelationTest', key: 'children'));
 
         // Create document with relationship with nested data
         $parent = $database->createDocument('parentRelationTest', new Document([

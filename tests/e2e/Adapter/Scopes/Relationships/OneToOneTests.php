@@ -41,7 +41,7 @@ trait OneToOneTests
         $database->createAttribute('library', Attribute::string(key: 'name', required: true));
         $database->createAttribute('library', Attribute::string(key: 'area', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'person', relatedCollection: 'library', type: RelationType::OneToOne));
+        $database->createRelationship(Relationship::oneToOne(collection: 'person', relatedCollection: 'library'));
 
         // Check metadata for collection
         $collection = $database->getCollection('person');
@@ -476,7 +476,7 @@ trait OneToOneTests
         $database->createAttribute('city', Attribute::string(key: 'code', size: 3, required: true));
         $database->createAttribute('city', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'country', relatedCollection: 'city', type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: 'country', relatedCollection: 'city', twoWay: true));
 
         $collection = $database->getCollection('country');
         $attributes = $collection->getAttribute('attributes', []);
@@ -1051,16 +1051,16 @@ trait OneToOneTests
         $database->createCollection('parent');
         $database->createCollection('child');
 
-        $database->createRelationship(new Relationship(collection: 'parent', relatedCollection: 'child', type: RelationType::OneToOne, key: 'child1'));
+        $database->createRelationship(Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'child1'));
 
         try {
-            $database->createRelationship(new Relationship(collection: 'parent', relatedCollection: 'child', type: RelationType::OneToMany, key: 'children'));
+            $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', key: 'children'));
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
             $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
 
-        $database->createRelationship(new Relationship(collection: 'parent', relatedCollection: 'child', type: RelationType::OneToMany, key: 'children', twoWayKey: 'parent_id'));
+        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', key: 'children', twoWayKey: 'parent_id'));
 
         $collection = $database->getCollection('parent');
         $attributes = $collection->getAttribute('attributes', []);
@@ -1144,8 +1144,20 @@ trait OneToOneTests
         $database->createAttribute('shirt', Attribute::string(key: 'name', required: true));
         $database->createAttribute('team', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'pattern', relatedCollection: 'shirt', type: RelationType::OneToOne, twoWay: true, key: 'shirt', twoWayKey: 'pattern'));
-        $database->createRelationship(new Relationship(collection: 'shirt', relatedCollection: 'team', type: RelationType::OneToOne, twoWay: true, key: 'team', twoWayKey: 'shirt'));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'pattern',
+            relatedCollection: 'shirt',
+            twoWay: true,
+            key: 'shirt',
+            twoWayKey: 'pattern'
+        ));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'shirt',
+            relatedCollection: 'team',
+            twoWay: true,
+            key: 'team',
+            twoWayKey: 'shirt'
+        ));
 
         $database->createDocument('pattern', new Document([
             '$id' => 'stripes',
@@ -1223,8 +1235,14 @@ trait OneToOneTests
         $database->createAttribute('teachers', Attribute::string(key: 'name', required: true));
         $database->createAttribute('classrooms', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'teachers', relatedCollection: 'classrooms', type: RelationType::OneToOne, twoWay: true, key: 'classroom', twoWayKey: 'teacher'));
-        $database->createRelationship(new Relationship(collection: 'classrooms', relatedCollection: 'children', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'classroom'));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'teachers',
+            relatedCollection: 'classrooms',
+            twoWay: true,
+            key: 'classroom',
+            twoWayKey: 'teacher'
+        ));
+        $database->createRelationship(Relationship::oneToMany(collection: 'classrooms', relatedCollection: 'children', twoWay: true, twoWayKey: 'classroom'));
 
         $database->createDocument('teachers', new Document([
             '$id' => 'teacher1',
@@ -1312,8 +1330,14 @@ trait OneToOneTests
         $database->createAttribute('profiles', Attribute::string(key: 'name', required: true));
         $database->createAttribute('avatars', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'users', relatedCollection: 'profiles', type: RelationType::OneToOne, twoWay: true, key: 'profile', twoWayKey: 'user'));
-        $database->createRelationship(new Relationship(collection: 'profiles', relatedCollection: 'avatars', type: RelationType::ManyToOne, twoWay: true, key: 'avatar'));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'users',
+            relatedCollection: 'profiles',
+            twoWay: true,
+            key: 'profile',
+            twoWayKey: 'user'
+        ));
+        $database->createRelationship(Relationship::manyToOne(collection: 'profiles', relatedCollection: 'avatars', twoWay: true, key: 'avatar'));
 
         $database->createDocument('users', new Document([
             '$id' => 'user1',
@@ -1393,8 +1417,14 @@ trait OneToOneTests
         $database->createAttribute('houses', Attribute::string(key: 'name', required: true));
         $database->createAttribute('buildings', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'addresses', relatedCollection: 'houses', type: RelationType::OneToOne, twoWay: true, key: 'house', twoWayKey: 'address'));
-        $database->createRelationship(new Relationship(collection: 'houses', relatedCollection: 'buildings', type: RelationType::ManyToMany, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'addresses',
+            relatedCollection: 'houses',
+            twoWay: true,
+            key: 'house',
+            twoWayKey: 'address'
+        ));
+        $database->createRelationship(Relationship::manyToMany(collection: 'houses', relatedCollection: 'buildings', twoWay: true));
 
         $database->createDocument('addresses', new Document([
             '$id' => 'address1',
@@ -1489,9 +1519,9 @@ trait OneToOneTests
         $database->createCollection($level3Collection);
         $database->createCollection($level4Collection);
 
-        $database->createRelationship(new Relationship(collection: $level1Collection, relatedCollection: $level2Collection, type: RelationType::OneToOne, twoWay: true));
-        $database->createRelationship(new Relationship(collection: $level2Collection, relatedCollection: $level3Collection, type: RelationType::OneToOne, twoWay: true));
-        $database->createRelationship(new Relationship(collection: $level3Collection, relatedCollection: $level4Collection, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $level1Collection, relatedCollection: $level2Collection, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $level2Collection, relatedCollection: $level3Collection, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $level3Collection, relatedCollection: $level4Collection, twoWay: true));
 
         // Exceed create depth
         $level1 = $database->createDocument($level1Collection, new Document([
@@ -1557,9 +1587,9 @@ trait OneToOneTests
         $database->createCollection($level3Collection);
         $database->createCollection($level4Collection);
 
-        $database->createRelationship(new Relationship(collection: $level1Collection, relatedCollection: $level2Collection, type: RelationType::OneToOne, twoWay: true));
-        $database->createRelationship(new Relationship(collection: $level2Collection, relatedCollection: $level3Collection, type: RelationType::OneToOne, twoWay: true));
-        $database->createRelationship(new Relationship(collection: $level3Collection, relatedCollection: $level4Collection, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $level1Collection, relatedCollection: $level2Collection, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $level2Collection, relatedCollection: $level3Collection, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $level3Collection, relatedCollection: $level4Collection, twoWay: true));
 
         $level1 = $database->createDocument($level1Collection, new Document([
             '$id' => 'level1',
@@ -1619,7 +1649,7 @@ trait OneToOneTests
         $database->createCollection('$symbols_coll.ection1');
         $database->createCollection('$symbols_coll.ection2');
 
-        $database->createRelationship(new Relationship(collection: '$symbols_coll.ection1', relatedCollection: '$symbols_coll.ection2', type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: '$symbols_coll.ection1', relatedCollection: '$symbols_coll.ection2', twoWay: true));
 
         $doc1 = $database->createDocument('$symbols_coll.ection2', new Document([
             '$id' => ID::unique(),
@@ -1675,11 +1705,11 @@ trait OneToOneTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne));
+        $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two));
 
         $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne));
+        $result = $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two));
 
         $this->assertTrue($result);
 
@@ -1718,11 +1748,11 @@ trait OneToOneTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
         $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne, twoWay: true));
+        $result = $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
         $this->assertTrue($result);
 
@@ -1761,11 +1791,11 @@ trait OneToOneTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne, twoWay: true));
+        $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
         $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne, twoWay: true));
+        $result = $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
         $this->assertTrue($result);
 
@@ -1804,11 +1834,11 @@ trait OneToOneTests
             Permission::delete(Role::any()),
         ]);
 
-        $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne));
+        $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two));
 
         $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(new Relationship(collection: $one, relatedCollection: $two, type: RelationType::OneToOne));
+        $result = $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two));
 
         $this->assertTrue($result);
 
@@ -1835,7 +1865,7 @@ trait OneToOneTests
         $this->getDatabase()->createAttribute('bulk_delete_library_o2o', Attribute::string(key: 'area', required: true));
 
         // Restrict
-        $this->getDatabase()->createRelationship(new Relationship(collection: 'bulk_delete_person_o2o', relatedCollection: 'bulk_delete_library_o2o', type: RelationType::OneToOne, onDelete: ForeignKeyAction::Restrict));
+        $this->getDatabase()->createRelationship(Relationship::oneToOne(collection: 'bulk_delete_person_o2o', relatedCollection: 'bulk_delete_library_o2o'));
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_o2o', new Document([
             '$id' => 'person1',
@@ -2025,7 +2055,13 @@ trait OneToOneTests
         $database->createCollection('drivers');
         $database->createCollection('licenses');
 
-        $database->createRelationship(new Relationship(collection: 'drivers', relatedCollection: 'licenses', type: RelationType::OneToOne, twoWay: true, key: 'license', twoWayKey: 'driver'));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'drivers',
+            relatedCollection: 'licenses',
+            twoWay: true,
+            key: 'license',
+            twoWayKey: 'driver'
+        ));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2061,7 +2097,13 @@ trait OneToOneTests
         $_cnt_indexes_1982 = $licenses->getAttribute('indexes');
         $this->assertEquals(0, \count($_cnt_indexes_1982));
 
-        $database->createRelationship(new Relationship(collection: 'drivers', relatedCollection: 'licenses', type: RelationType::OneToMany, twoWay: true, key: 'licenses', twoWayKey: 'driver'));
+        $database->createRelationship(Relationship::oneToMany(
+            collection: 'drivers',
+            relatedCollection: 'licenses',
+            twoWay: true,
+            key: 'licenses',
+            twoWayKey: 'driver'
+        ));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2097,7 +2139,13 @@ trait OneToOneTests
         $_cnt_indexes_2002 = $licenses->getAttribute('indexes');
         $this->assertEquals(0, \count($_cnt_indexes_2002));
 
-        $database->createRelationship(new Relationship(collection: 'licenses', relatedCollection: 'drivers', type: RelationType::ManyToOne, twoWay: true, key: 'driver', twoWayKey: 'licenses'));
+        $database->createRelationship(Relationship::manyToOne(
+            collection: 'licenses',
+            relatedCollection: 'drivers',
+            twoWay: true,
+            key: 'driver',
+            twoWayKey: 'licenses'
+        ));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2133,7 +2181,13 @@ trait OneToOneTests
         $_cnt_indexes_2022 = $licenses->getAttribute('indexes');
         $this->assertEquals(0, \count($_cnt_indexes_2022));
 
-        $database->createRelationship(new Relationship(collection: 'licenses', relatedCollection: 'drivers', type: RelationType::ManyToMany, twoWay: true, key: 'drivers', twoWayKey: 'licenses'));
+        $database->createRelationship(Relationship::manyToMany(
+            collection: 'licenses',
+            relatedCollection: 'drivers',
+            twoWay: true,
+            key: 'drivers',
+            twoWayKey: 'licenses'
+        ));
 
         $drivers = $database->getCollection('drivers');
         $licenses = $database->getCollection('licenses');
@@ -2204,7 +2258,7 @@ trait OneToOneTests
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::integer(key: 'parentNumber'));
 
-        $database->createRelationship(new Relationship(collection: $parentCollection, relatedCollection: $childCollection, type: RelationType::OneToOne, key: 'parentNumber'));
+        $database->createRelationship(Relationship::oneToOne(collection: $parentCollection, relatedCollection: $childCollection, key: 'parentNumber'));
 
         $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -2278,7 +2332,7 @@ trait OneToOneTests
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: $parentCollection, relatedCollection: $childCollection, type: RelationType::OneToOne, onDelete: ForeignKeyAction::Restrict));
+        $database->createRelationship(Relationship::oneToOne(collection: $parentCollection, relatedCollection: $childCollection));
 
         $parent = $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -2332,7 +2386,13 @@ trait OneToOneTests
         $database->createAttribute('cities_partial', Attribute::integer(key: 'population'));
         $database->createAttribute('mayors_partial', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'cities_partial', relatedCollection: 'mayors_partial', type: RelationType::OneToOne, twoWay: true, key: 'mayor', twoWayKey: 'city'));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'cities_partial',
+            relatedCollection: 'mayors_partial',
+            twoWay: true,
+            key: 'mayor',
+            twoWayKey: 'city'
+        ));
 
         // Create a city with a mayor
         $database->createDocument('cities_partial', new Document([
@@ -2412,7 +2472,13 @@ trait OneToOneTests
         $database->createAttribute('cities_strict', Attribute::string(key: 'name', required: true));
         $database->createAttribute('mayors_strict', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(new Relationship(collection: 'cities_strict', relatedCollection: 'mayors_strict', type: RelationType::OneToOne, twoWay: true, key: 'mayor', twoWayKey: 'city'));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'cities_strict',
+            relatedCollection: 'mayors_strict',
+            twoWay: true,
+            key: 'mayor',
+            twoWayKey: 'city'
+        ));
 
         // Create city with mayor
         $database->createDocument('cities_strict', new Document([

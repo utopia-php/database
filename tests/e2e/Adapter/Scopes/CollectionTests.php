@@ -27,7 +27,6 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Database\RelationType;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
@@ -559,7 +558,7 @@ trait CollectionTests
 
         $database->createCollection('devices');
 
-        $database->createRelationship(new Relationship(collection: 'testers', relatedCollection: 'devices', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'tester'));
+        $database->createRelationship(Relationship::oneToMany(collection: 'testers', relatedCollection: 'devices', twoWay: true, twoWayKey: 'tester'));
 
         $testers = $database->getCollection('testers');
         $devices = $database->getCollection('devices');
@@ -593,9 +592,9 @@ trait CollectionTests
         $database->createCollection('cascadeMultiDelete2');
         $database->createCollection('cascadeMultiDelete3');
 
-        $database->createRelationship(new Relationship(collection: 'cascadeMultiDelete1', relatedCollection: 'cascadeMultiDelete2', type: RelationType::OneToMany, twoWay: true, onDelete: ForeignKeyAction::Cascade));
+        $database->createRelationship(Relationship::oneToMany(collection: 'cascadeMultiDelete1', relatedCollection: 'cascadeMultiDelete2', twoWay: true, onDelete: ForeignKeyAction::Cascade));
 
-        $database->createRelationship(new Relationship(collection: 'cascadeMultiDelete2', relatedCollection: 'cascadeMultiDelete3', type: RelationType::OneToMany, twoWay: true, onDelete: ForeignKeyAction::Cascade));
+        $database->createRelationship(Relationship::oneToMany(collection: 'cascadeMultiDelete2', relatedCollection: 'cascadeMultiDelete3', twoWay: true, onDelete: ForeignKeyAction::Cascade));
 
         $root = $database->createDocument('cascadeMultiDelete1', new Document([
             '$id' => 'cascadeMultiDelete1',

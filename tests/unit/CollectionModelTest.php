@@ -64,6 +64,7 @@ class CollectionModelTest extends TestCase
         $this->assertSame('Users', $collection->name);
         $this->assertCount(1, $collection->attributes);
         $this->assertCount(1, $collection->indexes);
+        $this->assertNotNull($collection->permissions);
         $this->assertCount(1, $collection->permissions);
         $this->assertFalse($collection->documentSecurity);
     }
@@ -241,6 +242,7 @@ class CollectionModelTest extends TestCase
         ]);
 
         $collection = Collection::fromDocument($doc);
+        $this->assertNotNull($collection->permissions);
         $this->assertCount(2, $collection->permissions);
     }
 

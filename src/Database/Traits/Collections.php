@@ -49,9 +49,7 @@ trait Collections
         $name = $collection->name !== '' ? $collection->name : $collection->id;
         $attributes = $collection->attributes;
         $indexes = $collection->indexes;
-        $permissions = $collection->permissions !== []
-            ? $collection->permissions
-            : [Permission::create(Role::any())];
+        $permissions = $collection->permissions ?? [Permission::create(Role::any())];
         $documentSecurity = $collection->documentSecurity;
         $metadata = $collection->metadata;
 

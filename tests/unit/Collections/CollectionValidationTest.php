@@ -278,9 +278,11 @@ class CollectionValidationTest extends TestCase
 
         $anon = $database->createCollection(new Collection(id: 'anon'));
         $control = $database->createCollection(new Collection(id: 'control'));
+        $locked = $database->createCollection(new Collection(id: 'locked', permissions: []));
 
         $this->assertSame($control->getPermissions(), $anon->getPermissions());
         $this->assertSame([Permission::create(Role::any())], $anon->getPermissions());
+        $this->assertSame([], $locked->getPermissions());
     }
 
     public function testCreateCollectionWithIndexLimits(): void

@@ -23,7 +23,7 @@ class CollectionModelTest extends TestCase
         $this->assertSame('', $collection->name);
         $this->assertSame([], $collection->attributes);
         $this->assertSame([], $collection->indexes);
-        $this->assertSame([], $collection->permissions);
+        $this->assertNull($collection->permissions);
         $this->assertTrue($collection->documentSecurity);
         $this->assertSame([], $collection->metadata);
     }

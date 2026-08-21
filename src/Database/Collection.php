@@ -12,7 +12,7 @@ class Collection
     /**
      * @param  array<Attribute>  $attributes
      * @param  array<Index>  $indexes
-     * @param  array<string>  $permissions
+     * @param  array<string>|null  $permissions  Null means default create-any; empty means none
      * @param  array<string, mixed>  $metadata
      */
     public function __construct(
@@ -20,7 +20,7 @@ class Collection
         public string $name = '',
         public array $attributes = [],
         public array $indexes = [],
-        public array $permissions = [],
+        public ?array $permissions = null,
         public bool $documentSecurity = true,
         public array $metadata = [],
     ) {
@@ -38,7 +38,7 @@ class Collection
             'name' => $this->name ?: $this->id,
             'attributes' => \array_map(fn (Attribute $attr) => $attr->toDocument(), $this->attributes),
             'indexes' => \array_map(fn (Index $idx) => $idx->toDocument(), $this->indexes),
-            Document::PERMISSIONS => $this->permissions,
+            Document::PERMISSIONS => $this->permissions ?? [],
             'documentSecurity' => $this->documentSecurity,
         ]);
     }

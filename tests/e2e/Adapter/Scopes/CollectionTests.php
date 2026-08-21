@@ -16,9 +16,11 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
@@ -28,7 +30,6 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Query\Schema\IndexType;
@@ -77,27 +78,28 @@ trait CollectionTests
             }
         }
 
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection(new Collection(id: 'actors', permissions: [
+        $database->createCollection(new Collection(id: 'actors', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ])));
+        ]));
         $this->assertCount(1, $database->listCollections());
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection(new Collection(id: 'actors2', permissions: [
+        $database->createCollection(new Collection(id: 'actors2', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ])));
+        ]));
         $this->assertCount(2, $database->listCollections());
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors2'));
         $collection = $database->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
-        $this->assertInstanceOf('Utopia\Database\Document', $database->updateDocument(
+        $updated = $database->updateDocument(
             $collection->getCollection(),
             $collection->getId(),
             $collection
-        ));
+        );
+        $this->assertSame('actors', $updated->getAttribute('name'));
         $this->assertEquals(true, $database->deleteCollection('actors2')); // Delete collection when finished
         $this->assertCount(1, $database->listCollections());
 
@@ -145,36 +147,30 @@ trait CollectionTests
         $this->assertEquals(false, $collection->isEmpty());
         $this->assertEquals('withSchema', $collection->getId());
 
-        $this->assertIsArray($collection->getAttribute('attributes'));
-        $this->assertCount(4, $collection->getAttribute('attributes'));
-        $this->assertInstanceOf(Attribute::class, $collection->getAttribute('attributes')[0]);
-        $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
-        $this->assertSame('attribute1', $collection->getAttribute('attributes')[0]->key);
-        $this->assertEquals(ColumnType::String->value, $collection->getAttribute('attributes')[0]['type']);
-        $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['$id']);
-        $this->assertEquals(ColumnType::Integer->value, $collection->getAttribute('attributes')[1]['type']);
-        $this->assertEquals('attribute3', $collection->getAttribute('attributes')[2]['$id']);
-        $this->assertEquals(ColumnType::Boolean->value, $collection->getAttribute('attributes')[2]['type']);
-        $this->assertEquals('attribute4', $collection->getAttribute('attributes')[3]['$id']);
-        $this->assertEquals(ColumnType::Id->value, $collection->getAttribute('attributes')[3]['type']);
+        $this->assertCount(4, $collection->attributes);
+        $this->assertEquals('attribute1', $collection->attributes[0]['$id']);
+        $this->assertSame('attribute1', $collection->attributes[0]->key);
+        $this->assertEquals(ColumnType::String->value, $collection->attributes[0]['type']);
+        $this->assertEquals('attribute2', $collection->attributes[1]['$id']);
+        $this->assertEquals(ColumnType::Integer->value, $collection->attributes[1]['type']);
+        $this->assertEquals('attribute3', $collection->attributes[2]['$id']);
+        $this->assertEquals(ColumnType::Boolean->value, $collection->attributes[2]['type']);
+        $this->assertEquals('attribute4', $collection->attributes[3]['$id']);
+        $this->assertEquals(ColumnType::Id->value, $collection->attributes[3]['type']);
 
-        $this->assertIsArray($collection->getAttribute('indexes'));
-        $this->assertCount(4, $collection->getAttribute('indexes'));
-        $this->assertInstanceOf(Index::class, $collection->getAttribute('indexes')[0]);
-        $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
-        $this->assertSame('index1', $collection->getAttribute('indexes')[0]->key);
-        $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[0]['type']);
-        $this->assertEquals('index2', $collection->getAttribute('indexes')[1]['$id']);
-        $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[1]['type']);
-        $this->assertEquals('index3', $collection->getAttribute('indexes')[2]['$id']);
-        $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[2]['type']);
-        $this->assertEquals('index4', $collection->getAttribute('indexes')[3]['$id']);
-        $this->assertEquals(IndexType::Key->value, $collection->getAttribute('indexes')[3]['type']);
+        $this->assertCount(4, $collection->indexes);
+        $this->assertEquals('index1', $collection->indexes[0]['$id']);
+        $this->assertSame('index1', $collection->indexes[0]->key);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[0]['type']);
+        $this->assertEquals('index2', $collection->indexes[1]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[1]['type']);
+        $this->assertEquals('index3', $collection->indexes[2]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[2]['type']);
+        $this->assertEquals('index4', $collection->indexes[3]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[3]['type']);
 
         $fetched = $database->getCollection('withSchema');
-        $this->assertInstanceOf(Attribute::class, $fetched->getAttribute('attributes')[0]);
-        $this->assertInstanceOf(Index::class, $fetched->getAttribute('indexes')[0]);
-        $this->assertSame('attribute1', $fetched->getAttribute('attributes')[0]->key);
+        $this->assertSame('attribute1', $fetched->attributes[0]->key);
 
         $database->deleteCollection('withSchema');
 
@@ -187,14 +183,12 @@ trait CollectionTests
 
         $this->assertEquals(false, $collection2->isEmpty());
         $this->assertEquals('with-dash', $collection2->getId());
-        $this->assertIsArray($collection2->getAttribute('attributes'));
-        $this->assertCount(1, $collection2->getAttribute('attributes'));
-        $this->assertEquals('attribute-one', $collection2->getAttribute('attributes')[0]['$id']);
-        $this->assertEquals(ColumnType::String->value, $collection2->getAttribute('attributes')[0]['type']);
-        $this->assertIsArray($collection2->getAttribute('indexes'));
-        $this->assertCount(1, $collection2->getAttribute('indexes'));
-        $this->assertEquals('index-one', $collection2->getAttribute('indexes')[0]['$id']);
-        $this->assertEquals(IndexType::Key->value, $collection2->getAttribute('indexes')[0]['type']);
+        $this->assertCount(1, $collection2->attributes);
+        $this->assertEquals('attribute-one', $collection2->attributes[0]['$id']);
+        $this->assertEquals(ColumnType::String->value, $collection2->attributes[0]['type']);
+        $this->assertCount(1, $collection2->indexes);
+        $this->assertEquals('index-one', $collection2->indexes[0]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection2->indexes[0]['type']);
         $database->deleteCollection('with-dash');
     }
 
@@ -420,17 +414,17 @@ trait CollectionTests
             Permission::create(Role::any()),
         ]));
 
-        $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], null);
+        $this->assertEquals($collection->indexes[0]->attributes[0], 'username');
+        $this->assertEquals($collection->indexes[0]->lengths[0], null);
 
-        $this->assertEquals($collection->getAttribute('indexes')[1]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], 99);
-        $this->assertEquals($collection->getAttribute('indexes')[1]['orders'][0], OrderDirection::Desc->value);
+        $this->assertEquals($collection->indexes[1]->attributes[0], 'username');
+        $this->assertEquals($collection->indexes[1]->lengths[0], 99);
+        $this->assertEquals($collection->indexes[1]->orders[0], Order::Desc);
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
-            $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'cards');
-            $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], Database::MAX_ARRAY_INDEX_LENGTH);
-            $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], null);
+            $this->assertEquals($collection->indexes[2]->attributes[0], 'cards');
+            $this->assertEquals($collection->indexes[2]->lengths[0], Database::MAX_ARRAY_INDEX_LENGTH);
+            $this->assertEquals($collection->indexes[2]->orders[0], null);
         }
     }
 
@@ -445,7 +439,7 @@ trait CollectionTests
             return;
         }
 
-        $this->assertIsString($database->getConnectionId());
+        $this->assertNotSame('', $database->getConnectionId());
     }
 
     public function testKeywords(): void
@@ -454,7 +448,7 @@ trait CollectionTests
         $keywords = $database->getKeywords();
 
         if ($keywords === []) {
-            $this->assertSame([], $keywords);
+            $this->expectNotToPerformAssertions();
 
             return;
         }
@@ -569,9 +563,9 @@ trait CollectionTests
         $testers = $database->getCollection('testers');
         $devices = $database->getCollection('devices');
 
-        $this->assertEquals(1, \count($testers->getAttribute('attributes')));
-        $this->assertEquals(1, \count($devices->getAttribute('attributes')));
-        $this->assertEquals(1, \count($devices->getAttribute('indexes')));
+        $this->assertEquals(1, \count($testers->attributes));
+        $this->assertEquals(1, \count($devices->attributes));
+        $this->assertEquals(1, \count($devices->indexes));
 
         $database->deleteCollection('testers');
 
@@ -579,8 +573,8 @@ trait CollectionTests
         $devices = $database->getCollection('devices');
 
         $this->assertEquals(true, $testers->isEmpty());
-        $this->assertEquals(0, \count($devices->getAttribute('attributes')));
-        $this->assertEquals(0, \count($devices->getAttribute('indexes')));
+        $this->assertEquals(0, \count($devices->attributes));
+        $this->assertEquals(0, \count($devices->indexes));
     }
 
     public function testCascadeMultiDelete(): void
@@ -628,8 +622,9 @@ trait CollectionTests
             ],
         ]));
 
-        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2'));
-        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2')[0]->getAttribute('cascadeMultiDelete3'));
+        $cascade2 = $root->getDocuments('cascadeMultiDelete2');
+        $this->assertCount(1, $cascade2);
+        $this->assertCount(1, $cascade2[0]->getDocuments('cascadeMultiDelete3'));
 
         $this->assertEquals(true, $database->deleteDocument('cascadeMultiDelete1', $root->getId()));
 
@@ -901,15 +896,15 @@ trait CollectionTests
         }
 
         $collection = $database->getCollection('duplicates');
-        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
-        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+        $this->assertEquals(1, \count($collection->attributes));
+        $this->assertEquals(1, \count($collection->indexes));
 
         $database->setTenant(null);
         $database->purgeCachedCollection('duplicates');
 
         $collection = $database->getCollection('duplicates');
-        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
-        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+        $this->assertEquals(1, \count($collection->attributes));
+        $this->assertEquals(1, \count($collection->indexes));
 
         $database
             ->setSharedTables($sharedTables)
@@ -961,7 +956,7 @@ trait CollectionTests
 
             $col1 = $database->getCollection($colName);
             $this->assertFalse($col1->isEmpty());
-            $this->assertEquals(1, \count($col1->getAttribute('attributes')));
+            $this->assertEquals(1, \count($col1->attributes));
 
             $database->setTenant($tenant2);
 
@@ -971,7 +966,7 @@ trait CollectionTests
 
             $col2 = $database->getCollection($colName);
             $this->assertFalse($col2->isEmpty());
-            $this->assertEquals(1, \count($col2->getAttribute('attributes')));
+            $this->assertEquals(1, \count($col2->attributes));
 
             $database->setTenant($tenant1);
             $col1Again = $database->getCollection($colName);
@@ -1018,7 +1013,7 @@ trait CollectionTests
                 $database->create();
                 $database->setTenant($tenant2);
                 $database->create();
-                $this->assertTrue(true);
+                $this->assertSame($tenant2, $database->getTenant());
             } elseif ($database->getAdapter()->supports(Capability::Schemas)) {
                 $dbName = 'stMultiCreate';
                 if ($database->exists($dbName)) {
@@ -1133,8 +1128,6 @@ trait CollectionTests
                 ],
             ]));
 
-            $executed = false;
-
             $database->silent(function () use ($database, $collectionId, $document) {
                 $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
                 $database->getDocument($collectionId, 'doc1');
@@ -1145,8 +1138,6 @@ trait CollectionTests
                 $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
                 $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
             });
-
-            $this->assertFalse($executed);
 
             $database->createDocuments($collectionId, [
                 new Document([
@@ -1176,7 +1167,8 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection(new Collection(id: $this->getCreatedAtCollection())));
+        $created = $database->createCollection(new Collection(id: $this->getCreatedAtCollection()));
+        $this->assertSame($this->getCreatedAtCollection(), $created->getId());
         $database->createAttribute($this->getCreatedAtCollection(), Attribute::string(key: 'title', size: 100));
         $document = $database->createDocument($this->getCreatedAtCollection(), new Document([
             '$id' => ID::custom('uid123'),
@@ -1341,8 +1333,8 @@ trait CollectionTests
         ]));
 
         $this->assertEquals($collection, $collectionDocument->getId());
-        $this->assertCount(3, $collectionDocument->getAttribute('attributes'));
-        $this->assertCount(2, $collectionDocument->getAttribute('indexes'));
+        $this->assertCount(3, $collectionDocument->attributes);
+        $this->assertCount(2, $collectionDocument->indexes);
 
         $document = $database->createDocument($collection, new Document([
             '$id' => 'longIdDoc',

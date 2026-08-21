@@ -71,6 +71,23 @@ class Attribute extends Document
         parent::__construct($data);
     }
 
+    /**
+     * @return (
+     *     $name is 'key' ? string :
+     *     $name is 'type' ? ColumnType :
+     *     $name is 'size' ? int :
+     *     $name is 'required' ? bool :
+     *     $name is 'default' ? mixed :
+     *     $name is 'signed' ? bool :
+     *     $name is 'array' ? bool :
+     *     $name is 'format' ? string|null :
+     *     $name is 'formatOptions' ? array<string, mixed> :
+     *     $name is 'filters' ? array<string> :
+     *     $name is 'status' ? string|null :
+     *     $name is 'options' ? array<string, mixed>|null :
+     *     mixed
+     * )
+     */
     public function __get(string $name): mixed
     {
         switch ($name) {
@@ -98,15 +115,37 @@ class Attribute extends Document
             case 'array':
                 return (bool) $this->getAttribute('array', false);
             case 'format':
-                return $this->getAttribute('format');
+                $format = $this->getAttribute('format');
+
+                return \is_string($format) ? $format : null;
             case 'formatOptions':
-                return $this->getAttribute('formatOptions', []);
+                $formatOptions = $this->getAttribute('formatOptions', []);
+                if (! \is_array($formatOptions)) {
+                    return [];
+                }
+                /** @var array<string, mixed> $formatOptions */
+
+                return $formatOptions;
             case 'filters':
-                return $this->getAttribute('filters', []);
+                $filters = $this->getAttribute('filters', []);
+                if (! \is_array($filters)) {
+                    return [];
+                }
+                /** @var array<string> $filters */
+
+                return $filters;
             case 'status':
-                return $this->getAttribute('status');
+                $status = $this->getAttribute('status');
+
+                return \is_string($status) ? $status : null;
             case 'options':
-                return $this->getAttribute('options');
+                $options = $this->getAttribute('options');
+                if (! \is_array($options)) {
+                    return null;
+                }
+                /** @var array<string, mixed> $options */
+
+                return $options;
             default:
                 return $this->getAttribute($name);
         }

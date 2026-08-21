@@ -42,7 +42,7 @@ final class PoolTest extends TestCase
         $hook = new Tenancy('new');
         $pool->addWriteHook($hook);
 
-        $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+        $pool->withTransaction(static fn (): string => 'committed');
         $this->assertSame([$hook], $adapter->getWriteHooks());
         $this->assertSame($hook, $adapter->getTenantHook());
     }
@@ -69,11 +69,11 @@ final class PoolTest extends TestCase
 
         $hook = new Permissions();
         $pool->addWriteHook($hook);
-        $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+        $pool->withTransaction(static fn (): string => 'committed');
         $this->assertSame([$hook], $adapter->getWriteHooks());
 
         $pool->removeWriteHook(Permissions::class);
-        $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+        $pool->withTransaction(static fn (): string => 'committed');
         $this->assertSame([], $adapter->getWriteHooks());
     }
 
@@ -102,7 +102,7 @@ final class PoolTest extends TestCase
         $pool->setAuthorization(new Authorization());
         $pool->addWriteHook($hook);
 
-        $this->assertSame('committed', $pool->withTransaction(static fn (): string => 'committed'));
+        $pool->withTransaction(static fn (): string => 'committed');
     }
 
     public function testPinnedAdapterResyncsTenantAndDatabaseBeforeDelegatedCall(): void

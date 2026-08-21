@@ -309,7 +309,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ]));
 
-        $this->assertInstanceOf(Document::class, $collection);
+        $this->assertSame($this->getCollSecurityParentCollection(), $collection->getId());
 
         $this->assertTrue($database->createAttribute($collection->getId(), Attribute::string(key: 'test')));
 
@@ -320,7 +320,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ]));
 
-        $this->assertInstanceOf(Document::class, $collectionOneToOne);
+        $this->assertSame($this->getCollSecurityOneToOneCollection(), $collectionOneToOne->getId());
 
         $this->assertTrue($database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test')));
 
@@ -333,7 +333,7 @@ trait PermissionTests
             Permission::delete(Role::users()),
         ]));
 
-        $this->assertInstanceOf(Document::class, $collectionOneToMany);
+        $this->assertSame($this->getCollSecurityOneToManyCollection(), $collectionOneToMany->getId());
 
         $this->assertTrue($database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test')));
 
@@ -748,7 +748,7 @@ trait PermissionTests
             Permission::delete(Role::users())
         ], documentSecurity: false));
 
-        $this->assertInstanceOf(Document::class, $collection);
+        $this->assertSame($this->getCollSecurityCollection(), $collection->getId());
 
         $this->assertTrue($database->createAttribute($collection->getId(), Attribute::string(key: 'test')));
     }
@@ -811,9 +811,6 @@ trait PermissionTests
         ]));
     }
 
-    /**
-     * @return array<Document>
-     */
     public function testCollectionPermissionsCreateWorks(): void
     {
         $data = $this->initCollectionPermissionFixture();
@@ -833,7 +830,7 @@ trait PermissionTests
             ],
             'test' => 'lorem'
         ]));
-        $this->assertInstanceOf(Document::class, $document);
+        $this->assertSame('lorem', $document->getAttribute('test'));
 
         $database->deleteDocument($collectionId, $document->getId());
     }
@@ -943,7 +940,6 @@ trait PermissionTests
             $collectionId,
             $docId,
         );
-        $this->assertInstanceOf(Document::class, $document);
         $this->assertTrue($document->isEmpty());
     }
 
@@ -963,7 +959,6 @@ trait PermissionTests
             $collectionId,
             $docId
         );
-        $this->assertInstanceOf(Document::class, $document);
         $this->assertFalse($document->isEmpty());
     }
 
@@ -1113,7 +1108,7 @@ trait PermissionTests
                 ]
             ],
         ]));
-        $this->assertInstanceOf(Document::class, $document);
+        $this->assertFalse($document->isEmpty());
 
         $database->deleteDocument($collectionId, $document->getId());
     }
@@ -1161,13 +1156,10 @@ trait PermissionTests
             $collectionId
         );
 
-        $this->assertIsArray($documents);
         $this->assertCount(1, $documents);
         $document = $documents[0];
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(RelationType::OneToOne->value));
-        $this->assertIsArray($document->getAttribute(RelationType::OneToMany->value));
-        $this->assertCount(2, $document->getAttribute(RelationType::OneToMany->value));
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(2, $document->getDocuments(RelationType::OneToMany->value));
         $this->assertFalse($document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
@@ -1177,13 +1169,10 @@ trait PermissionTests
             $collectionId
         );
 
-        $this->assertIsArray($documents);
         $this->assertCount(1, $documents);
         $document = $documents[0];
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(RelationType::OneToOne->value));
-        $this->assertIsArray($document->getAttribute(RelationType::OneToMany->value));
-        $this->assertCount(1, $document->getAttribute(RelationType::OneToMany->value));
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(1, $document->getDocuments(RelationType::OneToMany->value));
         $this->assertFalse($document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
@@ -1193,7 +1182,6 @@ trait PermissionTests
             $collectionId
         );
 
-        $this->assertIsArray($documents);
         $this->assertCount(0, $documents);
     }
 
@@ -1218,7 +1206,6 @@ trait PermissionTests
             $collectionId,
             $docId,
         );
-        $this->assertInstanceOf(Document::class, $document);
         $this->assertTrue($document->isEmpty());
     }
 
@@ -1244,10 +1231,8 @@ trait PermissionTests
             $docId
         );
 
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(RelationType::OneToOne->value));
-        $this->assertIsArray($document->getAttribute(RelationType::OneToMany->value));
-        $this->assertCount(2, $document->getAttribute(RelationType::OneToMany->value));
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(2, $document->getDocuments(RelationType::OneToMany->value));
         $this->assertFalse($document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
@@ -1258,10 +1243,8 @@ trait PermissionTests
             $docId
         );
 
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(RelationType::OneToOne->value));
-        $this->assertIsArray($document->getAttribute(RelationType::OneToMany->value));
-        $this->assertCount(1, $document->getAttribute(RelationType::OneToMany->value));
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(1, $document->getDocuments(RelationType::OneToMany->value));
         $this->assertFalse($document->isEmpty());
     }
 
@@ -1285,12 +1268,14 @@ trait PermissionTests
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
-        $this->expectException(AuthorizationException::class);
 
+        $test = $document->getAttribute('test');
+        $this->assertIsString($test);
+        $this->expectException(AuthorizationException::class);
         $database->updateDocument(
             $collectionId,
             $docId,
-            $document->setAttribute('test', $document->getAttribute('test').'new_value')
+            $document->setAttribute('test', $test.'new_value')
         );
     }
 
@@ -1313,24 +1298,22 @@ trait PermissionTests
 
         $document = $database->getDocument($collectionId, $docId);
 
-        $database->updateDocument(
+        $updated = $database->updateDocument(
             $collectionId,
             $docId,
             $document
         );
-
-        $this->assertTrue(true);
+        $this->assertFalse($updated->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
 
-        $database->updateDocument(
+        $updated = $database->updateDocument(
             $collectionId,
             $docId,
             $document->setAttribute('test', 'ipsum')
         );
-
-        $this->assertTrue(true);
+        $this->assertSame('ipsum', $updated->getAttribute('test'));
     }
 
     public function testCollectionPermissionsUpdateThrowsException(): void
@@ -1371,11 +1354,12 @@ trait PermissionTests
 
         $document = $database->getDocument($collectionId, $docId);
 
-        $this->assertInstanceOf(Document::class, $database->updateDocument(
+        $updated = $database->updateDocument(
             $collectionId,
             $docId,
             $document->setAttribute('test', 'ipsum')
-        ));
+        );
+        $this->assertSame('ipsum', $updated->getAttribute('test'));
     }
     public function testCollectionUpdatePermissionsThrowException(): void
     {
@@ -1504,7 +1488,9 @@ trait PermissionTests
                 ],
             ],
         ]));
-        $this->assertEquals('child1', $parent->getAttribute('children')[0]->getId());
+        $children = $parent->getDocuments('children');
+        $this->assertNotEmpty($children);
+        $this->assertEquals('child1', $children[0]->getId());
         $parent->setAttribute('children', [
             [
                 '$id' => 'child2',
@@ -1512,7 +1498,9 @@ trait PermissionTests
         ]);
         $updatedParent = $database->updateDocument('parentRelationTest', 'parent1', $parent);
 
-        $this->assertEquals('child2', $updatedParent->getAttribute('children')[0]->getId());
+        $updatedChildren = $updatedParent->getDocuments('children');
+        $this->assertNotEmpty($updatedChildren);
+        $this->assertEquals('child2', $updatedChildren[0]->getId());
 
         $database->deleteCollection('parentRelationTest');
         $database->deleteCollection('childRelationTest');

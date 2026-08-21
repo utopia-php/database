@@ -128,7 +128,6 @@ final class PDOStatementTest extends TestCase
 
         $wrapper = new PDOStatement($pdo, $statement, 'SELECT 1');
 
-        $this->assertInstanceOf(\IteratorAggregate::class, $wrapper);
         $this->assertSame($statement, $wrapper->getIterator());
     }
 

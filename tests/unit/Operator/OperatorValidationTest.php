@@ -14,6 +14,9 @@ use Utopia\Query\Schema\ColumnType;
 
 class OperatorValidationTest extends TestCase
 {
+    /**
+     * @param  array<int, Attribute>  $attributes
+     */
     private function makeCollection(array $attributes): Document
     {
         $attrDocs = [];
@@ -30,11 +33,17 @@ class OperatorValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Attribute>  $attributes
+     */
     private function makeValidator(array $attributes, ?Document $currentDoc = null): OperatorValidator
     {
         return new OperatorValidator($this->makeCollection($attributes), $currentDoc);
     }
 
+    /**
+     * @param  array<int, mixed>  $values
+     */
     private function makeOperator(OperatorType $method, string $attribute, array $values = []): Operator
     {
         return new Operator($method, $attribute, $values);

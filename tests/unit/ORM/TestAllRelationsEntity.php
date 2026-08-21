@@ -21,9 +21,11 @@ class TestAllRelationsEntity
     #[BelongsTo(target: TestNoRelationsEntity::class, key: 'team', twoWayKey: 'members')]
     public mixed $team = null;
 
+    /** @var array<int, TestPost> */
     #[HasMany(target: TestPost::class, key: 'posts', twoWayKey: 'author')]
     public array $posts = [];
 
+    /** @var array<int, TestNoRelationsEntity> */
     #[BelongsToMany(target: TestNoRelationsEntity::class, key: 'tags', twoWayKey: 'items')]
     public array $tags = [];
 }

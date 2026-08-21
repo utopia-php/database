@@ -26,7 +26,6 @@ trait ObjectAttributeTests
      * Helper function to create an attribute if adapter supports attributes,
      * otherwise returns true to allow tests to continue
      *
-     * @param  string  $type
      * @param  mixed  $default
      */
     private function createAttribute(Database $database, string $collectionId, string $attributeId, ColumnType $type, int $size, bool $required, $default = null): bool
@@ -39,6 +38,27 @@ trait ObjectAttributeTests
         $this->assertEquals(true, $result);
 
         return $result;
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $data
+     * @param  non-empty-list<int|string>  $path
+     */
+    private function nestedMetaValue(array $data, array $path): mixed
+    {
+        $current = $data;
+        $lastIndex = count($path) - 1;
+        foreach ($path as $index => $key) {
+            $this->assertArrayHasKey($key, $current);
+            if ($index === $lastIndex) {
+                return $current[$key];
+            }
+            $nested = $current[$key];
+            $this->assertIsArray($nested);
+            $current = $nested;
+        }
+
+        return $current;
     }
 
     public function testObjectAttribute(): void
@@ -73,9 +93,14 @@ trait ObjectAttributeTests
         ]));
 
         $this->assertIsArray($doc1->getAttribute('meta'));
-        $this->assertEquals(25, $doc1->getAttribute('meta')['age']);
-        $this->assertEquals(['react', 'node'], $doc1->getAttribute('meta')['skills']);
-        $this->assertEquals('IN', $doc1->getAttribute('meta')['user']['info']['country']);
+        $meta = $doc1->getArray('meta');
+        $this->assertEquals(25, $meta['age']);
+        $this->assertEquals(['react', 'node'], $meta['skills']);
+        $user = $meta['user'] ?? null;
+        $this->assertIsArray($user);
+        $info = $user['info'] ?? null;
+        $this->assertIsArray($info);
+        $this->assertEquals('IN', $info['country']);
 
         // Test 2: Query::equal with simple key-value pair
         $results = $database->find($collectionId, [
@@ -154,9 +179,14 @@ trait ObjectAttributeTests
             ],
         ]));
 
-        $this->assertEquals(26, $updatedDoc->getAttribute('meta')['age']);
-        $this->assertEquals(['react', 'node', 'typescript'], $updatedDoc->getAttribute('meta')['skills']);
-        $this->assertEquals('CA', $updatedDoc->getAttribute('meta')['user']['info']['country']);
+        $updatedMeta = $updatedDoc->getArray('meta');
+        $this->assertEquals(26, $updatedMeta['age']);
+        $this->assertEquals(['react', 'node', 'typescript'], $updatedMeta['skills']);
+        $updatedUser = $updatedMeta['user'] ?? null;
+        $this->assertIsArray($updatedUser);
+        $updatedInfo = $updatedUser['info'] ?? null;
+        $this->assertIsArray($updatedInfo);
+        $this->assertEquals('CA', $updatedInfo['country']);
 
         // Test 9: Query updated document
         $results = $database->find($collectionId, [
@@ -214,9 +244,14 @@ trait ObjectAttributeTests
         $fetchedDoc = $database->getDocument($collectionId, 'doc1');
         $this->assertEquals('doc1', $fetchedDoc->getId());
         $this->assertIsArray($fetchedDoc->getAttribute('meta'));
-        $this->assertEquals(26, $fetchedDoc->getAttribute('meta')['age']);
-        $this->assertEquals(['react', 'node', 'typescript'], $fetchedDoc->getAttribute('meta')['skills']);
-        $this->assertEquals('CA', $fetchedDoc->getAttribute('meta')['user']['info']['country']);
+        $fetchedMeta = $fetchedDoc->getArray('meta');
+        $this->assertEquals(26, $fetchedMeta['age']);
+        $this->assertEquals(['react', 'node', 'typescript'], $fetchedMeta['skills']);
+        $fetchedUser = $fetchedMeta['user'] ?? null;
+        $this->assertIsArray($fetchedUser);
+        $fetchedInfo = $fetchedUser['info'] ?? null;
+        $this->assertIsArray($fetchedInfo);
+        $this->assertEquals('CA', $fetchedInfo['country']);
 
         // Test 11b: Test Query::select to limit returned attributes
         $results = $database->find($collectionId, [
@@ -226,7 +261,7 @@ trait ObjectAttributeTests
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
         $this->assertIsArray($results[0]->getAttribute('meta'));
-        $this->assertEquals(26, $results[0]->getAttribute('meta')['age']);
+        $this->assertEquals(26, $results[0]->getArray('meta')['age']);
 
         // Test 11c: Test Query::select with only $id (exclude meta)
         $results = $database->find($collectionId, [
@@ -271,7 +306,7 @@ trait ObjectAttributeTests
                 ],
             ],
         ]));
-        $this->assertEquals('deep_value', $doc5->getAttribute('meta')['level1']['level2']['level3']['level4']['level5']);
+        $this->assertEquals('deep_value', $this->nestedMetaValue($doc5->getArray('meta'), ['level1', 'level2', 'level3', 'level4', 'level5']));
 
         // Test 15: Query deeply nested structure
         $results = $database->find($collectionId, [
@@ -320,11 +355,11 @@ trait ObjectAttributeTests
                 'object' => ['key' => 'value'],
             ],
         ]));
-        $this->assertEquals('text', $doc6->getAttribute('meta')['string']);
-        $this->assertEquals(42, $doc6->getAttribute('meta')['number']);
-        $this->assertEquals(3.14, $doc6->getAttribute('meta')['float']);
-        $this->assertTrue($doc6->getAttribute('meta')['boolean']);
-        $this->assertNull($doc6->getAttribute('meta')['null_value']);
+        $this->assertEquals('text', $doc6->getArray('meta')['string']);
+        $this->assertEquals(42, $doc6->getArray('meta')['number']);
+        $this->assertEquals(3.14, $doc6->getArray('meta')['float']);
+        $this->assertTrue($doc6->getArray('meta')['boolean']);
+        $this->assertNull($doc6->getArray('meta')['null_value']);
 
         // Test 18: Query with boolean value
         $results = $database->find($collectionId, [
@@ -413,9 +448,12 @@ trait ObjectAttributeTests
                 'company' => 'TechCorp',
             ],
         ]));
-        $this->assertIsArray($doc9->getAttribute('meta')['projects']);
-        $this->assertCount(2, $doc9->getAttribute('meta')['projects']);
-        $this->assertEquals('Project A', $doc9->getAttribute('meta')['projects'][0]['name']);
+        $projects = $doc9->getArray('meta')['projects'] ?? null;
+        $this->assertIsArray($projects);
+        $this->assertCount(2, $projects);
+        $project = $projects[0] ?? null;
+        $this->assertIsArray($project);
+        $this->assertEquals('Project A', $project['name']);
 
         // Test 25: Query using equal with nested key
         $results = $database->find($collectionId, [
@@ -454,8 +492,8 @@ trait ObjectAttributeTests
                 'symbols' => '@#$%^&*()',
             ],
         ]));
-        $this->assertEquals('Test with "quotes" and \'apostrophes\'', $doc10->getAttribute('meta')['description']);
-        $this->assertEquals('🚀🎉', $doc10->getAttribute('meta')['emoji']);
+        $this->assertEquals('Test with "quotes" and \'apostrophes\'', $doc10->getArray('meta')['description']);
+        $this->assertEquals('🚀🎉', $doc10->getArray('meta')['emoji']);
 
         // Test 27: Query with special characters
         $results = $database->find($collectionId, [
@@ -509,8 +547,9 @@ trait ObjectAttributeTests
                 ],
             ],
         ]));
-        $this->assertIsArray($doc12->getAttribute('meta')['matrix']);
-        $this->assertEquals([1, 2, 3], $doc12->getAttribute('meta')['matrix'][0]);
+        $matrix = $doc12->getArray('meta')['matrix'] ?? null;
+        $this->assertIsArray($matrix);
+        $this->assertEquals([1, 2, 3], $matrix[0]);
 
         // Test 32: Contains query with nested array
         $results = $database->find($collectionId, [
@@ -522,13 +561,13 @@ trait ObjectAttributeTests
         // Test 33: Test getDocument with various documents
         $fetchedDoc6 = $database->getDocument($collectionId, 'doc6');
         $this->assertEquals('doc6', $fetchedDoc6->getId());
-        $this->assertEquals('text', $fetchedDoc6->getAttribute('meta')['string']);
-        $this->assertEquals(42, $fetchedDoc6->getAttribute('meta')['number']);
-        $this->assertTrue($fetchedDoc6->getAttribute('meta')['boolean']);
+        $this->assertEquals('text', $fetchedDoc6->getArray('meta')['string']);
+        $this->assertEquals(42, $fetchedDoc6->getArray('meta')['number']);
+        $this->assertTrue($fetchedDoc6->getArray('meta')['boolean']);
 
         $fetchedDoc10 = $database->getDocument($collectionId, 'doc10');
-        $this->assertEquals('🚀🎉', $fetchedDoc10->getAttribute('meta')['emoji']);
-        $this->assertEquals('Test with "quotes" and \'apostrophes\'', $fetchedDoc10->getAttribute('meta')['description']);
+        $this->assertEquals('🚀🎉', $fetchedDoc10->getArray('meta')['emoji']);
+        $this->assertEquals('Test with "quotes" and \'apostrophes\'', $fetchedDoc10->getArray('meta')['description']);
 
         // Test 34: Test Query::select with complex nested structures
         $results = $database->find($collectionId, [
@@ -547,7 +586,7 @@ trait ObjectAttributeTests
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc5', $results[0]->getId());
-        $this->assertEquals('deep_value', $results[0]->getAttribute('meta')['level1']['level2']['level3']['level4']['level5']);
+        $this->assertEquals('deep_value', $this->nestedMetaValue($results[0]->getArray('meta'), ['level1', 'level2', 'level3', 'level4', 'level5']));
 
         // Test 35: Test selecting multiple documents and verifying object attributes
         $allDocs = $database->find($collectionId, [
@@ -571,7 +610,7 @@ trait ObjectAttributeTests
         ]);
         $this->assertCount(1, $results);
         $this->assertIsArray($results[0]->getAttribute('meta'));
-        $this->assertEquals(['php', 'javascript', 'python', 'go', 'rust'], $results[0]->getAttribute('meta')['tags']);
+        $this->assertEquals(['php', 'javascript', 'python', 'go', 'rust'], $results[0]->getArray('meta')['tags']);
 
         // Clean up
         $database->deleteCollection($collectionId);

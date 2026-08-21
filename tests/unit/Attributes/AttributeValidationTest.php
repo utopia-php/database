@@ -90,6 +90,9 @@ class AttributeValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     */
     private function setupCollection(string $id, array $attributes = []): void
     {
         $collection = new Document([

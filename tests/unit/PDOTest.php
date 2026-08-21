@@ -141,7 +141,6 @@ class PDOTest extends TestCase
 
         $result = $pdoWrapper->prepare('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY]);
 
-        $this->assertInstanceOf(PDOStatement::class, $result);
         $this->assertSame($pdoStatementStub, $result->getStatement());
     }
 

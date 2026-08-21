@@ -69,7 +69,6 @@ class AttributeModelTest extends TestCase
 
         $doc = $attr->toDocument();
 
-        $this->assertInstanceOf(Document::class, $doc);
         $this->assertSame('email', $doc->getId());
         $this->assertSame('email', $doc->getAttribute('key'));
         $this->assertSame('string', $doc->getAttribute('type'));

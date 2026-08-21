@@ -46,6 +46,11 @@ class Collection extends Document
         parent::__construct(\array_merge($data, $this->metadata));
     }
 
+    public function isEmpty(): bool
+    {
+        return $this->getId() === '';
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */
@@ -96,6 +101,17 @@ class Collection extends Document
         return $collection;
     }
 
+    /**
+     * @return (
+     *     $name is 'id' ? string :
+     *     $name is 'name' ? string :
+     *     $name is 'attributes' ? array<Attribute> :
+     *     $name is 'indexes' ? array<Index> :
+     *     $name is 'permissions' ? array<string>|null :
+     *     $name is 'documentSecurity' ? bool :
+     *     mixed
+     * )
+     */
     public function __get(string $name): mixed
     {
         switch ($name) {
@@ -107,9 +123,9 @@ class Collection extends Document
 
                 return $value;
             case 'attributes':
-                return $this->getAttribute('attributes', []);
+                return self::castAttributes($this->getArray('attributes'));
             case 'indexes':
-                return $this->getAttribute('indexes', []);
+                return self::castIndexes($this->getArray('indexes'));
             case 'permissions':
                 return $this->offsetExists(self::PERMISSIONS) ? $this->getPermissions() : null;
             case 'documentSecurity':

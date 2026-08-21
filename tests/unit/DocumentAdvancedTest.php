@@ -210,10 +210,15 @@ class DocumentAdvancedTest extends TestCase
         ]);
 
         $copy = $doc->getArrayCopy();
-        $this->assertIsArray($copy['children']);
-        $this->assertCount(2, $copy['children']);
-        $this->assertSame('a', $copy['children'][0]['$id']);
-        $this->assertSame('b', $copy['children'][1]['$id']);
+        $children = $copy['children'] ?? null;
+        $this->assertIsArray($children);
+        $this->assertCount(2, $children);
+        $first = $children[0] ?? null;
+        $second = $children[1] ?? null;
+        $this->assertIsArray($first);
+        $this->assertIsArray($second);
+        $this->assertSame('a', $first['$id'] ?? null);
+        $this->assertSame('b', $second['$id'] ?? null);
     }
 
     public function testIsEmptyOnDifferentStates(): void
@@ -248,9 +253,8 @@ class DocumentAdvancedTest extends TestCase
             'email' => 'john@example.com',
         ]);
 
-        $result = $doc->removeAttribute('name');
+        $doc->removeAttribute('name');
 
-        $this->assertInstanceOf(Document::class, $result);
         $this->assertNull($doc->getAttribute('name'));
         $this->assertFalse($doc->isSet('name'));
         $this->assertSame('john@example.com', $doc->getAttribute('email'));
@@ -260,9 +264,8 @@ class DocumentAdvancedTest extends TestCase
     {
         $doc = new Document(['$id' => 'test', 'a' => 1, 'b' => 2]);
 
-        $result = $doc->removeAttribute('a')->removeAttribute('b');
+        $doc->removeAttribute('a')->removeAttribute('b');
 
-        $this->assertInstanceOf(Document::class, $result);
         $this->assertFalse($doc->isSet('a'));
         $this->assertFalse($doc->isSet('b'));
     }
@@ -408,11 +411,10 @@ class DocumentAdvancedTest extends TestCase
             ],
         ]);
 
-        /** @var array<Document> $children */
-        $children = $doc->getAttribute('children');
+        $children = $doc->getDocuments('children');
         $this->assertCount(2, $children);
-        $this->assertInstanceOf(Document::class, $children[0]);
-        $this->assertInstanceOf(Document::class, $children[1]);
+        $this->assertSame('a', $children[0]->getId());
+        $this->assertSame('b', $children[1]->getId());
     }
 
     public function testFindWithArrayValues(): void

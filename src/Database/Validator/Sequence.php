@@ -83,7 +83,7 @@ class Sequence extends Validator
 
         return match ($idType) {
             ColumnType::Uuid7 => \is_string($value) && preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i', $value) === 1,
-            ColumnType::Integer => (new Range($this->primary ? 1 : 0, Database::MAX_BIG_INT, ColumnType::Integer->value))->isValid($value),
+            ColumnType::Integer => (new Range(1, Database::MAX_BIG_INT, ColumnType::Integer->value))->isValid($value),
             default => false,
         };
     }

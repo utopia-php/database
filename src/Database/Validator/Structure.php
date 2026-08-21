@@ -153,7 +153,7 @@ class Structure extends Validator
      * Add a new Validator
      * Stores a callback and required params to create Validator
      *
-     * @param  Closure  $callback  Callback that accepts $params in order and returns Validator
+     * @param  Closure(array<string, mixed>): Validator  $callback
      * @param  ColumnType  $type  Primitive data type for validation
      */
     public static function addFormat(string $name, Closure $callback, ColumnType $type): void

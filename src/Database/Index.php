@@ -42,6 +42,17 @@ class Index extends Document
         ]);
     }
 
+    /**
+     * @return (
+     *     $name is 'key' ? string :
+     *     $name is 'type' ? IndexType :
+     *     $name is 'attributes' ? array<string> :
+     *     $name is 'lengths' ? array<int|null> :
+     *     $name is 'orders' ? array<Order|null> :
+     *     $name is 'ttl' ? int :
+     *     mixed
+     * )
+     */
     public function __get(string $name): mixed
     {
         switch ($name) {
@@ -58,9 +69,21 @@ class Index extends Document
 
                 return IndexType::from(\is_string($type) ? $type : IndexType::Key->value);
             case 'attributes':
-                return $this->getAttribute('attributes', []);
+                $attributes = $this->getAttribute('attributes', []);
+                if (! \is_array($attributes)) {
+                    return [];
+                }
+                /** @var array<string> $attributes */
+
+                return $attributes;
             case 'lengths':
-                return $this->getAttribute('lengths', []);
+                $lengths = $this->getAttribute('lengths', []);
+                if (! \is_array($lengths)) {
+                    return [];
+                }
+                /** @var array<int|null> $lengths */
+
+                return $lengths;
             case 'orders':
                 $stored = $this->getAttribute('orders', []);
 

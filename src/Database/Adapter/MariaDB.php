@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use PDO;
 use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOStatementProxy;
@@ -661,7 +662,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
             $this->execute($stmt);
 
-            $document[Document::SEQUENCE] = $this->pdo->lastInsertId();
+            $document[Document::SEQUENCE] = $this->getPDO()->lastInsertId();
 
             if (empty($document[Document::SEQUENCE])) {
                 throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
@@ -1528,24 +1529,33 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $stmt->bindParam(':schema', $schema);
             $stmt->bindParam(':table', $collection);
             $this->execute($stmt);
-            $rows = $stmt->fetchAll();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
             $stmt->closeCursor();
 
             $grouped = [];
             foreach ($rows as $row) {
-                $name = $row['indexName'];
+                if (! \is_array($row)) {
+                    continue;
+                }
+                $name = \is_string($row['indexName'] ?? null) ? $row['indexName'] : '';
+                if ($name === '') {
+                    continue;
+                }
                 if (!isset($grouped[$name])) {
+                    $indexType = \is_string($row['indexType'] ?? null) ? $row['indexType'] : '';
+                    $nonUnique = \is_numeric($row['nonUnique'] ?? null) ? (int) $row['nonUnique'] : 0;
                     $grouped[$name] = [
                         Document::ID => $name,
                         'indexName' => $name,
-                        'indexType' => $row['indexType'],
-                        'nonUnique' => (int)$row['nonUnique'],
+                        'indexType' => $indexType,
+                        'nonUnique' => $nonUnique,
                         'columns' => [],
                         'lengths' => [],
                     ];
                 }
-                $grouped[$name]['columns'][] = $row['columnName'];
-                $grouped[$name]['lengths'][] = $row['subPart'] !== null ? (int)$row['subPart'] : null;
+                $grouped[$name]['columns'][] = \is_string($row['columnName'] ?? null) ? $row['columnName'] : '';
+                $subPart = $row['subPart'] ?? null;
+                $grouped[$name]['lengths'][] = \is_numeric($subPart) ? (int) $subPart : null;
             }
 
             return \array_map(fn ($idx) => new Document($idx), \array_values($grouped));

@@ -75,6 +75,9 @@ class IncreaseDecreaseTest extends TestCase
         $this->database->getAuthorization()->addRole(Role::any()->toString());
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     */
     private function setupCollectionWithDocument(
         string $collectionId,
         Document $existingDoc,

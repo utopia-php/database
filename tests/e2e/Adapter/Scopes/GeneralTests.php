@@ -8,8 +8,14 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -146,7 +152,9 @@ trait GeneralTests
             return;
         }
 
-        $this->markTestSkipped('tenantPerDocument requires collection-level tenant bypass (not yet implemented)');
+        if (getenv('ENABLE_TENANT_PER_DOCUMENT_TEST') !== '1') {
+            $this->markTestSkipped('tenantPerDocument requires collection-level tenant bypass (not yet implemented)');
+        }
 
         $tenantPerDocDb = 'sharedTablesTenantPerDocument_'.static::getTestToken();
 
@@ -554,7 +562,7 @@ trait GeneralTests
         ]));
 
         // Outer transaction should succeed even if inner transaction throws
-        $result = $database->withTransaction(function () use ($database) {
+        $database->withTransaction(function () use ($database) {
             $database->createDocument('txNested', new Document([
                 '$id' => 'outer_doc',
                 '$permissions' => [
@@ -580,8 +588,6 @@ trait GeneralTests
 
             return true;
         });
-
-        $this->assertTrue($result);
 
         // inTransaction must be false after everything completes
         $this->assertFalse(

@@ -228,18 +228,18 @@ trait RelationshipTests
         $this->assertEquals('zoo1', $zoo->getId());
         $this->assertEquals('Bronx Zoo', $zoo->getAttribute('name'));
         $this->assertArrayHasKey('animals', $zoo);
-        $this->assertEquals(2, count($zoo->getAttribute('animals')));
-        $this->assertArrayHasKey('president', $zoo->getAttribute('animals')[0]);
-        $this->assertArrayHasKey('veterinarian', $zoo->getAttribute('animals')[0]);
+        $this->assertCount(2, $zoo->getDocuments('animals'));
+        $this->assertArrayHasKey('president', $zoo->getDocuments('animals')[0]);
+        $this->assertArrayHasKey('veterinarian', $zoo->getDocuments('animals')[0]);
 
         $zoo = $database->findOne('zoo');
 
         $this->assertEquals('zoo1', $zoo->getId());
         $this->assertEquals('Bronx Zoo', $zoo->getAttribute('name'));
         $this->assertArrayHasKey('animals', $zoo);
-        $this->assertEquals(2, count($zoo->getAttribute('animals')));
-        $this->assertArrayHasKey('president', $zoo->getAttribute('animals')[0]);
-        $this->assertArrayHasKey('veterinarian', $zoo->getAttribute('animals')[0]);
+        $this->assertCount(2, $zoo->getDocuments('animals'));
+        $this->assertArrayHasKey('president', $zoo->getDocuments('animals')[0]);
+        $this->assertArrayHasKey('veterinarian', $zoo->getDocuments('animals')[0]);
 
         /**
          * Check Veterinarians data
@@ -248,12 +248,12 @@ trait RelationshipTests
 
         $this->assertEquals('dr.pol', $veterinarian->getId());
         $this->assertArrayHasKey('presidents', $veterinarian);
-        $this->assertEquals(1, count($veterinarian->getAttribute('presidents')));
-        $this->assertArrayHasKey('animal', $veterinarian->getAttribute('presidents')[0]);
+        $this->assertCount(1, $veterinarian->getDocuments('presidents'));
+        $this->assertArrayHasKey('animal', $veterinarian->getDocuments('presidents')[0]);
         $this->assertArrayHasKey('animals', $veterinarian);
-        $this->assertEquals(1, count($veterinarian->getAttribute('animals')));
-        $this->assertArrayHasKey('zoo', $veterinarian->getAttribute('animals')[0]);
-        $this->assertArrayHasKey('president', $veterinarian->getAttribute('animals')[0]);
+        $this->assertCount(1, $veterinarian->getDocuments('animals'));
+        $this->assertArrayHasKey('zoo', $veterinarian->getDocuments('animals')[0]);
+        $this->assertArrayHasKey('president', $veterinarian->getDocuments('animals')[0]);
 
         $veterinarian = $database->findOne('veterinarians', [
             Query::equal('$id', ['dr.pol']),
@@ -261,12 +261,12 @@ trait RelationshipTests
 
         $this->assertEquals('dr.pol', $veterinarian->getId());
         $this->assertArrayHasKey('presidents', $veterinarian);
-        $this->assertEquals(1, count($veterinarian->getAttribute('presidents')));
-        $this->assertArrayHasKey('animal', $veterinarian->getAttribute('presidents')[0]);
+        $this->assertCount(1, $veterinarian->getDocuments('presidents'));
+        $this->assertArrayHasKey('animal', $veterinarian->getDocuments('presidents')[0]);
         $this->assertArrayHasKey('animals', $veterinarian);
-        $this->assertEquals(1, count($veterinarian->getAttribute('animals')));
-        $this->assertArrayHasKey('zoo', $veterinarian->getAttribute('animals')[0]);
-        $this->assertArrayHasKey('president', $veterinarian->getAttribute('animals')[0]);
+        $this->assertCount(1, $veterinarian->getDocuments('animals'));
+        $this->assertArrayHasKey('zoo', $veterinarian->getDocuments('animals')[0]);
+        $this->assertArrayHasKey('president', $veterinarian->getDocuments('animals')[0]);
 
         /**
          * Check Animals data
@@ -275,12 +275,12 @@ trait RelationshipTests
 
         $this->assertEquals('iguana', $animal->getId());
         $this->assertArrayHasKey('zoo', $animal);
-        $this->assertEquals('Bronx Zoo', $animal['zoo']->getAttribute('name'));
+        $this->assertEquals('Bronx Zoo', $animal->getDocument('zoo')->getAttribute('name'));
         $this->assertArrayHasKey('veterinarian', $animal);
-        $this->assertEquals('dr.pol', $animal['veterinarian']->getId());
-        $this->assertArrayHasKey('presidents', $animal['veterinarian']);
+        $this->assertEquals('dr.pol', $animal->getDocument('veterinarian')->getId());
+        $this->assertArrayHasKey('presidents', $animal->getDocument('veterinarian'));
         $this->assertArrayHasKey('president', $animal);
-        $this->assertEquals('bush', $animal['president']->getId());
+        $this->assertEquals('bush', $animal->getDocument('president')->getId());
 
         $animal = $database->findOne('__animals', [
             Query::equal('$id', ['tiger']),
@@ -288,12 +288,12 @@ trait RelationshipTests
 
         $this->assertEquals('tiger', $animal->getId());
         $this->assertArrayHasKey('zoo', $animal);
-        $this->assertEquals('Bronx Zoo', $animal['zoo']->getAttribute('name'));
+        $this->assertEquals('Bronx Zoo', $animal->getDocument('zoo')->getAttribute('name'));
         $this->assertArrayHasKey('veterinarian', $animal);
-        $this->assertEquals('dr.seuss', $animal['veterinarian']->getId());
-        $this->assertArrayHasKey('presidents', $animal['veterinarian']);
+        $this->assertEquals('dr.seuss', $animal->getDocument('veterinarian')->getId());
+        $this->assertArrayHasKey('presidents', $animal->getDocument('veterinarian'));
         $this->assertArrayHasKey('president', $animal);
-        $this->assertEquals('biden', $animal['president']->getId());
+        $this->assertEquals('biden', $animal->getDocument('president')->getId());
 
         /**
          * Check President data
@@ -303,7 +303,7 @@ trait RelationshipTests
         $this->assertEquals('trump', $president->getId());
         $this->assertArrayHasKey('animal', $president);
         $this->assertArrayHasKey('votes', $president);
-        $this->assertEquals(2, count($president['votes']));
+        $this->assertCount(2, $president->getDocuments('votes'));
 
         /**
          * Check President data
@@ -315,7 +315,7 @@ trait RelationshipTests
         $this->assertEquals('bush', $president->getId());
         $this->assertArrayHasKey('animal', $president);
         $this->assertArrayHasKey('votes', $president);
-        $this->assertEquals(0, count($president['votes']));
+        $this->assertCount(0, $president->getDocuments('votes'));
 
         $president = $database->findOne('presidents', [
             Query::select([
@@ -327,8 +327,8 @@ trait RelationshipTests
 
         $this->assertEquals('trump', $president->getId());
         $this->assertArrayHasKey('votes', $president);
-        $this->assertEquals(2, count($president['votes']));
-        $this->assertArrayNotHasKey('animals', $president['votes'][0]); // Not exist
+        $this->assertCount(2, $president->getDocuments('votes'));
+        $this->assertArrayNotHasKey('animals', $president->getDocuments('votes')[0]); // Not exist
 
         $president = $database->findOne('presidents', [
             Query::select([
@@ -341,8 +341,8 @@ trait RelationshipTests
 
         $this->assertEquals('trump', $president->getId());
         $this->assertArrayHasKey('votes', $president);
-        $this->assertEquals(2, count($president['votes']));
-        $this->assertArrayHasKey('animals', $president['votes'][0]); // Exist
+        $this->assertCount(2, $president->getDocuments('votes'));
+        $this->assertArrayHasKey('animals', $president->getDocuments('votes')[0]); // Exist
 
         /**
          * Check Selects queries
@@ -369,7 +369,7 @@ trait RelationshipTests
         $this->assertArrayHasKey('animals', $veterinarian);
         $this->assertArrayNotHasKey('presidents', $veterinarian);
 
-        $animal = $veterinarian['animals'][0];
+        $animal = $veterinarian->getDocuments('animals')[0];
 
         $this->assertArrayHasKey('president', $animal);
         $this->assertEquals('bush', $animal->getAttribute('president')); // Check president is a value
@@ -391,12 +391,12 @@ trait RelationshipTests
         $this->assertArrayHasKey('animals', $veterinarian);
         $this->assertArrayNotHasKey('presidents', $veterinarian);
 
-        $animal = $veterinarian['animals'][0];
+        $animal = $veterinarian->getDocuments('animals')[0];
 
         $this->assertArrayHasKey('president', $animal);
-        $this->assertEquals('Bush', $animal->getAttribute('president')->getAttribute('lastName')); // Check president is an object
+        $this->assertEquals('Bush', $animal->getDocument('president')->getAttribute('lastName')); // Check president is an object
         $this->assertArrayHasKey('zoo', $animal);
-        $this->assertEquals('Bronx Zoo', $animal->getAttribute('zoo')->getAttribute('name')); // Check zoo is an object
+        $this->assertEquals('Bronx Zoo', $animal->getDocument('zoo')->getAttribute('name')); // Check zoo is an object
     }
 
     public function testSimpleRelationshipPopulation(): void
@@ -448,27 +448,15 @@ trait RelationshipTests
 
         // fetch user with posts populated
         $fetchedUser = $database->getDocument('usersSimple', 'user1');
-        $posts = $fetchedUser->getAttribute('posts', []);
+        $posts = $fetchedUser->getDocuments('posts');
 
-        // Basic assertions
-        $this->assertIsArray($posts, 'Posts should be an array');
         $this->assertCount(2, $posts, 'Should have 2 posts');
+        $this->assertEquals('First Post', $posts[0]->getAttribute('title'), 'First post title should be populated');
 
-        if (! empty($posts)) {
-            $this->assertInstanceOf(Document::class, $posts[0], 'First post should be a Document object');
-            $this->assertEquals('First Post', $posts[0]->getAttribute('title'), 'First post title should be populated');
-        }
-
-        // fetch posts with author populated
         $fetchedPosts = $database->find('postsSimple');
 
         $this->assertCount(2, $fetchedPosts, 'Should fetch 2 posts');
-
-        if (! empty($fetchedPosts)) {
-            $author = $fetchedPosts[0]->getAttribute('author');
-            $this->assertInstanceOf(Document::class, $author, 'Author should be a Document object');
-            $this->assertEquals('John Doe', $author->getAttribute('name'), 'Author name should be populated');
-        }
+        $this->assertEquals('John Doe', $fetchedPosts[0]->getDocument('author')->getAttribute('name'), 'Author name should be populated');
     }
 
     public function testDeleteRelatedCollection(): void
@@ -490,32 +478,32 @@ trait RelationshipTests
 
         $this->assertEquals(true, $database->deleteCollection('c1'));
         $collection = $database->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c1'));
         $database->createRelationship(Relationship::oneToOne(collection: 'c1', relatedCollection: 'c2'));
 
         $this->assertEquals(true, $database->deleteCollection('c2'));
         $collection = $database->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c2'));
         $database->createRelationship(Relationship::oneToOne(collection: 'c1', relatedCollection: 'c2', twoWay: true));
 
         $this->assertEquals(true, $database->deleteCollection('c1'));
         $collection = $database->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c1'));
         $database->createRelationship(Relationship::oneToOne(collection: 'c1', relatedCollection: 'c2', twoWay: true));
 
         $this->assertEquals(true, $database->deleteCollection('c2'));
         $collection = $database->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         // ONE_TO_MANY
         $database->createCollection(new Collection(id: 'c2'));
@@ -523,32 +511,32 @@ trait RelationshipTests
 
         $this->assertEquals(true, $database->deleteCollection('c1'));
         $collection = $database->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c1'));
         $database->createRelationship(Relationship::oneToMany(collection: 'c1', relatedCollection: 'c2'));
 
         $this->assertEquals(true, $database->deleteCollection('c2'));
         $collection = $database->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c2'));
         $database->createRelationship(Relationship::oneToMany(collection: 'c1', relatedCollection: 'c2', twoWay: true));
 
         $this->assertEquals(true, $database->deleteCollection('c1'));
         $collection = $database->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c1'));
         $database->createRelationship(Relationship::oneToMany(collection: 'c1', relatedCollection: 'c2', twoWay: true));
 
         $this->assertEquals(true, $database->deleteCollection('c2'));
         $collection = $database->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         // RELATION_MANY_TO_ONE
         $database->createCollection(new Collection(id: 'c2'));
@@ -556,32 +544,32 @@ trait RelationshipTests
 
         $this->assertEquals(true, $database->deleteCollection('c1'));
         $collection = $database->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c1'));
         $database->createRelationship(Relationship::manyToOne(collection: 'c1', relatedCollection: 'c2'));
 
         $this->assertEquals(true, $database->deleteCollection('c2'));
         $collection = $database->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c2'));
         $database->createRelationship(Relationship::manyToOne(collection: 'c1', relatedCollection: 'c2', twoWay: true));
 
         $this->assertEquals(true, $database->deleteCollection('c1'));
         $collection = $database->getCollection('c2');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
 
         $database->createCollection(new Collection(id: 'c1'));
         $database->createRelationship(Relationship::manyToOne(collection: 'c1', relatedCollection: 'c2', twoWay: true));
 
         $this->assertEquals(true, $database->deleteCollection('c2'));
         $collection = $database->getCollection('c1');
-        $this->assertCount(0, $collection->getAttribute('attributes'));
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->attributes);
+        $this->assertCount(0, $collection->indexes);
     }
 
     public function testVirtualRelationsAttributes(): void
@@ -1075,7 +1063,7 @@ trait RelationshipTests
         // Check our data is OK
         $docA = $database->getDocument('rnRsTestA', $docA->getId());
         $this->assertArrayHasKey('rnRsTestB_renamed_2', $docA->getAttributes());
-        $this->assertEquals($docB->getId(), $docA->getAttribute('rnRsTestB_renamed_2')['$id']);
+        $this->assertEquals($docB->getId(), $docA->getDocument('rnRsTestB_renamed_2')->getId());
     }
 
     public function testSelectRelationshipAttributes(): void
@@ -1142,11 +1130,11 @@ trait RelationshipTests
         }
 
         $this->assertEquals('Ford', $make['name']);
-        $this->assertEquals(2, \count($make['models']));
-        $this->assertEquals('Fiesta', $make['models'][0]['name']);
-        $this->assertEquals('Focus', $make['models'][1]['name']);
-        $this->assertArrayNotHasKey('year', $make['models'][0]);
-        $this->assertArrayNotHasKey('year', $make['models'][1]);
+        $this->assertCount(2, $make->getDocuments('models'));
+        $this->assertEquals('Fiesta', $make->getDocuments('models')[0]->getAttribute('name'));
+        $this->assertEquals('Focus', $make->getDocuments('models')[1]->getAttribute('name'));
+        $this->assertArrayNotHasKey('year', $make->getDocuments('models')[0]);
+        $this->assertArrayNotHasKey('year', $make->getDocuments('models')[1]);
         $this->assertArrayHasKey('$id', $make);
         $this->assertArrayHasKey('$sequence', $make);
         $this->assertArrayHasKey('$permissions', $make);
@@ -1261,11 +1249,11 @@ trait RelationshipTests
         }
 
         $this->assertEquals('Ford', $make['name']);
-        $this->assertEquals(2, \count($make['models']));
-        $this->assertArrayNotHasKey('name', $make['models'][0]);
-        $this->assertArrayNotHasKey('name', $make['models'][1]);
-        $this->assertEquals(2010, $make['models'][0]['year']);
-        $this->assertEquals(2011, $make['models'][1]['year']);
+        $this->assertCount(2, $make->getDocuments('models'));
+        $this->assertArrayNotHasKey('name', $make->getDocuments('models')[0]);
+        $this->assertArrayNotHasKey('name', $make->getDocuments('models')[1]);
+        $this->assertEquals(2010, $make->getDocuments('models')[0]->getAttribute('year'));
+        $this->assertEquals(2011, $make->getDocuments('models')[1]->getAttribute('year'));
 
         // Select all parent attributes, all child attributes
         $make = $database->findOne('make', [
@@ -1277,11 +1265,11 @@ trait RelationshipTests
         }
 
         $this->assertEquals('Ford', $make['name']);
-        $this->assertEquals(2, \count($make['models']));
-        $this->assertEquals('Fiesta', $make['models'][0]['name']);
-        $this->assertEquals('Focus', $make['models'][1]['name']);
-        $this->assertEquals(2010, $make['models'][0]['year']);
-        $this->assertEquals(2011, $make['models'][1]['year']);
+        $this->assertCount(2, $make->getDocuments('models'));
+        $this->assertEquals('Fiesta', $make->getDocuments('models')[0]->getAttribute('name'));
+        $this->assertEquals('Focus', $make->getDocuments('models')[1]->getAttribute('name'));
+        $this->assertEquals(2010, $make->getDocuments('models')[0]->getAttribute('year'));
+        $this->assertEquals(2011, $make->getDocuments('models')[1]->getAttribute('year'));
 
         // Select all parent attributes, all child attributes
         // Must select parent if selecting children
@@ -1294,11 +1282,11 @@ trait RelationshipTests
         }
 
         $this->assertEquals('Ford', $make['name']);
-        $this->assertEquals(2, \count($make['models']));
-        $this->assertEquals('Fiesta', $make['models'][0]['name']);
-        $this->assertEquals('Focus', $make['models'][1]['name']);
-        $this->assertEquals(2010, $make['models'][0]['year']);
-        $this->assertEquals(2011, $make['models'][1]['year']);
+        $this->assertCount(2, $make->getDocuments('models'));
+        $this->assertEquals('Fiesta', $make->getDocuments('models')[0]->getAttribute('name'));
+        $this->assertEquals('Focus', $make->getDocuments('models')[1]->getAttribute('name'));
+        $this->assertEquals(2010, $make->getDocuments('models')[0]->getAttribute('year'));
+        $this->assertEquals(2011, $make->getDocuments('models')[1]->getAttribute('year'));
 
         // Select all parent attributes, no child attributes
         $make = $database->findOne('make', [
@@ -1317,7 +1305,7 @@ trait RelationshipTests
         ]);
 
         $this->assertEquals('Ford', $make['name']);
-        $this->assertEquals(2, \count($make['models']));
+        $this->assertCount(2, $make->getDocuments('models'));
 
         /*
          * FROM CHILD TO PARENT
@@ -1329,8 +1317,8 @@ trait RelationshipTests
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
-        $this->assertEquals('Ford', $model['make']['name']);
-        $this->assertArrayNotHasKey('origin', $model['make']);
+        $this->assertEquals('Ford', $model->getDocument('make')->getAttribute('name'));
+        $this->assertArrayNotHasKey('origin', $model->getDocument('make'));
         $this->assertArrayNotHasKey('year', $model);
         $this->assertArrayHasKey('name', $model);
 
@@ -1340,7 +1328,7 @@ trait RelationshipTests
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
-        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertEquals('Ford', $model->getDocument('make')->getAttribute('name'));
         $this->assertArrayHasKey('year', $model);
 
         // Select all parent attributes, all child attributes
@@ -1349,9 +1337,9 @@ trait RelationshipTests
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
-        $this->assertEquals('Ford', $model['make']['name']);
+        $this->assertEquals('Ford', $model->getDocument('make')->getAttribute('name'));
         $this->assertArrayHasKey('year', $model);
-        $this->assertArrayHasKey('name', $model['make']);
+        $this->assertArrayHasKey('name', $model->getDocument('make'));
 
         // Select all parent attributes, no child attributes
         $model = $database->findOne('model', [
@@ -1368,8 +1356,8 @@ trait RelationshipTests
         ]);
 
         $this->assertEquals('Fiesta', $model['name']);
-        $this->assertEquals('Ford', $model['make']['name']);
-        $this->assertEquals('USA', $model['make']['origin']);
+        $this->assertEquals('Ford', $model->getDocument('make')->getAttribute('name'));
+        $this->assertEquals('USA', $model->getDocument('make')->getAttribute('origin'));
     }
 
     public function testInheritRelationshipPermissions(): void
@@ -1431,15 +1419,15 @@ trait RelationshipTests
 
         $lawn1 = $database->getDocument('lawns', 'lawn1');
         $this->assertEquals($permissions, $lawn1->getPermissions());
-        $this->assertEquals($permissions, $lawn1['trees'][0]->getPermissions());
-        $this->assertEquals($permissions, $lawn1['trees'][0]['birds'][0]->getPermissions());
-        $this->assertEquals($permissions, $lawn1['trees'][0]['birds'][1]->getPermissions());
+        $this->assertEquals($permissions, $lawn1->getDocuments('trees')[0]->getPermissions());
+        $this->assertEquals($permissions, $lawn1->getDocuments('trees')[0]->getDocuments('birds')[0]->getPermissions());
+        $this->assertEquals($permissions, $lawn1->getDocuments('trees')[0]->getDocuments('birds')[1]->getPermissions());
 
         $tree1 = $database->getDocument('trees', 'tree1');
         $this->assertEquals($permissions, $tree1->getPermissions());
-        $this->assertEquals($permissions, $tree1['lawn']->getPermissions());
-        $this->assertEquals($permissions, $tree1['birds'][0]->getPermissions());
-        $this->assertEquals($permissions, $tree1['birds'][1]->getPermissions());
+        $this->assertEquals($permissions, $tree1->getDocument('lawn')->getPermissions());
+        $this->assertEquals($permissions, $tree1->getDocuments('birds')[0]->getPermissions());
+        $this->assertEquals($permissions, $tree1->getDocuments('birds')[1]->getPermissions());
     }
 
     public function testUpdateDocumentsRelationships(): void
@@ -1485,7 +1473,7 @@ trait RelationshipTests
         ]));
 
         $sisterDocument = $this->getDatabase()->getDocument('testUpdateDocumentsRelationships2', 'doc1');
-        $this->assertNotNull($sisterDocument);
+        $this->assertFalse($sisterDocument->isEmpty());
 
         $this->getDatabase()->updateDocuments('testUpdateDocumentsRelationships1', new Document([
             'string' => 'text📝 updated',
@@ -1493,13 +1481,13 @@ trait RelationshipTests
 
         $document = $this->getDatabase()->findOne('testUpdateDocumentsRelationships1');
 
-        $this->assertNotFalse($document);
+        $this->assertFalse($document->isEmpty());
         $this->assertEquals('text📝 updated', $document->getAttribute('string'));
 
         $sisterDocument = $this->getDatabase()->getDocument('testUpdateDocumentsRelationships2', 'doc1');
-        $this->assertNotNull($sisterDocument);
+        $this->assertFalse($sisterDocument->isEmpty());
 
-        $relationalDocument = $sisterDocument->getAttribute('testUpdateDocumentsRelationships1');
+        $relationalDocument = $sisterDocument->getDocument('testUpdateDocumentsRelationships1');
         $this->assertEquals('text📝 updated', $relationalDocument->getAttribute('string'));
 
         // Check relationship value updating between each other.
@@ -1531,7 +1519,7 @@ trait RelationshipTests
         $documents = $this->getDatabase()->find('testUpdateDocumentsRelationships2');
 
         foreach ($documents as $document) {
-            $this->assertEquals('doc1', $document->getAttribute('testUpdateDocumentsRelationships1')->getId());
+            $this->assertEquals('doc1', $document->getDocument('testUpdateDocumentsRelationships1')->getId());
         }
     }
 
@@ -1668,13 +1656,13 @@ trait RelationshipTests
                 'name' => 'Community 1',
             ],
         ]));
-        $this->assertEquals('link1', $profile->getAttribute('links')[0]->getId());
-        $this->assertEquals('settings1', $profile->getAttribute('settings')->getId());
-        $this->assertEquals('group1', $profile->getAttribute('group')->getId());
-        $this->assertEquals('community1', $profile->getAttribute('community')->getId());
-        $this->assertEquals('video1', $profile->getAttribute('videos')[0]->getId());
-        $this->assertEquals('product1', $profile->getAttribute('products')[0]->getId());
-        $this->assertEquals('appearance1', $profile->getAttribute('appearance')->getId());
+        $this->assertEquals('link1', $profile->getDocuments('links')[0]->getId());
+        $this->assertEquals('settings1', $profile->getDocument('settings')->getId());
+        $this->assertEquals('group1', $profile->getDocument('group')->getId());
+        $this->assertEquals('community1', $profile->getDocument('community')->getId());
+        $this->assertEquals('video1', $profile->getDocuments('videos')[0]->getId());
+        $this->assertEquals('product1', $profile->getDocuments('products')[0]->getId());
+        $this->assertEquals('appearance1', $profile->getDocument('appearance')->getId());
 
         $profile->setAttribute('links', [
             [
@@ -1695,15 +1683,15 @@ trait RelationshipTests
 
         $updatedProfile = $database->updateDocument('userProfiles', '1', $profile);
 
-        $this->assertEquals('New Link Value', $updatedProfile->getAttribute('links')[0]->getAttribute('title'));
-        $this->assertEquals('New Meta Title', $updatedProfile->getAttribute('settings')->getAttribute('metaTitle'));
-        $this->assertEquals('New Group Name', $updatedProfile->getAttribute('group')->getAttribute('name'));
+        $this->assertEquals('New Link Value', $updatedProfile->getDocuments('links')[0]->getAttribute('title'));
+        $this->assertEquals('New Meta Title', $updatedProfile->getDocument('settings')->getAttribute('metaTitle'));
+        $this->assertEquals('New Group Name', $updatedProfile->getDocument('group')->getAttribute('name'));
 
         // This is the point of test, related documents should be present if they are not updated
-        $this->assertEquals('Video 1', $updatedProfile->getAttribute('videos')[0]->getAttribute('title'));
-        $this->assertEquals('Product 1', $updatedProfile->getAttribute('products')[0]->getAttribute('title'));
-        $this->assertEquals('Meta Title', $updatedProfile->getAttribute('appearance')->getAttribute('metaTitle'));
-        $this->assertEquals('Community 1', $updatedProfile->getAttribute('community')->getAttribute('name'));
+        $this->assertEquals('Video 1', $updatedProfile->getDocuments('videos')[0]->getAttribute('title'));
+        $this->assertEquals('Product 1', $updatedProfile->getDocuments('products')[0]->getAttribute('title'));
+        $this->assertEquals('Meta Title', $updatedProfile->getDocument('appearance')->getAttribute('metaTitle'));
+        $this->assertEquals('Community 1', $updatedProfile->getDocument('community')->getAttribute('name'));
 
         // updating document using two way key in one to many relationship
         $product = $database->getDocument('products', 'product1');
@@ -1712,10 +1700,10 @@ trait RelationshipTests
             'username' => 'updated user value',
         ]);
         $updatedProduct = $database->updateDocument('products', 'product1', $product);
-        $this->assertEquals('updated user value', $updatedProduct->getAttribute('userProfile')->getAttribute('username'));
+        $this->assertEquals('updated user value', $updatedProduct->getDocument('userProfile')->getAttribute('username'));
         $this->assertEquals('Product 1', $updatedProduct->getAttribute('title'));
         $this->assertEquals('product1', $updatedProduct->getId());
-        $this->assertEquals('1', $updatedProduct->getAttribute('userProfile')->getId());
+        $this->assertEquals('1', $updatedProduct->getDocument('userProfile')->getId());
 
         $database->deleteCollection('userProfiles');
         $database->deleteCollection('links');
@@ -1873,21 +1861,21 @@ trait RelationshipTests
         $this->assertCount(3, $cars);
 
         $this->assertEquals('ABC123', $cars[0]['plateNumber']);
-        $this->assertEquals('Customer 1', $cars[0]['customer']['name']);
-        $this->assertCount(2, $cars[0]['customer']['inspections']);
-        $this->assertEquals('annual', $cars[0]['customer']['inspections'][0]['type']);
-        $this->assertEquals('safety', $cars[0]['customer']['inspections'][1]['type']);
+        $this->assertEquals('Customer 1', $cars[0]->getDocument('customer')->getAttribute('name'));
+        $this->assertCount(2, $cars[0]->getDocument('customer')->getDocuments('inspections'));
+        $this->assertEquals('annual', $cars[0]->getDocument('customer')->getDocuments('inspections')[0]->getAttribute('type'));
+        $this->assertEquals('safety', $cars[0]->getDocument('customer')->getDocuments('inspections')[1]->getAttribute('type'));
 
         $this->assertEquals('DEF456', $cars[1]['plateNumber']);
-        $this->assertEquals('Customer 2', $cars[1]['customer']['name']);
-        $this->assertCount(2, $cars[1]['customer']['inspections']);
-        $this->assertEquals('emissions', $cars[1]['customer']['inspections'][0]['type']);
-        $this->assertEquals('annual', $cars[1]['customer']['inspections'][1]['type']);
+        $this->assertEquals('Customer 2', $cars[1]->getDocument('customer')->getAttribute('name'));
+        $this->assertCount(2, $cars[1]->getDocument('customer')->getDocuments('inspections'));
+        $this->assertEquals('emissions', $cars[1]->getDocument('customer')->getDocuments('inspections')[0]->getAttribute('type'));
+        $this->assertEquals('annual', $cars[1]->getDocument('customer')->getDocuments('inspections')[1]->getAttribute('type'));
 
         $this->assertEquals('GHI789', $cars[2]['plateNumber']);
-        $this->assertEquals('Customer 3', $cars[2]['customer']['name']);
-        $this->assertCount(1, $cars[2]['customer']['inspections']);
-        $this->assertEquals('safety', $cars[2]['customer']['inspections'][0]['type']);
+        $this->assertEquals('Customer 3', $cars[2]->getDocument('customer')->getAttribute('name'));
+        $this->assertCount(1, $cars[2]->getDocument('customer')->getDocuments('inspections'));
+        $this->assertEquals('safety', $cars[2]->getDocument('customer')->getDocuments('inspections')[0]->getAttribute('type'));
 
         // Test with createDocuments as well
         $database->deleteDocument('car', 'car1');
@@ -1925,9 +1913,9 @@ trait RelationshipTests
 
         // Verify all cars still have nested relationships after batch create
         $this->assertCount(3, $cars);
-        $this->assertCount(2, $cars[0]['customer']['inspections']);
-        $this->assertCount(2, $cars[1]['customer']['inspections']);
-        $this->assertCount(1, $cars[2]['customer']['inspections']);
+        $this->assertCount(2, $cars[0]->getDocument('customer')->getDocuments('inspections'));
+        $this->assertCount(2, $cars[1]->getDocument('customer')->getDocuments('inspections'));
+        $this->assertCount(1, $cars[2]->getDocument('customer')->getDocuments('inspections'));
 
         // Clean up
         $database->deleteCollection('inspection');
@@ -3209,15 +3197,15 @@ trait RelationshipTests
         ]);
         $this->assertCount(0, $orders);
 
-        // Non-existent relationship attribute
+        $threw = false;
         try {
             $database->find('ordersEdge', [
                 Query::equal('nonexistent.attribute', ['value']),
             ]);
-        } catch (\Exception $e) {
-            // Expected - non-existent relationship
-            $this->assertTrue(true);
+        } catch (\Exception) {
+            $threw = true;
         }
+        $this->assertTrue($threw);
 
         // Null or missing relationship
         $database->createDocument('ordersEdge', new Document([

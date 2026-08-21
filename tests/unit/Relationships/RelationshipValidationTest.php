@@ -53,6 +53,10 @@ class RelationshipValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     * @param  array<int, string>  $permissions
+     */
     private function makeCollection(string $id, array $attributes = [], array $permissions = []): Document
     {
         if (empty($permissions)) {
@@ -379,7 +383,7 @@ class RelationshipValidationTest extends TestCase
     {
         $this->expectException(\TypeError::class);
 
-        new Relationship(collection: 'test3', relatedCollection: 'test4', type: 'invalid', twoWay: true);
+        (new \ReflectionClass(Relationship::class))->newInstance('test3', 'test4', 'invalid', true);
     }
 
     public function testDeleteMissingRelationship(): void
@@ -640,7 +644,7 @@ class RelationshipValidationTest extends TestCase
             'articles' => Operator::arrayAppend(['article2']),
         ]));
 
-        $this->assertNotNull($updated);
+        $this->assertSame('author1', $updated->getId());
     }
 
     public function testOneToManyChildSideRejectsArrayOperators(): void
@@ -721,6 +725,6 @@ class RelationshipValidationTest extends TestCase
             'books' => Operator::arrayAppend(['book2']),
         ]));
 
-        $this->assertNotNull($updated);
+        $this->assertSame('library1', $updated->getId());
     }
 }

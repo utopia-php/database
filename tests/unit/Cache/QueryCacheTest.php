@@ -3,6 +3,7 @@
 namespace Tests\Unit\Cache;
 
 use Closure;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory;
@@ -20,7 +21,7 @@ class QueryCacheTest extends TestCase
 {
     private QueryCache $queryCache;
 
-    private Cache $cache;
+    private Cache&Stub $cache;
 
     protected function setUp(): void
     {
@@ -54,7 +55,6 @@ class QueryCacheTest extends TestCase
     public function testGetRegionReturnsDefaultForUnknownCollection(): void
     {
         $region = $this->queryCache->getRegion('unknown');
-        $this->assertInstanceOf(Region::class, $region);
         $this->assertEquals(3600, $region->ttl);
         $this->assertTrue($region->enabled);
     }
@@ -131,7 +131,6 @@ class QueryCacheTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertCount(2, $result);
-        $this->assertInstanceOf(Document::class, $result[0]);
         $this->assertEquals('doc1', $result[0]->getId());
     }
 

@@ -91,6 +91,9 @@ class ObjectAttributeValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     */
     private function makeCollection(string $id, array $attributes = []): Document
     {
         return new Document([
@@ -113,6 +116,9 @@ class ObjectAttributeValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $collections
+     */
     private function setupCollections(array $collections): void
     {
         $meta = $this->metaCollection();
@@ -245,13 +251,16 @@ class ObjectAttributeValidationTest extends TestCase
         $this->assertIsArray($doc->getAttribute('metaDefaultEmpty'));
         $this->assertEmpty($doc->getAttribute('metaDefaultEmpty'));
 
-        $this->assertIsArray($doc->getAttribute('settings'));
-        $this->assertEquals('light', $doc->getAttribute('settings')['config']['theme']);
+        $settings = $doc->getArray('settings');
+        $config = $settings['config'] ?? null;
+        $this->assertIsArray($config);
+        $this->assertEquals('light', $config['theme'] ?? null);
 
-        $this->assertEquals('provided', $doc->getAttribute('profile')['name']);
+        $profile = $doc->getArray('profile');
+        $this->assertEquals('provided', $profile['name'] ?? null);
 
-        $this->assertIsArray($doc->getAttribute('profile2'));
-        $this->assertEquals('anon', $doc->getAttribute('profile2')['name']);
+        $profile2 = $doc->getArray('profile2');
+        $this->assertEquals('anon', $profile2['name'] ?? null);
 
         $this->assertNull($doc->getAttribute('misc'));
     }

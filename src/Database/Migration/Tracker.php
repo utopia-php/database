@@ -66,10 +66,16 @@ class Tracker
      */
     public function getAppliedVersions(): array
     {
-        return \array_map(
-            fn (Document $doc) => $doc->getAttribute('version', ''),
-            $this->getApplied()
-        );
+        return \array_values(\array_filter(
+            \array_map(
+                static function (Document $doc): ?string {
+                    $version = $doc->getAttribute('version', '');
+
+                    return \is_string($version) ? $version : null;
+                },
+                $this->getApplied()
+            ),
+        ));
     }
 
     public function markApplied(string $version, string $name, int $batch): void
@@ -112,7 +118,9 @@ class Tracker
             return 0;
         }
 
-        return (int) $docs[0]->getAttribute('batch', 0);
+        $batch = $docs[0]->getAttribute('batch', 0);
+
+        return \is_numeric($batch) ? (int) $batch : 0;
     }
 
     /**

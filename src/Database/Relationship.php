@@ -41,6 +41,19 @@ class Relationship extends Document
         ]);
     }
 
+    /**
+     * @return (
+     *     $name is 'collection' ? string :
+     *     $name is 'relatedCollection' ? string :
+     *     $name is 'type' ? RelationType :
+     *     $name is 'twoWay' ? bool :
+     *     $name is 'key' ? string :
+     *     $name is 'twoWayKey' ? string :
+     *     $name is 'onDelete' ? ForeignKeyAction :
+     *     $name is 'side' ? RelationSide :
+     *     mixed
+     * )
+     */
     public function __get(string $name): mixed
     {
         switch ($name) {

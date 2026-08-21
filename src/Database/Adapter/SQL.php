@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Adapter;
@@ -33,6 +34,7 @@ use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
@@ -134,7 +136,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Accepts Utopia\Database\PDO or any PDO-compatible proxy (e.g. Swoole\Database\PDOProxy).
+     * Accepts Utopia\Database\PDO, a PDO-compatible proxy, or a native PDO.
      */
     public function __construct(object $pdo)
     {
@@ -180,17 +182,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @deprecated Use getDriver() instead
      */
-    protected function getPDO(): object
+    protected function getPDO(): DatabasePDO|PDOProxy|PDO
     {
-        return $this->pdo;
+        if ($this->pdo instanceof DatabasePDO || $this->pdo instanceof PDOProxy || $this->pdo instanceof PDO) {
+            return $this->pdo;
+        }
+
+        throw new DatabaseException('SQL adapter requires Utopia\\Database\\PDO, Swoole\\Database\\PDOProxy, or PDO');
     }
 
     /**
      * Returns the current PDO object
      */
-    public function getDriver(): mixed
+    public function getDriver(): DatabasePDO|PDOProxy|PDO
     {
-        return $this->pdo;
+        return $this->getPDO();
     }
 
     /**
@@ -246,7 +252,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     public function getHostname(): string
     {
         try {
-            return $this->pdo->getHostname();
+            if ($this->pdo instanceof DatabasePDO) {
+                return $this->pdo->getHostname();
+            }
+
+            return $this->hostname;
         } catch (Throwable) {
             return '';
         }
@@ -297,9 +307,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('1')->build();
 
-        return $this->getPDO()
-            ->prepare($result->query)
-            ->execute();
+        return $this->prepareStatement($result->query)->execute();
     }
 
     /**
@@ -309,7 +317,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function reconnect(): void
     {
-        $this->getPDO()->reconnect();
+        $pdo = $this->getPDO();
+        if ($pdo instanceof DatabasePDO) {
+            $pdo->reconnect();
+        }
         $this->inTransaction = 0;
     }
 
@@ -325,7 +336,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                         $this->getPDO()->rollBack();
                     } else {
                         // If no active transaction, this has no effect.
-                        $this->getPDO()->prepare('ROLLBACK')->execute();
+                        $this->prepareStatement('ROLLBACK')->execute();
                     }
                 } catch (PDOException) {
                     // A pooled connection can report a transaction it no longer
@@ -3270,18 +3281,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $this->statementEvents[$stmt] ?? null;
     }
 
-    protected function prepareStatement(string $sql, ?Event $event = null): PDOStatement|DatabasePDOStatement|PDOStatementProxy
+    protected function prepareStatement(string $sql, ?Event $event = null): DatabasePDOStatement|PDOStatementProxy|PDOStatement
     {
         if ($event !== null) {
             $sql = $this->transformQuery($event, $sql);
         }
 
         $statement = $this->getPDO()->prepare($sql);
-        if (
-            ! $statement instanceof PDOStatement
-            && ! $statement instanceof DatabasePDOStatement
-            && ! $statement instanceof PDOStatementProxy
-        ) {
+        if (! $statement instanceof DatabasePDOStatement && ! $statement instanceof PDOStatementProxy && ! $statement instanceof PDOStatement) {
             throw new DatabaseException('Failed to prepare SQL statement');
         }
 
@@ -5154,16 +5161,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 return $arr;
             })(),
             OperatorType::ArrayRemove => (function () use ($arrVal, $values) {
-                $arr = $arrVal;
+                $arr = self::stringifyList($arrVal);
                 $toRemove = $values[0] ?? null;
+                $remove = \is_array($toRemove) ? self::stringifyList($toRemove) : [self::stringify($toRemove)];
 
-                return is_array($toRemove)
-                    ? array_values(array_diff($arr, $toRemove))
-                    : array_values(array_diff($arr, [$toRemove]));
+                return array_values(array_diff($arr, $remove));
             })(),
-            OperatorType::ArrayUnique => array_values(array_unique($arrVal)),
-            OperatorType::ArrayIntersect => array_values(array_intersect($arrVal, $values)),
-            OperatorType::ArrayDiff => array_values(array_diff($arrVal, $values)),
+            OperatorType::ArrayUnique => array_values(array_unique(self::stringifyList($arrVal))),
+            OperatorType::ArrayIntersect => array_values(array_intersect(self::stringifyList($arrVal), self::stringifyList($values))),
+            OperatorType::ArrayDiff => array_values(array_diff(self::stringifyList($arrVal), self::stringifyList($values))),
             OperatorType::ArrayFilter => $arrVal,
             OperatorType::StringConcat => (\is_scalar($value) ? (string) $value : '') . (count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : ''),
             OperatorType::StringReplace => str_replace(count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : '', count($values) > 1 && \is_scalar($values[1]) ? (string) $values[1] : '', \is_scalar($value) ? (string) $value : ''),
@@ -5172,6 +5178,32 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             OperatorType::DateSubDays => $value,
             OperatorType::DateSetNow => DateTime::now(),
         };
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     * @return list<string>
+     */
+    private static function stringifyList(array $values): array
+    {
+        $out = [];
+        foreach ($values as $value) {
+            $out[] = self::stringify($value);
+        }
+
+        return $out;
+    }
+
+    private static function stringify(mixed $value): string
+    {
+        if (\is_string($value)) {
+            return $value;
+        }
+        if (\is_scalar($value) || $value === null) {
+            return (string) $value;
+        }
+
+        return \get_debug_type($value);
     }
 
     /**

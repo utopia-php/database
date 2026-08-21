@@ -86,16 +86,17 @@ class QueryProfilerTest extends TestCase
         $this->profiler->enable();
         $this->profiler->setSlowThreshold(50.0);
 
-        $called = false;
-        $this->profiler->onSlowQuery(function () use (&$called) {
-            $called = true;
+        $called = new \stdClass();
+        $called->value = false;
+        $this->profiler->onSlowQuery(function () use ($called) {
+            $called->value = true;
         });
 
         $this->profiler->log('fast', [], 10.0);
-        $this->assertFalse($called);
+        $this->assertFalse($called->value);
 
         $this->profiler->log('slow', [], 100.0);
-        $this->assertTrue($called);
+        $this->assertTrue($called->value);
     }
 
     public function testNPlusOneDetection(): void

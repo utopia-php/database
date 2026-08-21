@@ -118,24 +118,9 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $this->registerUserFunctions();
     }
 
-    /**
-     * Return the underlying PDO with a narrowed type so static analysis
-     * can resolve `prepare`, `execute`, `bindValue` etc. on every SQLite
-     * call site without relying on object-typed property access.
-     *
-     * @return PDO|DatabasePDO|PDOProxy
-     */
-    protected function getPDO(): object
+    protected function getPDO(): DatabasePDO|PDOProxy|PDO
     {
-        if (
-            ! $this->pdo instanceof PDO
-            && ! $this->pdo instanceof DatabasePDO
-            && ! $this->pdo instanceof PDOProxy
-        ) {
-            throw new DatabaseException('SQLite requires a PDO-compatible driver');
-        }
-
-        return $this->pdo;
+        return parent::getPDO();
     }
 
     /**
@@ -146,7 +131,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         string $query,
         string $message = 'Failed to prepare SQLite statement',
         ?Event $event = null,
-    ): PDOStatement|DatabasePDOStatement|PDOStatementProxy {
+    ): DatabasePDOStatement|PDOStatementProxy|PDOStatement {
         try {
             return parent::prepareStatement($query, $event);
         } catch (DatabaseException $error) {
@@ -287,10 +272,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         try {
             $pdo = $this->getPDO();
-            if ($pdo instanceof PDO) {
-                $pdo->sqliteCreateFunction('REGEXP', $pcre, 2);
-            } else {
+            if ($pdo instanceof DatabasePDO) {
                 $pdo->__call('sqliteCreateFunction', ['REGEXP', $pcre, 2]);
+            } elseif (\method_exists($pdo, 'sqliteCreateFunction')) {
+                $pdo->sqliteCreateFunction('REGEXP', $pcre, 2);
             }
             $this->pcreRegistered = true;
             // Capability::PCRE is conditional on UDF registration — invalidate cache.

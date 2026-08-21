@@ -26,6 +26,9 @@ class EntityMapper
 
     private function getReflectionProperty(string $class, string $property): \ReflectionProperty
     {
+        if (! \class_exists($class) && ! \interface_exists($class)) {
+            throw new \RuntimeException("Unknown class {$class}");
+        }
         if (!isset(self::$reflectionPropertyCache[$class][$property])) {
             self::$reflectionPropertyCache[$class][$property] = new \ReflectionProperty($class, $property);
         }
@@ -37,6 +40,9 @@ class EntityMapper
      */
     private function getReflectionClass(string $class): \ReflectionClass
     {
+        if (! \class_exists($class)) {
+            throw new \RuntimeException("Unknown class {$class}");
+        }
         if (!isset(self::$reflectionClassCache[$class])) {
             self::$reflectionClassCache[$class] = new \ReflectionClass($class);
         }

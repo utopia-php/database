@@ -125,7 +125,6 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
         $source = $database->getSource();
-        $this->assertInstanceOf(Database::class, $source);
         $this->assertEquals(self::$source, $source);
     }
 

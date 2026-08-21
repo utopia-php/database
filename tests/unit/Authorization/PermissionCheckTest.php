@@ -3,6 +3,7 @@
 namespace Tests\Unit\Authorization;
 
 use DateTime;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoneAdapter;
 use Utopia\Cache\Cache;
@@ -19,7 +20,7 @@ class PermissionCheckTest extends TestCase
 {
     private Database $database;
 
-    private Adapter $adapter;
+    private Adapter&Stub $adapter;
 
     private Authorization $authorization;
 
@@ -55,6 +56,9 @@ class PermissionCheckTest extends TestCase
         $this->authorization = $this->database->getAuthorization();
     }
 
+    /**
+     * @param  array<string>  $permissions
+     */
     private function buildCollectionDoc(
         string $id,
         array $permissions = [],

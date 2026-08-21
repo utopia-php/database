@@ -80,6 +80,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame(['value' => 'fresh'], $value);
         $this->assertSame(1, $callbackCalls);
 
@@ -91,6 +92,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame(['value' => 'fresh'], $value);
         $this->assertSame(1, $callbackCalls);
     }
@@ -110,6 +112,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame([], $value);
 
         $value = $database->withCache(
@@ -120,6 +123,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame([], $value);
         $this->assertSame(1, $callbackCalls);
     }
@@ -190,6 +194,9 @@ class QueryCacheTest extends TestCase
             'first-field',
         );
 
+        /** @var mixed $first */
+        /** @var mixed $second */
+        /** @var mixed $cachedFirst */
         $this->assertSame(['value' => 'first'], $first);
         $this->assertSame(['value' => 'second'], $second);
         $this->assertSame(['value' => 'first'], $cachedFirst);
@@ -225,6 +232,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame('fresh', $value);
         $this->assertSame(2, $callbackCalls);
     }
@@ -253,6 +261,8 @@ class QueryCacheTest extends TestCase
             hash: null,
         );
 
+        /** @var mixed $first */
+        /** @var mixed $second */
         $this->assertSame('first', $first);
         $this->assertSame('second', $second);
         $this->assertSame(2, $callbackCalls);
@@ -393,6 +403,8 @@ class QueryCacheTest extends TestCase
             hash: $hash,
         );
 
+        /** @var mixed $first */
+        /** @var mixed $second */
         $this->assertSame(10, $first);
         $this->assertSame(10, $second);
         $this->assertSame(1, $callbackCalls);
@@ -684,6 +696,7 @@ class QueryCacheTest extends TestCase
             hash: $hash,
         );
 
+        /** @var mixed $documents */
         $this->assertSame([], $documents);
         $this->assertSame(0, $callbackCalls);
     }

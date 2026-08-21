@@ -3,16 +3,14 @@
 namespace Tests\Unit\ORM;
 
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\ORM\EntityManager;
-use Utopia\Database\ORM\EntityMapper;
 use Utopia\Database\ORM\EntityState;
-use Utopia\Database\ORM\IdentityMap;
 use Utopia\Database\ORM\MetadataFactory;
-use Utopia\Database\ORM\UnitOfWork;
 use Utopia\Database\Query;
 
 #[AllowMockObjectsWithoutExpectations]
@@ -20,7 +18,7 @@ class EntityManagerTest extends TestCase
 {
     private EntityManager $em;
 
-    private Database $db;
+    private Database&MockObject $db;
 
     protected function setUp(): void
     {
@@ -93,7 +91,6 @@ class EntityManagerTest extends TestCase
         /** @var TestEntity $result */
         $result = $this->em->find(TestEntity::class, 'db-1');
 
-        $this->assertInstanceOf(TestEntity::class, $result);
         $this->assertEquals('db-1', $result->id);
         $this->assertEquals('FromDB', $result->name);
     }
@@ -191,8 +188,6 @@ class EntityManagerTest extends TestCase
         $results = $this->em->findMany(TestEntity::class);
 
         $this->assertCount(2, $results);
-        $this->assertInstanceOf(TestEntity::class, $results[0]);
-        $this->assertInstanceOf(TestEntity::class, $results[1]);
         $this->assertEquals('Alice', $results[0]->name);
         $this->assertEquals('Bob', $results[1]->name);
     }
@@ -272,7 +267,6 @@ class EntityManagerTest extends TestCase
         /** @var TestEntity $result */
         $result = $this->em->findOne(TestEntity::class);
 
-        $this->assertInstanceOf(TestEntity::class, $result);
         $this->assertEquals('Only', $result->name);
     }
 
@@ -327,7 +321,7 @@ class EntityManagerTest extends TestCase
                     && $collection->id === 'users'
                     && $collection->documentSecurity === true;
             }))
-            ->willReturn(new Document(['$id' => 'users']));
+            ->willReturn(new Collection(id: 'users'));
 
         $this->db->expects($this->once())
             ->method('createRelationship')
@@ -338,22 +332,21 @@ class EntityManagerTest extends TestCase
 
     public function testCreateCollectionFromEntityReturnsDocument(): void
     {
-        $returnDoc = new Document(['$id' => 'users']);
+        $returnDoc = new Collection(id: 'users');
 
         $this->db->method('createCollection')->willReturn($returnDoc);
         $this->db->method('createRelationship')->willReturn(true);
 
         $result = $this->em->createCollectionFromEntity(TestEntity::class);
 
-        $this->assertInstanceOf(Document::class, $result);
-        $this->assertEquals('users', $result->getAttribute('$id'));
+        $this->assertEquals('users', $result->getId());
     }
 
     public function testCreateCollectionFromEntityWithNoRelationships(): void
     {
         $this->db->expects($this->once())
             ->method('createCollection')
-            ->willReturn(new Document(['$id' => 'posts']));
+            ->willReturn(new Collection(id: 'posts'));
 
         $this->db->expects($this->once())
             ->method('createRelationship');
@@ -400,26 +393,6 @@ class EntityManagerTest extends TestCase
         $this->em->clear();
 
         $this->assertEmpty(\iterator_to_array($this->em->getIdentityMap()->all()));
-    }
-
-    public function testGetUnitOfWorkReturnsUnitOfWork(): void
-    {
-        $this->assertInstanceOf(UnitOfWork::class, $this->em->getUnitOfWork());
-    }
-
-    public function testGetIdentityMapReturnsIdentityMap(): void
-    {
-        $this->assertInstanceOf(IdentityMap::class, $this->em->getIdentityMap());
-    }
-
-    public function testGetMetadataFactoryReturnsMetadataFactory(): void
-    {
-        $this->assertInstanceOf(MetadataFactory::class, $this->em->getMetadataFactory());
-    }
-
-    public function testGetEntityMapperReturnsEntityMapper(): void
-    {
-        $this->assertInstanceOf(EntityMapper::class, $this->em->getEntityMapper());
     }
 
     public function testFlushDelegatesToUnitOfWork(): void
@@ -631,15 +604,5 @@ class EntityManagerTest extends TestCase
         $this->em->findMany(TestEntity::class);
 
         $this->assertTrue($this->em->getIdentityMap()->has('users', 'findmany-map-1'));
-    }
-
-    public function testConstructorCreatesAllComponents(): void
-    {
-        $em = new EntityManager($this->db);
-
-        $this->assertInstanceOf(UnitOfWork::class, $em->getUnitOfWork());
-        $this->assertInstanceOf(IdentityMap::class, $em->getIdentityMap());
-        $this->assertInstanceOf(MetadataFactory::class, $em->getMetadataFactory());
-        $this->assertInstanceOf(EntityMapper::class, $em->getEntityMapper());
     }
 }

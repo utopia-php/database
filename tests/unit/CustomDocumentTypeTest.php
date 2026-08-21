@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use DateTime;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoneAdapter;
 use Utopia\Cache\Cache;
@@ -61,7 +62,7 @@ class CustomDocumentTypeTest extends TestCase
 {
     private Database $database;
 
-    private Adapter $adapter;
+    private Adapter&Stub $adapter;
 
     protected function setUp(): void
     {
@@ -151,9 +152,6 @@ class CustomDocumentTypeTest extends TestCase
 
     public function testMethodChaining(): void
     {
-        $result = $this->database->setDocumentType('users', TestUserDocument::class);
-        $this->assertInstanceOf(Database::class, $result);
-
         $this->database
             ->setDocumentType('users', TestUserDocument::class)
             ->setDocumentType('posts', TestPostDocument::class);
@@ -165,14 +163,15 @@ class CustomDocumentTypeTest extends TestCase
     public function testClearDocumentTypeReturnsSelf(): void
     {
         $this->database->setDocumentType('users', TestUserDocument::class);
-        $result = $this->database->clearDocumentType('users');
-        $this->assertInstanceOf(Database::class, $result);
+        $this->database->clearDocumentType('users');
+        $this->assertNull($this->database->getDocumentType('users'));
     }
 
     public function testClearAllDocumentTypesReturnsSelf(): void
     {
-        $result = $this->database->clearAllDocumentTypes();
-        $this->assertInstanceOf(Database::class, $result);
+        $this->database->setDocumentType('users', TestUserDocument::class);
+        $this->database->clearAllDocumentTypes();
+        $this->assertNull($this->database->getDocumentType('users'));
     }
 
     public function testCreateDocumentInstanceReturnsCorrectType(): void
@@ -315,7 +314,6 @@ class CustomDocumentTypeTest extends TestCase
             'data' => 'test',
         ]));
 
-        $this->assertInstanceOf(Document::class, $result);
         $this->assertNotInstanceOf(TestUserDocument::class, $result);
         $this->assertNotInstanceOf(TestPostDocument::class, $result);
     }

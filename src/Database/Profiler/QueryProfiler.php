@@ -59,7 +59,7 @@ class QueryProfiler
         if ($this->captureBacktrace) {
             $trace = \debug_backtrace(\DEBUG_BACKTRACE_IGNORE_ARGS, 10);
             $backtrace = \array_map(
-                fn (array $frame) => ($frame['file'] ?? '') . ':' . ($frame['line'] ?? '') . ' ' . ($frame['function'] ?? ''),
+                fn (array $frame) => ($frame['file'] ?? '') . ':' . ($frame['line'] ?? '') . ' ' . $frame['function'],
                 $trace
             );
         }

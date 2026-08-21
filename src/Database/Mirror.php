@@ -91,7 +91,7 @@ class Mirror extends Database
      * reads through the source keeps its view of attributes and relationships
      * in lockstep with the authoritative database.
      */
-    public function getCollection(string $id): Document
+    public function getCollection(string $id): Collection
     {
         return $this->source->getCollection($id);
     }
@@ -334,13 +334,18 @@ class Mirror extends Database
 
         $this->trigger(Event::CollectionList, $result);
 
-        return $result;
+        $collections = [];
+        foreach ($result as $doc) {
+            $collections[] = $doc instanceof Collection ? $doc : Collection::fromArray($doc->getArrayCopy());
+        }
+
+        return $collections;
     }
 
     /**
      * {@inheritdoc}
      */
-    public function createCollection(Collection $collection): Document
+    public function createCollection(Collection $collection): Collection
     {
         $collectionId = $collection->id;
 
@@ -378,7 +383,7 @@ class Mirror extends Database
             $this->logError('createCollection', $err);
         }
 
-        return $result;
+        return $result instanceof Collection ? $result : Collection::fromArray($result->getArrayCopy());
     }
 
     /**

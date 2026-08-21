@@ -202,8 +202,8 @@ class CacheKeyTest extends TestCase
         ];
 
         $schemaHash = \md5(
-            (\json_encode($collection->getAttribute('attributes', [])) ?: '')
-            . (\json_encode($collection->getAttribute('indexes', [])) ?: '')
+            (\json_encode($collection->getArray('attributes')) ?: '')
+            . (\json_encode($collection->getArray('indexes')) ?: '')
             . (\json_encode($collection->getAttribute('$permissions', [])) ?: '')
             . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
         );

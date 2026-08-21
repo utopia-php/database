@@ -97,6 +97,10 @@ class VectorValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     * @param  array<int, Document>  $indexes
+     */
     private function makeCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
         return new Document([
@@ -119,6 +123,9 @@ class VectorValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $collections
+     */
     private function setupCollections(array $collections): void
     {
         $meta = $this->metaCollection();
@@ -141,6 +148,9 @@ class VectorValidationTest extends TestCase
         );
     }
 
+    /**
+     * @param  array<int, Document>  $extraAttrs
+     */
     private function vectorCollection(string $id, int $dimensions = 3, bool $required = true, array $extraAttrs = []): Document
     {
         $attrs = [
@@ -360,7 +370,7 @@ class VectorValidationTest extends TestCase
             'embedding' => [0.0, 0.0, 0.0],
         ]));
 
-        $this->assertNotNull($doc->getId());
+        $this->assertNotSame('', $doc->getId());
     }
 
     public function testVectorSearchWithRestrictedPermissions(): void
@@ -373,7 +383,7 @@ class VectorValidationTest extends TestCase
             'embedding' => [1.0, 0.0, 0.0],
         ]));
 
-        $this->assertNotNull($doc->getId());
+        $this->assertNotSame('', $doc->getId());
     }
 
     public function testVectorPermissionFilteringAfterScoring(): void
@@ -394,7 +404,7 @@ class VectorValidationTest extends TestCase
             'embedding' => [0.6, 0.4, 0.0],
         ]));
 
-        $this->assertNotNull($doc->getId());
+        $this->assertNotSame('', $doc->getId());
     }
 
     public function testVectorRequiredWithNullValue(): void
@@ -452,7 +462,7 @@ class VectorValidationTest extends TestCase
             ]));
             $this->fail('Should reject object in vector array');
         } catch (\Throwable $e) {
-            $this->assertTrue(true);
+            $this->assertNotSame('', $e->getMessage());
         }
     }
 }

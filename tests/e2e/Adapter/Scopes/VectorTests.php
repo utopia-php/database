@@ -39,14 +39,12 @@ trait VectorTests
 
         // Verify the attributes were created
         $collection = $database->getCollection('vectorCollection');
-        $attributes = $collection->getAttribute('attributes');
-        $this->assertIsArray($attributes);
+        $attributes = $collection->attributes;
 
         $embeddingAttr = null;
         $largeEmbeddingAttr = null;
 
         foreach ($attributes as $attr) {
-            $this->assertInstanceOf(Document::class, $attr);
             if ($attr->getAttribute('key') === 'embedding') {
                 $embeddingAttr = $attr;
             } elseif ($attr->getAttribute('key') === 'large_embedding') {
@@ -296,7 +294,7 @@ trait VectorTests
 
         // Verify indexes were created
         $collection = $database->getCollection('vectorIndexes');
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
 
         $this->assertCount(3, $indexes);
 
@@ -664,7 +662,9 @@ trait VectorTests
 
         $this->assertCount(2, $results);
         foreach ($results as $result) {
-            $this->assertStringContainsString('Learning', $result->getAttribute('title'));
+            $title = $result->getAttribute('title');
+            $this->assertIsString($title);
+            $this->assertStringContainsString('Learning', $title);
         }
 
         // Complex query with multiple filters
@@ -705,7 +705,7 @@ trait VectorTests
             'embedding' => [1e-10, 1e-10, 1e-10],
         ]));
 
-        $this->assertNotNull($doc1->getId());
+        $this->assertNotSame('', $doc1->getId());
 
         // Test with very large values
         $doc2 = $database->createDocument('vectorSpecialFloats', new Document([
@@ -715,7 +715,7 @@ trait VectorTests
             'embedding' => [1e10, 1e10, 1e10],
         ]));
 
-        $this->assertNotNull($doc2->getId());
+        $this->assertNotSame('', $doc2->getId());
 
         // Test with negative values
         $doc3 = $database->createDocument('vectorSpecialFloats', new Document([
@@ -725,7 +725,7 @@ trait VectorTests
             'embedding' => [-1.0, -0.5, -0.1],
         ]));
 
-        $this->assertNotNull($doc3->getId());
+        $this->assertNotSame('', $doc3->getId());
 
         // Test with mixed sign values
         $doc4 = $database->createDocument('vectorSpecialFloats', new Document([
@@ -735,7 +735,7 @@ trait VectorTests
             'embedding' => [-1.0, 0.0, 1.0],
         ]));
 
-        $this->assertNotNull($doc4->getId());
+        $this->assertNotSame('', $doc4->getId());
 
         // Query with negative vector
         $results = $database->find('vectorSpecialFloats', [
@@ -1090,8 +1090,7 @@ trait VectorTests
 
         // Query authors and verify relationship
         $authorFetched = $database->getDocument('vectorAuthors', $author->getId());
-        $books = $authorFetched->getAttribute('books');
-        $this->assertCount(2, $books);
+        $this->assertCount(2, $authorFetched->getDocuments('books'));
 
         // Cleanup
         $database->deleteCollection('vectorBooks');
@@ -1181,10 +1180,8 @@ trait VectorTests
 
         // Verify attribute is gone
         $collection = $database->getCollection('vectorDeleteAttr');
-        $attributes = $collection->getAttribute('attributes');
-        $this->assertIsArray($attributes);
+        $attributes = $collection->attributes;
         foreach ($attributes as $attr) {
-            $this->assertInstanceOf(Document::class, $attr);
             $this->assertNotEquals('embedding', $attr->getAttribute('key'));
         }
 
@@ -1228,7 +1225,7 @@ trait VectorTests
 
         // Verify indexes are gone
         $collection = $database->getCollection('vectorDeleteIndexedAttr');
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(0, $indexes);
 
         // Cleanup
@@ -1366,15 +1363,14 @@ trait VectorTests
             'embedding' => [1.0, 0.0, 0.0],
         ]));
 
-        $this->assertCount(3, $doc->getAttribute('embedding'));
+        $this->assertCount(3, $doc->getArray('embedding'));
 
         // Try to update attribute dimensions - should fail (immutable)
         try {
             $database->updateAttribute('vectorDimUpdate', 'embedding', ColumnType::Vector->value, 5, true);
             $this->fail('Should not allow changing vector dimensions');
         } catch (\Throwable $e) {
-            // Expected - dimension changes not allowed (either validation or database error)
-            $this->assertTrue(true);
+            $this->assertNotSame('', $e->getMessage());
         }
 
         // Cleanup
@@ -1445,7 +1441,7 @@ trait VectorTests
 
         // Verify index exists
         $collection = $database->getCollection('vectorDeleteIdx');
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(1, $indexes);
 
         // Create documents
@@ -1462,7 +1458,7 @@ trait VectorTests
 
         // Verify index is gone
         $collection = $database->getCollection('vectorDeleteIdx');
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(0, $indexes);
 
         // Queries should still work (without index optimization)
@@ -1497,7 +1493,7 @@ trait VectorTests
 
         // Verify both indexes exist
         $collection = $database->getCollection('vectorMultiIdx');
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(2, $indexes);
 
         // Create document
@@ -1754,7 +1750,7 @@ trait VectorTests
             'embedding' => [1e38, -1e38, 1e37],
         ]));
 
-        $this->assertNotNull($doc->getId());
+        $this->assertNotSame('', $doc->getId());
 
         // Query should work
         $results = $database->find('vectorLargeVals', [
@@ -1791,7 +1787,7 @@ trait VectorTests
         ]));
 
         // Retrieve and check precision (may have some loss)
-        $retrieved = $doc->getAttribute('embedding');
+        $retrieved = $doc->getArray('embedding');
         $this->assertCount(3, $retrieved);
 
         // Values should be close to original (allowing for float precision)

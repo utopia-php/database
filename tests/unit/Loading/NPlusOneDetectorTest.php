@@ -11,19 +11,21 @@ class NPlusOneDetectorTest extends TestCase
 {
     public function testDetectsExcessiveQueries(): void
     {
-        $detected = false;
-        $detector = new NPlusOneDetector(3, function () use (&$detected) {
-            $detected = true;
+        $detected = new \stdClass();
+        $detected->value = false;
+        $detector = new NPlusOneDetector(3, function () use ($detected) {
+            $detected->value = true;
         });
 
         $doc = new Document(['$id' => '1', '$collection' => 'users']);
 
         $detector->handle(Event::DocumentFind, $doc);
         $detector->handle(Event::DocumentFind, $doc);
-        $this->assertFalse($detected);
+        $this->assertFalse($detected->value);
 
         $detector->handle(Event::DocumentFind, $doc);
-        $this->assertTrue($detected);
+        $this->assertNotEmpty($detector->getViolations());
+        $this->assertTrue($detected->value);
     }
 
     public function testIgnoresNonQueryEvents(): void

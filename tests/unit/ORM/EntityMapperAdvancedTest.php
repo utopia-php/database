@@ -71,10 +71,9 @@ class EntityMapperAdvancedTest extends TestCase
         $metadata = $this->metadataFactory->getMetadata(TestEntity::class);
         $doc = $this->mapper->toDocument($entity, $metadata);
 
-        $posts = $doc->getAttribute('posts');
+        $posts = $doc->getDocuments('posts');
         $this->assertCount(1, $posts);
-        $this->assertInstanceOf(Document::class, $posts[0]);
-        $this->assertEquals('nested-post-1', $posts[0]->getAttribute('$id'));
+        $this->assertEquals('nested-post-1', $posts[0]->getId());
         $this->assertEquals('Nested', $posts[0]->getAttribute('title'));
     }
 

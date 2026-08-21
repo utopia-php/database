@@ -114,7 +114,7 @@ trait OperatorTests
         $this->assertEquals([0, 1, 99, 2, 3, 4, 5], $updated->getAttribute('numbers'));
 
         // Test insert at end
-        $numbers = $updated->getAttribute('numbers');
+        $numbers = $updated->getArray('numbers');
         $lastIndex = count($numbers);
         $updated = $database->updateDocument($collectionId, 'test_doc', new Document([
             'numbers' => Operator::arrayInsert($lastIndex, 100)
@@ -173,7 +173,7 @@ trait OperatorTests
         foreach ($updated as $doc) {
             $originalCount = (int) str_replace('doc_', '', $doc->getId()) * 10;
             $this->assertEquals($originalCount + 5, $doc->getAttribute('count'));
-            $this->assertContains('batch_updated', $doc->getAttribute('tags'));
+            $this->assertContains('batch_updated', $doc->getArray('tags'));
             $this->assertEquals('updated', $doc->getAttribute('category'));
         }
 
@@ -307,10 +307,10 @@ trait OperatorTests
         $this->assertEquals(4.0, $doc1->getAttribute('power_val'));       // 2^2
         $this->assertEquals('Title 1 - Updated', $doc1->getAttribute('title'));
         $this->assertEquals('new content 1', $doc1->getAttribute('content'));
-        $this->assertContains('bulk', $doc1->getAttribute('tags'));
-        $this->assertContains('priority', $doc1->getAttribute('categories'));
-        $this->assertNotContains('shared', $doc1->getAttribute('items'));
-        $this->assertCount(4, $doc1->getAttribute('duplicates')); // Should have unique values
+        $this->assertContains('bulk', $doc1->getArray('tags'));
+        $this->assertContains('priority', $doc1->getArray('categories'));
+        $this->assertNotContains('shared', $doc1->getArray('items'));
+        $this->assertCount(4, $doc1->getArray('duplicates')); // Should have unique values
         $this->assertEquals([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
         $this->assertEquals(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
         $this->assertEquals(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)
@@ -1146,7 +1146,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'complex_test_doc', new Document([
             'stats' => Operator::arrayUnique() // Should remove duplicate 20s
         ]));
-        $stats = $updated->getAttribute('stats');
+        $stats = $updated->getArray('stats');
         $this->assertCount(4, $stats); // [10, 20, 30, 40]
         $this->assertEquals([10, 20, 30, 40], $stats);
 
@@ -1345,7 +1345,7 @@ trait OperatorTests
             'items' => Operator::arrayUnique()
         ]));
 
-        $result = $updated->getAttribute('items');
+        $result = $updated->getArray('items');
         $this->assertCount(3, $result);
         $this->assertContains('a', $result);
         $this->assertContains('b', $result);
@@ -2264,7 +2264,7 @@ trait OperatorTests
         $this->assertEquals([0, 1, 2, 3, 4], $updated->getAttribute('numbers'));
 
         // Success case - end insertion
-        $numbers = $updated->getAttribute('numbers');
+        $numbers = $updated->getArray('numbers');
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'numbers' => Operator::arrayInsert(count($numbers), 5)
         ]));
@@ -2344,7 +2344,7 @@ trait OperatorTests
             'items' => Operator::arrayUnique()
         ]));
 
-        $result = $updated->getAttribute('items');
+        $result = $updated->getArray('items');
         sort($result); // Sort for consistent comparison
         $this->assertEquals(['a', 'b', 'c'], $result);
 
@@ -2386,7 +2386,7 @@ trait OperatorTests
             'items' => Operator::arrayIntersect(['b', 'c', 'e'])
         ]));
 
-        $result = $updated->getAttribute('items');
+        $result = $updated->getArray('items');
         sort($result);
         $this->assertEquals(['b', 'c'], $result);
 
@@ -2423,7 +2423,7 @@ trait OperatorTests
             'items' => Operator::arrayDiff(['b', 'd'])
         ]));
 
-        $result = $updated->getAttribute('items');
+        $result = $updated->getArray('items');
         sort($result);
         $this->assertEquals(['a', 'c'], $result);
 
@@ -2432,7 +2432,7 @@ trait OperatorTests
             'items' => Operator::arrayDiff([])
         ]));
 
-        $result = $updated->getAttribute('items');
+        $result = $updated->getArray('items');
         sort($result);
         $this->assertEquals(['a', 'c'], $result); // Should remain unchanged
 
@@ -2688,6 +2688,7 @@ trait OperatorTests
         ]));
 
         $result = $updated->getAttribute('timestamp');
+        $this->assertIsString($result);
         $this->assertNotEmpty($result);
 
         // Verify it's a recent timestamp (within last minute)
@@ -2901,7 +2902,7 @@ trait OperatorTests
         $this->assertEquals(['apple', 'banana', 'cherry'], $doc->getAttribute('items'));
 
         // Attempt to insert at end (index = length)
-        $items = $doc->getAttribute('items');
+        $items = $doc->getArray('items');
         $updated = $database->updateDocument($collectionId, $doc->getId(), new Document([
             'items' => Operator::arrayInsert(count($items), 'date')
         ]));
@@ -3019,7 +3020,7 @@ trait OperatorTests
 
         // Get the collection to verify attribute was created
         $collection = $database->getCollection($collectionId);
-        $attributes = $collection->getAttribute('attributes', []);
+        $attributes = $collection->attributes;
         $scoreAttr = null;
         foreach ($attributes as $attr) {
             if ($attr['$id'] === 'score') {
@@ -3065,6 +3066,7 @@ trait OperatorTests
             // Refetch to get the actual computed value from the database
             $refetched = $database->getDocument($collectionId, $doc2->getId());
             $finalScore = $refetched->getAttribute('score');
+            $this->assertIsNumeric($finalScore);
 
             // Document the bug: The value should not exceed MAX_INT
             $this->assertLessThanOrEqual(
@@ -3109,8 +3111,10 @@ trait OperatorTests
             'title' => 'Hello World'  // 11 characters
         ]));
 
-        $this->assertEquals('Hello World', $doc->getAttribute('title'));
-        $this->assertEquals(11, strlen($doc->getAttribute('title')));
+        $title = $doc->getAttribute('title');
+        $this->assertIsString($title);
+        $this->assertEquals('Hello World', $title);
+        $this->assertEquals(11, strlen($title));
 
         // BUG EXPOSED: Concat a 15-character string to make total length 26 (exceeds max of 20)
         // This should throw a StructureException for exceeding max length,
@@ -3123,6 +3127,7 @@ trait OperatorTests
             // Refetch to get the actual computed value from the database
             $refetched = $database->getDocument($collectionId, $doc->getId());
             $finalTitle = $refetched->getAttribute('title');
+            $this->assertIsString($finalTitle);
             $finalLength = strlen($finalTitle);
 
             // Document the bug: The resulting string should not exceed 20 characters
@@ -3180,6 +3185,7 @@ trait OperatorTests
             // Refetch to get the actual computed value from the database
             $refetched = $database->getDocument($collectionId, $doc->getId());
             $finalQuantity = $refetched->getAttribute('quantity');
+            $this->assertIsNumeric($finalQuantity);
 
             // Document the bug: The value should not exceed MAX_INT
             $this->assertLessThanOrEqual(
@@ -3401,8 +3407,10 @@ trait OperatorTests
 
             // Refetch to get the actual computed value from the database
             $refetched = $database->getDocument($collectionId, $doc2->getId());
-            $finalNumbers = $refetched->getAttribute('numbers');
+            $finalNumbers = $refetched->getArray('numbers');
             $lastNumber = end($finalNumbers);
+            $this->assertNotFalse($lastNumber);
+            $this->assertIsNumeric($lastNumber);
 
             // Document the bug: Array items should not exceed MAX_INT
             $this->assertLessThanOrEqual(
@@ -3435,10 +3443,11 @@ trait OperatorTests
 
             // Refetch to get the actual computed value from the database
             $refetched = $database->getDocument($collectionId, $doc3->getId());
-            $finalNumbers = $refetched->getAttribute('numbers');
+            $finalNumbers = $refetched->getArray('numbers');
 
             // Document the bug: ALL array items should be validated
             foreach ($finalNumbers as $num) {
+                $this->assertIsNumeric($num);
                 $this->assertLessThanOrEqual(
                     Database::MAX_INT,
                     $num,
@@ -3689,7 +3698,9 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'unicode_doc', new Document([
             'text' => Operator::stringConcat(' ☕')
         ]));
-        $this->assertStringContainsString('☕', $updated->getAttribute('text'));
+        $unicodeText = $updated->getAttribute('text');
+        $this->assertIsString($unicodeText);
+        $this->assertStringContainsString('☕', $unicodeText);
 
         $database->deleteCollection($collectionId);
     }
@@ -3791,10 +3802,10 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'special_values_doc', new Document([
             'mixed' => Operator::arrayUnique()
         ]));
-        $this->assertContains('', $updated->getAttribute('mixed'));
-        $this->assertContains('text', $updated->getAttribute('mixed'));
+        $this->assertContains('', $updated->getArray('mixed'));
+        $this->assertContains('text', $updated->getArray('mixed'));
         // Should have only 2 unique values: '' and 'text'
-        $this->assertCount(2, $updated->getAttribute('mixed'));
+        $this->assertCount(2, $updated->getArray('mixed'));
 
         // Test remove empty string
         $database->updateDocument($collectionId, 'special_values_doc', new Document([
@@ -3804,7 +3815,7 @@ trait OperatorTests
         $updated = $database->updateDocument($collectionId, 'special_values_doc', new Document([
             'mixed' => Operator::arrayRemove('')
         ]));
-        $this->assertNotContains('', $updated->getAttribute('mixed'));
+        $this->assertNotContains('', $updated->getArray('mixed'));
         $this->assertEquals(['a', 'b'], $updated->getAttribute('mixed'));
 
         $database->deleteCollection($collectionId);
@@ -3941,6 +3952,7 @@ trait OperatorTests
         ]));
 
         $result = $updated->getAttribute('text');
+        $this->assertIsString($result);
         $this->assertEquals(20000, strlen($result));
         $this->assertStringStartsWith('AAA', $result);
         $this->assertStringEndsWith('BBB', $result);
@@ -3951,6 +3963,7 @@ trait OperatorTests
         ]));
 
         $result = $updated->getAttribute('text');
+        $this->assertIsString($result);
         $this->assertStringNotContainsString('A', $result);
         $this->assertStringContainsString('X', $result);
 
@@ -3988,6 +4001,7 @@ trait OperatorTests
         ]));
 
         $resultDate = $updated->getAttribute('date');
+        $this->assertIsString($resultDate);
         $this->assertStringStartsWith('2024-01-01', $resultDate);
 
         // Test leap year: Feb 28, 2024 + 1 day = Feb 29, 2024 (leap year)
@@ -4000,6 +4014,7 @@ trait OperatorTests
         ]));
 
         $resultDate = $updated->getAttribute('date');
+        $this->assertIsString($resultDate);
         $this->assertStringStartsWith('2024-02-29', $resultDate);
 
         // Test non-leap year: Feb 28, 2023 + 1 day = Mar 1, 2023
@@ -4012,6 +4027,7 @@ trait OperatorTests
         ]));
 
         $resultDate = $updated->getAttribute('date');
+        $this->assertIsString($resultDate);
         $this->assertStringStartsWith('2023-03-01', $resultDate);
 
         // Test large day addition (cross multiple months)
@@ -4024,6 +4040,7 @@ trait OperatorTests
         ]));
 
         $resultDate = $updated->getAttribute('date');
+        $this->assertIsString($resultDate);
         $this->assertStringStartsWith('2024-01-01', $resultDate);
 
         $database->deleteCollection($collectionId);
@@ -4519,9 +4536,13 @@ trait OperatorTests
                 $this->assertIsArray($doc->getAttribute('tags'));
 
                 // Verify values are actually computed
-                $expectedCount = $old->getAttribute('count') + 7;
-                $expectedScore = $old->getAttribute('score') * 2;
-                $expectedTags = array_merge($old->getAttribute('tags'), ['updated']);
+                $oldCount = $old->getAttribute('count');
+                $oldScore = $old->getAttribute('score');
+                $this->assertIsNumeric($oldCount);
+                $this->assertIsNumeric($oldScore);
+                $expectedCount = $oldCount + 7;
+                $expectedScore = $oldScore * 2;
+                $expectedTags = array_merge($old->getArray('tags'), ['updated']);
 
                 $this->assertEquals($expectedCount, $doc->getAttribute('count'));
                 $this->assertEquals($expectedScore, $doc->getAttribute('score'));
@@ -5011,10 +5032,10 @@ trait OperatorTests
         $this->assertEquals(4.0, $doc1->getAttribute('power_val'));       // 2^2
         $this->assertEquals('Title 1 - Updated', $doc1->getAttribute('title'));
         $this->assertEquals('new content 1', $doc1->getAttribute('content'));
-        $this->assertContains('upsert', $doc1->getAttribute('tags'));
-        $this->assertContains('priority', $doc1->getAttribute('categories'));
-        $this->assertNotContains('shared', $doc1->getAttribute('items'));
-        $this->assertCount(4, $doc1->getAttribute('duplicates')); // Should have unique values
+        $this->assertContains('upsert', $doc1->getArray('tags'));
+        $this->assertContains('priority', $doc1->getArray('categories'));
+        $this->assertNotContains('shared', $doc1->getArray('items'));
+        $this->assertCount(4, $doc1->getArray('duplicates')); // Should have unique values
         $this->assertEquals([1, 2, 99, 3, 4, 5], $doc1->getAttribute('numbers')); // arrayInsert at index 2
         $this->assertEquals(['b', 'c'], $doc1->getAttribute('intersect_items')); // arrayIntersect
         $this->assertEquals(['x', 'w'], $doc1->getAttribute('diff_items')); // arrayDiff (removed y, z)

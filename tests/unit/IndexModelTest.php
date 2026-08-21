@@ -70,11 +70,10 @@ class IndexModelTest extends TestCase
 
         $doc = $index->toDocument();
 
-        $this->assertInstanceOf(Document::class, $doc);
         $this->assertSame('idx_email', $doc->getId());
         $this->assertSame('idx_email', $doc->getAttribute('key'));
         $this->assertSame('unique', $doc->getAttribute('type'));
-        $this->assertSame(['email'], $doc->getAttribute('attributes'));
+        $this->assertSame(['email'], $doc->getArray('attributes'));
         $this->assertSame([256], $doc->getAttribute('lengths'));
         $this->assertSame(['ASC'], $doc->getAttribute('orders'));
         $this->assertSame(1, $doc->getAttribute('ttl'));
@@ -255,7 +254,6 @@ class IndexModelTest extends TestCase
             ttl: 3600,
         );
 
-        $this->assertInstanceOf(Index::class, $index);
         $this->assertSame('idx', $index->key);
         $this->assertSame(IndexType::Key, $index->type);
         $this->assertSame(['name', 'email'], $index->attributes);
@@ -268,7 +266,6 @@ class IndexModelTest extends TestCase
     {
         $index = Index::key('idx_name', ['name']);
 
-        $this->assertInstanceOf(Index::class, $index);
         $this->assertSame('idx_name', $index->key);
         $this->assertSame(IndexType::Key, $index->type);
         $this->assertSame(['name'], $index->attributes);
@@ -278,7 +275,6 @@ class IndexModelTest extends TestCase
     {
         $index = Index::fullText('idx_body', ['body']);
 
-        $this->assertInstanceOf(Index::class, $index);
         $this->assertSame('idx_body', $index->key);
         $this->assertSame(IndexType::Fulltext, $index->type);
         $this->assertSame(['body'], $index->attributes);

@@ -70,6 +70,10 @@ class UpdateDocumentLogicTest extends TestCase
         return $adapter;
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     * @param  array<int, string>  $collectionPermissions
+     */
     private function setupCollectionAndDocument(
         Adapter&Stub $adapter,
         string $collectionId,

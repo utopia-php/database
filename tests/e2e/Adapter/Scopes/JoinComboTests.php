@@ -181,10 +181,6 @@ trait JoinComboTests
 
             $this->assertSame(0, \count($results));
             $this->assertComboSecretsHidden($results);
-            foreach ($results as $document) {
-                $this->assertSame(null, $document->getAttribute('score'));
-                $this->assertSame(null, $document->getAttribute('secret'));
-            }
         });
 
         $this->cleanupAggCollections($database, $this->joinComboCollections());
@@ -461,7 +457,12 @@ trait JoinComboTests
                 Query::join($cCol, 'mid.$id', 'selfId', '=', 'c'),
             ]);
             $this->assertGreaterThanOrEqual(1, \count($visible));
-            $visibleEncoded = \json_encode(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $visible));
+            $visibleEncoded = \json_encode(\array_map(static function (Document $document): array {
+                /** @var array<string, mixed> $copy */
+                $copy = $document->getArrayCopy();
+
+                return $copy;
+            }, $visible));
             $this->assertNotFalse($visibleEncoded);
             $this->assertSame(true, \str_contains($visibleEncoded, 'c-combo-secret'));
 
@@ -732,8 +733,6 @@ trait JoinComboTests
                 $this->assertSame($names[$id], $document->getAttribute('name'));
                 $this->assertSame($id, $document->getAttribute('twin.$id'));
                 $this->assertSame($names[$id], $document->getAttribute('twin.name'));
-                $this->assertNotSame('peer-hidden', $id);
-                $this->assertNotSame('hm-meta-secret', $id);
             }
             \sort($ids);
             $this->assertSame(['hm1', 'hm2', 'hm3'], $ids);
@@ -871,7 +870,6 @@ trait JoinComboTests
                 }
             }
             $this->assertNotNull($cursor);
-            $this->assertInstanceOf(Document::class, $cursor);
             $this->assertNotSame('', $cursor->getId());
             $cursorScore = $this->comboJoinScore($cursor);
             $this->assertNotNull($cursorScore);
@@ -901,7 +899,6 @@ trait JoinComboTests
                 }
             }
             $this->assertNotNull($beforeCursor);
-            $this->assertInstanceOf(Document::class, $beforeCursor);
             $this->assertNotSame('', $beforeCursor->getId());
             $beforeCursorScore = $this->comboJoinScore($beforeCursor);
             $this->assertNotNull($beforeCursorScore);
@@ -1112,7 +1109,6 @@ trait JoinComboTests
             }
 
             $this->assertNotNull($unmatched);
-            $this->assertInstanceOf(Document::class, $unmatched);
             $this->assertSame('', $unmatched->getId());
             $this->assertTrue($unmatched->getAttribute('name') === null || $unmatched->getAttribute('name') === '');
             $orphanScore = $unmatched->getAttribute('meta.score') ?? $unmatched->getAttribute('score');
@@ -1146,7 +1142,12 @@ trait JoinComboTests
             $this->assertSame(0, \count($results));
             $this->assertComboSecretsHidden($results);
 
-            $encoded = \json_encode(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $results));
+            $encoded = \json_encode(\array_map(static function (Document $document): array {
+                /** @var array<string, mixed> $copy */
+                $copy = $document->getArrayCopy();
+
+                return $copy;
+            }, $results));
             $this->assertNotFalse($encoded);
             $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 8686));
         });
@@ -1242,7 +1243,12 @@ trait JoinComboTests
                 $this->assertContains(10, $payloads);
                 $this->assertSame(false, \in_array(5151, $payloads, true));
 
-                $encoded = \json_encode(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $results));
+                $encoded = \json_encode(\array_map(static function (Document $document): array {
+                    /** @var array<string, mixed> $copy */
+                    $copy = $document->getArrayCopy();
+
+                    return $copy;
+                }, $results));
                 $this->assertNotFalse($encoded);
                 $this->assertSame(false, $this->comboEncodedJsonContainsScalar($encoded, 5151));
                 $this->assertSame(false, \str_contains($encoded, 'combo-hard-alpha'));
@@ -1444,9 +1450,6 @@ trait JoinComboTests
             foreach ($full as $document) {
                 $id = $document->getId();
                 $this->assertTrue($id === '' || \in_array($id, ['hm1', 'hm2', 'hm3'], true));
-                $this->assertNotSame('hm-meta-secret', $id);
-                $this->assertNotSame('peer-hidden', $id);
-                $this->assertNotSame('peer-a', $id);
             }
 
             $cursor = null;
@@ -1460,7 +1463,6 @@ trait JoinComboTests
                 }
             }
             $this->assertNotNull($cursor);
-            $this->assertInstanceOf(Document::class, $cursor);
             $this->assertNotSame('', $cursor->getId());
             $this->assertNotNull($cursorIndex);
             $cursorScore = $this->comboJoinScore($cursor);
@@ -1866,10 +1868,6 @@ trait JoinComboTests
                 $this->assertNotSame(777, (int) $score);
                 $this->assertNotSame(8686, (int) $score);
                 $this->assertNotSame(5151, (int) $score);
-            } else {
-                $this->assertNotSame(777, $score);
-                $this->assertNotSame(8686, $score);
-                $this->assertNotSame(5151, $score);
             }
         }
 
@@ -2241,7 +2239,7 @@ trait JoinComboTests
         }
 
         /** @var array<Document> $indexes */
-        $indexes = $database->getCollection($collection)->getAttribute('indexes', []);
+        $indexes = $database->getCollection($collection)->indexes;
         foreach ($indexes as $index) {
             $type = $index->getAttribute('type');
             $typeValue = $type instanceof IndexType ? $type->value : $type;

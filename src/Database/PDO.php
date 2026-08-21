@@ -23,6 +23,7 @@ use Utopia\Console;
  * @method bool setAttribute(int $attribute, mixed $value)
  * @method mixed getAttribute(int $attribute)
  * @method string|false lastInsertId(?string $name = null)
+ * @method \PDOStatement|false query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs)
  */
 class PDO
 {

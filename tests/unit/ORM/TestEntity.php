@@ -31,6 +31,7 @@ class TestEntity
     #[UpdatedAt]
     public ?string $updatedAt = null;
 
+    /** @var array<int, string> */
     #[Permissions]
     public array $permissions = [];
 
@@ -46,6 +47,7 @@ class TestEntity
     #[Column(type: ColumnType::Boolean)]
     public bool $active = true;
 
+    /** @var array<int, TestPost|string> */
     #[HasMany(target: TestPost::class, key: 'posts', twoWayKey: 'author')]
     public array $posts = [];
 }

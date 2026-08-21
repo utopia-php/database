@@ -8,9 +8,7 @@ class LazyProxy extends Document
 {
     private bool $resolved = false;
 
-    private ?Document $realDocument = null;
-
-    private ?BatchLoader $batchLoader;
+    private BatchLoader $batchLoader;
 
     private string $targetCollection;
 
@@ -28,7 +26,6 @@ class LazyProxy extends Document
     public function resolveWith(?Document $document): void
     {
         $this->resolved = true;
-        $this->realDocument = $document;
 
         if ($document !== null) {
             foreach ($document->getArrayCopy() as $key => $value) {
@@ -83,10 +80,7 @@ class LazyProxy extends Document
             return;
         }
 
-        $this->batchLoader?->resolve($this->targetCollection, $this->targetId);
-
-        if (! $this->resolved) {
-            $this->resolved = true;
-        }
+        $this->batchLoader->resolve($this->targetCollection, $this->targetId);
+        $this->resolved = true;
     }
 }

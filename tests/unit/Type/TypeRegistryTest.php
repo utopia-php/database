@@ -30,11 +30,19 @@ class TypeRegistryTest extends TestCase
 
             public function encode(mixed $value): mixed
             {
+                if (! \is_int($value) && ! \is_float($value)) {
+                    return 0;
+                }
+
                 return (int) ($value * 100);
             }
 
             public function decode(mixed $value): mixed
             {
+                if (! \is_int($value) && ! \is_float($value)) {
+                    return 0;
+                }
+
                 return $value / 100;
             }
         };

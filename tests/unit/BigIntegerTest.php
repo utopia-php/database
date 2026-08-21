@@ -109,11 +109,11 @@ final class BigIntegerTest extends TestCase
         $this->assertTrue($adapter->createCollection('bigints', [
             Attribute::bigInteger(key: 'value'),
         ]));
-        $this->assertInstanceOf(Document::class, $adapter->createDocument($collection, new Document([
+        $adapter->createDocument($collection, new Document([
             '$id' => 'maximum',
             '$permissions' => [],
             'value' => PHP_INT_MAX,
-        ])));
+        ]));
 
         $stored = $adapter->getDocument($collection, 'maximum')->getAttribute('value');
         $this->assertTrue(\is_int($stored) || \is_string($stored));

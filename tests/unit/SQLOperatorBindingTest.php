@@ -40,6 +40,7 @@ final class SQLOperatorBindingTest extends TestCase
         $method = new ReflectionMethod($adapter, 'bindOperatorParams');
         $method->invokeArgs($adapter, [$statement, Operator::increment(2), &$bindIndex]);
 
+        /** @var mixed $bindIndex */
         $this->assertSame(1, $bindIndex);
         $this->assertTrue($statement->execute());
         $this->assertSame(2, $statement->fetchColumn());

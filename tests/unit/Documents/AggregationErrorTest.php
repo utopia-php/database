@@ -17,6 +17,9 @@ use Utopia\Database\Query;
 
 class AggregationErrorTest extends TestCase
 {
+    /**
+     * @param  array<int, Capability>  $capabilities
+     */
     private function buildDatabase(array $capabilities): Database
     {
         $adapter = self::createStub(Adapter::class);
@@ -102,7 +105,7 @@ class AggregationErrorTest extends TestCase
         ]);
 
         $results = $db->skipValidation(fn () => $db->find('testCol', [Query::count('*', 'cnt')]));
-        $this->assertIsArray($results);
+        $this->assertSame([], $results);
     }
 
     public function testFindWithCursorAndAggregationThrows(): void

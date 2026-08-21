@@ -116,7 +116,6 @@ final class AttributeSubclassTest extends TestCase
     {
         $attribute = Attribute::string(key: 'name');
 
-        $this->assertInstanceOf(StringType::class, $attribute);
         $this->assertSame(ColumnType::String, $attribute->type);
         $this->assertSame(Database::LENGTH_KEY, $attribute->size);
         $this->assertSame('name', $attribute->key);
@@ -127,7 +126,6 @@ final class AttributeSubclassTest extends TestCase
     {
         $attribute = new StringType(key: 'name');
 
-        $this->assertInstanceOf(StringType::class, $attribute);
         $this->assertSame(ColumnType::String, $attribute->type);
         $this->assertSame(Database::LENGTH_KEY, $attribute->size);
         $this->assertSame('name', $attribute->key);
@@ -138,7 +136,6 @@ final class AttributeSubclassTest extends TestCase
     {
         $attribute = new Integer(key: 'age', default: 0);
 
-        $this->assertInstanceOf(Integer::class, $attribute);
         $this->assertSame(ColumnType::Integer, $attribute->type);
         $this->assertSame(0, $attribute->size);
         $this->assertSame(0, $attribute->default);
@@ -150,7 +147,6 @@ final class AttributeSubclassTest extends TestCase
     {
         $attribute = Attribute::integer(key: 'age', default: 0);
 
-        $this->assertInstanceOf(Integer::class, $attribute);
         $this->assertSame(ColumnType::Integer, $attribute->type);
         $this->assertSame(0, $attribute->size);
         $this->assertSame(0, $attribute->default);
@@ -161,13 +157,11 @@ final class AttributeSubclassTest extends TestCase
     public function testVectorKeepsExplicitSize(): void
     {
         $fromFactory = Attribute::vector(key: 'embedding', size: 3);
-        $this->assertInstanceOf(Vector::class, $fromFactory);
         $this->assertSame(ColumnType::Vector, $fromFactory->type);
         $this->assertSame(3, $fromFactory->size);
         $this->assertSame('embedding', $fromFactory->key);
 
         $fromConstructor = new Vector(key: 'embedding', size: 3);
-        $this->assertInstanceOf(Vector::class, $fromConstructor);
         $this->assertSame(ColumnType::Vector, $fromConstructor->type);
         $this->assertSame(3, $fromConstructor->size);
         $this->assertSame('embedding', $fromConstructor->key);
@@ -184,7 +178,6 @@ final class AttributeSubclassTest extends TestCase
 
         $attribute = Attribute::relationship(key: 'author', options: $options);
 
-        $this->assertInstanceOf(Relationship::class, $attribute);
         $this->assertSame(ColumnType::Relationship, $attribute->type);
         $this->assertSame($options, $attribute->options);
         $this->assertSame('author', $attribute->key);
@@ -375,12 +368,10 @@ final class AttributeSubclassTest extends TestCase
         $enum = Attribute::enum(key: 'status');
         $array = Attribute::array(key: 'tags');
 
-        $this->assertInstanceOf(EnumType::class, $enum);
         $this->assertSame(ColumnType::Enum, $enum->type);
         $this->assertSame('status', $enum->key);
         $this->assertSame(0, $enum->size);
 
-        $this->assertInstanceOf(ArrayType::class, $array);
         $this->assertSame(ColumnType::Array, $array->type);
         $this->assertSame('tags', $array->key);
         $this->assertSame(0, $array->size);

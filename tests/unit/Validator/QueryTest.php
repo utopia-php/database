@@ -251,9 +251,6 @@ class QueryTest extends TestCase
         }
 
         $cursor = reset($queries1);
-
-        $this->assertInstanceOf(Query::class, $cursor);
-
         $cursor->setValue(new Document(['$id' => 'hello1']));
 
         $query1 = $queries[1];

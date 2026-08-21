@@ -5,7 +5,6 @@ namespace Tests\Unit\Seeder;
 use Faker\Factory as FakerFactory;
 use Faker\Generator;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Document;
 use Utopia\Database\Seeder\Factory;
 
 class FactoryTest extends TestCase
@@ -31,7 +30,7 @@ class FactoryTest extends TestCase
     public function testDefineAndMake(): void
     {
         $factory = new Factory();
-        $factory->define('users', function ($faker) {
+        $factory->define('users', function (Generator $faker) {
             return [
                 'name' => $faker->name(),
                 'email' => $faker->email(),
@@ -41,7 +40,6 @@ class FactoryTest extends TestCase
 
         $doc = $factory->make('users');
 
-        $this->assertInstanceOf(Document::class, $doc);
         $this->assertNotEmpty($doc->getAttribute('name'));
         $this->assertNotEmpty($doc->getAttribute('email'));
         $this->assertGreaterThanOrEqual(18, $doc->getAttribute('age'));
@@ -50,7 +48,7 @@ class FactoryTest extends TestCase
     public function testMakeWithOverrides(): void
     {
         $factory = new Factory();
-        $factory->define('users', function ($faker) {
+        $factory->define('users', function (Generator $faker) {
             return [
                 'name' => $faker->name(),
                 'email' => $faker->email(),
@@ -65,7 +63,7 @@ class FactoryTest extends TestCase
     public function testMakeMany(): void
     {
         $factory = new Factory();
-        $factory->define('users', function ($faker) {
+        $factory->define('users', function (Generator $faker) {
             return [
                 'name' => $faker->name(),
             ];
@@ -75,7 +73,7 @@ class FactoryTest extends TestCase
 
         $this->assertCount(5, $docs);
         foreach ($docs as $doc) {
-            $this->assertInstanceOf(Document::class, $doc);
+            $this->assertNotEmpty($doc->getAttribute('name'));
         }
     }
 
@@ -87,9 +85,4 @@ class FactoryTest extends TestCase
         $factory->make('nonexistent');
     }
 
-    public function testGetFaker(): void
-    {
-        $factory = new Factory();
-        $this->assertNotNull($factory->getFaker());
-    }
 }

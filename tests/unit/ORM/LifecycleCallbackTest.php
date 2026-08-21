@@ -24,6 +24,7 @@ class LifecycleEntity
     #[Column(type: ColumnType::String, size: 255)]
     public string $name = '';
 
+    /** @var list<string> */
     public array $callLog = [];
 
     #[PrePersist]
@@ -72,6 +73,7 @@ class MultiCallbackEntity
     #[Column(type: ColumnType::String, size: 255)]
     public string $name = '';
 
+    /** @var list<string> */
     public array $callLog = [];
 
     #[PrePersist]
@@ -168,35 +170,6 @@ class LifecycleCallbackTest extends TestCase
         $this->assertEmpty($metadata->postUpdateCallbacks);
         $this->assertEmpty($metadata->preRemoveCallbacks);
         $this->assertEmpty($metadata->postRemoveCallbacks);
-    }
-
-    public function testCallbackValuesAreStrings(): void
-    {
-        $metadata = $this->factory->getMetadata(LifecycleEntity::class);
-
-        foreach ($metadata->prePersistCallbacks as $cb) {
-            $this->assertIsString($cb);
-        }
-
-        foreach ($metadata->postPersistCallbacks as $cb) {
-            $this->assertIsString($cb);
-        }
-
-        foreach ($metadata->preUpdateCallbacks as $cb) {
-            $this->assertIsString($cb);
-        }
-
-        foreach ($metadata->postUpdateCallbacks as $cb) {
-            $this->assertIsString($cb);
-        }
-
-        foreach ($metadata->preRemoveCallbacks as $cb) {
-            $this->assertIsString($cb);
-        }
-
-        foreach ($metadata->postRemoveCallbacks as $cb) {
-            $this->assertIsString($cb);
-        }
     }
 
     public function testPrePersistCallbackCountIsExactlyOne(): void

@@ -622,7 +622,10 @@ trait Attributes
     {
         return $this->updateAttributeMeta($collection, $id, function ($attribute) use ($format) {
             $rawType = $attribute->getAttribute('type');
-            $attrType = Attribute::normalizeType($rawType instanceof ColumnType ? $rawType : (string) $rawType);
+            if (! $rawType instanceof ColumnType && ! \is_string($rawType)) {
+                throw new DatabaseException('Unknown attribute type');
+            }
+            $attrType = Attribute::normalizeType($rawType);
             if (! Structure::hasFormat($format, $attrType)) {
                 throw new DatabaseException('Format "'.$format.'" not available for attribute type "'.$attrType->value.'"');
             }

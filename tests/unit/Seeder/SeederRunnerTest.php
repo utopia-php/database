@@ -14,8 +14,12 @@ class SeederRunnerTest extends TestCase
         $order = [];
 
         $seederA = new class ($order) extends Seeder {
-            private array $order;
+            /** @var list<string> */
+            public array $order;
 
+            /**
+             * @param  list<string>  $order
+             */
             public function __construct(array &$order)
             {
                 $this->order = &$order;
@@ -28,10 +32,16 @@ class SeederRunnerTest extends TestCase
         };
 
         $seederB = new class ($order, $seederA::class) extends Seeder {
-            private array $order;
+            /** @var list<string> */
+            public array $order;
 
+            /** @var class-string<Seeder> */
             private string $depClass;
 
+            /**
+             * @param  list<string>  $order
+             * @param  class-string<Seeder>  $depClass
+             */
             public function __construct(array &$order, string $depClass)
             {
                 $this->order = &$order;
@@ -57,6 +67,8 @@ class SeederRunnerTest extends TestCase
         $runner->run($db);
 
         $this->assertEquals(['A', 'B'], $order);
+        $this->assertEquals(['A', 'B'], $seederA->order);
+        $this->assertEquals(['A', 'B'], $seederB->order);
     }
 
     public function testDoesNotRunSameSeederTwice(): void

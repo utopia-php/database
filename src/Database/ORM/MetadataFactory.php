@@ -50,6 +50,10 @@ class MetadataFactory
             return self::$cache[$className];
         }
 
+        if (! \class_exists($className)) {
+            throw new \RuntimeException("Class {$className} does not exist");
+        }
+
         $ref = new ReflectionClass($className);
         $entityAttrs = $ref->getAttributes(Entity::class);
 
@@ -287,6 +291,7 @@ class MetadataFactory
     }
 
     /**
+     * @param  ReflectionClass<object>  $ref
      * @return array{prePersist: array<string>, postPersist: array<string>, preUpdate: array<string>, postUpdate: array<string>, preRemove: array<string>, postRemove: array<string>}
      */
     private function parseLifecycleCallbacks(ReflectionClass $ref): array

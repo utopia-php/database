@@ -80,8 +80,9 @@ class Factory
     public function createMany(string $collection, Database $db, int $count, array $overrides = []): array
     {
         $documents = $this->makeMany($collection, $count, $overrides);
+        $db->createDocuments($collection, $documents);
 
-        return $db->createDocuments($collection, $documents);
+        return $documents;
     }
 
     public function getFaker(): Generator

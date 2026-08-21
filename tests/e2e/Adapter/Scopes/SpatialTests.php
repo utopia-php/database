@@ -45,28 +45,22 @@ trait SpatialTests
 
         $col = $database->createCollection(new Collection(id: $collectionName, attributes: $attributes, indexes: $indexes));
 
-        $this->assertIsArray($col->getAttribute('attributes'));
-        $this->assertCount(2, $col->getAttribute('attributes'));
+        $this->assertCount(2, $col->attributes);
 
-        $this->assertIsArray($col->getAttribute('indexes'));
-        $this->assertCount(2, $col->getAttribute('indexes'));
+        $this->assertCount(2, $col->indexes);
 
         $col = $database->getCollection($collectionName);
-        $this->assertIsArray($col->getAttribute('attributes'));
-        $this->assertCount(2, $col->getAttribute('attributes'));
+        $this->assertCount(2, $col->attributes);
 
-        $this->assertIsArray($col->getAttribute('indexes'));
-        $this->assertCount(2, $col->getAttribute('indexes'));
+        $this->assertCount(2, $col->indexes);
 
         $database->createAttribute($collectionName, Attribute::point(key: 'attribute3', required: true));
         $database->createIndex($collectionName, Index::spatial(key: ID::custom('index3'), attributes: ['attribute3']));
 
         $col = $database->getCollection($collectionName);
-        $this->assertIsArray($col->getAttribute('attributes'));
-        $this->assertCount(3, $col->getAttribute('attributes'));
+        $this->assertCount(3, $col->attributes);
 
-        $this->assertIsArray($col->getAttribute('indexes'));
-        $this->assertCount(3, $col->getAttribute('indexes'));
+        $this->assertCount(3, $col->indexes);
 
         $database->deleteCollection($collectionName);
     }
@@ -110,13 +104,11 @@ trait SpatialTests
                 '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())],
             ]);
             $createdDoc = $database->createDocument($collectionName, $doc1);
-            $this->assertInstanceOf(Document::class, $createdDoc);
             $this->assertEquals($point, $createdDoc->getAttribute('pointAttr'));
             $this->assertEquals($linestring, $createdDoc->getAttribute('lineAttr'));
             $this->assertEquals($polygon, $createdDoc->getAttribute('polyAttr'));
 
             $createdDoc = $database->getDocument($collectionName, 'doc1');
-            $this->assertInstanceOf(Document::class, $createdDoc);
             $this->assertEquals($point, $createdDoc->getAttribute('pointAttr'));
             $this->assertEquals($linestring, $createdDoc->getAttribute('lineAttr'));
             $this->assertEquals($polygon, $createdDoc->getAttribute('polyAttr'));
@@ -273,7 +265,6 @@ trait SpatialTests
             'building' => 'building1',
         ]));
 
-        $this->assertInstanceOf(Document::class, $location1);
         $this->assertEquals([40.7128, -74.0060], $location1->getAttribute('coordinates'));
 
         // Check if building attribute is populated (could be ID string or Document object)
@@ -309,14 +300,12 @@ trait SpatialTests
 
         // Test relationship integrity with spatial data
         $building = $database->getDocument('building', 'building1');
-        $this->assertInstanceOf(Document::class, $building);
         $this->assertEquals('building1', $building->getId());
 
         // Test one-way relationship (building doesn't have location attribute)
         $this->assertArrayNotHasKey('location', $building->getArrayCopy());
 
         // Test basic relationship integrity
-        $this->assertInstanceOf(Document::class, $building);
         $this->assertEquals('Empire State Building', $building->getAttribute('name'));
 
         // Clean up
@@ -354,10 +343,8 @@ trait SpatialTests
             $this->assertEquals(true, $database->createIndex($collectionName, Index::spatial(key: 'idx_poly', attributes: ['polyAttr'])));
 
             $collection = $database->getCollection($collectionName);
-            $this->assertIsArray($collection->getAttribute('attributes'));
-            $this->assertCount(3, $collection->getAttribute('attributes'));
-            $this->assertIsArray($collection->getAttribute('indexes'));
-            $this->assertCount(3, $collection->getAttribute('indexes'));
+            $this->assertCount(3, $collection->attributes);
+            $this->assertCount(3, $collection->indexes);
 
             // Create a simple document to ensure structure is valid
             $doc = $database->createDocument($collectionName, new Document([
@@ -367,7 +354,6 @@ trait SpatialTests
                 'polyAttr' => [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]],
                 '$permissions' => [Permission::read(Role::any())],
             ]));
-            $this->assertInstanceOf(Document::class, $doc);
         } finally {
             $database->deleteCollection($collectionName);
         }
@@ -402,30 +388,25 @@ trait SpatialTests
                 twoWayKey: 'region'
             ));
 
-            $r1 = $database->createDocument($parent, new Document([
+            $database->createDocument($parent, new Document([
                 '$id' => 'r1',
                 'name' => 'Region 1',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $this->assertInstanceOf(Document::class, $r1);
-
-            $p1 = $database->createDocument($child, new Document([
+            $database->createDocument($child, new Document([
                 '$id' => 'p1',
                 'name' => 'Place 1',
                 'coord' => [10.0, 10.0],
                 'region' => 'r1',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $p2 = $database->createDocument($child, new Document([
+            $database->createDocument($child, new Document([
                 '$id' => 'p2',
                 'name' => 'Place 2',
                 'coord' => [10.1, 10.1],
                 'region' => 'r1',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $this->assertInstanceOf(Document::class, $p1);
-            $this->assertInstanceOf(Document::class, $p2);
-
             // Spatial query on child collection
             $near = $database->find($child, [
                 Query::distanceLessThan('coord', [10.0, 10.0], 1.0),
@@ -478,7 +459,7 @@ trait SpatialTests
 
             $region = $database->getDocument($parent, 'r1');
             $this->assertArrayHasKey('places', $region);
-            $this->assertEquals(2, \count($region['places']));
+            $this->assertCount(2, $region->getDocuments('places'));
         } finally {
             $database->deleteCollection($child);
             $database->deleteCollection($parent);
@@ -514,30 +495,26 @@ trait SpatialTests
                 twoWayKey: 'stops'
             ));
 
-            $c1 = $database->createDocument($parent, new Document([
+            $database->createDocument($parent, new Document([
                 '$id' => 'c1',
                 'name' => 'City 1',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
 
-            $s1 = $database->createDocument($child, new Document([
+            $database->createDocument($child, new Document([
                 '$id' => 's1',
                 'name' => 'Stop 1',
                 'coord' => [20.0, 20.0],
                 'city' => 'c1',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $s2 = $database->createDocument($child, new Document([
+            $database->createDocument($child, new Document([
                 '$id' => 's2',
                 'name' => 'Stop 2',
                 'coord' => [20.2, 20.2],
                 'city' => 'c1',
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $this->assertInstanceOf(Document::class, $c1);
-            $this->assertInstanceOf(Document::class, $s1);
-            $this->assertInstanceOf(Document::class, $s2);
-
             $near = $database->find($child, [
                 Query::distanceLessThan('coord', [20.0, 20.0], 1.0),
             ], PermissionType::Read);
@@ -583,7 +560,7 @@ trait SpatialTests
 
             $city = $database->getDocument($parent, 'c1');
             $this->assertArrayHasKey('stops', $city);
-            $this->assertEquals(2, \count($city['stops']));
+            $this->assertCount(2, $city->getDocuments('stops'));
         } finally {
             $database->deleteCollection($child);
             $database->deleteCollection($parent);
@@ -621,7 +598,7 @@ trait SpatialTests
                 twoWayKey: 'drivers'
             ));
 
-            $d1 = $database->createDocument($a, new Document([
+            $database->createDocument($a, new Document([
                 '$id' => 'd1',
                 'name' => 'Driver 1',
                 'home' => [30.0, 30.0],
@@ -634,8 +611,6 @@ trait SpatialTests
                 ],
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $this->assertInstanceOf(Document::class, $d1);
-
             // Spatial query on "drivers" using point distanceEqual
             $near = $database->find($a, [
                 Query::distanceLessThan('home', [30.0, 30.0], 0.5),
@@ -688,7 +663,7 @@ trait SpatialTests
             // Ensure relationship present
             $d1 = $database->getDocument($a, 'd1');
             $this->assertArrayHasKey('routes', $d1);
-            $this->assertEquals(1, \count($d1['routes']));
+            $this->assertCount(1, $d1->getDocuments('routes'));
         } finally {
             $database->deleteCollection($b);
             $database->deleteCollection($a);
@@ -713,8 +688,7 @@ trait SpatialTests
             $this->assertEquals(true, $database->createIndex($collectionName, Index::spatial(key: 'loc_spatial', attributes: ['loc'])));
 
             $collection = $database->getCollection($collectionName);
-            $indexes = $collection->getAttribute('indexes');
-            $this->assertIsArray($indexes);
+            $indexes = $collection->indexes;
             $this->assertCount(1, $indexes);
             $index = $indexes[0] ?? null;
             $this->assertInstanceOf(Document::class, $index);
@@ -723,7 +697,7 @@ trait SpatialTests
 
             $this->assertEquals(true, $database->deleteIndex($collectionName, 'loc_spatial'));
             $collection = $database->getCollection($collectionName);
-            $this->assertCount(0, $collection->getAttribute('indexes'));
+            $this->assertCount(0, $collection->indexes);
         } finally {
             $database->deleteCollection($collectionName);
         }
@@ -744,8 +718,7 @@ trait SpatialTests
             if ($orderSupported) {
                 $database->createCollection(new Collection(id: $collOrderCreate, attributes: $attributes, indexes: $indexes));
                 $meta = $database->getCollection($collOrderCreate);
-                $createdIndexes = $meta->getAttribute('indexes');
-                $this->assertIsArray($createdIndexes);
+                $createdIndexes = $meta->indexes;
                 $createdIndex = $createdIndexes[0] ?? null;
                 $this->assertInstanceOf(Document::class, $createdIndex);
                 $this->assertSame('idx_loc', $createdIndex->getId());
@@ -794,8 +767,7 @@ trait SpatialTests
             if ($nullSupported) {
                 $database->createCollection(new Collection(id: $collNullCreate, attributes: $attributes, indexes: $indexes));
                 $meta = $database->getCollection($collNullCreate);
-                $createdIndexes = $meta->getAttribute('indexes');
-                $this->assertIsArray($createdIndexes);
+                $createdIndexes = $meta->indexes;
                 $createdIndex = $createdIndexes[0] ?? null;
                 $this->assertInstanceOf(Document::class, $createdIndex);
                 $this->assertSame('idx_loc', $createdIndex->getId());
@@ -804,7 +776,7 @@ trait SpatialTests
                     $database->createCollection(new Collection(id: $collNullCreate, attributes: $attributes, indexes: $indexes));
                     $this->fail('Expected exception when spatial index is created on NULL-able geometry attribute');
                 } catch (\Throwable $e) {
-                    $this->assertTrue(true); // exception expected; exact message is adapter-specific
+                    $this->assertNotSame('', $e->getMessage());
                 }
             }
         } finally {
@@ -825,7 +797,7 @@ trait SpatialTests
                     $database->createIndex($collNullIndex, Index::spatial(key: 'idx_loc', attributes: ['loc']));
                     $this->fail('Expected exception when spatial index is created on NULL-able geometry attribute');
                 } catch (\Throwable $e) {
-                    $this->assertTrue(true); // exception expected; exact message is adapter-specific
+                    $this->assertNotSame('', $e->getMessage()); // exception expected; exact message is adapter-specific
                 }
             }
         } finally {
@@ -932,11 +904,8 @@ trait SpatialTests
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]);
 
-            $createdDoc1 = $database->createDocument($collectionName, $doc1);
-            $createdDoc2 = $database->createDocument($collectionName, $doc2);
-
-            $this->assertInstanceOf(Document::class, $createdDoc1);
-            $this->assertInstanceOf(Document::class, $createdDoc2);
+            $database->createDocument($collectionName, $doc1);
+            $database->createDocument($collectionName, $doc2);
 
             // Test rectangle contains point
             if ($database->getAdapter()->supports(Capability::BoundaryInclusive)) {
@@ -1549,10 +1518,12 @@ trait SpatialTests
             $this->assertNotEmpty($document->getId());
             $this->assertNotEmpty($document->getAttribute('name'));
             $this->assertNotEmpty($document->getSequence());
-            $this->assertIsArray($document->getAttribute('location'));
-            $this->assertIsArray($document->getAttribute('area'));
-            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
-            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+            $location = $document->getArray('location');
+            $area = $document->getArray('area');
+            $this->assertCount(2, $location);
+            $ring = $area[0] ?? null;
+            $this->assertIsArray($ring);
+            $this->assertGreaterThan(1, count($ring));
         }
 
         $results = $database->find($collectionName);
@@ -1560,10 +1531,12 @@ trait SpatialTests
             $this->assertNotEmpty($document->getId());
             $this->assertNotEmpty($document->getAttribute('name'));
             $this->assertNotEmpty($document->getSequence());
-            $this->assertIsArray($document->getAttribute('location'));
-            $this->assertIsArray($document->getAttribute('area'));
-            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
-            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+            $location = $document->getArray('location');
+            $area = $document->getArray('area');
+            $this->assertCount(2, $location);
+            $ring = $area[0] ?? null;
+            $this->assertIsArray($ring);
+            $this->assertGreaterThan(1, count($ring));
         }
 
         foreach ($results as $doc) {
@@ -1572,10 +1545,12 @@ trait SpatialTests
             $this->assertNotEmpty($document->getAttribute('name'));
             $this->assertEquals($document->getAttribute('name'), $doc->getAttribute('name'));
             $this->assertNotEmpty($document->getSequence());
-            $this->assertIsArray($document->getAttribute('location'));
-            $this->assertIsArray($document->getAttribute('area'));
-            $this->assertCount(2, $document->getAttribute('location')); // POINT has 2 coordinates
-            $this->assertGreaterThan(1, count($document->getAttribute('area')[0])); // POLYGON has multiple points
+            $location = $document->getArray('location');
+            $area = $document->getArray('area');
+            $this->assertCount(2, $location);
+            $ring = $area[0] ?? null;
+            $this->assertIsArray($ring);
+            $this->assertGreaterThan(1, count($ring));
         }
 
         $results = $database->find($collectionName, [Query::select(['name'])]);
@@ -1615,7 +1590,7 @@ trait SpatialTests
                 [15.0, 25.0],
             ], // New POLYGON
         ]), [
-            Query::greaterThanEqual('$sequence', $results[0]->getSequence()),
+            Query::greaterThanEqual('$sequence', $results[0]->getSequence() ?? ''),
         ], onNext: function ($doc) use (&$updateResults) {
             $updateResults[] = $doc;
         });
@@ -1700,8 +1675,8 @@ trait SpatialTests
         foreach ($upsertResults as $document) {
             $this->assertNotEmpty($document->getId());
             $this->assertNotEmpty($document->getSequence());
-            $this->assertIsArray($document->getAttribute('location'));
-            $this->assertIsArray($document->getAttribute('area'));
+            $this->assertNotEmpty($document->getArray('location'));
+            $this->assertNotEmpty($document->getArray('area'));
         }
 
         // Test 4: Query spatial data after bulk operations
@@ -1797,7 +1772,7 @@ trait SpatialTests
             $database->createIndex($collectionName, Index::spatial(key: 'idx_area', attributes: ['area']));
 
             // Seed documents
-            $a = $database->createDocument($collectionName, new Document([
+            $database->createDocument($collectionName, new Document([
                 '$id' => 'a',
                 'name' => 'A',
                 'loc' => [10.0, 10.0],
@@ -1805,7 +1780,7 @@ trait SpatialTests
                 'score' => 10,
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $b = $database->createDocument($collectionName, new Document([
+            $database->createDocument($collectionName, new Document([
                 '$id' => 'b',
                 'name' => 'B',
                 'loc' => [10.05, 10.05],
@@ -1813,7 +1788,7 @@ trait SpatialTests
                 'score' => 20,
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $c = $database->createDocument($collectionName, new Document([
+            $database->createDocument($collectionName, new Document([
                 '$id' => 'c',
                 'name' => 'C',
                 'loc' => [50.0, 50.0],
@@ -1821,10 +1796,6 @@ trait SpatialTests
                 'score' => 30,
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-
-            $this->assertInstanceOf(Document::class, $a);
-            $this->assertInstanceOf(Document::class, $b);
-            $this->assertInstanceOf(Document::class, $c);
 
             // COUNT with spatial distanceEqual filter
             $queries = [
@@ -1917,8 +1888,7 @@ trait SpatialTests
                 // Should succeed on adapters that allow nullable spatial indexes
                 $database->updateAttribute($collectionName, 'geom', required: false);
                 $meta = $database->getCollection($collectionName);
-                $attributes = $meta->getAttribute('attributes');
-                $this->assertIsArray($attributes);
+                $attributes = $meta->attributes;
                 $attribute = $attributes[0] ?? null;
                 $this->assertInstanceOf(Document::class, $attribute);
                 $this->assertFalse($attribute->getAttribute('required'));
@@ -1933,8 +1903,7 @@ trait SpatialTests
                 $this->assertTrue($threw, 'Expected error when setting required=false with existing spatial index and adapter not supporting nullable indexes');
                 // Ensure attribute remains required
                 $meta = $database->getCollection($collectionName);
-                $attributes = $meta->getAttribute('attributes');
-                $this->assertIsArray($attributes);
+                $attributes = $meta->attributes;
                 $attribute = $attributes[0] ?? null;
                 $this->assertInstanceOf(Document::class, $attribute);
                 $this->assertTrue($attribute->getAttribute('required'));
@@ -1951,7 +1920,7 @@ trait SpatialTests
                     $database->createIndex($collectionName, Index::spatial(key: 'idx_geom_desc', attributes: ['geom'], orders: [Order::Desc]));
                     $this->fail('Expected error when providing orders for spatial index on adapter without order support');
                 } catch (\Throwable $e) {
-                    $this->assertTrue(true);
+                    $this->assertNotSame('', $e->getMessage());
                 }
             }
         } finally {
@@ -1976,19 +1945,16 @@ trait SpatialTests
             $this->assertEquals(true, $database->createIndex($collectionName, Index::spatial(key: 'idx_loc', attributes: ['loc'])));
 
             // Two points roughly ~1000 meters apart by latitude delta (~0.009 deg ≈ 1km)
-            $p0 = $database->createDocument($collectionName, new Document([
+            $database->createDocument($collectionName, new Document([
                 '$id' => 'p0',
                 'loc' => [0.0000, 0.0000],
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-            $p1 = $database->createDocument($collectionName, new Document([
+            $database->createDocument($collectionName, new Document([
                 '$id' => 'p1',
                 'loc' => [0.0090, 0.0000],
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-
-            $this->assertInstanceOf(Document::class, $p0);
-            $this->assertInstanceOf(Document::class, $p1);
 
             // distanceLessThan with meters=true: within 1500m should include both
             $within1_5km = $database->find($collectionName, [
@@ -2062,7 +2028,7 @@ trait SpatialTests
             $this->assertEquals(true, $database->createIndex($multiCollection, Index::spatial(key: 'idx_poly', attributes: ['poly'])));
 
             // Geometry sets: near origin and far east
-            $docNear = $database->createDocument($multiCollection, new Document([
+            $database->createDocument($multiCollection, new Document([
                 '$id' => 'near',
                 'loc' => [0.0000, 0.0000],
                 'line' => [[0.0000, 0.0000], [0.0010, 0.0000]], // ~111m
@@ -2076,7 +2042,7 @@ trait SpatialTests
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
 
-            $docFar = $database->createDocument($multiCollection, new Document([
+            $database->createDocument($multiCollection, new Document([
                 '$id' => 'far',
                 'loc' => [0.2000, 0.0000], // ~22 km east
                 'line' => [[0.2000, 0.0000], [0.2020, 0.0000]],
@@ -2089,9 +2055,6 @@ trait SpatialTests
                 ]],
                 '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             ]));
-
-            $this->assertInstanceOf(Document::class, $docNear);
-            $this->assertInstanceOf(Document::class, $docFar);
 
             // polygon vs polygon (~1 km from near, ~22 km from far)
             $polyPolyWithin3km = $database->find($multiCollection, [

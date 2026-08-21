@@ -3,6 +3,7 @@
 namespace Tests\Unit\Repository;
 
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -59,7 +60,7 @@ class AdminSpecification implements Specification
 #[AllowMockObjectsWithoutExpectations]
 class RepositoryTest extends TestCase
 {
-    private Database $db;
+    private Database&MockObject $db;
 
     private TestRepository $repo;
 
@@ -205,8 +206,11 @@ class RepositoryTest extends TestCase
             ->with(
                 'users',
                 $this->callback(function (array $queries) {
+                    $query = $queries[0] ?? null;
+
                     return count($queries) === 1
-                        && $queries[0]->getMethod()->value === 'equal';
+                        && $query instanceof Query
+                        && $query->getMethod()->value === 'equal';
                 })
             )
             ->willReturn([]);
@@ -255,7 +259,6 @@ class RepositoryTest extends TestCase
         $spec2 = new AdminSpecification();
 
         $composite = $spec1->and($spec2);
-        $this->assertInstanceOf(Specification::class, $composite);
         $this->assertCount(2, $composite->toQueries());
     }
 
@@ -265,7 +268,7 @@ class RepositoryTest extends TestCase
         $spec2 = new AdminSpecification();
 
         $composite = $spec1->or($spec2);
-        $this->assertInstanceOf(Specification::class, $composite);
+        $this->assertCount(1, $composite->toQueries());
     }
 
     public function testCustomSpecificationImplementingInterface(): void
@@ -302,7 +305,9 @@ class RepositoryTest extends TestCase
             ->with(
                 'users',
                 $this->callback(function (array $queries) {
-                    return $queries[0]->getValues() === ['admin', 'editor'];
+                    $query = $queries[0] ?? null;
+
+                    return $query instanceof Query && $query->getValues() === ['admin', 'editor'];
                 })
             )
             ->willReturn([]);

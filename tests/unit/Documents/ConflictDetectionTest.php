@@ -70,6 +70,9 @@ class ConflictDetectionTest extends TestCase
         return $db;
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     */
     private function setupCollectionAndDocument(
         Adapter&Stub $adapter,
         string $collectionId,

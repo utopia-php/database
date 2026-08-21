@@ -143,18 +143,17 @@ trait DocumentTests
 
     private static bool $moviesFixtureInit = false;
 
-    private static ?array $moviesFixtureData = null;
+    private static ?string $moviesFixtureSequence = null;
 
     /**
      * Create the movies collection with standard test data.
-     * Returns ['$sequence' => ...].
      */
-    protected function initMoviesFixture(): array
+    protected function initMoviesFixture(): string
     {
-        if (self::$moviesFixtureInit && self::$moviesFixtureData !== null) {
+        if (self::$moviesFixtureInit && self::$moviesFixtureSequence !== null) {
             $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
             $this->getDatabase()->getAuthorization()->addRole('user:x');
-            return self::$moviesFixtureData;
+            return self::$moviesFixtureSequence;
         }
 
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -270,10 +269,12 @@ trait DocumentTests
             'nullable' => 'Not null',
         ]));
 
+        $sequence = $document->getSequence();
+        $this->assertNotNull($sequence);
         self::$moviesFixtureInit = true;
-        self::$moviesFixtureData = ['$sequence' => $document->getSequence()];
+        self::$moviesFixtureSequence = $sequence;
 
-        return self::$moviesFixtureData;
+        return self::$moviesFixtureSequence;
     }
 
     private static bool $incDecFixtureInit = false;
@@ -382,7 +383,7 @@ trait DocumentTests
         $this->assertEquals(Database::MAX_INT, $document->getAttribute('integer_unsigned'));
         $this->assertIsInt($document->getAttribute('bigint_signed'));
         $this->assertEquals(-Database::MAX_BIG_INT, $document->getAttribute('bigint_signed'));
-        $this->assertIsInt($document->getAttribute('bigint_signed'));
+        $this->assertIsInt($document->getAttribute('bigint_unsigned'));
         $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint_unsigned'));
         $this->assertIsFloat($document->getAttribute('float_signed'));
         $this->assertEquals(-5.55, $document->getAttribute('float_signed'));
@@ -790,7 +791,7 @@ trait DocumentTests
 
         // Projected read caches its marker under the projected slot only.
         $this->assertTrue($database->getDocument($collection, 'ghost', [Query::select(['name'])])->isEmpty());
-        $cached = $this->loadDocumentPointCache($database, $collection, 'ghost', $selects);
+        $cached = $this->loadDocumentPointCache($database, $collection, 'ghost', ...$selects);
         $this->assertIsArray($cached);
         $this->assertArrayHasKey('$empty', $cached);
         $this->assertFalse(
@@ -816,7 +817,7 @@ trait DocumentTests
 
         $this->assertNotSame($epoch, $cache->load($collectionKey.'#epoch', Database::TTL));
         $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'ghost'));
-        $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'ghost', $selects));
+        $this->assertFalse($this->loadDocumentPointCache($database, $collection, 'ghost', ...$selects));
     }
 
     public function testCacheEmptyGetCollection(): void
@@ -1774,7 +1775,7 @@ trait DocumentTests
 
     public function testFindByInternalID(): void
     {
-        $data = $this->initMoviesFixture();
+        $sequence = $this->initMoviesFixture();
         /** @var Database $database */
         $database = $this->getDatabase();
 
@@ -1782,7 +1783,7 @@ trait DocumentTests
          * Test that internal ID queries are handled correctly
          */
         $documents = $database->find($this->getMoviesCollection(), [
-            Query::equal('$sequence', [$data['$sequence']]),
+            Query::equal('$sequence', [$sequence]),
         ]);
 
         $this->assertEquals(1, count($documents));
@@ -2656,7 +2657,6 @@ trait DocumentTests
                 throw new Exception("Error thrown to test that update doesn't stop and error is caught");
             });
         } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
         }
 
@@ -2670,7 +2670,6 @@ trait DocumentTests
             $results[] = $doc;
             throw new Exception("Error thrown to test that update doesn't stop and error is caught");
         }, onError: function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals("Error thrown to test that update doesn't stop and error is caught", $e->getMessage());
         });
 
@@ -2961,7 +2960,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertNotSame('', $e->getMessage());
         }
 
         $database->disableValidation();
@@ -2978,7 +2977,7 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
+            $this->assertNotSame('', $e->getMessage());
         }
 
         $database->skipValidation(function () use ($database) {
@@ -3537,10 +3536,13 @@ trait DocumentTests
         $this->assertEquals($docId1, $updatedDoc->getId());
         $this->assertEquals('Updated Document', $updatedDoc->getAttribute('name'));
         $this->assertIsArray($updatedDoc->getAttribute('metadata'));
-        $this->assertEquals('2.0.0', $updatedDoc->getAttribute('metadata')['version']);
-        $this->assertEquals(['php', 'database', 'json'], $updatedDoc->getAttribute('metadata')['tags']);
-        $this->assertTrue($updatedDoc->getAttribute('metadata')['config']['debug']);
-        $this->assertTrue($updatedDoc->getAttribute('metadata')['updated']);
+        $metadata = $updatedDoc->getArray('metadata');
+        $this->assertEquals('2.0.0', $metadata['version']);
+        $this->assertEquals(['php', 'database', 'json'], $metadata['tags']);
+        $config = $metadata['config'] ?? null;
+        $this->assertIsArray($config);
+        $this->assertTrue($config['debug']);
+        $this->assertTrue($metadata['updated']);
 
         // Test 3: Upsert - Create new document (upsertDocument)
         $docId2 = 'json-doc-2';
@@ -3636,16 +3638,17 @@ trait DocumentTests
         // Verify bulk upsert results
         $bulkDoc1 = $database->getDocument($collection, $docId3);
         $this->assertEquals('Bulk Upsert 1', $bulkDoc1->getAttribute('name'));
-        $this->assertEquals('3.0.0', $bulkDoc1->getAttribute('metadata')['version']);
+        $this->assertEquals('3.0.0', $bulkDoc1->getArray('metadata')['version']);
 
         $bulkDoc2 = $database->getDocument($collection, $docId4);
         $this->assertEquals('Bulk Upsert 2', $bulkDoc2->getAttribute('name'));
-        $this->assertEquals('3.1.0', $bulkDoc2->getAttribute('metadata')['version']);
+        $this->assertEquals('3.1.0', $bulkDoc2->getArray('metadata')['version']);
 
         $bulkDoc3 = $database->getDocument($collection, $docId1);
         $this->assertEquals('Bulk Updated Document', $bulkDoc3->getAttribute('name'));
-        $this->assertEquals('3.0.0', $bulkDoc3->getAttribute('metadata')['version']);
-        $this->assertTrue($bulkDoc3->getAttribute('metadata')['bulkUpdated']);
+        $bulkMetadata = $bulkDoc3->getArray('metadata');
+        $this->assertEquals('3.0.0', $bulkMetadata['version']);
+        $this->assertTrue($bulkMetadata['bulkUpdated']);
 
         // Cleanup
         $database->deleteCollection($collection);
@@ -3767,7 +3770,11 @@ trait DocumentTests
         ]);
 
         // Helper function to verify regex query completeness
-        $verifyRegexQuery = function (string $attribute, string $regexPattern, array $queryResults) use ($database) {
+        /**
+         * @param  list<Document>  $queryResults
+         */
+        $verifyRegexQuery = function (string $attribute, string $regexPattern, array $queryResults) use ($database): void {
+            /** @var list<Document> $queryResults */
             // Convert database regex pattern to PHP regex format.
             // POSIX-style word boundary (\y) is not supported by PHP PCRE, so map it to \b.
             $normalizedPattern = str_replace('\y', '\b', $regexPattern);
@@ -3780,20 +3787,20 @@ trait DocumentTests
             $expectedMatches = [];
             foreach ($allDocuments as $doc) {
                 $value = $doc->getAttribute($attribute);
+                $this->assertIsString($value);
                 if (preg_match($phpPattern, $value)) {
                     $expectedMatches[] = $doc->getId();
                 }
             }
 
-            // Get IDs from query results
-            $actualMatches = array_map(fn ($doc) => $doc->getId(), $queryResults);
-
-            // Verify no extra documents are returned
-            foreach ($queryResults as $doc) {
-                $value = $doc->getAttribute($attribute);
+            $actualMatches = [];
+            foreach ($queryResults as $result) {
+                $actualMatches[] = $result->getId();
+                $value = $result->getAttribute($attribute);
+                $this->assertIsString($value);
                 $this->assertTrue(
                     (bool) preg_match($phpPattern, $value),
-                    "Document '{$doc->getId()}' with {$attribute}='{$value}' should match pattern '{$regexPattern}'"
+                    "Document '{$result->getId()}' with {$attribute}='{$value}' should match pattern '{$regexPattern}'"
                 );
             }
 
@@ -3893,7 +3900,7 @@ trait DocumentTests
         // Verify all returned documents match the pattern (case-insensitive check for verification)
         foreach ($documents as $doc) {
             $name = $doc->getAttribute('name');
-            // Verify that returned documents contain 'captain' (case-insensitive check)
+            $this->assertIsString($name);            // Verify that returned documents contain 'captain' (case-insensitive check)
             $this->assertTrue(
                 (bool) preg_match($patternCaseInsensitive, $name),
                 "Document '{$name}' should match pattern 'captain' (case-insensitive check)"
@@ -3909,6 +3916,7 @@ trait DocumentTests
         $expectedMatchesCaseInsensitive = [];
         foreach ($allDocuments as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             if (preg_match($patternCaseSensitive, $name)) {
                 $expectedMatchesCaseSensitive[] = $doc->getId();
             }
@@ -3944,6 +3952,7 @@ trait DocumentTests
         // Verify all returned documents match the pattern
         foreach ($documents as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             $this->assertTrue(
                 (bool) preg_match($pattern, $name),
                 "Document '{$name}' should match pattern 'Captain'"
@@ -3955,6 +3964,7 @@ trait DocumentTests
         $expectedMatches = [];
         foreach ($allDocuments as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             if (preg_match($pattern, $name)) {
                 $expectedMatches[] = $doc->getId();
             }
@@ -3978,6 +3988,7 @@ trait DocumentTests
         // Verify all returned documents match both conditions
         foreach ($documents as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             $year = $doc->getAttribute('year');
             $this->assertTrue(
                 (bool) preg_match($pattern, $name),
@@ -3991,6 +4002,7 @@ trait DocumentTests
         $expectedMatches = [];
         foreach ($allDocuments as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             $year = $doc->getAttribute('year');
             if (preg_match($pattern, $name) && $year > 2010) {
                 $expectedMatches[] = $doc->getId();
@@ -4017,6 +4029,7 @@ trait DocumentTests
         // Verify all returned documents match the pattern (should match all)
         foreach ($documents as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             $this->assertTrue(
                 (bool) preg_match($pattern, $name),
                 "Document '{$name}' should match pattern '{$pattern}'"
@@ -4038,6 +4051,7 @@ trait DocumentTests
         $matchingCount = 0;
         foreach ($allDocuments as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             if (preg_match($pattern, $name)) {
                 $matchingCount++;
             }
@@ -4083,6 +4097,7 @@ trait DocumentTests
             // Verify all returned documents match the pattern
             foreach ($documents as $doc) {
                 $name = $doc->getAttribute('name');
+                $this->assertIsString($name);
                 $this->assertTrue(
                     (bool) preg_match($phpPattern, $name),
                     "Document '{$name}' should match pattern '{$dbPattern}'"
@@ -4094,6 +4109,7 @@ trait DocumentTests
             $expectedMatches = [];
             foreach ($allDocuments as $doc) {
                 $name = $doc->getAttribute('name');
+                $this->assertIsString($name);
                 if (preg_match($phpPattern, $name)) {
                     $expectedMatches[] = $doc->getId();
                 }
@@ -4121,6 +4137,7 @@ trait DocumentTests
         // Verify all returned documents match at least one pattern
         foreach ($documents as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             $matchesPattern1 = (bool) preg_match($pattern1, $name);
             $matchesPattern2 = (bool) preg_match($pattern2, $name);
             $this->assertTrue(
@@ -4134,6 +4151,7 @@ trait DocumentTests
         $expectedMatches = [];
         foreach ($allDocuments as $doc) {
             $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
             if (preg_match($pattern1, $name) || preg_match($pattern2, $name)) {
                 $expectedMatches[] = $doc->getId();
             }
@@ -4222,6 +4240,7 @@ trait DocumentTests
                 $foundOther = false;
                 foreach ($results as $doc) {
                     $text = $doc->getAttribute('text');
+                    $this->assertIsString($text);
                     if ($text === 'other') {
                         $foundOther = true;
 
@@ -4241,6 +4260,7 @@ trait DocumentTests
                 // Additional verification: check that all returned documents actually match the pattern
                 foreach ($results as $doc) {
                     $text = $doc->getAttribute('text');
+                    $this->assertIsString($text);
                     $matches = @preg_match('/'.str_replace('/', '\/', $pattern).'/', $text);
 
                     // If pattern is invalid, skip validation
@@ -4258,9 +4278,7 @@ trait DocumentTests
                 }
 
             } catch (\Exception $e) {
-                // Exceptions are acceptable - they indicate the injection was blocked or caused an error
-                // This is actually good - it means the system rejected the malicious pattern
-                $this->assertInstanceOf(\Exception::class, $e);
+                $this->assertNotSame('', $e->getMessage());
             }
         }
 
@@ -4277,11 +4295,10 @@ trait DocumentTests
                     Query::regex('text', $pattern),
                 ]);
 
-                $this->assertIsArray($results);
-
                 // Verify each result actually matches
                 foreach ($results as $doc) {
                     $text = $doc->getAttribute('text');
+                    $this->assertIsString($text);
                     $matches = @preg_match('/'.str_replace('/', '\/', $pattern).'/', $text);
                     if ($matches !== false) {
                         $this->assertEquals(
@@ -4584,13 +4601,13 @@ trait DocumentTests
             'name' => 'Test Document with Numerical ID',
         ]));
 
-        $this->assertIsString($numericalIdDocument->getId());
+        $this->assertNotSame('', $numericalIdDocument->getId());
         $this->assertEquals('123456789', $numericalIdDocument->getId());
         $this->assertEquals('Test Document with Numerical ID', $numericalIdDocument->getAttribute('name'));
 
         // Verify we can retrieve the document
         $retrievedDocument = $database->getDocument('numericalIds', '123456789');
-        $this->assertIsString($retrievedDocument->getId());
+        $this->assertNotSame('', $retrievedDocument->getId());
         $this->assertEquals('123456789', $retrievedDocument->getId());
         $this->assertEquals('Test Document with Numerical ID', $retrievedDocument->getAttribute('name'));
     }
@@ -5196,6 +5213,8 @@ trait DocumentTests
             $updatedAt = $before->getUpdatedAt();
             $increase = $before->getAttribute('increase');
             $decrease = $before->getAttribute('decrease');
+            $this->assertIsNumeric($increase);
+            $this->assertIsNumeric($decrease);
 
             $database->increaseDocumentAttribute($this->getIncDecCollection(), $document->getId(), 'increase', 1);
 
@@ -5323,8 +5342,8 @@ trait DocumentTests
 
             // Alphabetical order
             $sortedDocuments = $movieDocuments;
-            \usort($sortedDocuments, function ($doc1, $doc2) {
-                return strcmp($doc1['$id'], $doc2['$id']);
+            \usort($sortedDocuments, function (Document $doc1, Document $doc2) {
+                return strcmp($doc1->getId(), $doc2->getId());
             });
 
             $firstDocumentId = $sortedDocuments[0]->getId();
@@ -6590,7 +6609,9 @@ trait DocumentTests
         $this->assertCount(2, $documents);
 
         // Make sure the query was not modified by reference
-        $this->assertEquals($queries[0]->getValues()[0]->getAttribute(), '$id');
+        $nested = $queries[0]->getValues()[0];
+        $this->assertInstanceOf(Query::class, $nested);
+        $this->assertEquals($nested->getAttribute(), '$id');
 
         $count = $database->count('movies_nested_id', $queries);
         $this->assertEquals(2, $count);
@@ -7119,7 +7140,7 @@ trait DocumentTests
         $result = $database->encode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertContains('read("any")', $result->getAttribute('$permissions'));
+        $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('any', $result->getRead());
         $this->assertContains(Permission::create(Role::user(ID::custom('608fdbe51361a'))), $result->getPermissions());
@@ -7143,7 +7164,7 @@ trait DocumentTests
         $result = $database->decode($collection, $document);
 
         $this->assertEquals('608fdbe51361a', $result->getAttribute('$id'));
-        $this->assertContains('read("any")', $result->getAttribute('$permissions'));
+        $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('read("any")', $result->getPermissions());
         $this->assertContains('any', $result->getRead());
         $this->assertContains(Permission::create(Role::user('608fdbe51361a')), $result->getPermissions());
@@ -7529,7 +7550,6 @@ trait DocumentTests
                 }
             );
         } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         }
 
@@ -7575,7 +7595,6 @@ trait DocumentTests
             $results[] = $doc;
             throw new Exception("Error thrown to test that deletion doesn't stop and error is caught");
         }, onError:function ($e) {
-            $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals("Error thrown to test that deletion doesn't stop and error is caught", $e->getMessage());
         });
 
@@ -7655,7 +7674,6 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Equal queries require at least one value.', $e->getMessage());
         }
 
@@ -7665,7 +7683,6 @@ trait DocumentTests
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertInstanceOf(Exception::class, $e);
             $this->assertEquals('Invalid query: Contains queries require at least one value.', $e->getMessage());
         }
     }
@@ -8211,10 +8228,8 @@ trait DocumentTests
 
     /**
      * Load the active epoch-addressed point-cache entry for a document.
-     *
-     * @param  array<string>  $selections
      */
-    private function loadDocumentPointCache(Database $database, string $collection, string $id, array $selections = []): mixed
+    private function loadDocumentPointCache(Database $database, string $collection, string $id, string ...$selections): mixed
     {
         [$collectionKey, , $hashKey] = $database->getCacheKeys($collection, $id, $selections);
         $cache = $database->getCache();

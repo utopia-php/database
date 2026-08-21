@@ -61,6 +61,7 @@ class DiffTest extends TestCase
         $this->assertCount(1, $additions);
         $change = \array_values($additions)[0];
         $this->assertEquals(ChangeType::AddAttribute, $change->type);
+        $this->assertInstanceOf(Attribute::class, $change->attribute);
         $this->assertEquals('email', $change->attribute->key);
     }
 
@@ -87,6 +88,7 @@ class DiffTest extends TestCase
         $this->assertCount(1, $removals);
         $change = \array_values($removals)[0];
         $this->assertEquals(ChangeType::DropAttribute, $change->type);
+        $this->assertInstanceOf(Attribute::class, $change->attribute);
         $this->assertEquals('email', $change->attribute->key);
     }
 
@@ -112,6 +114,8 @@ class DiffTest extends TestCase
         $this->assertCount(1, $modifications);
         $change = \array_values($modifications)[0];
         $this->assertEquals(ChangeType::ModifyAttribute, $change->type);
+        $this->assertInstanceOf(Attribute::class, $change->attribute);
+        $this->assertInstanceOf(Attribute::class, $change->previousAttribute);
         $this->assertEquals(255, $change->attribute->size);
         $this->assertEquals(100, $change->previousAttribute->size);
     }
@@ -132,6 +136,7 @@ class DiffTest extends TestCase
         $this->assertCount(1, $additions);
         $change = \array_values($additions)[0];
         $this->assertEquals(ChangeType::AddIndex, $change->type);
+        $this->assertInstanceOf(Index::class, $change->index);
         $this->assertEquals('idx_name', $change->index->key);
     }
 

@@ -3,6 +3,7 @@
 namespace Tests\Unit\Profiler;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Profiler\QueryLog;
 use Utopia\Database\Profiler\QueryProfiler;
 
 class QueryProfilerAdvancedTest extends TestCase
@@ -23,7 +24,6 @@ class QueryProfilerAdvancedTest extends TestCase
         $logs = $this->profiler->getLogs();
         $this->assertCount(1, $logs);
         $this->assertNotNull($logs[0]->backtrace);
-        $this->assertIsArray($logs[0]->backtrace);
         $this->assertNotEmpty($logs[0]->backtrace);
     }
 
@@ -54,17 +54,19 @@ class QueryProfilerAdvancedTest extends TestCase
         $this->profiler->enable();
         $this->profiler->setSlowThreshold(10.0);
 
-        $received = null;
-        $this->profiler->onSlowQuery(function ($entry) use (&$received) {
-            $received = $entry;
+        $received = new class () {
+            public mixed $entry = null;
+        };
+        $this->profiler->onSlowQuery(function ($entry) use ($received) {
+            $received->entry = $entry;
         });
 
         $this->profiler->log('fast', [], 5.0);
-        $this->assertNull($received);
+        $this->assertEmpty($this->profiler->getSlowQueries());
 
         $this->profiler->log('slow', [], 20.0);
-        $this->assertNotNull($received);
-        $this->assertEquals('slow', $received->query);
+        $this->assertInstanceOf(QueryLog::class, $received->entry);
+        $this->assertEquals('slow', $received->entry->query);
     }
 
     public function testDetectNPlusOneWithVariedQueryPatterns(): void
@@ -152,17 +154,19 @@ class QueryProfilerAdvancedTest extends TestCase
         $this->profiler->enable();
         $this->profiler->setSlowThreshold(10.0);
 
-        $received = null;
-        $this->profiler->onSlowQuery(function ($entry) use (&$received) {
-            $received = $entry;
+        $received = new class () {
+            public mixed $entry = null;
+        };
+        $this->profiler->onSlowQuery(function ($entry) use ($received) {
+            $received->entry = $entry;
         });
 
         $this->profiler->log('SELECT slow', ['param'], 50.0, 'users', 'find');
 
-        $this->assertNotNull($received);
-        $this->assertEquals('SELECT slow', $received->query);
-        $this->assertEquals(50.0, $received->durationMs);
-        $this->assertEquals('users', $received->collection);
+        $this->assertInstanceOf(QueryLog::class, $received->entry);
+        $this->assertEquals('SELECT slow', $received->entry->query);
+        $this->assertEquals(50.0, $received->entry->durationMs);
+        $this->assertEquals('users', $received->entry->collection);
     }
 
     public function testDetectNPlusOneNormalizesQueryParameters(): void

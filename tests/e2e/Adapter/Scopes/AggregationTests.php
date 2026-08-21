@@ -28,6 +28,22 @@ trait AggregationTests
         return self::$aggWorkerSuffix;
     }
 
+    private function numericAttribute(Document $document, string $key): float
+    {
+        $value = $document->getAttribute($key);
+        $this->assertIsNumeric($value);
+
+        return (float) $value;
+    }
+
+    private function intAttribute(Document $document, string $key): int
+    {
+        $value = $document->getAttribute($key);
+        $this->assertIsNumeric($value);
+
+        return (int) $value;
+    }
+
     private function createProducts(Database $database, string $collection = 'agg_products'): void
     {
         if (isset(self::$createdProductCollections[$collection])) {
@@ -175,6 +191,9 @@ trait AggregationTests
         }
     }
 
+    /**
+     * @param  array<string>  $collections
+     */
     private function cleanupAggCollections(Database $database, array $collections): void
     {
         foreach ($collections as $col) {
@@ -397,10 +416,7 @@ trait AggregationTests
         $this->createProducts($database, 'avg_all');
         $results = $database->find('avg_all', [Query::avg('price', 'avg_price')]);
         $this->assertCount(1, $results);
-        $avgPrice = $results[0]->getAttribute('avg_price');
-        $this->assertIsNumeric($avgPrice);
-        $avgPrice = (float) $avgPrice;
-        $this->assertEqualsWithDelta(309.44, $avgPrice, 1.0);
+        $this->assertEqualsWithDelta(309.44, $this->numericAttribute($results[0], 'avg_price'), 1.0);
         $database->deleteCollection('avg_all');
     }
 
@@ -417,8 +433,7 @@ trait AggregationTests
             Query::equal('category', ['electronics']),
             Query::avg('price', 'avg_price'),
         ]);
-        $avgPrice = (float) $results[0]->getAttribute('avg_price');
-        $this->assertEqualsWithDelta(833.33, $avgPrice, 1.0);
+        $this->assertEqualsWithDelta(833.33, $this->numericAttribute($results[0], 'avg_price'), 1.0);
         $database->deleteCollection('avg_filt');
     }
 
@@ -432,8 +447,7 @@ trait AggregationTests
 
         $this->createProducts($database, 'avg_rating');
         $results = $database->find('avg_rating', [Query::avg('rating', 'avg_rating')]);
-        $avgRating = (float) $results[0]->getAttribute('avg_rating');
-        $this->assertEqualsWithDelta(4.09, $avgRating, 0.1);
+        $this->assertEqualsWithDelta(4.09, $this->numericAttribute($results[0], 'avg_rating'), 0.1);
         $database->deleteCollection('avg_rating');
     }
 
@@ -538,7 +552,7 @@ trait AggregationTests
         $this->assertCount(1, $results);
         $this->assertEquals(9, $results[0]->getAttribute('total_count'));
         $this->assertEquals(2785, $results[0]->getAttribute('total_price'));
-        $this->assertEqualsWithDelta(309.44, (float) $results[0]->getAttribute('avg_price'), 1.0);
+        $this->assertEqualsWithDelta(309.44, $this->numericAttribute($results[0], 'avg_price'), 1.0);
         $this->assertEquals(10, $results[0]->getAttribute('min_price'));
         $this->assertEquals(1200, $results[0]->getAttribute('max_price'));
         $database->deleteCollection('multi_agg');
@@ -563,7 +577,7 @@ trait AggregationTests
         $this->assertCount(1, $results);
         $this->assertEquals(3, $results[0]->getAttribute('cnt'));
         $this->assertEquals(200, $results[0]->getAttribute('total'));
-        $this->assertEqualsWithDelta(143.33, (float) $results[0]->getAttribute('avg_stock'), 1.0);
+        $this->assertEqualsWithDelta(143.33, $this->numericAttribute($results[0], 'avg_stock'), 1.0);
         $database->deleteCollection('multi_agg_f');
     }
 
@@ -584,7 +598,9 @@ trait AggregationTests
         $this->assertCount(3, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('category')] = $doc;
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
         }
         $this->assertEquals(3, $mapped['electronics']->getAttribute('cnt'));
         $this->assertEquals(3, $mapped['clothing']->getAttribute('cnt'));
@@ -608,7 +624,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('category')] = $doc;
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
         }
         $this->assertEquals(2500, $mapped['electronics']->getAttribute('total_price'));
         $this->assertEquals(200, $mapped['clothing']->getAttribute('total_price'));
@@ -632,7 +650,11 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('category')] = (float) $doc->getAttribute('avg_price');
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $value = $doc->getAttribute('avg_price');
+            $this->assertIsNumeric($value);
+            $mapped[$category] = (float) $value;
         }
         $this->assertEqualsWithDelta(833.33, $mapped['electronics'], 1.0);
         $this->assertEqualsWithDelta(66.67, $mapped['clothing'], 1.0);
@@ -657,7 +679,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('category')] = $doc;
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
         }
         $this->assertEquals(500, $mapped['electronics']->getAttribute('cheapest'));
         $this->assertEquals(1200, $mapped['electronics']->getAttribute('priciest'));
@@ -689,7 +713,9 @@ trait AggregationTests
         $this->assertCount(3, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('category')] = $doc;
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
         }
 
         $this->assertEquals(3, $mapped['electronics']->getAttribute('cnt'));
@@ -722,7 +748,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('category')] = $doc;
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
         }
         $this->assertEquals(3, $mapped['electronics']->getAttribute('cnt'));
         $this->assertEquals(1, $mapped['clothing']->getAttribute('cnt'));
@@ -747,7 +775,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('status')] = $doc;
+            $status = $doc->getAttribute('status');
+            $this->assertIsString($status);
+            $mapped[$status] = $doc;
         }
         $this->assertEquals(7, $mapped['completed']->getAttribute('cnt'));
         $this->assertEquals(2, $mapped['pending']->getAttribute('cnt'));
@@ -774,7 +804,9 @@ trait AggregationTests
         $this->assertCount(4, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('customer_uid')] = $doc;
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
         }
         $this->assertEquals(3, $mapped['alice']->getAttribute('order_count'));
         $this->assertEquals(2890, $mapped['alice']->getAttribute('total_spent'));
@@ -894,7 +926,9 @@ trait AggregationTests
         $this->assertCount(4, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('customer_uid')] = $doc;
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
         }
         $this->assertEquals(2890, $mapped['alice']->getAttribute('total_spent'));
         $this->assertEquals(3, $mapped['alice']->getAttribute('order_count'));
@@ -924,7 +958,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('customer_uid')] = $doc;
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
         }
         $this->assertEquals(2800, $mapped['alice']->getAttribute('revenue'));
         $this->assertEquals(1275, $mapped['bob']->getAttribute('revenue'));
@@ -981,13 +1017,15 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('name')] = $doc;
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
         }
 
         $this->assertEquals(3, $mapped['Laptop']->getAttribute('review_count'));
-        $this->assertEqualsWithDelta(4.0, (float) $mapped['Laptop']->getAttribute('avg_score'), 0.1);
+        $this->assertEqualsWithDelta(4.0, $this->numericAttribute($mapped['Laptop'], 'avg_score'), 0.1);
         $this->assertEquals(3, $mapped['Novel']->getAttribute('review_count'));
-        $this->assertEqualsWithDelta(4.67, (float) $mapped['Novel']->getAttribute('avg_score'), 0.1);
+        $this->assertEqualsWithDelta(4.67, $this->numericAttribute($mapped['Novel'], 'avg_score'), 0.1);
 
         $this->cleanupAggCollections($database, ['ij_prs_p', 'ij_prs_r']);
     }
@@ -1013,7 +1051,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('name')] = $doc;
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
         }
 
         $this->assertEquals(3, $mapped['Laptop']->getAttribute('review_count'));
@@ -1047,7 +1087,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('name')] = $doc;
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
         }
         $this->assertEquals(2, $mapped['Laptop']->getAttribute('order_count'));
         $this->assertEquals(2, $mapped['Phone']->getAttribute('order_count'));
@@ -1076,7 +1118,9 @@ trait AggregationTests
 
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('name')] = $doc;
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
         }
 
         $this->assertEquals(3, $mapped['Alice']->getAttribute('order_count'));
@@ -1142,7 +1186,9 @@ trait AggregationTests
         $this->assertCount(2, $results);
         $mapped = [];
         foreach ($results as $doc) {
-            $mapped[$doc->getAttribute('customer_uid')] = $doc;
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
         }
         $this->assertEquals(300, $mapped['u1']->getAttribute('total'));
         $this->assertEquals(2, $mapped['u1']->getAttribute('cnt'));
@@ -1208,7 +1254,7 @@ trait AggregationTests
     }
 
     /**
-     * @return array<string, array{string, string, string, array<Query>, int|float}>
+     * @return array<string, array{string, string, string, string, array<Query>, int|float}>
      */
     public static function singleAggregationProvider(): array
     {
@@ -1262,6 +1308,7 @@ trait AggregationTests
             'min' => Query::min($attribute, $alias),
             'max' => Query::max($attribute, $alias),
             'countDistinct' => Query::countDistinct($attribute, $alias),
+            default => throw new \InvalidArgumentException('Unknown aggregation method: '.$method),
         };
 
         $queries = array_merge($filters, [$aggQuery]);
@@ -1269,14 +1316,14 @@ trait AggregationTests
         $this->assertCount(1, $results);
 
         if ($method === 'avg') {
-            $this->assertEqualsWithDelta($expected, (float) $results[0]->getAttribute($alias), 1.0);
+            $this->assertEqualsWithDelta($expected, $this->numericAttribute($results[0], $alias), 1.0);
         } else {
             $this->assertEquals($expected, $results[0]->getAttribute($alias));
         }
     }
 
     /**
-     * @return array<string, array{string, array<string>, array<Query>, int}>
+     * @return array<string, array{string, array<Query>, int}>
      */
     public static function groupByCountProvider(): array
     {
@@ -1382,6 +1429,7 @@ trait AggregationTests
             'sum' => Query::sum('price', 'val'),
             'min' => Query::min('price', 'val'),
             'max' => Query::max('price', 'val'),
+            default => throw new \InvalidArgumentException('Unknown aggregation method: '.$method),
         };
 
         $results = $database->find($col, [
@@ -1475,7 +1523,7 @@ trait AggregationTests
         $this->createProducts($database, 'stddev_pop');
         $results = $database->find('stddev_pop', [Query::stddevPop('price', 'result')]);
         $this->assertCount(1, $results);
-        $this->assertEqualsWithDelta(406.87456737949, (float) $results[0]->getAttribute('result'), 0.5);
+        $this->assertEqualsWithDelta(406.87456737949, $this->numericAttribute($results[0], 'result'), 0.5);
         $database->deleteCollection('stddev_pop');
     }
 
@@ -1491,7 +1539,7 @@ trait AggregationTests
         $this->createProducts($database, 'stddev_samp');
         $results = $database->find('stddev_samp', [Query::stddevSamp('price', 'result')]);
         $this->assertCount(1, $results);
-        $this->assertEqualsWithDelta(431.55564852957, (float) $results[0]->getAttribute('result'), 0.5);
+        $this->assertEqualsWithDelta(431.55564852957, $this->numericAttribute($results[0], 'result'), 0.5);
         $database->deleteCollection('stddev_samp');
     }
 
@@ -1507,7 +1555,7 @@ trait AggregationTests
         $this->createProducts($database, 'var_pop');
         $results = $database->find('var_pop', [Query::varPop('price', 'result')]);
         $this->assertCount(1, $results);
-        $this->assertEqualsWithDelta(165546.91358025, (float) $results[0]->getAttribute('result'), 1.0);
+        $this->assertEqualsWithDelta(165546.91358025, $this->numericAttribute($results[0], 'result'), 1.0);
         $database->deleteCollection('var_pop');
     }
 
@@ -1523,7 +1571,7 @@ trait AggregationTests
         $this->createProducts($database, 'var_samp');
         $results = $database->find('var_samp', [Query::varSamp('price', 'result')]);
         $this->assertCount(1, $results);
-        $this->assertEqualsWithDelta(186240.27777778, (float) $results[0]->getAttribute('result'), 1.0);
+        $this->assertEqualsWithDelta(186240.27777778, $this->numericAttribute($results[0], 'result'), 1.0);
         $database->deleteCollection('var_samp');
     }
 
@@ -1539,7 +1587,7 @@ trait AggregationTests
         $this->createProducts($database, 'bit_and');
         $results = $database->find('bit_and', [Query::bitAnd('price', 'result')]);
         $this->assertCount(1, $results);
-        $this->assertSame(0, (int) $results[0]->getAttribute('result'));
+        $this->assertSame(0, $this->intAttribute($results[0], 'result'));
         $database->deleteCollection('bit_and');
     }
 
@@ -1555,7 +1603,7 @@ trait AggregationTests
         $this->createProducts($database, 'bit_or');
         $results = $database->find('bit_or', [Query::bitOr('price', 'result')]);
         $this->assertCount(1, $results);
-        $this->assertSame(2047, (int) $results[0]->getAttribute('result'));
+        $this->assertSame(2047, $this->intAttribute($results[0], 'result'));
         $database->deleteCollection('bit_or');
     }
 
@@ -1571,7 +1619,7 @@ trait AggregationTests
         $this->createProducts($database, 'bit_xor');
         $results = $database->find('bit_xor', [Query::bitXor('price', 'result')]);
         $this->assertCount(1, $results);
-        $this->assertSame(1545, (int) $results[0]->getAttribute('result'));
+        $this->assertSame(1545, $this->intAttribute($results[0], 'result'));
         $database->deleteCollection('bit_xor');
     }
 

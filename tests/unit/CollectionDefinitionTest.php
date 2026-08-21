@@ -76,8 +76,7 @@ final class CollectionDefinitionTest extends TestCase
         $db->create();
 
         $meta = $db->getCollection(Database::METADATA);
-        $attributes = $meta->getAttribute('attributes', []);
-        $this->assertIsArray($attributes);
+        $attributes = $meta->attributes;
 
         $keys = [];
         foreach ($attributes as $attribute) {

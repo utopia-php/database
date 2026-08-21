@@ -241,18 +241,11 @@ class OperatorTest extends TestCase
 
         $result = Operator::extractOperators($data);
 
-        $this->assertArrayHasKey('operators', $result);
-        $this->assertArrayHasKey('updates', $result);
-
         $operators = $result['operators'];
         $updates = $result['updates'];
 
-        // Check operators
         $this->assertCount(2, $operators);
-        $this->assertInstanceOf(Operator::class, $operators['count']);
-        $this->assertInstanceOf(Operator::class, $operators['tags']);
 
-        // Check that attributes are set from document keys
         $this->assertEquals('count', $operators['count']->getAttribute());
         $this->assertEquals('tags', $operators['tags']->getAttribute());
 
@@ -316,8 +309,6 @@ class OperatorTest extends TestCase
 
         $parsed = Operator::parseOperators($operators);
         $this->assertCount(2, $parsed);
-        $this->assertInstanceOf(Operator::class, $parsed[0]);
-        $this->assertInstanceOf(Operator::class, $parsed[1]);
         $this->assertEquals(OperatorType::Increment, $parsed[0]->getMethod());
         $this->assertEquals(OperatorType::ArrayAppend, $parsed[1]->getMethod());
     }
@@ -471,12 +462,9 @@ class OperatorTest extends TestCase
         // Check operators count (all fields except 'name' and 'age')
         $this->assertCount(15, $operators);
 
-        // Check that array methods are properly extracted
-        $this->assertInstanceOf(Operator::class, $operators['tags']);
         $this->assertEquals('tags', $operators['tags']->getAttribute());
         $this->assertEquals(OperatorType::ArrayAppend, $operators['tags']->getMethod());
 
-        $this->assertInstanceOf(Operator::class, $operators['blacklist']);
         $this->assertEquals('blacklist', $operators['blacklist']->getAttribute());
         $this->assertEquals(OperatorType::ArrayRemove, $operators['blacklist']->getMethod());
 
@@ -1523,22 +1511,11 @@ class OperatorTest extends TestCase
         $this->assertCount(6, $operators);
 
         // Check each operator type
-        $this->assertInstanceOf(Operator::class, $operators['uniqueTags']);
         $this->assertEquals(OperatorType::ArrayUnique, $operators['uniqueTags']->getMethod());
-
-        $this->assertInstanceOf(Operator::class, $operators['commonItems']);
         $this->assertEquals(OperatorType::ArrayIntersect, $operators['commonItems']->getMethod());
-
-        $this->assertInstanceOf(Operator::class, $operators['filteredList']);
         $this->assertEquals(OperatorType::ArrayDiff, $operators['filteredList']->getMethod());
-
-        $this->assertInstanceOf(Operator::class, $operators['activeUsers']);
         $this->assertEquals(OperatorType::ArrayFilter, $operators['activeUsers']->getMethod());
-
-        $this->assertInstanceOf(Operator::class, $operators['expiry']);
         $this->assertEquals(OperatorType::DateAddDays, $operators['expiry']->getMethod());
-
-        $this->assertInstanceOf(Operator::class, $operators['reminder']);
         $this->assertEquals(OperatorType::DateSubDays, $operators['reminder']->getMethod());
 
         // Check updates
@@ -1557,6 +1534,7 @@ class OperatorTest extends TestCase
 
         $this->assertNotSame($parentValues[0], $clonedValues[0]);
         $this->assertInstanceOf(Operator::class, $clonedValues[0]);
+        $this->assertInstanceOf(Operator::class, $parentValues[0]);
         $this->assertEquals($nested->getMethod(), $clonedValues[0]->getMethod());
         $this->assertEquals($nested->getValues(), $clonedValues[0]->getValues());
 

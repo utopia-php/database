@@ -37,13 +37,13 @@ trait Collections
      * Create Collection
      *
      * @param  Collection  $collection  Collection to create
-     * @return Document The created collection metadata document
+     * @return Collection The created collection metadata document
      *
      * @throws DatabaseException
      * @throws DuplicateException
      * @throws LimitException
      */
-    public function createCollection(Collection $collection): Document
+    public function createCollection(Collection $collection): Collection
     {
         $id = $collection->id;
         $name = $collection->name !== '' ? $collection->name : $collection->id;
@@ -223,7 +223,7 @@ trait Collections
         }
 
         if ($id === self::METADATA) {
-            return $this->hydrateCollectionModels(new Document(self::collectionMeta()));
+            return $this->hydrateCollectionModels(Collection::fromArray(self::collectionMeta()));
         }
 
         try {
@@ -302,11 +302,11 @@ trait Collections
      * Get Collection
      *
      * @param  string  $id  The collection identifier
-     * @return Document The collection metadata document, or an empty Document if not found
+     * @return Collection The collection metadata document, or an empty Collection if not found
      *
      * @throws DatabaseException
      */
-    public function getCollection(string $id): Document
+    public function getCollection(string $id): Collection
     {
         $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
@@ -316,20 +316,24 @@ trait Collections
             && $collection->getTenant() !== null
             && $collection->getTenant() !== $this->adapter->getTenant()
         ) {
-            return new Document();
+            return new Collection();
         }
 
-        $this->hydrateCollectionModels($collection);
+        $collection = $this->hydrateCollectionModels($collection);
 
         $this->trigger(Event::CollectionRead, $collection);
 
         return $collection;
     }
 
-    private function hydrateCollectionModels(Document $collection): Document
+    private function hydrateCollectionModels(Document $collection): Collection
     {
         if ($collection->isEmpty()) {
-            return $collection;
+            return $collection instanceof Collection ? $collection : new Collection();
+        }
+
+        if (! $collection instanceof Collection) {
+            $collection = Collection::fromArray($collection->getArrayCopy());
         }
 
         $attributes = $collection->getAttribute('attributes', []);
@@ -392,7 +396,7 @@ trait Collections
      *
      * @param  int  $limit  Maximum number of collections to return
      * @param  int  $offset  Number of collections to skip
-     * @return array<Document>
+     * @return array<Collection>
      *
      * @throws Exception
      */

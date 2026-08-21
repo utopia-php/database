@@ -94,6 +94,10 @@ class SchemalessValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     * @param  array<int, Document>  $indexes
+     */
     private function makeCollection(string $id, array $attributes = [], array $indexes = []): Document
     {
         return new Document([
@@ -116,6 +120,9 @@ class SchemalessValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $collections
+     */
     private function setupCollections(array $collections): void
     {
         $meta = $this->metaCollection();

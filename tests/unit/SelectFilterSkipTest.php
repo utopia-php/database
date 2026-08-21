@@ -25,12 +25,13 @@ class SelectFilterSkipTest extends TestCase
 
         $database->create();
 
-        $calls = 0;
+        $calls = new \stdClass();
+        $calls->count = 0;
         $database->addFilter(
             'subQueryProbeUnit',
             fn (mixed $value) => null,
-            function (mixed $value) use (&$calls) {
-                $calls++;
+            function (mixed $value) use ($calls) {
+                $calls->count++;
 
                 return ['fanned', 'out'];
             }
@@ -50,37 +51,37 @@ class SelectFilterSkipTest extends TestCase
             'plain' => 'x',
         ]));
 
-        $calls = 0;
+        $calls->count = 0;
         $document = $database->getDocument('filterSelect', 'doc1');
-        $this->assertSame(1, $calls);
+        $this->assertSame(1, $calls->count);
         $this->assertSame(['fanned', 'out'], $document->getAttribute('kids'));
 
-        $calls = 0;
+        $calls->count = 0;
         $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['$id', 'plain'])]);
-        $this->assertSame(0, $calls);
+        $this->assertSame(0, $calls->count);
         $this->assertNull($document->getAttribute('kids'));
         $this->assertSame('x', $document->getAttribute('plain'));
 
-        $calls = 0;
+        $calls->count = 0;
         $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['$id', 'kids'])]);
-        $this->assertSame(1, $calls);
+        $this->assertSame(1, $calls->count);
         $this->assertSame(['fanned', 'out'], $document->getAttribute('kids'));
 
-        $calls = 0;
+        $calls->count = 0;
         $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['*'])]);
-        $this->assertSame(1, $calls);
+        $this->assertSame(1, $calls->count);
         $this->assertSame(['fanned', 'out'], $document->getAttribute('kids'));
 
-        $calls = 0;
+        $calls->count = 0;
         $documents = $database->find('filterSelect', [Query::select(['$id', 'plain'])]);
         $this->assertCount(1, $documents);
-        $this->assertSame(0, $calls);
+        $this->assertSame(0, $calls->count);
         $this->assertNull($documents[0]->getAttribute('kids'));
 
-        $calls = 0;
+        $calls->count = 0;
         $documents = $database->find('filterSelect');
         $this->assertCount(1, $documents);
-        $this->assertSame(1, $calls);
+        $this->assertSame(1, $calls->count);
         $this->assertSame(['fanned', 'out'], $documents[0]->getAttribute('kids'));
     }
 }

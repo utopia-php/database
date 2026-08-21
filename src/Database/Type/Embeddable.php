@@ -18,5 +18,8 @@ interface Embeddable
      */
     public function decompose(mixed $value): array;
 
+    /**
+     * @param  array<string, mixed>  $values
+     */
     public function compose(array $values): mixed;
 }

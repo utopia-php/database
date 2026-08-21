@@ -2,20 +2,21 @@
 
 namespace Tests\Unit\ORM;
 
+use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
 use Utopia\Database\ORM\EntityManager;
 use Utopia\Database\ORM\MetadataFactory;
 
 class EntitySchemasSyncTest extends TestCase
 {
-    protected Database $db;
+    protected Database&MockObject $db;
 
-    protected Adapter $adapter;
+    protected Adapter&Stub $adapter;
 
     protected EntityManager $em;
 
@@ -42,7 +43,7 @@ class EntitySchemasSyncTest extends TestCase
                 return $collection instanceof Collection
                     && $collection->id === 'users';
             }))
-            ->willReturn(new Document(['$id' => 'users']));
+            ->willReturn(new Collection(id: 'users'));
 
         $this->db->expects($this->once())
             ->method('createRelationship');

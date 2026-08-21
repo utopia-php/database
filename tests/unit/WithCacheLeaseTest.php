@@ -60,6 +60,8 @@ class WithCacheLeaseTest extends TestCase
             return [$document];
         }, $hash);
 
+        /** @var mixed $result */
+        $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $callbackCalls = 0;
         $fresh = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
@@ -67,6 +69,7 @@ class WithCacheLeaseTest extends TestCase
 
             return [];
         }, $hash);
+        /** @var mixed $fresh */
         $this->assertSame([], $fresh);
         $this->assertSame(1, $callbackCalls);
     }
@@ -79,6 +82,8 @@ class WithCacheLeaseTest extends TestCase
 
         $result = $this->database->withCache($this->key, fn () => [$document], $hash);
 
+        /** @var mixed $result */
+        $this->assertIsArray($result);
         $this->assertCount(1, $result);
         $callbackCalls = 0;
         $cached = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
@@ -86,6 +91,8 @@ class WithCacheLeaseTest extends TestCase
 
             return [];
         }, $hash);
+        /** @var mixed $cached */
+        $this->assertIsArray($cached);
         $this->assertCount(1, $cached);
         $this->assertSame(0, $callbackCalls);
     }

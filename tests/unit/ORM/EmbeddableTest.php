@@ -113,14 +113,6 @@ class EmbeddableTest extends TestCase
         $this->assertEmpty($metadata->embeddables);
     }
 
-    public function testEmbeddableMappingIsInstanceOfEmbeddableMapping(): void
-    {
-        $metadata = $this->factory->getMetadata(EmbeddableEntity::class);
-        $mapping = $metadata->embeddables['address'];
-
-        $this->assertInstanceOf(EmbeddableMapping::class, $mapping);
-    }
-
     public function testMultipleEmbeddablesAreParsed(): void
     {
         $metadata = $this->factory->getMetadata(MultiEmbeddableEntity::class);

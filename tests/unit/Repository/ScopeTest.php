@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Repository;
 
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -63,7 +64,7 @@ class PriceSpec implements Specification
 
 class ScopeTest extends TestCase
 {
-    protected Database $db;
+    protected Database&MockObject $db;
 
     protected ScopedRepository $repo;
 
@@ -83,8 +84,11 @@ class ScopeTest extends TestCase
             ->with(
                 'products',
                 $this->callback(function (array $queries) {
+                    $query = $queries[0] ?? null;
+
                     return count($queries) === 1
-                        && $queries[0]->getAttribute() === 'active';
+                        && $query instanceof Query
+                        && $query->getAttribute() === 'active';
                 })
             )
             ->willReturn([]);
@@ -101,7 +105,12 @@ class ScopeTest extends TestCase
             ->with(
                 'products',
                 $this->callback(function (array $queries) {
-                    $attrs = array_map(fn (Query $q) => $q->getAttribute(), $queries);
+                    $attrs = [];
+                    foreach ($queries as $query) {
+                        if ($query instanceof Query) {
+                            $attrs[] = $query->getAttribute();
+                        }
+                    }
 
                     return in_array('active', $attrs);
                 })
@@ -121,7 +130,12 @@ class ScopeTest extends TestCase
             ->with(
                 'products',
                 $this->callback(function (array $queries) {
-                    $attrs = array_map(fn (Query $q) => $q->getAttribute(), $queries);
+                    $attrs = [];
+                    foreach ($queries as $query) {
+                        if ($query instanceof Query) {
+                            $attrs[] = $query->getAttribute();
+                        }
+                    }
 
                     return in_array('active', $attrs) && in_array('name', $attrs);
                 })
@@ -141,7 +155,12 @@ class ScopeTest extends TestCase
             ->with(
                 'products',
                 $this->callback(function (array $queries) {
-                    $attrs = array_map(fn (Query $q) => $q->getAttribute(), $queries);
+                    $attrs = [];
+                    foreach ($queries as $query) {
+                        if ($query instanceof Query) {
+                            $attrs[] = $query->getAttribute();
+                        }
+                    }
 
                     return in_array('active', $attrs);
                 })
@@ -189,7 +208,12 @@ class ScopeTest extends TestCase
             ->with(
                 'products',
                 $this->callback(function (array $queries) {
-                    $attrs = array_map(fn (Query $q) => $q->getAttribute(), $queries);
+                    $attrs = [];
+                    foreach ($queries as $query) {
+                        if ($query instanceof Query) {
+                            $attrs[] = $query->getAttribute();
+                        }
+                    }
 
                     return in_array('active', $attrs) && in_array('tenantId', $attrs);
                 })
@@ -210,7 +234,12 @@ class ScopeTest extends TestCase
             ->with(
                 'products',
                 $this->callback(function (array $queries) {
-                    $attrs = array_map(fn (Query $q) => $q->getAttribute(), $queries);
+                    $attrs = [];
+                    foreach ($queries as $query) {
+                        if ($query instanceof Query) {
+                            $attrs[] = $query->getAttribute();
+                        }
+                    }
 
                     return in_array('active', $attrs) && in_array('price', $attrs);
                 })
@@ -279,7 +308,12 @@ class ScopeTest extends TestCase
             ->with(
                 'products',
                 $this->callback(function (array $queries) {
-                    $attrs = array_map(fn (Query $q) => $q->getAttribute(), $queries);
+                    $attrs = [];
+                    foreach ($queries as $query) {
+                        if ($query instanceof Query) {
+                            $attrs[] = $query->getAttribute();
+                        }
+                    }
 
                     return in_array('tenantId', $attrs) && ! in_array('active', $attrs);
                 })

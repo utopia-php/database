@@ -64,6 +64,9 @@ class Runner
 
             foreach ($applied as $doc) {
                 $version = $doc->getAttribute('version', '');
+                if (! \is_string($version) || $version === '') {
+                    continue;
+                }
 
                 if (isset($migrationsByVersion[$version])) {
                     $this->db->withTransaction(function () use ($migrationsByVersion, $version): void {

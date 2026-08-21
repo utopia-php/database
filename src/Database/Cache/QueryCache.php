@@ -114,7 +114,13 @@ class QueryCache
                 return null;
             }
 
-            $documents[] = new Document($item);
+            $typed = [];
+            foreach ($item as $key => $value) {
+                if (\is_string($key)) {
+                    $typed[$key] = $value;
+                }
+            }
+            $documents[] = new Document($typed);
         }
 
         return $documents;

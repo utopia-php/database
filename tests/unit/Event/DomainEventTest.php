@@ -103,7 +103,7 @@ class DomainEventTest extends TestCase
     {
         $event = new DomainEvent('users', Event::DocumentCreate);
 
-        $this->assertInstanceOf(\DateTimeImmutable::class, $event->occurredAt);
+        $this->assertLessThanOrEqual(new \DateTimeImmutable(), $event->occurredAt);
         $this->assertEquals('users', $event->collection);
         $this->assertEquals(Event::DocumentCreate, $event->event);
     }
@@ -113,18 +113,18 @@ class DomainEventTest extends TestCase
         $doc = new Document(['$id' => 'doc1']);
         $event = new DocumentCreated('users', $doc);
 
-        $this->assertInstanceOf(\DateTimeImmutable::class, $event->occurredAt);
+        $this->assertLessThanOrEqual(new \DateTimeImmutable(), $event->occurredAt);
     }
 
     public function testDocumentDeletedOccurredAtIsAutoPopulated(): void
     {
         $event = new DocumentDeleted('users', 'doc1');
-        $this->assertInstanceOf(\DateTimeImmutable::class, $event->occurredAt);
+        $this->assertLessThanOrEqual(new \DateTimeImmutable(), $event->occurredAt);
     }
 
     public function testCollectionDeletedOccurredAtIsAutoPopulated(): void
     {
         $event = new CollectionDeleted('users');
-        $this->assertInstanceOf(\DateTimeImmutable::class, $event->occurredAt);
+        $this->assertLessThanOrEqual(new \DateTimeImmutable(), $event->occurredAt);
     }
 }

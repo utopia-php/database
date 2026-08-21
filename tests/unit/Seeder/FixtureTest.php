@@ -3,6 +3,7 @@
 namespace Tests\Unit\Seeder;
 
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -11,7 +12,7 @@ use Utopia\Database\Seeder\Fixture;
 #[AllowMockObjectsWithoutExpectations]
 class FixtureTest extends TestCase
 {
-    private Database $db;
+    private Database&MockObject $db;
 
     private Fixture $fixture;
 

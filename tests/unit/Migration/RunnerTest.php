@@ -64,6 +64,10 @@ class RunnerTest extends TestCase
         };
     }
 
+    /**
+     * @param  array<int, string>  $appliedVersions
+     * @param  array<int, array<int, Document>>  $batchDocs
+     */
     private function createTrackerMock(array $appliedVersions = [], int $lastBatch = 0, array $batchDocs = []): Tracker
     {
         $tracker = self::createStub(Tracker::class);
@@ -300,7 +304,6 @@ class RunnerTest extends TestCase
     public function testMigrationAbstractClassNameReturnsClassName(): void
     {
         $migration = $this->createMigration('001');
-        $this->assertIsString($migration->name());
         $this->assertNotEmpty($migration->name());
     }
 

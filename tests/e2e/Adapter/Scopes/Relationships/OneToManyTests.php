@@ -17,6 +17,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait OneToManyTests
@@ -43,18 +44,16 @@ trait OneToManyTests
 
         // Check metadata for collection
         $collection = $database->getCollection('artist');
-        $attributes = $collection->getAttribute('attributes', []);
-
-        /** @var array<mixed> $attributes */
-        foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'albums') {
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('albums', $attribute['$id']);
-                $this->assertEquals('albums', $attribute['key']);
-                $this->assertEquals('album', $attribute['options']['relatedCollection']);
-                $this->assertEquals(RelationType::OneToMany->value, $attribute['options']['relationType']);
-                $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('artist', $attribute['options']['twoWayKey']);
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === 'albums') {
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('albums', $attribute->getId());
+                $this->assertEquals('albums', $attribute->key);
+                $options = $attribute->options ?? [];
+                $this->assertEquals('album', $options['relatedCollection'] ?? null);
+                $this->assertEquals(RelationType::OneToMany->value, $options['relationType'] ?? null);
+                $this->assertEquals(false, $options['twoWay'] ?? null);
+                $this->assertEquals('artist', $options['twoWayKey'] ?? null);
             }
         }
 
@@ -85,9 +84,7 @@ trait OneToManyTests
 
         $artist1Document = $database->getDocument('artist', 'artist1');
         // Assert document does not contain non existing relation document.
-        /** @var array<mixed> $_cnt_albums_86 */
-        $_cnt_albums_86 = $artist1Document->getAttribute('albums');
-        $this->assertEquals(1, \count($_cnt_albums_86));
+        $this->assertEquals(1, \count($artist1Document->getDocuments('albums')));
 
         // Create document with relationship with related ID
         $database->createDocument('album', new Document([
@@ -130,17 +127,15 @@ trait OneToManyTests
 
         // Get document with relationship
         $artist = $database->getDocument('artist', 'artist1');
-        /** @var array<array<string, mixed>> $albums */
-        $albums = $artist->getAttribute('albums', []);
-        $this->assertEquals('album1', $albums[0]['$id']);
+        $albums = $artist->getDocuments('albums');
+        $this->assertEquals('album1', $albums[0]->getId());
         $this->assertArrayNotHasKey('artist', $albums[0]);
 
         $artist = $database->getDocument('artist', 'artist2');
-        /** @var array<array<string, mixed>> $albums */
-        $albums = $artist->getAttribute('albums', []);
-        $this->assertEquals('album2', $albums[0]['$id']);
+        $albums = $artist->getDocuments('albums');
+        $this->assertEquals('album2', $albums[0]->getId());
         $this->assertArrayNotHasKey('artist', $albums[0]);
-        $this->assertEquals('album33', $albums[1]['$id']);
+        $this->assertEquals('album33', $albums[1]->getId());
         $this->assertCount(2, $albums);
 
         // Get related document
@@ -163,23 +158,15 @@ trait OneToManyTests
             $this->fail('Artist not found');
         }
 
-        /** @var array<Document> $_rel_albums_160 */
-        $_rel_albums_160 = $artist->getAttribute('albums');
-        $this->assertEquals('Album 1', $_rel_albums_160[0]->getAttribute('name'));
-        /** @var array<mixed> $_arr_albums_161 */
-        $_arr_albums_161 = $artist->getAttribute('albums');
-        $this->assertArrayNotHasKey('price', $_arr_albums_161[0]);
+        $this->assertEquals('Album 1', $artist->getDocuments('albums')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('price', $artist->getDocuments('albums')[0]);
 
         $artist = $database->getDocument('artist', 'artist1', [
             Query::select(['*', 'albums.name']),
         ]);
 
-        /** @var array<Document> $_rel_albums_167 */
-        $_rel_albums_167 = $artist->getAttribute('albums');
-        $this->assertEquals('Album 1', $_rel_albums_167[0]->getAttribute('name'));
-        /** @var array<mixed> $_arr_albums_168 */
-        $_arr_albums_168 = $artist->getAttribute('albums');
-        $this->assertArrayNotHasKey('price', $_arr_albums_168[0]);
+        $this->assertEquals('Album 1', $artist->getDocuments('albums')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('price', $artist->getDocuments('albums')[0]);
 
         // Update root document attribute without altering relationship
         $artist1 = $database->updateDocument(
@@ -193,8 +180,7 @@ trait OneToManyTests
         $this->assertEquals('Artist 1 Updated', $artist1->getAttribute('name'));
 
         // Update nested document attribute
-        /** @var array<\Utopia\Database\Document> $albums */
-        $albums = $artist1->getAttribute('albums', []);
+        $albums = $artist1->getDocuments('albums');
         $albums[0]->setAttribute('name', 'Album 1 Updated');
 
         $artist1 = $database->updateDocument(
@@ -203,26 +189,20 @@ trait OneToManyTests
             $artist1->setAttribute('albums', $albums)
         );
 
-        /** @var array<Document> $_rel_albums_191 */
-        $_rel_albums_191 = $artist1->getAttribute('albums');
-        $this->assertEquals('Album 1 Updated', $_rel_albums_191[0]->getAttribute('name'));
+        $this->assertEquals('Album 1 Updated', $artist1->getDocuments('albums')[0]->getAttribute('name'));
         $artist1 = $database->getDocument('artist', 'artist1');
-        /** @var array<Document> $_rel_albums_193 */
-        $_rel_albums_193 = $artist1->getAttribute('albums');
-        $this->assertEquals('Album 1 Updated', $_rel_albums_193[0]->getAttribute('name'));
+        $this->assertEquals('Album 1 Updated', $artist1->getDocuments('albums')[0]->getAttribute('name'));
 
-        $albumId = $artist1->getAttribute('albums')[0]->getAttribute('$id');
+        $albumId = $artist1->getDocuments('albums')[0]->getId();
         $albumDocument = $database->getDocument('album', $albumId);
         $albumDocument->setAttribute('name', 'Album 1 Updated!!!');
         $database->updateDocument('album', $albumDocument->getId(), $albumDocument);
         $albumDocument = $database->getDocument('album', $albumDocument->getId());
         $artist1 = $database->getDocument('artist', $artist1->getId());
 
-        $this->assertEquals('Album 1 Updated!!!', $albumDocument['name']);
-        /** @var array<Document> $_arr_albums_203 */
-        $_arr_albums_203 = $artist1->getAttribute('albums');
-        $this->assertEquals($albumDocument->getId(), $_arr_albums_203[0]->getId());
-        $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getAttribute('albums')[0]->getAttribute('name'));
+        $this->assertEquals('Album 1 Updated!!!', $albumDocument->getAttribute('name'));
+        $this->assertEquals($albumDocument->getId(), $artist1->getDocuments('albums')[0]->getId());
+        $this->assertEquals($albumDocument->getAttribute('name'), $artist1->getDocuments('albums')[0]->getAttribute('name'));
 
         // Create new document with no relationship
         $artist3 = $database->createDocument('artist', new Document([
@@ -251,13 +231,9 @@ trait OneToManyTests
             ])])
         );
 
-        /** @var array<Document> $_rel_albums_233 */
-        $_rel_albums_233 = $artist3->getAttribute('albums');
-        $this->assertEquals('Album 3', $_rel_albums_233[0]->getAttribute('name'));
+        $this->assertEquals('Album 3', $artist3->getDocuments('albums')[0]->getAttribute('name'));
         $artist3 = $database->getDocument('artist', 'artist3');
-        /** @var array<Document> $_rel_albums_235 */
-        $_rel_albums_235 = $artist3->getAttribute('albums');
-        $this->assertEquals('Album 3', $_rel_albums_235[0]->getAttribute('name'));
+        $this->assertEquals('Album 3', $artist3->getDocuments('albums')[0]->getAttribute('name'));
 
         // Update document with new related documents, will remove existing relations
         $database->updateDocument(
@@ -282,9 +258,8 @@ trait OneToManyTests
 
         // Get document with new relationship key
         $artist = $database->getDocument('artist', 'artist1');
-        /** @var array<array<string, mixed>> $albums */
-        $albums = $artist->getAttribute('newAlbums');
-        $this->assertEquals('album1', $albums[0]['$id']);
+        $albums = $artist->getDocuments('newAlbums');
+        $this->assertEquals('album1', $albums[0]->getId());
 
         // Create new document with no relationship
         $database->createDocument('artist', new Document([
@@ -374,9 +349,7 @@ trait OneToManyTests
         ]));
 
         $artist = $database->getDocument('artist', $artist->getId());
-        /** @var array<mixed> $_ac_newAlbums_351 */
-        $_ac_newAlbums_351 = $artist->getAttribute('newAlbums');
-        $this->assertCount(50, $_ac_newAlbums_351);
+        $this->assertCount(50, $artist->getDocuments('newAlbums'));
 
         $albums = $database->find('album', [
             Query::equal('artist', [$artist->getId()]),
@@ -393,9 +366,7 @@ trait OneToManyTests
 
         $database->deleteDocument('album', 'album_1');
         $artist = $database->getDocument('artist', $artist->getId());
-        /** @var array<mixed> $_ac_newAlbums_368 */
-        $_ac_newAlbums_368 = $artist->getAttribute('newAlbums');
-        $this->assertCount(49, $_ac_newAlbums_368);
+        $this->assertCount(49, $artist->getDocuments('newAlbums'));
 
         $database->deleteDocument('artist', $artist->getId());
 
@@ -440,33 +411,31 @@ trait OneToManyTests
 
         // Check metadata for collection
         $collection = $database->getCollection('customer');
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<mixed> $attributes */
-        foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'accounts') {
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('accounts', $attribute['$id']);
-                $this->assertEquals('accounts', $attribute['key']);
-                $this->assertEquals('account', $attribute['options']['relatedCollection']);
-                $this->assertEquals(RelationType::OneToMany->value, $attribute['options']['relationType']);
-                $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('customer', $attribute['options']['twoWayKey']);
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === 'accounts') {
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('accounts', $attribute->getId());
+                $this->assertEquals('accounts', $attribute->key);
+                $options = $attribute->options ?? [];
+                $this->assertEquals('account', $options['relatedCollection'] ?? null);
+                $this->assertEquals(RelationType::OneToMany->value, $options['relationType'] ?? null);
+                $this->assertEquals(true, $options['twoWay'] ?? null);
+                $this->assertEquals('customer', $options['twoWayKey'] ?? null);
             }
         }
 
         // Check metadata for related collection
         $collection = $database->getCollection('account');
-        $attributes = $collection->getAttribute('attributes', []);
-        /** @var array<mixed> $attributes */
-        foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'customer') {
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('customer', $attribute['$id']);
-                $this->assertEquals('customer', $attribute['key']);
-                $this->assertEquals('customer', $attribute['options']['relatedCollection']);
-                $this->assertEquals(RelationType::OneToMany->value, $attribute['options']['relationType']);
-                $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('accounts', $attribute['options']['twoWayKey']);
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === 'customer') {
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('customer', $attribute->getId());
+                $this->assertEquals('customer', $attribute->key);
+                $options = $attribute->options ?? [];
+                $this->assertEquals('customer', $options['relatedCollection'] ?? null);
+                $this->assertEquals(RelationType::OneToMany->value, $options['relationType'] ?? null);
+                $this->assertEquals(true, $options['twoWay'] ?? null);
+                $this->assertEquals('accounts', $options['twoWayKey'] ?? null);
             }
         }
 
@@ -498,9 +467,7 @@ trait OneToManyTests
 
         $customer1Document = $database->getDocument('customer', 'customer1');
         // Assert document does not contain non existing relation document.
-        /** @var array<mixed> $_cnt_accounts_469 */
-        $_cnt_accounts_469 = $customer1Document->getAttribute('accounts');
-        $this->assertEquals(1, \count($_cnt_accounts_469));
+        $this->assertEquals(1, \count($customer1Document->getDocuments('accounts')));
 
         // Create document with relationship with related ID
         $account2 = $database->createDocument('account', new Document([
@@ -569,48 +536,44 @@ trait OneToManyTests
 
         // Get documents with relationship
         $customer = $database->getDocument('customer', 'customer1');
-        /** @var array<array<string, mixed>> $accounts */
-        $accounts = $customer->getAttribute('accounts', []);
-        $this->assertEquals('account1', $accounts[0]['$id']);
+        $accounts = $customer->getDocuments('accounts');
+        $this->assertEquals('account1', $accounts[0]->getId());
         $this->assertArrayNotHasKey('customer', $accounts[0]);
 
         $customer = $database->getDocument('customer', 'customer2');
-        /** @var array<array<string, mixed>> $accounts */
-        $accounts = $customer->getAttribute('accounts', []);
-        $this->assertEquals('account2', $accounts[0]['$id']);
+        $accounts = $customer->getDocuments('accounts');
+        $this->assertEquals('account2', $accounts[0]->getId());
         $this->assertArrayNotHasKey('customer', $accounts[0]);
 
         $customer = $database->getDocument('customer', 'customer3');
-        /** @var array<array<string, mixed>> $accounts */
-        $accounts = $customer->getAttribute('accounts', []);
-        $this->assertEquals('account3', $accounts[0]['$id']);
+        $accounts = $customer->getDocuments('accounts');
+        $this->assertEquals('account3', $accounts[0]->getId());
         $this->assertArrayNotHasKey('customer', $accounts[0]);
 
         $customer = $database->getDocument('customer', 'customer4');
-        /** @var array<array<string, mixed>> $accounts */
-        $accounts = $customer->getAttribute('accounts', []);
-        $this->assertEquals('account4', $accounts[0]['$id']);
+        $accounts = $customer->getDocuments('accounts');
+        $this->assertEquals('account4', $accounts[0]->getId());
         $this->assertArrayNotHasKey('customer', $accounts[0]);
 
         // Get related documents
         $account = $database->getDocument('account', 'account1');
-        $customer = $account->getAttribute('customer');
-        $this->assertEquals('customer1', $customer['$id']);
+        $customer = $account->getDocument('customer');
+        $this->assertEquals('customer1', $customer->getId());
         $this->assertArrayNotHasKey('accounts', $customer);
 
         $account = $database->getDocument('account', 'account2');
-        $customer = $account->getAttribute('customer');
-        $this->assertEquals('customer2', $customer['$id']);
+        $customer = $account->getDocument('customer');
+        $this->assertEquals('customer2', $customer->getId());
         $this->assertArrayNotHasKey('accounts', $customer);
 
         $account = $database->getDocument('account', 'account3');
-        $customer = $account->getAttribute('customer');
-        $this->assertEquals('customer3', $customer['$id']);
+        $customer = $account->getDocument('customer');
+        $this->assertEquals('customer3', $customer->getId());
         $this->assertArrayNotHasKey('accounts', $customer);
 
         $account = $database->getDocument('account', 'account4');
-        $customer = $account->getAttribute('customer');
-        $this->assertEquals('customer4', $customer['$id']);
+        $customer = $account->getDocument('customer');
+        $this->assertEquals('customer4', $customer->getId());
         $this->assertArrayNotHasKey('accounts', $customer);
 
         $customers = $database->find('customer');
@@ -626,23 +589,15 @@ trait OneToManyTests
             throw new Exception('Customer not found');
         }
 
-        /** @var array<Document> $_rel_accounts_591 */
-        $_rel_accounts_591 = $customer->getAttribute('accounts');
-        $this->assertEquals('Account 1', $_rel_accounts_591[0]->getAttribute('name'));
-        /** @var array<mixed> $_arr_accounts_592 */
-        $_arr_accounts_592 = $customer->getAttribute('accounts');
-        $this->assertArrayNotHasKey('number', $_arr_accounts_592[0]);
+        $this->assertEquals('Account 1', $customer->getDocuments('accounts')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('number', $customer->getDocuments('accounts')[0]);
 
         $customer = $database->getDocument('customer', 'customer1', [
             Query::select(['*', 'accounts.name']),
         ]);
 
-        /** @var array<Document> $_rel_accounts_598 */
-        $_rel_accounts_598 = $customer->getAttribute('accounts');
-        $this->assertEquals('Account 1', $_rel_accounts_598[0]->getAttribute('name'));
-        /** @var array<mixed> $_arr_accounts_599 */
-        $_arr_accounts_599 = $customer->getAttribute('accounts');
-        $this->assertArrayNotHasKey('number', $_arr_accounts_599[0]);
+        $this->assertEquals('Account 1', $customer->getDocuments('accounts')[0]->getAttribute('name'));
+        $this->assertArrayNotHasKey('number', $customer->getDocuments('accounts')[0]);
 
         // Update root document attribute without altering relationship
         $customer1 = $database->updateDocument(
@@ -669,8 +624,7 @@ trait OneToManyTests
         $this->assertEquals('Account 2 Updated', $account2->getAttribute('name'));
 
         // Update nested document attribute
-        /** @var array<\Utopia\Database\Document> $accounts */
-        $accounts = $customer1->getAttribute('accounts', []);
+        $accounts = $customer1->getDocuments('accounts');
         $accounts[0]->setAttribute('name', 'Account 1 Updated');
 
         $customer1 = $database->updateDocument(
@@ -679,13 +633,9 @@ trait OneToManyTests
             $customer1->setAttribute('accounts', $accounts)
         );
 
-        /** @var array<Document> $_rel_accounts_635 */
-        $_rel_accounts_635 = $customer1->getAttribute('accounts');
-        $this->assertEquals('Account 1 Updated', $_rel_accounts_635[0]->getAttribute('name'));
+        $this->assertEquals('Account 1 Updated', $customer1->getDocuments('accounts')[0]->getAttribute('name'));
         $customer1 = $database->getDocument('customer', 'customer1');
-        /** @var array<Document> $_rel_accounts_637 */
-        $_rel_accounts_637 = $customer1->getAttribute('accounts');
-        $this->assertEquals('Account 1 Updated', $_rel_accounts_637[0]->getAttribute('name'));
+        $this->assertEquals('Account 1 Updated', $customer1->getDocuments('accounts')[0]->getAttribute('name'));
 
         // Update inverse nested document attribute
         $account2 = $database->updateDocument(
@@ -694,18 +644,14 @@ trait OneToManyTests
             $account2->setAttribute(
                 'customer',
                 $account2
-                    ->getAttribute('customer')
+                    ->getDocument('customer')
                     ->setAttribute('name', 'Customer 2 Updated')
             )
         );
 
-        /** @var \Utopia\Database\Document $_doc_customer_651 */
-        $_doc_customer_651 = $account2->getAttribute('customer');
-        $this->assertEquals('Customer 2 Updated', $_doc_customer_651->getAttribute('name'));
+        $this->assertEquals('Customer 2 Updated', $account2->getDocument('customer')->getAttribute('name'));
         $account2 = $database->getDocument('account', 'account2');
-        /** @var \Utopia\Database\Document $_doc_customer_653 */
-        $_doc_customer_653 = $account2->getAttribute('customer');
-        $this->assertEquals('Customer 2 Updated', $_doc_customer_653->getAttribute('name'));
+        $this->assertEquals('Customer 2 Updated', $account2->getDocument('customer')->getAttribute('name'));
 
         // Create new document with no relationship
         $customer5 = $database->createDocument('customer', new Document([
@@ -734,13 +680,9 @@ trait OneToManyTests
             ])])
         );
 
-        /** @var array<Document> $_rel_accounts_682 */
-        $_rel_accounts_682 = $customer5->getAttribute('accounts');
-        $this->assertEquals('Account 5', $_rel_accounts_682[0]->getAttribute('name'));
+        $this->assertEquals('Account 5', $customer5->getDocuments('accounts')[0]->getAttribute('name'));
         $customer5 = $database->getDocument('customer', 'customer5');
-        /** @var array<Document> $_rel_accounts_684 */
-        $_rel_accounts_684 = $customer5->getAttribute('accounts');
-        $this->assertEquals('Account 5', $_rel_accounts_684[0]->getAttribute('name'));
+        $this->assertEquals('Account 5', $customer5->getDocuments('accounts')[0]->getAttribute('name'));
 
         // Create new child document with no relationship
         $account6 = $database->createDocument('account', new Document([
@@ -769,13 +711,9 @@ trait OneToManyTests
             ]))
         );
 
-        /** @var \Utopia\Database\Document $_doc_customer_713 */
-        $_doc_customer_713 = $account6->getAttribute('customer');
-        $this->assertEquals('Customer 6', $_doc_customer_713->getAttribute('name'));
+        $this->assertEquals('Customer 6', $account6->getDocument('customer')->getAttribute('name'));
         $account6 = $database->getDocument('account', 'account6');
-        /** @var \Utopia\Database\Document $_doc_customer_715 */
-        $_doc_customer_715 = $account6->getAttribute('customer');
-        $this->assertEquals('Customer 6', $_doc_customer_715->getAttribute('name'));
+        $this->assertEquals('Customer 6', $account6->getDocument('customer')->getAttribute('name'));
 
         // Update document with new related document, will remove existing relations
         $database->updateDocument(
@@ -808,14 +746,13 @@ trait OneToManyTests
 
         // Get document with new relationship key
         $customer = $database->getDocument('customer', 'customer1');
-        /** @var array<array<string, mixed>> $accounts */
-        $accounts = $customer->getAttribute('newAccounts');
-        $this->assertEquals('account1', $accounts[0]['$id']);
+        $accounts = $customer->getDocuments('newAccounts');
+        $this->assertEquals('account1', $accounts[0]->getId());
 
         // Get inverse document with new relationship key
         $account = $database->getDocument('account', 'account1');
-        $customer = $account->getAttribute('newCustomer');
-        $this->assertEquals('customer1', $customer['$id']);
+        $customer = $account->getDocument('newCustomer');
+        $this->assertEquals('customer1', $customer->getId());
 
         // Create new document with no relationship
         $database->createDocument('customer', new Document([
@@ -970,7 +907,7 @@ trait OneToManyTests
         $documents = $database->find('countries', [
             Query::limit(1),
         ]);
-        $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
+        $this->assertEquals('Mayor 1', $documents[0]->getDocuments('cities')[0]->getDocument('mayor')->getAttribute('name'));
 
         $documents = $database->find('countries', [
             Query::select(['name']),
@@ -991,13 +928,13 @@ trait OneToManyTests
             Query::limit(1),
         ]);
 
-        $this->assertEquals('Mayor 1', $documents[0]['cities'][0]['mayor']['name']);
+        $this->assertEquals('Mayor 1', $documents[0]->getDocuments('cities')[0]->getDocument('mayor')->getAttribute('name'));
 
         // Insert docs to cache:
         $country1 = $database->getDocument('countries', 'country1');
         $mayor1 = $database->getDocument('mayors', 'mayor1');
-        $this->assertEquals('City 1', $mayor1['city']['name']);
-        $this->assertEquals('City 1', $country1['cities'][0]['name']);
+        $this->assertEquals('City 1', $mayor1->getDocument('city')->getAttribute('name'));
+        $this->assertEquals('City 1', $country1->getDocuments('cities')[0]->getAttribute('name'));
 
         $database->updateDocument('cities', 'city1', new Document([
             '$id' => 'city1',
@@ -1013,14 +950,14 @@ trait OneToManyTests
         $mayor1 = $database->getDocument('mayors', 'mayor1');
         $country1 = $database->getDocument('countries', 'country1');
 
-        $this->assertEquals('City 1 updated', $mayor1['city']['name']);
-        $this->assertEquals('City 1 updated', $country1['cities'][0]['name']);
-        $this->assertEquals('city1', $country1['cities'][0]['$id']);
-        $this->assertEquals('city2', $country1['cities'][1]['$id']);
-        $this->assertEquals('mayor1', $country1['cities'][0]['mayor']['$id']);
-        $this->assertEquals('mayor2', $country1['cities'][1]['mayor']['$id']);
-        $this->assertArrayNotHasKey('city', $country1['cities'][0]['mayor']);
-        $this->assertArrayNotHasKey('city', $country1['cities'][1]['mayor']);
+        $this->assertEquals('City 1 updated', $mayor1->getDocument('city')->getAttribute('name'));
+        $this->assertEquals('City 1 updated', $country1->getDocuments('cities')[0]->getAttribute('name'));
+        $this->assertEquals('city1', $country1->getDocuments('cities')[0]->getId());
+        $this->assertEquals('city2', $country1->getDocuments('cities')[1]->getId());
+        $this->assertEquals('mayor1', $country1->getDocuments('cities')[0]->getDocument('mayor')->getId());
+        $this->assertEquals('mayor2', $country1->getDocuments('cities')[1]->getDocument('mayor')->getId());
+        $this->assertArrayNotHasKey('city', $country1->getDocuments('cities')[0]->getDocument('mayor'));
+        $this->assertArrayNotHasKey('city', $country1->getDocuments('cities')[1]->getDocument('mayor'));
 
         $database->createDocument('mayors', new Document([
             '$id' => 'mayor3',
@@ -1045,10 +982,10 @@ trait OneToManyTests
         ]));
 
         $country2 = $database->getDocument('countries', 'country2');
-        $this->assertEquals('city3', $country2['cities'][0]['$id']);
-        $this->assertEquals('mayor3', $country2['cities'][0]['mayor']['$id']);
-        $this->assertArrayNotHasKey('country', $country2['cities'][0]);
-        $this->assertArrayNotHasKey('city', $country2['cities'][0]['mayor']);
+        $this->assertEquals('city3', $country2->getDocuments('cities')[0]->getId());
+        $this->assertEquals('mayor3', $country2->getDocuments('cities')[0]->getDocument('mayor')->getId());
+        $this->assertArrayNotHasKey('country', $country2->getDocuments('cities')[0]);
+        $this->assertArrayNotHasKey('city', $country2->getDocuments('cities')[0]->getDocument('mayor'));
     }
 
     public function testNestedOneToMany_OneToManyRelationship(): void
@@ -1130,18 +1067,18 @@ trait OneToManyTests
         ]));
 
         $dormitory1 = $database->getDocument('dormitories', 'dormitory1');
-        $this->assertEquals('occupant1', $dormitory1['occupants'][0]['$id']);
-        $this->assertEquals('occupant2', $dormitory1['occupants'][1]['$id']);
-        $this->assertEquals('pet1', $dormitory1['occupants'][0]['pets'][0]['$id']);
-        $this->assertEquals('pet2', $dormitory1['occupants'][0]['pets'][1]['$id']);
-        $this->assertEquals('pet3', $dormitory1['occupants'][1]['pets'][0]['$id']);
-        $this->assertEquals('pet4', $dormitory1['occupants'][1]['pets'][1]['$id']);
-        $this->assertArrayNotHasKey('dormitory', $dormitory1['occupants'][0]);
-        $this->assertArrayNotHasKey('dormitory', $dormitory1['occupants'][1]);
-        $this->assertArrayNotHasKey('occupant', $dormitory1['occupants'][0]['pets'][0]);
-        $this->assertArrayNotHasKey('occupant', $dormitory1['occupants'][0]['pets'][1]);
-        $this->assertArrayNotHasKey('occupant', $dormitory1['occupants'][1]['pets'][0]);
-        $this->assertArrayNotHasKey('occupant', $dormitory1['occupants'][1]['pets'][1]);
+        $this->assertEquals('occupant1', $dormitory1->getDocuments('occupants')[0]->getId());
+        $this->assertEquals('occupant2', $dormitory1->getDocuments('occupants')[1]->getId());
+        $this->assertEquals('pet1', $dormitory1->getDocuments('occupants')[0]->getDocuments('pets')[0]->getId());
+        $this->assertEquals('pet2', $dormitory1->getDocuments('occupants')[0]->getDocuments('pets')[1]->getId());
+        $this->assertEquals('pet3', $dormitory1->getDocuments('occupants')[1]->getDocuments('pets')[0]->getId());
+        $this->assertEquals('pet4', $dormitory1->getDocuments('occupants')[1]->getDocuments('pets')[1]->getId());
+        $this->assertArrayNotHasKey('dormitory', $dormitory1->getDocuments('occupants')[0]);
+        $this->assertArrayNotHasKey('dormitory', $dormitory1->getDocuments('occupants')[1]);
+        $this->assertArrayNotHasKey('occupant', $dormitory1->getDocuments('occupants')[0]->getDocuments('pets')[0]);
+        $this->assertArrayNotHasKey('occupant', $dormitory1->getDocuments('occupants')[0]->getDocuments('pets')[1]);
+        $this->assertArrayNotHasKey('occupant', $dormitory1->getDocuments('occupants')[1]->getDocuments('pets')[0]);
+        $this->assertArrayNotHasKey('occupant', $dormitory1->getDocuments('occupants')[1]->getDocuments('pets')[1]);
 
         $database->createDocument('pets', new Document([
             '$id' => 'pet5',
@@ -1166,10 +1103,10 @@ trait OneToManyTests
         ]));
 
         $pet5 = $database->getDocument('pets', 'pet5');
-        $this->assertEquals('occupant3', $pet5['occupant']['$id']);
-        $this->assertEquals('dormitory2', $pet5['occupant']['dormitory']['$id']);
-        $this->assertArrayNotHasKey('pets', $pet5['occupant']);
-        $this->assertArrayNotHasKey('occupant', $pet5['occupant']['dormitory']);
+        $this->assertEquals('occupant3', $pet5->getDocument('occupant')->getId());
+        $this->assertEquals('dormitory2', $pet5->getDocument('occupant')->getDocument('dormitory')->getId());
+        $this->assertArrayNotHasKey('pets', $pet5->getDocument('occupant'));
+        $this->assertArrayNotHasKey('occupant', $pet5->getDocument('occupant')->getDocument('dormitory'));
     }
 
     public function testNestedOneToMany_ManyToOneRelationship(): void
@@ -1219,10 +1156,10 @@ trait OneToManyTests
         ]));
 
         $home1 = $database->getDocument('home', 'home1');
-        $this->assertEquals('renter1', $home1['renters'][0]['$id']);
-        $this->assertEquals('floor1', $home1['renters'][0]['floor']['$id']);
-        $this->assertArrayNotHasKey('home', $home1['renters'][0]);
-        $this->assertArrayNotHasKey('renters', $home1['renters'][0]['floor']);
+        $this->assertEquals('renter1', $home1->getDocuments('renters')[0]->getId());
+        $this->assertEquals('floor1', $home1->getDocuments('renters')[0]->getDocument('floor')->getId());
+        $this->assertArrayNotHasKey('home', $home1->getDocuments('renters')[0]);
+        $this->assertArrayNotHasKey('renters', $home1->getDocuments('renters')[0]->getDocument('floor'));
 
         $database->createDocument('floors', new Document([
             '$id' => 'floor2',
@@ -1249,10 +1186,10 @@ trait OneToManyTests
         ]));
 
         $floor2 = $database->getDocument('floors', 'floor2');
-        $this->assertEquals('renter2', $floor2['renters'][0]['$id']);
-        $this->assertArrayNotHasKey('floor', $floor2['renters'][0]);
-        $this->assertEquals('home2', $floor2['renters'][0]['home']['$id']);
-        $this->assertArrayNotHasKey('renter', $floor2['renters'][0]['home']);
+        $this->assertEquals('renter2', $floor2->getDocuments('renters')[0]->getId());
+        $this->assertArrayNotHasKey('floor', $floor2->getDocuments('renters')[0]);
+        $this->assertEquals('home2', $floor2->getDocuments('renters')[0]->getDocument('home')->getId());
+        $this->assertArrayNotHasKey('renter', $floor2->getDocuments('renters')[0]->getDocument('home'));
     }
 
     public function testNestedOneToMany_ManyToManyRelationship(): void
@@ -1304,10 +1241,10 @@ trait OneToManyTests
         ]));
 
         $owner1 = $database->getDocument('owners', 'owner1');
-        $this->assertEquals('cat1', $owner1['cats'][0]['$id']);
-        $this->assertArrayNotHasKey('owner', $owner1['cats'][0]);
-        $this->assertEquals('toy1', $owner1['cats'][0]['toys'][0]['$id']);
-        $this->assertArrayNotHasKey('cats', $owner1['cats'][0]['toys'][0]);
+        $this->assertEquals('cat1', $owner1->getDocuments('cats')[0]->getId());
+        $this->assertArrayNotHasKey('owner', $owner1->getDocuments('cats')[0]);
+        $this->assertEquals('toy1', $owner1->getDocuments('cats')[0]->getDocuments('toys')[0]->getId());
+        $this->assertArrayNotHasKey('cats', $owner1->getDocuments('cats')[0]->getDocuments('toys')[0]);
 
         $database->createDocument('toys', new Document([
             '$id' => 'toy2',
@@ -1334,10 +1271,10 @@ trait OneToManyTests
         ]));
 
         $toy2 = $database->getDocument('toys', 'toy2');
-        $this->assertEquals('cat2', $toy2['cats'][0]['$id']);
-        $this->assertArrayNotHasKey('toys', $toy2['cats'][0]);
-        $this->assertEquals('owner2', $toy2['cats'][0]['owner']['$id']);
-        $this->assertArrayNotHasKey('cats', $toy2['cats'][0]['owner']);
+        $this->assertEquals('cat2', $toy2->getDocuments('cats')[0]->getId());
+        $this->assertArrayNotHasKey('toys', $toy2->getDocuments('cats')[0]);
+        $this->assertEquals('owner2', $toy2->getDocuments('cats')[0]->getDocument('owner')->getId());
+        $this->assertArrayNotHasKey('cats', $toy2->getDocuments('cats')[0]->getDocument('owner'));
     }
 
     public function testExceedMaxDepthOneToMany(): void
@@ -1388,25 +1325,25 @@ trait OneToManyTests
                 ],
             ],
         ]));
-        $this->assertEquals(1, count($level1[$level2Collection]));
-        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
-        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
-        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
-        $this->assertArrayNotHasKey('level4', $level1[$level2Collection][0][$level3Collection][0]);
+        $this->assertEquals(1, count($level1->getDocuments($level2Collection)));
+        $this->assertEquals('level2', $level1->getDocuments($level2Collection)[0]->getId());
+        $this->assertEquals(1, count($level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)));
+        $this->assertEquals('level3', $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]->getId());
+        $this->assertArrayNotHasKey('level4', $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]);
 
         // Make sure level 4 document was not created
         $level3 = $database->getDocument($level3Collection, 'level3');
-        $this->assertEquals(0, count($level3[$level4Collection]));
+        $this->assertEquals(0, count($level3->getDocuments($level4Collection)));
         $level4 = $database->getDocument($level4Collection, 'level4');
         $this->assertTrue($level4->isEmpty());
 
         // Exceed fetch depth
         $level1 = $database->getDocument($level1Collection, 'level1');
-        $this->assertEquals(1, count($level1[$level2Collection]));
-        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
-        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
-        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
-        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+        $this->assertEquals(1, count($level1->getDocuments($level2Collection)));
+        $this->assertEquals('level2', $level1->getDocuments($level2Collection)[0]->getId());
+        $this->assertEquals(1, count($level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)));
+        $this->assertEquals('level3', $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]);
 
         // Exceed update depth
         $level1 = $database->updateDocument(
@@ -1427,15 +1364,15 @@ trait OneToManyTests
                     ],
                 ])])
         );
-        $this->assertEquals(1, count($level1[$level2Collection]));
-        $this->assertEquals('level2new', $level1[$level2Collection][0]->getId());
-        $this->assertEquals(1, count($level1[$level2Collection][0][$level3Collection]));
-        $this->assertEquals('level3new', $level1[$level2Collection][0][$level3Collection][0]->getId());
-        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+        $this->assertEquals(1, count($level1->getDocuments($level2Collection)));
+        $this->assertEquals('level2new', $level1->getDocuments($level2Collection)[0]->getId());
+        $this->assertEquals(1, count($level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)));
+        $this->assertEquals('level3new', $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]);
 
         // Make sure level 4 document was not created
         $level3 = $database->getDocument($level3Collection, 'level3new');
-        $this->assertEquals(0, count($level3[$level4Collection]));
+        $this->assertEquals(0, count($level3->getDocuments($level4Collection)));
         $level4 = $database->getDocument($level4Collection, 'level4new');
         $this->assertTrue($level4->isEmpty());
     }
@@ -1488,34 +1425,34 @@ trait OneToManyTests
             ],
         ]));
         $this->assertArrayHasKey($level2Collection, $level1);
-        $this->assertEquals('level2', $level1[$level2Collection][0]->getId());
-        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection][0]);
-        $this->assertEquals('level3', $level1[$level2Collection][0][$level3Collection][0]->getId());
-        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][0][$level3Collection][0]);
+        $this->assertEquals('level2', $level1->getDocuments($level2Collection)[0]->getId());
+        $this->assertArrayHasKey($level3Collection, $level1->getDocuments($level2Collection)[0]);
+        $this->assertEquals('level3', $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1->getDocuments($level2Collection)[0]->getDocuments($level3Collection)[0]);
 
         // Confirm the 4th level document does not exist
         $level3 = $database->getDocument($level3Collection, 'level3');
-        $this->assertEquals(0, count($level3[$level4Collection]));
+        $this->assertEquals(0, count($level3->getDocuments($level4Collection)));
 
         // Create level 4 document
         $level3->setAttribute($level4Collection, [new Document([
             '$id' => 'level4',
         ])]);
         $level3 = $database->updateDocument($level3Collection, $level3->getId(), $level3);
-        $this->assertEquals('level4', $level3[$level4Collection][0]->getId());
+        $this->assertEquals('level4', $level3->getDocuments($level4Collection)[0]->getId());
 
         // Verify level 4 document is set
         $level3 = $database->getDocument($level3Collection, 'level3');
         $this->assertArrayHasKey($level4Collection, $level3);
-        $this->assertEquals('level4', $level3[$level4Collection][0]->getId());
+        $this->assertEquals('level4', $level3->getDocuments($level4Collection)[0]->getId());
 
         // Exceed fetch depth
         $level4 = $database->getDocument($level4Collection, 'level4');
         $this->assertArrayHasKey($level3Collection, $level4);
-        $this->assertEquals('level3', $level4[$level3Collection]->getId());
-        $this->assertArrayHasKey($level2Collection, $level4[$level3Collection]);
-        $this->assertEquals('level2', $level4[$level3Collection][$level2Collection]->getId());
-        $this->assertArrayNotHasKey($level1Collection, $level4[$level3Collection][$level2Collection]);
+        $this->assertEquals('level3', $level4->getDocument($level3Collection)->getId());
+        $this->assertArrayHasKey($level2Collection, $level4->getDocument($level3Collection));
+        $this->assertEquals('level2', $level4->getDocument($level3Collection)->getDocument($level2Collection)->getId());
+        $this->assertArrayNotHasKey($level1Collection, $level4->getDocument($level3Collection)->getDocument($level2Collection));
     }
 
     public function testOneToManyRelationshipKeyWithSymbols(): void
@@ -1553,10 +1490,8 @@ trait OneToManyTests
         $doc1 = $database->getDocument('$symbols_coll.ection4', $doc1->getId());
         $doc2 = $database->getDocument('$symbols_coll.ection3', $doc2->getId());
 
-        $this->assertEquals($doc2->getId(), $doc1->getAttribute('symbols_collection3')->getId());
-        /** @var array<Document> $_arr_symbols_collection4_1487 */
-        $_arr_symbols_collection4_1487 = $doc2->getAttribute('symbols_collection4');
-        $this->assertEquals($doc1->getId(), $_arr_symbols_collection4_1487[0]->getId());
+        $this->assertEquals($doc2->getId(), $doc1->getDocument('symbols_collection3')->getId());
+        $this->assertEquals($doc1->getId(), $doc2->getDocuments('symbols_collection4')[0]->getId());
     }
 
     public function testRecreateOneToManyOneWayRelationshipFromChild(): void
@@ -1785,7 +1720,7 @@ trait OneToManyTests
         ]));
 
         $person1 = $this->getDatabase()->getDocument('bulk_delete_person_o2m', 'person1');
-        $libraries = $person1->getAttribute('bulk_delete_library_o2m');
+        $libraries = $person1->getDocuments('bulk_delete_library_o2m');
         $this->assertCount(2, $libraries);
 
         // Delete person
@@ -1843,14 +1778,14 @@ trait OneToManyTests
         ]));
 
         $person1 = $this->getDatabase()->getDocument('bulk_delete_person_o2m', 'person1');
-        $libraries = $person1->getAttribute('bulk_delete_library_o2m');
+        $libraries = $person1->getDocuments('bulk_delete_library_o2m');
         $this->assertCount(2, $libraries);
 
         $this->getDatabase()->deleteDocuments('bulk_delete_library_o2m');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library_o2m'));
 
         $person = $this->getDatabase()->getDocument('bulk_delete_person_o2m', 'person1');
-        $libraries = $person->getAttribute('bulk_delete_library_o2m');
+        $libraries = $person->getDocuments('bulk_delete_library_o2m');
         $this->assertEmpty($libraries);
 
         // NULL - Cleanup
@@ -1897,14 +1832,14 @@ trait OneToManyTests
         ]));
 
         $person1 = $this->getDatabase()->getDocument('bulk_delete_person_o2m', 'person1');
-        $libraries = $person1->getAttribute('bulk_delete_library_o2m');
+        $libraries = $person1->getDocuments('bulk_delete_library_o2m');
         $this->assertCount(2, $libraries);
 
         $this->getDatabase()->deleteDocuments('bulk_delete_library_o2m');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_library_o2m'));
 
         $person = $this->getDatabase()->getDocument('bulk_delete_person_o2m', 'person1');
-        $libraries = $person->getAttribute('bulk_delete_library_o2m');
+        $libraries = $person->getDocuments('bulk_delete_library_o2m');
         $this->assertEmpty($libraries);
     }
 
@@ -1928,70 +1863,38 @@ trait OneToManyTests
         $database->createRelationship(Relationship::oneToMany(collection: $relation1, relatedCollection: $relation2));
 
         $relation1Col = $database->getCollection($relation1);
-        /** @var array<mixed> $_ac_attributes_1840 */
-        $_ac_attributes_1840 = $relation1Col->getAttribute('attributes');
-        $this->assertCount(1, $_ac_attributes_1840);
-        /** @var array<mixed> $_ac_indexes_1841 */
-        $_ac_indexes_1841 = $relation1Col->getAttribute('indexes');
-        $this->assertCount(0, $_ac_indexes_1841);
+        $this->assertCount(1, $relation1Col->attributes);
+        $this->assertCount(0, $relation1Col->indexes);
         $relation2Col = $database->getCollection($relation2);
-        /** @var array<mixed> $_ac_attributes_1843 */
-        $_ac_attributes_1843 = $relation2Col->getAttribute('attributes');
-        $this->assertCount(1, $_ac_attributes_1843);
-        /** @var array<mixed> $_ac_indexes_1844 */
-        $_ac_indexes_1844 = $relation2Col->getAttribute('indexes');
-        $this->assertCount(1, $_ac_indexes_1844);
+        $this->assertCount(1, $relation2Col->attributes);
+        $this->assertCount(1, $relation2Col->indexes);
 
         $database->deleteRelationship($relation2, $relation1);
 
         $relation1Col = $database->getCollection($relation1);
-        /** @var array<mixed> $_ac_attributes_1849 */
-        $_ac_attributes_1849 = $relation1Col->getAttribute('attributes');
-        $this->assertCount(0, $_ac_attributes_1849);
-        /** @var array<mixed> $_ac_indexes_1850 */
-        $_ac_indexes_1850 = $relation1Col->getAttribute('indexes');
-        $this->assertCount(0, $_ac_indexes_1850);
+        $this->assertCount(0, $relation1Col->attributes);
+        $this->assertCount(0, $relation1Col->indexes);
         $relation2Col = $database->getCollection($relation2);
-        /** @var array<mixed> $_ac_attributes_1852 */
-        $_ac_attributes_1852 = $relation2Col->getAttribute('attributes');
-        $this->assertCount(0, $_ac_attributes_1852);
-        /** @var array<mixed> $_ac_indexes_1853 */
-        $_ac_indexes_1853 = $relation2Col->getAttribute('indexes');
-        $this->assertCount(0, $_ac_indexes_1853);
+        $this->assertCount(0, $relation2Col->attributes);
+        $this->assertCount(0, $relation2Col->indexes);
 
         $database->createRelationship(Relationship::manyToOne(collection: $relation1, relatedCollection: $relation2));
 
         $relation1Col = $database->getCollection($relation1);
-        /** @var array<mixed> $_ac_attributes_1858 */
-        $_ac_attributes_1858 = $relation1Col->getAttribute('attributes');
-        $this->assertCount(1, $_ac_attributes_1858);
-        /** @var array<mixed> $_ac_indexes_1859 */
-        $_ac_indexes_1859 = $relation1Col->getAttribute('indexes');
-        $this->assertCount(1, $_ac_indexes_1859);
+        $this->assertCount(1, $relation1Col->attributes);
+        $this->assertCount(1, $relation1Col->indexes);
         $relation2Col = $database->getCollection($relation2);
-        /** @var array<mixed> $_ac_attributes_1861 */
-        $_ac_attributes_1861 = $relation2Col->getAttribute('attributes');
-        $this->assertCount(1, $_ac_attributes_1861);
-        /** @var array<mixed> $_ac_indexes_1862 */
-        $_ac_indexes_1862 = $relation2Col->getAttribute('indexes');
-        $this->assertCount(0, $_ac_indexes_1862);
+        $this->assertCount(1, $relation2Col->attributes);
+        $this->assertCount(0, $relation2Col->indexes);
 
         $database->deleteRelationship($relation1, $relation2);
 
         $relation1Col = $database->getCollection($relation1);
-        /** @var array<mixed> $_ac_attributes_1867 */
-        $_ac_attributes_1867 = $relation1Col->getAttribute('attributes');
-        $this->assertCount(0, $_ac_attributes_1867);
-        /** @var array<mixed> $_ac_indexes_1868 */
-        $_ac_indexes_1868 = $relation1Col->getAttribute('indexes');
-        $this->assertCount(0, $_ac_indexes_1868);
+        $this->assertCount(0, $relation1Col->attributes);
+        $this->assertCount(0, $relation1Col->indexes);
         $relation2Col = $database->getCollection($relation2);
-        /** @var array<mixed> $_ac_attributes_1870 */
-        $_ac_attributes_1870 = $relation2Col->getAttribute('attributes');
-        $this->assertCount(0, $_ac_attributes_1870);
-        /** @var array<mixed> $_ac_indexes_1871 */
-        $_ac_indexes_1871 = $relation2Col->getAttribute('indexes');
-        $this->assertCount(0, $_ac_indexes_1871);
+        $this->assertCount(0, $relation2Col->attributes);
+        $this->assertCount(0, $relation2Col->indexes);
 
         $database->deleteCollection($relation1);
         $database->deleteCollection($relation2);
@@ -2195,12 +2098,12 @@ trait OneToManyTests
         $product1 = $database->getDocument($products, 'product1');
         $this->assertEquals('Laptop', $product1->getAttribute('name'));
         $this->assertEquals(999.99, $product1->getAttribute('price'));
-        $this->assertEquals('electronics', $product1->getAttribute('category')->getId());
+        $this->assertEquals('electronics', $product1->getDocument('category')->getId());
 
         $product2 = $database->getDocument($products, 'product2');
         $this->assertEquals('Mouse', $product2->getAttribute('name'));
         $this->assertEquals(25.50, $product2->getAttribute('price'));
-        $this->assertEquals('electronics', $product2->getAttribute('category')->getId());
+        $this->assertEquals('electronics', $product2->getDocument('category')->getId());
 
         // Perform a BATCH partial update - ONLY update price, NOT the category relationship
         $database->updateDocuments(
@@ -2217,19 +2120,18 @@ trait OneToManyTests
         $this->assertEquals(50.00, $product1After->getAttribute('price'), 'Price should be updated');
 
         // This is the critical assertion - the category relationship should still exist after batch partial update
-        $categoryAfter = $product1After->getAttribute('category');
-        $this->assertNotNull($categoryAfter, 'Category relationship should be preserved after batch partial update');
+        $categoryAfter = $product1After->getDocument('category');
+        $this->assertFalse($categoryAfter->isEmpty(), 'Category relationship should be preserved after batch partial update');
         $this->assertEquals('electronics', $categoryAfter->getId(), 'Category should still be electronics');
 
         $product2After = $database->getDocument($products, 'product2');
         $this->assertEquals('Mouse', $product2After->getAttribute('name'), 'Product name should be preserved');
         $this->assertEquals(50.00, $product2After->getAttribute('price'), 'Price should be updated');
-        $this->assertEquals('electronics', $product2After->getAttribute('category')->getId(), 'Category should still be electronics');
+        $this->assertEquals('electronics', $product2After->getDocument('category')->getId(), 'Category should still be electronics');
 
         // Verify the reverse relationship is still intact
         $category = $database->getDocument($categories, 'electronics');
-        /** @var array<\Utopia\Database\Document> $productsArr */
-        $productsArr = $category->getAttribute('products');
+        $productsArr = $category->getDocuments('products');
         $this->assertCount(2, $productsArr, 'Category should still have 2 products');
         $this->assertEquals('product1', $productsArr[0]->getId());
         $this->assertEquals('product2', $productsArr[1]->getId());
@@ -2302,12 +2204,8 @@ trait OneToManyTests
         $author = $database->getDocument($authors, 'author1');
         $this->assertEquals('John Doe', $author->getAttribute('name'));
         $this->assertEquals('A great author', $author->getAttribute('bio'));
-        /** @var array<mixed> $_ac_books_2164 */
-        $_ac_books_2164 = $author->getAttribute('books');
-        $this->assertCount(1, $_ac_books_2164);
-        /** @var array<Document> $_arr_books_2165 */
-        $_arr_books_2165 = $author->getAttribute('books');
-        $this->assertEquals('book1', $_arr_books_2165[0]->getId());
+        $this->assertCount(1, $author->getDocuments('books'));
+        $this->assertEquals('book1', $author->getDocuments('books')[0]->getId());
 
         // Partial update that ONLY changes the relationship (adds book2 to the author)
         $database->updateDocument($authors, 'author1', new Document([
@@ -2324,20 +2222,18 @@ trait OneToManyTests
         $authorAfter = $database->getDocument($authors, 'author1');
         $this->assertEquals('John Doe', $authorAfter->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('A great author', $authorAfter->getAttribute('bio'), 'Bio should be preserved');
-        $this->assertCount(2, $authorAfter->getAttribute('books'), 'Should now have 2 books');
+        $this->assertCount(2, $authorAfter->getDocuments('books'), 'Should now have 2 books');
 
-        /** @var array<Document> $_map_books_2186 */
-        $_map_books_2186 = $authorAfter->getAttribute('books');
-        $bookIds = \array_map(fn ($book) => $book->getId(), $_map_books_2186);
+        $bookIds = \array_map(fn ($book) => $book->getId(), $authorAfter->getDocuments('books'));
         $this->assertContains('book1', $bookIds);
         $this->assertContains('book2', $bookIds);
 
         // Verify reverse relationships
         $book1 = $database->getDocument($books, 'book1');
-        $this->assertEquals('author1', $book1->getAttribute('author')->getId());
+        $this->assertEquals('author1', $book1->getDocument('author')->getId());
 
         $book2 = $database->getDocument($books, 'book2');
-        $this->assertEquals('author1', $book2->getAttribute('author')->getId());
+        $this->assertEquals('author1', $book2->getDocument('author')->getId());
 
         $database->deleteCollection($authors);
         $database->deleteCollection($books);
@@ -2418,9 +2314,7 @@ trait OneToManyTests
         $this->assertEquals('The Warriors', $team->getAttribute('name'));
         $this->assertEquals('San Francisco', $team->getAttribute('city'));
         $this->assertEquals(1946, $team->getAttribute('founded'));
-        /** @var array<mixed> $_ac_players_2268 */
-        $_ac_players_2268 = $team->getAttribute('players');
-        $this->assertCount(2, $_ac_players_2268);
+        $this->assertCount(2, $team->getDocuments('players'));
 
         // Partial update that changes BOTH flat data (city) AND relationship (players)
         // Do NOT update name or founded
@@ -2441,24 +2335,22 @@ trait OneToManyTests
         $this->assertEquals('The Warriors', $teamAfter->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('Oakland', $teamAfter->getAttribute('city'), 'City should be updated');
         $this->assertEquals(1946, $teamAfter->getAttribute('founded'), 'Founded should be preserved');
-        $this->assertCount(2, $teamAfter->getAttribute('players'), 'Should still have 2 players');
+        $this->assertCount(2, $teamAfter->getDocuments('players'), 'Should still have 2 players');
 
-        /** @var array<Document> $_map_players_2291 */
-        $_map_players_2291 = $teamAfter->getAttribute('players');
-        $playerIds = \array_map(fn ($player) => $player->getId(), $_map_players_2291);
+        $playerIds = \array_map(fn ($player) => $player->getId(), $teamAfter->getDocuments('players'));
         $this->assertContains('player1', $playerIds, 'Should still have player1');
         $this->assertContains('player3', $playerIds, 'Should now have player3');
         $this->assertNotContains('player2', $playerIds, 'Should no longer have player2');
 
         // Verify reverse relationships
         $player1 = $database->getDocument($players, 'player1');
-        $this->assertEquals('team1', $player1->getAttribute('team')->getId());
+        $this->assertEquals('team1', $player1->getDocument('team')->getId());
 
         $player2 = $database->getDocument($players, 'player2');
         $this->assertNull($player2->getAttribute('team'), 'Player2 should no longer have a team');
 
         $player3 = $database->getDocument($players, 'player3');
-        $this->assertEquals('team1', $player3->getAttribute('team')->getId());
+        $this->assertEquals('team1', $player3->getDocument('team')->getId());
 
         $database->deleteCollection($teams);
         $database->deleteCollection($players);
@@ -2516,7 +2408,7 @@ trait OneToManyTests
         $post = $database->getDocument($posts, 'post1');
         $this->assertEquals('Post 1', $post->getAttribute('title'), 'Title should be preserved');
         $this->assertEquals(200, $post->getAttribute('views'), 'Views should be updated');
-        $this->assertEquals('blog1', $post->getAttribute('blog')->getId(), 'Blog relationship should be preserved');
+        $this->assertEquals('blog1', $post->getDocument('blog')->getId(), 'Blog relationship should be preserved');
 
         $database->deleteCollection($blogs);
         $database->deleteCollection($posts);
@@ -2580,7 +2472,7 @@ trait OneToManyTests
         $lib = $database->getDocument($libraries, 'lib1');
         $this->assertEquals('Central Library', $lib->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('Downtown', $lib->getAttribute('location'), 'Location should be preserved');
-        $this->assertCount(2, $lib->getAttribute('books'), 'Should have 2 books');
+        $this->assertCount(2, $lib->getDocuments('books'), 'Should have 2 books');
 
         // Create another standalone book
         $database->createDocument($booksLib, new Document([
@@ -2603,11 +2495,9 @@ trait OneToManyTests
         $lib = $database->getDocument($libraries, 'lib1');
         $this->assertEquals('Central Library', $lib->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals('Downtown', $lib->getAttribute('location'), 'Location should be preserved');
-        $this->assertCount(2, $lib->getAttribute('books'), 'Should have 2 books');
+        $this->assertCount(2, $lib->getDocuments('books'), 'Should have 2 books');
 
-        /** @var array<Document> $_map_books_2433 */
-        $_map_books_2433 = $lib->getAttribute('books');
-        $bookIds = \array_map(fn ($book) => $book->getId(), $_map_books_2433);
+        $bookIds = \array_map(fn ($book) => $book->getId(), $lib->getDocuments('books'));
         $this->assertContains('book1', $bookIds);
         $this->assertContains('book3', $bookIds);
 

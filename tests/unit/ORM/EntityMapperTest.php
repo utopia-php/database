@@ -65,7 +65,6 @@ class EntityMapperTest extends TestCase
         /** @var TestEntity $entity */
         $entity = $this->mapper->toEntity($doc, $metadata, $identityMap);
 
-        $this->assertInstanceOf(TestEntity::class, $entity);
         $this->assertEquals('user-456', $entity->id);
         $this->assertEquals(2, $entity->version);
         $this->assertEquals('2024-01-01 00:00:00', $entity->createdAt);

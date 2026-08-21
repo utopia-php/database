@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Loading;
 
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -10,7 +11,7 @@ use Utopia\Database\Loading\LazyProxy;
 
 class LazyProxyTest extends TestCase
 {
-    private Database $db;
+    private Database&Stub $db;
 
     private BatchLoader $batchLoader;
 

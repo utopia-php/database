@@ -55,7 +55,8 @@
         "utopia-php/cli": "^0.22",
         "laravel/pint": "*",
         "phpstan/phpstan": "2.1.*",
-        "rregeer/phpunit-coverage-check": "0.3.*"
+        "rregeer/phpunit-coverage-check": "0.3.*",
+        "phpstan/phpstan-phpunit": "2.0.*"
     },
     "suggest": {
         "ext-redis": "Needed to support Redis Cache Adapter",

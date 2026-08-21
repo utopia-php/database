@@ -22,6 +22,20 @@ use Utopia\Query\Schema\Order;
 
 trait SchemalessTests
 {
+    private function asString(mixed $value): string
+    {
+        $this->assertIsString($value);
+
+        return $value;
+    }
+
+    private function asDocument(mixed $value): Document
+    {
+        $this->assertInstanceOf(Document::class, $value);
+
+        return $value;
+    }
+
     public function testSchemalessDocumentOperation(): void
     {
         /** @var Database $database */
@@ -629,6 +643,7 @@ trait SchemalessTests
         $processedDocs = $database->find($colName, [Query::equal('processed', [true])]);
         $this->assertCount(4, $processedDocs);
 
+        /** @var list<array{id: string, value: mixed, customData: mixed}> $deleteResults */
         $deleteResults = [];
         $deleteCount = $database->deleteDocuments(
             $colName,
@@ -647,7 +662,7 @@ trait SchemalessTests
 
         foreach ($deleteResults as $result) {
             $this->assertGreaterThan(50, $result['value']);
-            $this->assertStringStartsWith('data', $result['customData']);
+            $this->assertStringStartsWith('data', $this->asString($result['customData']));
         }
 
         $remainingDocs = $database->find($colName);
@@ -692,7 +707,7 @@ trait SchemalessTests
         $this->assertTrue($database->createIndex($col, Index::key(key: 'idx_rank_key', attributes: ['rank'], lengths: [0], orders: [Order::Asc])));
 
         $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(2, $indexes);
         $ids = array_map(fn ($i) => $i['$id'], $indexes);
         $this->assertContains('idx_rank_key', $ids);
@@ -700,8 +715,8 @@ trait SchemalessTests
 
         $this->assertTrue($database->deleteIndex($col, 'idx_rank_key'));
         $collection = $database->getCollection($col);
-        $this->assertCount(1, $collection->getAttribute('indexes'));
-        $this->assertEquals('idx_title_unique', $collection->getAttribute('indexes')[0]['$id']);
+        $this->assertCount(1, $collection->indexes);
+        $this->assertEquals('idx_title_unique', $collection->indexes[0]['$id']);
 
         $this->assertTrue($database->deleteIndex($col, 'idx_title_unique'));
         $database->deleteCollection($col);
@@ -738,7 +753,7 @@ trait SchemalessTests
 
         // Verify index metadata is stored on the collection
         $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(2, $indexes);
         $ids = array_map(fn ($i) => $i['$id'], $indexes);
         $this->assertContains('idx_meta_key', $ids);
@@ -850,7 +865,7 @@ trait SchemalessTests
         $curDate1 = '2000-01-05T05:05:05.000+00:00';
 
         // createDocument with preserved dates
-        $doc1 = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt1, $updatedAt1, $curDate1) {
+        $doc1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt1, $updatedAt1, $curDate1) {
             return $database->createDocument($col, new Document([
                 '$id' => 'd1',
                 '$permissions' => $permissions,
@@ -859,13 +874,13 @@ trait SchemalessTests
                 'curDate' => $curDate1,
                 'counter' => 0,
             ]));
-        });
+        }));
 
         $this->assertEquals('d1', $doc1->getId());
         $this->assertTrue(is_string($doc1->getAttribute('curDate')));
         // MongoDB converts ISO 8601 to 'Y-m-d H:i:s.v' format, so compare by parsing
         $curDate1Value = $doc1->getAttribute('curDate');
-        $parsedCurDate1 = new \DateTime($curDate1Value);
+        $parsedCurDate1 = new \DateTime($this->asString($curDate1Value));
         $parsedExpectedCurDate1 = new \DateTime($curDate1);
         $this->assertEquals($parsedExpectedCurDate1->getTimestamp(), $parsedCurDate1->getTimestamp());
         $this->assertTrue(is_string($doc1->getAttribute('$createdAt')));
@@ -873,8 +888,8 @@ trait SchemalessTests
         // Internal attributes should preserve format better, but verify by parsing for MongoDB
         $createdAt1Value = $doc1->getAttribute('$createdAt');
         $updatedAt1Value = $doc1->getAttribute('$updatedAt');
-        $parsedCreatedAt1 = new \DateTime($createdAt1Value);
-        $parsedUpdatedAt1 = new \DateTime($updatedAt1Value);
+        $parsedCreatedAt1 = new \DateTime($this->asString($createdAt1Value));
+        $parsedUpdatedAt1 = new \DateTime($this->asString($updatedAt1Value));
         $parsedExpectedCreatedAt1 = new \DateTime($createdAt1);
         $parsedExpectedUpdatedAt1 = new \DateTime($updatedAt1);
         $this->assertEquals($parsedExpectedCreatedAt1->getTimestamp(), $parsedCreatedAt1->getTimestamp());
@@ -883,14 +898,14 @@ trait SchemalessTests
         $fetched1 = $database->getDocument($col, 'd1');
         $fetchedCurDate1 = $fetched1->getAttribute('curDate');
         $this->assertTrue(is_string($fetchedCurDate1));
-        $parsedFetchedCurDate1 = new \DateTime($fetchedCurDate1);
+        $parsedFetchedCurDate1 = new \DateTime($this->asString($fetchedCurDate1));
         $this->assertEquals($parsedExpectedCurDate1->getTimestamp(), $parsedFetchedCurDate1->getTimestamp());
         $this->assertTrue(is_string($fetched1->getAttribute('$createdAt')));
         $this->assertTrue(is_string($fetched1->getAttribute('$updatedAt')));
         $fetchedCreatedAt1 = $fetched1->getAttribute('$createdAt');
         $fetchedUpdatedAt1 = $fetched1->getAttribute('$updatedAt');
-        $parsedFetchedCreatedAt1 = new \DateTime($fetchedCreatedAt1);
-        $parsedFetchedUpdatedAt1 = new \DateTime($fetchedUpdatedAt1);
+        $parsedFetchedCreatedAt1 = new \DateTime($this->asString($fetchedCreatedAt1));
+        $parsedFetchedUpdatedAt1 = new \DateTime($this->asString($fetchedUpdatedAt1));
         $this->assertEquals($parsedExpectedCreatedAt1->getTimestamp(), $parsedFetchedCreatedAt1->getTimestamp());
         $this->assertEquals($parsedExpectedUpdatedAt1->getTimestamp(), $parsedFetchedUpdatedAt1->getTimestamp());
 
@@ -925,13 +940,13 @@ trait SchemalessTests
 
         $fetched2 = $database->getDocument($col, 'd2');
         $fetchedCurDate2 = $fetched2->getAttribute('curDate');
-        $parsedCurDate2 = new \DateTime($fetchedCurDate2);
+        $parsedCurDate2 = new \DateTime($this->asString($fetchedCurDate2));
         $parsedExpectedCurDate2 = new \DateTime($curDate2);
         $this->assertEquals($parsedExpectedCurDate2->getTimestamp(), $parsedCurDate2->getTimestamp());
         $fetchedCreatedAt2 = $fetched2->getAttribute('$createdAt');
         $fetchedUpdatedAt2 = $fetched2->getAttribute('$updatedAt');
-        $parsedCreatedAt2 = new \DateTime($fetchedCreatedAt2);
-        $parsedUpdatedAt2 = new \DateTime($fetchedUpdatedAt2);
+        $parsedCreatedAt2 = new \DateTime($this->asString($fetchedCreatedAt2));
+        $parsedUpdatedAt2 = new \DateTime($this->asString($fetchedUpdatedAt2));
         $parsedExpectedCreatedAt2 = new \DateTime($createdAt2);
         $parsedExpectedUpdatedAt2 = new \DateTime($updatedAt2);
         $this->assertEquals($parsedExpectedCreatedAt2->getTimestamp(), $parsedCreatedAt2->getTimestamp());
@@ -939,13 +954,13 @@ trait SchemalessTests
 
         $fetched3 = $database->getDocument($col, 'd3');
         $fetchedCurDate3 = $fetched3->getAttribute('curDate');
-        $parsedCurDate3 = new \DateTime($fetchedCurDate3);
+        $parsedCurDate3 = new \DateTime($this->asString($fetchedCurDate3));
         $parsedExpectedCurDate3 = new \DateTime($curDate3);
         $this->assertEquals($parsedExpectedCurDate3->getTimestamp(), $parsedCurDate3->getTimestamp());
         $fetchedCreatedAt3 = $fetched3->getAttribute('$createdAt');
         $fetchedUpdatedAt3 = $fetched3->getAttribute('$updatedAt');
-        $parsedCreatedAt3 = new \DateTime($fetchedCreatedAt3);
-        $parsedUpdatedAt3 = new \DateTime($fetchedUpdatedAt3);
+        $parsedCreatedAt3 = new \DateTime($this->asString($fetchedCreatedAt3));
+        $parsedUpdatedAt3 = new \DateTime($this->asString($fetchedUpdatedAt3));
         $parsedExpectedCreatedAt3 = new \DateTime($createdAt3);
         $parsedExpectedUpdatedAt3 = new \DateTime($updatedAt3);
         $this->assertEquals($parsedExpectedCreatedAt3->getTimestamp(), $parsedCreatedAt3->getTimestamp());
@@ -954,16 +969,16 @@ trait SchemalessTests
         // updateDocument with preserved $updatedAt and custom date field
         $newCurDate1 = '2000-02-01T00:00:00.000+00:00';
         $newUpdatedAt1 = '2000-02-02T02:02:02.000+00:00';
-        $updated1 = $database->withPreserveDates(function () use ($database, $col, $newCurDate1, $newUpdatedAt1) {
+        $updated1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $newCurDate1, $newUpdatedAt1) {
             return $database->updateDocument($col, 'd1', new Document([
                 'curDate' => $newCurDate1,
                 '$updatedAt' => $newUpdatedAt1,
             ]));
-        });
+        }));
         $updatedCurDate1 = $updated1->getAttribute('curDate');
         $updatedUpdatedAt1 = $updated1->getAttribute('$updatedAt');
-        $parsedUpdatedCurDate1 = new \DateTime($updatedCurDate1);
-        $parsedUpdatedUpdatedAt1 = new \DateTime($updatedUpdatedAt1);
+        $parsedUpdatedCurDate1 = new \DateTime($this->asString($updatedCurDate1));
+        $parsedUpdatedUpdatedAt1 = new \DateTime($this->asString($updatedUpdatedAt1));
         $parsedExpectedNewCurDate1 = new \DateTime($newCurDate1);
         $parsedExpectedNewUpdatedAt1 = new \DateTime($newUpdatedAt1);
         $this->assertEquals($parsedExpectedNewCurDate1->getTimestamp(), $parsedUpdatedCurDate1->getTimestamp());
@@ -971,8 +986,8 @@ trait SchemalessTests
         $refetched1 = $database->getDocument($col, 'd1');
         $refetchedCurDate1 = $refetched1->getAttribute('curDate');
         $refetchedUpdatedAt1 = $refetched1->getAttribute('$updatedAt');
-        $parsedRefetchedCurDate1 = new \DateTime($refetchedCurDate1);
-        $parsedRefetchedUpdatedAt1 = new \DateTime($refetchedUpdatedAt1);
+        $parsedRefetchedCurDate1 = new \DateTime($this->asString($refetchedCurDate1));
+        $parsedRefetchedUpdatedAt1 = new \DateTime($this->asString($refetchedUpdatedAt1));
         $this->assertEquals($parsedExpectedNewCurDate1->getTimestamp(), $parsedRefetchedCurDate1->getTimestamp());
         $this->assertEquals($parsedExpectedNewUpdatedAt1->getTimestamp(), $parsedRefetchedUpdatedAt1->getTimestamp());
 
@@ -996,10 +1011,10 @@ trait SchemalessTests
         $bulkUpdatedAt2 = $afterBulk2->getAttribute('$updatedAt');
         $bulkCurDate3 = $afterBulk3->getAttribute('curDate');
         $bulkUpdatedAt3 = $afterBulk3->getAttribute('$updatedAt');
-        $parsedBulkCurDate2 = new \DateTime($bulkCurDate2);
-        $parsedBulkUpdatedAt2 = new \DateTime($bulkUpdatedAt2);
-        $parsedBulkCurDate3 = new \DateTime($bulkCurDate3);
-        $parsedBulkUpdatedAt3 = new \DateTime($bulkUpdatedAt3);
+        $parsedBulkCurDate2 = new \DateTime($this->asString($bulkCurDate2));
+        $parsedBulkUpdatedAt2 = new \DateTime($this->asString($bulkUpdatedAt2));
+        $parsedBulkCurDate3 = new \DateTime($this->asString($bulkCurDate3));
+        $parsedBulkUpdatedAt3 = new \DateTime($this->asString($bulkUpdatedAt3));
         $parsedExpectedBulkCurDate = new \DateTime($bulkCurDate);
         $parsedExpectedBulkUpdatedAt = new \DateTime($bulkUpdatedAt);
         $this->assertEquals($parsedExpectedBulkCurDate->getTimestamp(), $parsedBulkCurDate2->getTimestamp());
@@ -1011,7 +1026,7 @@ trait SchemalessTests
         $createdAt4 = '2003-03-03T03:03:03.000+00:00';
         $updatedAt4 = '2003-03-04T04:04:04.000+00:00';
         $curDate4 = '2003-03-05T05:05:05.000+00:00';
-        $up1 = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt4, $updatedAt4, $curDate4) {
+        $up1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt4, $updatedAt4, $curDate4) {
             return $database->upsertDocument($col, new Document([
                 '$id' => 'd4',
                 '$permissions' => $permissions,
@@ -1019,14 +1034,14 @@ trait SchemalessTests
                 '$updatedAt' => $updatedAt4,
                 'curDate' => $curDate4,
             ]));
-        });
+        }));
         $this->assertEquals('d4', $up1->getId());
         $up1CurDate4 = $up1->getAttribute('curDate');
         $up1CreatedAt4 = $up1->getAttribute('$createdAt');
         $up1UpdatedAt4 = $up1->getAttribute('$updatedAt');
-        $parsedUp1CurDate4 = new \DateTime($up1CurDate4);
-        $parsedUp1CreatedAt4 = new \DateTime($up1CreatedAt4);
-        $parsedUp1UpdatedAt4 = new \DateTime($up1UpdatedAt4);
+        $parsedUp1CurDate4 = new \DateTime($this->asString($up1CurDate4));
+        $parsedUp1CreatedAt4 = new \DateTime($this->asString($up1CreatedAt4));
+        $parsedUp1UpdatedAt4 = new \DateTime($this->asString($up1UpdatedAt4));
         $parsedExpectedCurDate4 = new \DateTime($curDate4);
         $parsedExpectedCreatedAt4 = new \DateTime($createdAt4);
         $parsedExpectedUpdatedAt4 = new \DateTime($updatedAt4);
@@ -1036,17 +1051,17 @@ trait SchemalessTests
 
         $updatedAt4b = '2003-03-06T06:06:06.000+00:00';
         $curDate4b = '2003-03-07T07:07:07.000+00:00';
-        $up2 = $database->withPreserveDates(function () use ($database, $col, $updatedAt4b, $curDate4b) {
+        $up2 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $updatedAt4b, $curDate4b) {
             return $database->upsertDocument($col, new Document([
                 '$id' => 'd4',
                 'curDate' => $curDate4b,
                 '$updatedAt' => $updatedAt4b,
             ]));
-        });
+        }));
         $up2CurDate4b = $up2->getAttribute('curDate');
         $up2UpdatedAt4b = $up2->getAttribute('$updatedAt');
-        $parsedUp2CurDate4b = new \DateTime($up2CurDate4b);
-        $parsedUp2UpdatedAt4b = new \DateTime($up2UpdatedAt4b);
+        $parsedUp2CurDate4b = new \DateTime($this->asString($up2CurDate4b));
+        $parsedUp2UpdatedAt4b = new \DateTime($this->asString($up2UpdatedAt4b));
         $parsedExpectedCurDate4b = new \DateTime($curDate4b);
         $parsedExpectedUpdatedAt4b = new \DateTime($updatedAt4b);
         $this->assertEquals($parsedExpectedCurDate4b->getTimestamp(), $parsedUp2CurDate4b->getTimestamp());
@@ -1054,8 +1069,8 @@ trait SchemalessTests
         $refetched4 = $database->getDocument($col, 'd4');
         $refetched4CurDate4b = $refetched4->getAttribute('curDate');
         $refetched4UpdatedAt4b = $refetched4->getAttribute('$updatedAt');
-        $parsedRefetched4CurDate4b = new \DateTime($refetched4CurDate4b);
-        $parsedRefetched4UpdatedAt4b = new \DateTime($refetched4UpdatedAt4b);
+        $parsedRefetched4CurDate4b = new \DateTime($this->asString($refetched4CurDate4b));
+        $parsedRefetched4UpdatedAt4b = new \DateTime($this->asString($refetched4UpdatedAt4b));
         $this->assertEquals($parsedExpectedCurDate4b->getTimestamp(), $parsedRefetched4CurDate4b->getTimestamp());
         $this->assertEquals($parsedExpectedUpdatedAt4b->getTimestamp(), $parsedRefetched4UpdatedAt4b->getTimestamp());
 
@@ -1088,9 +1103,9 @@ trait SchemalessTests
         $fetched5CurDate5 = $fetched5->getAttribute('curDate');
         $fetched5CreatedAt5 = $fetched5->getAttribute('$createdAt');
         $fetched5UpdatedAt5 = $fetched5->getAttribute('$updatedAt');
-        $parsedFetched5CurDate5 = new \DateTime($fetched5CurDate5);
-        $parsedFetched5CreatedAt5 = new \DateTime($fetched5CreatedAt5);
-        $parsedFetched5UpdatedAt5 = new \DateTime($fetched5UpdatedAt5);
+        $parsedFetched5CurDate5 = new \DateTime($this->asString($fetched5CurDate5));
+        $parsedFetched5CreatedAt5 = new \DateTime($this->asString($fetched5CreatedAt5));
+        $parsedFetched5UpdatedAt5 = new \DateTime($this->asString($fetched5UpdatedAt5));
         $parsedExpectedCurDate5 = new \DateTime($curDate5);
         $parsedExpectedCreatedAt5 = new \DateTime($createdAt5);
         $parsedExpectedUpdatedAt5 = new \DateTime($updatedAt5);
@@ -1101,8 +1116,8 @@ trait SchemalessTests
         $fetched2b = $database->getDocument($col, 'd2');
         $fetched2bCurDate2b = $fetched2b->getAttribute('curDate');
         $fetched2bUpdatedAt2b = $fetched2b->getAttribute('$updatedAt');
-        $parsedFetched2bCurDate2b = new \DateTime($fetched2bCurDate2b);
-        $parsedFetched2bUpdatedAt2b = new \DateTime($fetched2bUpdatedAt2b);
+        $parsedFetched2bCurDate2b = new \DateTime($this->asString($fetched2bCurDate2b));
+        $parsedFetched2bUpdatedAt2b = new \DateTime($this->asString($fetched2bUpdatedAt2b));
         $parsedExpectedCurDate2b = new \DateTime($curDate2b);
         $parsedExpectedUpdatedAt2b = new \DateTime($updatedAt2b);
         $this->assertEquals($parsedExpectedCurDate2b->getTimestamp(), $parsedFetched2bCurDate2b->getTimestamp());
@@ -1913,7 +1928,7 @@ trait SchemalessTests
         $retrieved3 = $database->getDocument($collectionName, 'doc3');
         $this->assertEquals('Updated Product', $retrieved3->getAttribute('name'));
         $this->assertArrayHasKey('specs', $retrieved3->getArrayCopy());
-        $this->assertEquals('AMD', $retrieved3->getAttribute('specs')['cpu']);
+        $this->assertEquals('AMD', $retrieved3->getArray('specs')['cpu']);
         $this->assertArrayNotHasKey('details', $retrieved3->getArrayCopy());
 
         // Test 4: Remove array fields
@@ -2105,7 +2120,6 @@ trait SchemalessTests
         );
 
         $collection = $database->getCollection($col);
-        $this->assertInstanceOf(Collection::class, $collection);
         $indexes = $collection->indexes;
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
@@ -2159,7 +2173,6 @@ trait SchemalessTests
         $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 
         $collection2 = $database->getCollection($col2);
-        $this->assertInstanceOf(Collection::class, $collection2);
         $indexes2 = $collection2->indexes;
         $this->assertCount(1, $indexes2);
         $ttlIndex2 = $indexes2[0];
@@ -2233,14 +2246,14 @@ trait SchemalessTests
 
         // Verify datetime values are equivalent by parsing (MongoDB converts to UTC)
         $parsedInput1 = new \DateTime($datetime1);
-        $parsedOutput1 = new \DateTime($fetchedEventDate1);
+        $parsedOutput1 = new \DateTime($this->asString($fetchedEventDate1));
         $this->assertEquals($parsedInput1->getTimestamp(), $parsedOutput1->getTimestamp());
 
         $fetched2 = $database->getDocument($col, 'dt2');
         $fetchedEventDate2 = $fetched2->getAttribute('eventDate');
         $this->assertTrue(is_string($fetchedEventDate2));
         $parsedInput2 = new \DateTime($datetime2);
-        $parsedOutput2 = new \DateTime($fetchedEventDate2);
+        $parsedOutput2 = new \DateTime($this->asString($fetchedEventDate2));
         $this->assertEquals($parsedInput2->getTimestamp(), $parsedOutput2->getTimestamp());
 
         $fetched3 = $database->getDocument($col, 'dt3');
@@ -2249,8 +2262,8 @@ trait SchemalessTests
         // Verify it's a valid datetime string (format may vary slightly)
         $this->assertGreaterThanOrEqual(20, strlen($fetchedEventDate3));
         $this->assertLessThanOrEqual(40, strlen($fetchedEventDate3));
-        $parsedInput3 = new \DateTime($datetime3);
-        $parsedOutput3 = new \DateTime($fetchedEventDate3);
+        $parsedInput3 = new \DateTime($this->asString($datetime3));
+        $parsedOutput3 = new \DateTime($this->asString($fetchedEventDate3));
         // MongoDB converts to UTC, so timestamps should match
         $this->assertEquals($parsedInput3->getTimestamp(), $parsedOutput3->getTimestamp());
 
@@ -2278,7 +2291,7 @@ trait SchemalessTests
         $refetchedEventDate = $refetched->getAttribute('eventDate');
         $this->assertTrue(is_string($refetchedEventDate));
         $parsedNewInput = new \DateTime($newDatetime);
-        $parsedNewOutput = new \DateTime($refetchedEventDate);
+        $parsedNewOutput = new \DateTime($this->asString($refetchedEventDate));
         $this->assertEquals($parsedNewInput->getTimestamp(), $parsedNewOutput->getTimestamp());
 
         $database->deleteCollection($col);
@@ -2371,8 +2384,7 @@ trait SchemalessTests
             sleep($retryDelay);
 
             // Fetch collection to trigger TTL cleanup check
-            $collection = $database->getCollection($col);
-            $this->assertNotNull($collection);
+            $database->getCollection($col);
 
             // Check if expired document is gone
             $remainingDocs = $database->find($col);
@@ -2485,8 +2497,7 @@ trait SchemalessTests
             sleep($retryDelay);
 
             // Fetch collection to trigger TTL cleanup check in MongoDB
-            $collection = $database->getCollection($col);
-            $this->assertNotNull($collection);
+            $database->getCollection($col);
 
             // Fetch through getDocument, which goes through the cache layer
             $expired = $database->getDocument($col, 'expired_doc');
@@ -2579,21 +2590,17 @@ trait SchemalessTests
         $this->assertGreaterThanOrEqual(20, strlen($doc1->getAttribute('str')));
         $this->assertLessThanOrEqual(40, strlen($doc1->getAttribute('str')));
         // datetime field should be converted to MongoDB format if it's a valid ISO date
-        $datetime1 = $doc1->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime1));
+        $datetime1 = $this->asString($doc1->getAttribute('datetime'));
         $this->assertGreaterThanOrEqual(20, strlen($datetime1));
         $this->assertLessThanOrEqual(40, strlen($datetime1));
         // Verify it's a valid datetime by parsing
         $parsed1 = new \DateTime($datetime1);
-        $this->assertInstanceOf(\DateTime::class, $parsed1);
 
         $doc2 = $database->getDocument($col, 'doc2');
         $this->assertEquals('doc2', $doc2->getId());
         $this->assertEquals('just a regular string', $doc2->getAttribute('str'));
-        $datetime2 = $doc2->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime2));
+        $datetime2 = $this->asString($doc2->getAttribute('datetime'));
         $parsed2 = new \DateTime($datetime2);
-        $this->assertInstanceOf(\DateTime::class, $parsed2);
 
         $doc3 = $database->getDocument($col, 'doc3');
         $this->assertEquals('doc3', $doc3->getId());
@@ -2609,10 +2616,8 @@ trait SchemalessTests
         $doc4 = $database->getDocument($col, 'doc4');
         $this->assertEquals('doc4', $doc4->getId());
         $this->assertEquals('another string value', $doc4->getAttribute('str'));
-        $datetime4 = $doc4->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime4));
+        $datetime4 = $this->asString($doc4->getAttribute('datetime'));
         $parsed4 = new \DateTime($datetime4);
-        $this->assertInstanceOf(\DateTime::class, $parsed4);
 
         $doc5 = $database->getDocument($col, 'doc5');
         $this->assertEquals('doc5', $doc5->getId());
@@ -2620,10 +2625,8 @@ trait SchemalessTests
         $this->assertTrue(is_string($str5));
         $this->assertGreaterThanOrEqual(20, strlen($str5));
         $this->assertLessThanOrEqual(40, strlen($str5));
-        $datetime5 = $doc5->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime5));
+        $datetime5 = $this->asString($doc5->getAttribute('datetime'));
         $parsed5 = new \DateTime($datetime5);
-        $this->assertInstanceOf(\DateTime::class, $parsed5);
 
         // Verify all documents are present using simple find
         $allDocs = $database->find($col);
@@ -2727,10 +2730,8 @@ trait SchemalessTests
 
         $docDatetimeFuture = $database->getDocument($col, 'doc_datetime_future');
         $this->assertFalse($docDatetimeFuture->isEmpty());
-        $expiresAt2 = $docDatetimeFuture->getAttribute('expiresAt');
-        $this->assertTrue(is_string($expiresAt2));
+        $expiresAt2 = $this->asString($docDatetimeFuture->getAttribute('expiresAt'));
         $parsed2 = new \DateTime($expiresAt2);
-        $this->assertInstanceOf(\DateTime::class, $parsed2);
 
         // Verify documents with random strings remain as strings
         $docStringRandom = $database->getDocument($col, 'doc_string_random');
@@ -2756,8 +2757,7 @@ trait SchemalessTests
             sleep($retryDelay);
 
             // Fetch collection to trigger TTL cleanup check
-            $collection = $database->getCollection($col);
-            $this->assertNotNull($collection);
+            $database->getCollection($col);
 
             $remainingDocs = $database->find($col);
             $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);

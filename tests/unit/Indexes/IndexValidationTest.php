@@ -96,6 +96,10 @@ class IndexValidationTest extends TestCase
         ]);
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     * @param  array<int, Document>  $indexes
+     */
     private function setupCollection(string $id, array $attributes = [], array $indexes = []): void
     {
         $collection = new Document([

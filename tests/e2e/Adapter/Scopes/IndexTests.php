@@ -78,7 +78,7 @@ trait IndexTests
         $this->assertEquals(true, $database->createIndex('indexes', Index::unique(key: 'order', attributes: ['order'], lengths: [128], orders: [Order::Asc])));
 
         $collection = $database->getCollection('indexes');
-        $this->assertCount(6, $collection->getAttribute('indexes'));
+        $this->assertCount(6, $collection->indexes);
 
         // Delete Indexes
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
@@ -89,7 +89,7 @@ trait IndexTests
         $this->assertEquals(true, $database->deleteIndex('indexes', 'order'));
 
         $collection = $database->getCollection('indexes');
-        $this->assertCount(0, $collection->getAttribute('indexes'));
+        $this->assertCount(0, $collection->indexes);
 
         // Test non-shared tables duplicates throw duplicate
         $database->createIndex('indexes', Index::key(key: 'duplicate', attributes: ['string', 'boolean'], lengths: [128], orders: [Order::Asc]));
@@ -164,9 +164,9 @@ trait IndexTests
 
         $numbers = $database->getCollection($collection);
 
-        $this->assertEquals('index2', $numbers->getAttribute('indexes')[1]['$id']);
-        $this->assertEquals('index3', $numbers->getAttribute('indexes')[0]['$id']);
-        $this->assertCount(2, $numbers->getAttribute('indexes'));
+        $this->assertEquals('index2', $numbers->indexes[1]['$id']);
+        $this->assertEquals('index3', $numbers->indexes[0]['$id']);
+        $this->assertCount(2, $numbers->indexes);
     }
 
     private static string $numbersCollection = '';
@@ -304,7 +304,7 @@ trait IndexTests
             $this->assertEquals(true, $database->createIndex($collectionId, Index::trigram(key: 'trigram_name', attributes: ['name'])));
 
             $collection = $database->getCollection($collectionId);
-            $indexes = $collection->getAttribute('indexes');
+            $indexes = $collection->indexes;
             $this->assertCount(1, $indexes);
             $this->assertEquals('trigram_name', $indexes[0]['$id']);
             $this->assertEquals(IndexType::Trigram->value, $indexes[0]['type']);
@@ -314,7 +314,7 @@ trait IndexTests
             $this->assertEquals(true, $database->createIndex($collectionId, Index::trigram(key: 'trigram_description', attributes: ['description'])));
 
             $collection = $database->getCollection($collectionId);
-            $indexes = $collection->getAttribute('indexes');
+            $indexes = $collection->indexes;
             $this->assertCount(2, $indexes);
 
             // Test that trigram index can be deleted
@@ -322,7 +322,7 @@ trait IndexTests
             $this->assertEquals(true, $database->deleteIndex($collectionId, 'trigram_description'));
 
             $collection = $database->getCollection($collectionId);
-            $indexes = $collection->getAttribute('indexes');
+            $indexes = $collection->indexes;
             $this->assertCount(0, $indexes);
 
         } finally {
@@ -359,7 +359,7 @@ trait IndexTests
         );
 
         $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
         $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
@@ -404,7 +404,7 @@ trait IndexTests
         $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 
         $collection2 = $database->getCollection($col2);
-        $indexes2 = $collection2->getAttribute('indexes');
+        $indexes2 = $collection2->indexes;
         $this->assertCount(1, $indexes2);
         $ttlIndex2 = $indexes2[0];
         $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());

@@ -63,7 +63,9 @@ class DispatcherHook implements Lifecycle
                 : null,
             Event::DocumentDelete, Event::DocumentsDelete => $data instanceof Document
                 ? new DocumentDeleted($data->getCollection(), $data->getId())
-                : ($data instanceof \stdClass && isset($data->collection, $data->id)
+                : ($data instanceof \stdClass
+                    && \is_string($data->collection ?? null)
+                    && \is_string($data->id ?? null)
                     ? new DocumentDeleted($data->collection, $data->id)
                     : null),
             Event::CollectionCreate => $data instanceof Document

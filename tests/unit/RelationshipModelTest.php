@@ -68,7 +68,6 @@ class RelationshipModelTest extends TestCase
 
         $doc = $rel->toDocument();
 
-        $this->assertInstanceOf(Document::class, $doc);
         $this->assertSame('profiles', $doc->getAttribute('relatedCollection'));
         $this->assertSame('oneToOne', $doc->getAttribute('relationType'));
         $this->assertTrue($doc->getAttribute('twoWay'));
@@ -345,7 +344,6 @@ class RelationshipModelTest extends TestCase
             key: 'comments',
         );
 
-        $this->assertInstanceOf(Document::class, $relationship);
         $this->assertSame('comments', $relationship->getId());
         $this->assertSame('posts', $relationship->getAttribute('collection'));
     }

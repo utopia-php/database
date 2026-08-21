@@ -1531,21 +1531,30 @@ class Database
      */
     public function encode(Document $collection, Document $document, bool $applyDefaults = true): Document
     {
-        /** @var array<array<string, mixed>> $attributes */
-        $attributes = $collection->getAttribute('attributes', []);
+        $rawAttributes = $collection->getAttribute('attributes', []);
+        $attributes = \is_array($rawAttributes) ? $rawAttributes : [];
         $internalDateAttributes = [Document::CREATED_AT, Document::UPDATED_AT];
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
         }
 
         foreach ($attributes as $attribute) {
-            /** @var string $key */
-            $key = $attribute[Document::ID] ?? '';
-            $array = $attribute['array'] ?? false;
-            $default = $attribute['default'] ?? null;
+            if ($attribute instanceof Attribute) {
+                $key = $attribute->key;
+                $array = $attribute->array;
+                $default = $attribute->default;
+                $filters = $attribute->filters;
+            } elseif (\is_array($attribute)) {
+                $key = \is_string($attribute[Document::ID] ?? null) ? $attribute[Document::ID] : '';
+                $array = $attribute['array'] ?? false;
+                $default = $attribute['default'] ?? null;
+                $filters = \is_array($attribute['filters'] ?? null) ? $attribute['filters'] : [];
+            } else {
+                continue;
+            }
             /** @var array<string> $filters */
-            $filters = $attribute['filters'] ?? [];
-            $value = $document->getAttribute($key);
+            $exists = $document->offsetExists($key);
+            $value = $exists ? $document[$key] : null;
 
             if (in_array($key, $internalDateAttributes) && is_string($value) && empty($value)) {
                 $document->setAttribute($key, null);
@@ -1558,7 +1567,7 @@ class Database
             }
 
             // Continue on optional param with no default
-            if (is_null($value) && is_null($default)) {
+            if (! $exists && $default === null) {
                 continue;
             }
 
@@ -1568,7 +1577,7 @@ class Database
             }
 
             // Assign default only if no value provided
-            if (is_null($value) && ! is_null($default)) {
+            if (! $exists) {
                 // Skip applying defaults during updates to avoid resetting unspecified attributes
                 if (! $applyDefaults) {
                     continue;

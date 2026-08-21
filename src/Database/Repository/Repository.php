@@ -66,8 +66,16 @@ abstract class Repository
 
     public function findOneBy(string $attribute, mixed $value): Document
     {
+        $values = \is_array($value) ? $value : [$value];
+        $equal = [];
+        foreach ($values as $item) {
+            if (\is_array($item) || \is_bool($item) || \is_float($item) || \is_int($item) || \is_string($item) || $item === null) {
+                $equal[] = $item;
+            }
+        }
+
         $results = $this->db->find($this->collection(), $this->applyScopes([
-            Query::equal($attribute, \is_array($value) ? $value : [$value]),
+            Query::equal($attribute, $equal),
             Query::limit(1),
         ]));
 

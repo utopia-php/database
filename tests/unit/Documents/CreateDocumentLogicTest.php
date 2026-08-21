@@ -70,6 +70,10 @@ class CreateDocumentLogicTest extends TestCase
         $this->database->getAuthorization()->addRole(Role::any()->toString());
     }
 
+    /**
+     * @param  array<int, Document>  $attributes
+     * @param  array<int, string>  $permissions
+     */
     private function setupCollection(string $id, array $attributes = [], array $permissions = []): void
     {
         if (empty($permissions)) {
@@ -316,6 +320,6 @@ class CreateDocumentLogicTest extends TestCase
         ]);
 
         $result = $this->database->createDocument('testCol', $doc);
-        $this->assertIsArray($result->getPermissions());
+        $this->assertSame([], $result->getPermissions());
     }
 }

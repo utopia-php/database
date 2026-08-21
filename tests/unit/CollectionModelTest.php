@@ -22,6 +22,7 @@ class CollectionModelTest extends TestCase
 
         $this->assertSame('', $collection->id);
         $this->assertSame('', $collection->name);
+        $this->assertTrue($collection->isEmpty());
         $this->assertSame([], $collection->attributes);
         $this->assertSame([], $collection->indexes);
         $this->assertNull($collection->permissions);
@@ -41,9 +42,7 @@ class CollectionModelTest extends TestCase
             ],
         );
 
-        $this->assertInstanceOf(Attribute::class, $collection->attributes[0]);
         $this->assertSame('name', $collection->attributes[0]->key);
-        $this->assertInstanceOf(Index::class, $collection->indexes[0]);
         $this->assertSame('idx_name', $collection->indexes[0]->key);
     }
 
@@ -62,6 +61,7 @@ class CollectionModelTest extends TestCase
         );
 
         $this->assertSame('users', $collection->id);
+        $this->assertFalse($collection->isEmpty());
         $this->assertSame('Users', $collection->name);
         $this->assertCount(1, $collection->attributes);
         $this->assertCount(1, $collection->indexes);
@@ -86,14 +86,11 @@ class CollectionModelTest extends TestCase
 
         $doc = $collection;
 
-        $this->assertInstanceOf(Document::class, $doc);
         $this->assertSame('accounts', $doc->getId());
         $this->assertSame('Accounts', $doc->getAttribute('name'));
         $this->assertTrue($doc->getAttribute('documentSecurity'));
         $this->assertCount(1, $doc->attributes);
-        $this->assertInstanceOf(Attribute::class, $doc->attributes[0]);
         $this->assertCount(1, $doc->indexes);
-        $this->assertInstanceOf(Index::class, $doc->indexes[0]);
         $this->assertCount(2, $doc->getPermissions());
     }
 
@@ -135,8 +132,6 @@ class CollectionModelTest extends TestCase
         $this->assertSame($original->attributes[0]->key, $restored->attributes[0]->key);
         $this->assertSame($original->indexes[0]->key, $restored->indexes[0]->key);
         $this->assertInstanceOf(StringType::class, $restored->attributes[0]);
-        $this->assertInstanceOf(Attribute::class, $original->attributes[0]);
-        $this->assertInstanceOf(Index::class, $original->indexes[0]);
     }
 
     public function testFromArrayWithEmptyPayload(): void
@@ -265,9 +260,7 @@ class CollectionModelTest extends TestCase
             ],
         );
 
-        $this->assertInstanceOf(Attribute::class, $collection->attributes[0]);
         $this->assertSame('name', $collection->attributes[0]->key);
-        $this->assertInstanceOf(Index::class, $collection->indexes[0]);
         $this->assertSame('idx_name', $collection->indexes[0]->key);
     }
 
@@ -278,7 +271,6 @@ class CollectionModelTest extends TestCase
 
         $attributes = $collection->attributes;
 
-        $this->assertInstanceOf(Attribute::class, $attributes[0]);
         $this->assertSame('title', $attributes[0]->key);
         $this->assertSame('string', $attributes[0]->getAttribute('type'));
     }
@@ -290,7 +282,6 @@ class CollectionModelTest extends TestCase
 
         $indexes = $collection->indexes;
 
-        $this->assertInstanceOf(Index::class, $indexes[0]);
         $this->assertSame('idx_test', $indexes[0]->key);
         $this->assertSame('fulltext', $indexes[0]->getAttribute('type'));
     }

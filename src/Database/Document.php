@@ -40,8 +40,12 @@ class Document extends ArrayObject
     /** @var array<string, true>|null */
     private static ?array $internalKeySet = null;
 
+    /** @var array<string, list<string>>|null */
     private ?array $parsedPermissions = null;
 
+    /**
+     * @return array<string, true>
+     */
     private static function getInternalKeySet(): array
     {
         if (self::$internalKeySet === null) {
@@ -74,7 +78,13 @@ class Document extends ArrayObject
         }
 
         if (array_key_exists(self::PERMISSIONS, $input) && is_array($input[self::PERMISSIONS])) {
-            $input[self::PERMISSIONS] = \array_values(\array_unique($input[self::PERMISSIONS]));
+            $permissions = [];
+            foreach ($input[self::PERMISSIONS] as $permission) {
+                if (\is_string($permission)) {
+                    $permissions[] = $permission;
+                }
+            }
+            $input[self::PERMISSIONS] = \array_values(\array_unique($permissions));
         }
 
         foreach ($input as $key => $value) {
@@ -141,7 +151,13 @@ class Document extends ArrayObject
             if (! \is_array($row[self::PERMISSIONS])) {
                 throw new StructureException(self::PERMISSIONS.' must be of type array');
             }
-            $row[self::PERMISSIONS] = \array_values(\array_unique($row[self::PERMISSIONS]));
+            $permissions = [];
+            foreach ($row[self::PERMISSIONS] as $permission) {
+                if (\is_string($permission)) {
+                    $permissions[] = $permission;
+                }
+            }
+            $row[self::PERMISSIONS] = \array_values(\array_unique($permissions));
         }
 
         $document = new self();
@@ -323,7 +339,11 @@ class Document extends ArrayObject
             return (int) $tenant;
         }
 
-        return $tenant;
+        if (\is_int($tenant) || \is_string($tenant) || $tenant === null) {
+            return $tenant;
+        }
+
+        return null;
     }
 
     /**
@@ -379,6 +399,62 @@ class Document extends ArrayObject
     }
 
     /**
+     * @return array<int|string, mixed>
+     */
+    public function getArray(string $key): array
+    {
+        $value = $this->offsetExists($key) ? $this[$key] : [];
+
+        return \is_array($value) ? $value : [];
+    }
+
+    /**
+     * @return list<self>
+     */
+    public function getDocuments(string $key): array
+    {
+        $documents = [];
+        foreach ($this->getArray($key) as $item) {
+            if ($item instanceof self) {
+                $documents[] = $item;
+                continue;
+            }
+            if (! \is_array($item)) {
+                continue;
+            }
+            $typed = [];
+            foreach ($item as $name => $value) {
+                if (\is_string($name)) {
+                    $typed[$name] = $value;
+                }
+            }
+            $documents[] = new self($typed);
+        }
+
+        return $documents;
+    }
+
+    public function getDocument(string $key): self
+    {
+        $value = $this->offsetExists($key) ? $this[$key] : null;
+        if ($value instanceof self) {
+            return $value;
+        }
+        if (! \is_array($value) || $value === [] || \array_is_list($value)) {
+            return new self();
+        }
+
+        $typed = [];
+        foreach ($value as $name => $item) {
+            if (\is_string($name)) {
+                $typed[$name] = $item;
+            }
+        }
+
+        return new self($typed);
+    }
+
+    /**
      * Set Attribute.
      *
      * Method for setting a specific field attribute
@@ -400,7 +476,13 @@ class Document extends ArrayObject
 
         if ($key === self::PERMISSIONS) {
             if (\is_array($this[$key])) {
-                $this[$key] = \array_values(\array_unique($this[$key]));
+                $permissions = [];
+                foreach ($this[$key] as $permission) {
+                    if (\is_string($permission)) {
+                        $permissions[] = $permission;
+                    }
+                }
+                $this[$key] = \array_values(\array_unique($permissions));
             }
             $this->parsedPermissions = null;
         }

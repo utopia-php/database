@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -92,13 +93,13 @@ class PostgresTest extends Base
             \strlen($database->getNamespace().'_'.$collection)
         );
 
-        $database->createCollection($collection, [
+        $database->createCollection(new Collection(id: $collection, attributes: [
             Attribute::string(key: 'name', size: 128, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-        ]);
+        ]));
 
         $document = $database->createDocument($collection, new Document([
             '$id' => 'vector-doc',

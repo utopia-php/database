@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -25,7 +26,7 @@ trait IndexTests
     {
         $database = $this->getDatabase();
 
-        $database->createCollection('indexes');
+        $database->createCollection(new Collection(id: 'indexes'));
 
         /**
          * Check ticks sounding cast index for reserved words
@@ -61,7 +62,7 @@ trait IndexTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('indexes');
+        $database->createCollection(new Collection(id: 'indexes'));
 
         $this->assertEquals(true, $database->createAttribute('indexes', Attribute::string(key: 'string', size: 128, required: true)));
         $this->assertEquals(true, $database->createAttribute('indexes', Attribute::string(key: 'order', size: 128, required: true)));
@@ -124,7 +125,7 @@ trait IndexTests
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection(new Collection(id: __FUNCTION__));
 
         $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title1', size: $database->getAdapter()->getMaxIndexLength() + 300, required: true));
 
@@ -151,7 +152,7 @@ trait IndexTests
         $database = $this->getDatabase();
         $collection = $this->getNumbersCollection();
 
-        $numbers = $database->createCollection($collection);
+        $numbers = $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'verbose', size: 128, required: true));
         $database->createAttribute($collection, Attribute::integer(key: 'symbol', required: true));
 
@@ -190,7 +191,7 @@ trait IndexTests
         $database = $this->getDatabase();
         $collection = $this->getNumbersCollection();
 
-        $database->createCollection($collection);
+        $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'verbose', size: 128, required: true));
         $database->createAttribute($collection, Attribute::integer(key: 'symbol', required: true));
         $database->createIndex($collection, Index::key(key: 'index1', attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
@@ -295,7 +296,7 @@ trait IndexTests
 
         $collectionId = 'trigram_test';
         try {
-            $database->createCollection($collectionId);
+            $database->createCollection(new Collection(id: $collectionId));
 
             $database->createAttribute($collectionId, Attribute::string(key: 'name', size: 256));
             $database->createAttribute($collectionId, Attribute::string(key: 'description', size: 512));
@@ -343,7 +344,7 @@ trait IndexTests
         }
 
         $col = uniqid('sl_ttl');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $database->createAttribute($col, Attribute::datetime(key: 'expiresAt', filters: ['datetime']));
 
@@ -417,7 +418,7 @@ trait IndexTests
             'ttl' => 7200, // 2 hours
         ]);
 
-        $database->createCollection($col2, [$expiresAtAttr], [$ttlIndexDoc]);
+        $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 
         $collection2 = $database->getCollection($col2);
         $indexes2 = $collection2->getAttribute('indexes');

@@ -13,6 +13,7 @@ class Collection
      * @param  array<Attribute>  $attributes
      * @param  array<Index>  $indexes
      * @param  array<string>  $permissions
+     * @param  array<string, mixed>  $metadata
      */
     public function __construct(
         public string $id = '',
@@ -21,6 +22,7 @@ class Collection
         public array $indexes = [],
         public array $permissions = [],
         public bool $documentSecurity = true,
+        public array $metadata = [],
     ) {
     }
 

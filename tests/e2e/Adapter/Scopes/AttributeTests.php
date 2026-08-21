@@ -7,6 +7,7 @@ use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -109,7 +110,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection($this->getAttributesCollection());
+        $database->createCollection(new Collection(id: $this->getAttributesCollection()));
 
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string1', size: 128, required: true)));
         $this->assertEquals(true, $database->createAttribute($this->getAttributesCollection(), Attribute::string(key: 'string2', size: 16382 + 1, required: true)));
@@ -267,7 +268,7 @@ trait AttributeTests
 
         $database = $this->getDatabase();
 
-        $database->createCollection($this->getAttributesCollection());
+        $database->createCollection(new Collection(id: $this->getAttributesCollection()));
 
         self::$attributesCollectionFixtureInit = true;
     }
@@ -277,7 +278,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('attributesWithKeys');
+        $database->createCollection(new Collection(id: 'attributesWithKeys'));
 
         $this->assertEquals(true, $database->createAttribute('attributesWithKeys', Attribute::string(key: 'key_with.sym$bols', size: 128, required: true)));
 
@@ -305,7 +306,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('dots.parent');
+        $database->createCollection(new Collection(id: 'dots.parent'));
 
         $this->assertTrue($database->createAttribute('dots.parent', Attribute::string(key: 'dots.name')));
 
@@ -314,7 +315,7 @@ trait AttributeTests
         ]);
         $this->assertEmpty($document);
 
-        $database->createCollection('dots');
+        $database->createCollection(new Collection(id: 'dots'));
 
         $this->assertTrue($database->createAttribute('dots', Attribute::string(key: 'name')));
 
@@ -353,7 +354,7 @@ trait AttributeTests
         $database = $this->getDatabase();
         $collection = $this->getFlowersCollection();
 
-        $flowers = $database->createCollection($collection);
+        $flowers = $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
         $database->createAttribute($collection, Attribute::integer(key: 'inStock'));
         $database->createAttribute($collection, Attribute::string(key: 'date', size: 128));
@@ -408,7 +409,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $colors = $database->createCollection($this->getColorsCollection());
+        $colors = $database->createCollection(new Collection(id: $this->getColorsCollection()));
         $database->createAttribute($this->getColorsCollection(), Attribute::string(key: 'name', size: 128, required: true));
         $database->createAttribute($this->getColorsCollection(), Attribute::string(key: 'hex', size: 128, required: true));
 
@@ -462,7 +463,7 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $collection = $this->getFlowersCollection();
-        $database->createCollection($collection);
+        $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
         $database->createAttribute($collection, Attribute::integer(key: 'inStock'));
         $database->createAttribute($collection, Attribute::string(key: 'date', size: 128));
@@ -841,7 +842,7 @@ trait AttributeTests
             return;
         }
 
-        $database->createCollection('rename_test');
+        $database->createCollection(new Collection(id: 'rename_test'));
 
         $this->assertEquals(true, $database->createAttribute('rename_test', Attribute::string(key: 'rename_me', size: 128, required: true)));
 
@@ -985,7 +986,7 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $collection = $this->getColorsCollection();
-        $database->createCollection($collection);
+        $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
         $database->createAttribute($collection, Attribute::string(key: 'hex', size: 128, required: true));
         $database->createIndex($collection, Index::key(key: 'index1', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
@@ -1068,7 +1069,7 @@ trait AttributeTests
         ]);
 
         try {
-            $database->createCollection('attributes_row_size', $attributes);
+            $database->createCollection(new Collection(id: 'attributes_row_size', attributes: $attributes));
             $this->fail('Failed to throw exception');
         } catch (\Throwable $e) {
             $this->assertInstanceOf(LimitException::class, $e);
@@ -1080,7 +1081,7 @@ trait AttributeTests
          */
         array_pop($attributes);
 
-        $collection = $database->createCollection('attributes_row_size', $attributes);
+        $collection = $database->createCollection(new Collection(id: 'attributes_row_size', attributes: $attributes));
 
         $attribute = new Document([
             '$id' => ID::custom('breaking'),
@@ -1125,7 +1126,7 @@ trait AttributeTests
             return;
         }
 
-        $database->createCollection('resize_test');
+        $database->createCollection(new Collection(id: 'resize_test'));
 
         $this->assertEquals(true, $database->createAttribute('resize_test', Attribute::string(key: 'resize_me', size: 128, required: true)));
         $document = $database->createDocument('resize_test', new Document([
@@ -1267,7 +1268,7 @@ trait AttributeTests
             }
         );
 
-        $col = $database->createCollection(__FUNCTION__);
+        $col = $database->createCollection(new Collection(id: __FUNCTION__));
         $this->assertNotNull($col->getId());
 
         $database->createAttribute($col->getId(), Attribute::string(key: 'title', required: true));
@@ -1316,7 +1317,7 @@ trait AttributeTests
             }
         );
 
-        $database->createCollection('filterSelect');
+        $database->createCollection(new Collection(id: 'filterSelect'));
         $database->createAttribute('filterSelect', Attribute::string(key: 'plain', size: 128));
         $database->createAttribute('filterSelect', Attribute::string(key: 'kids', size: 128, filters: ['subQueryProbe']));
 
@@ -1401,9 +1402,9 @@ trait AttributeTests
         $collection = 'json';
         $permissions = [Permission::read(Role::any())];
 
-        $database->createCollection($collection, permissions: [
+        $database->createCollection(new Collection(id: $collection, permissions: [
             Permission::create(Role::any()),
-        ]);
+        ]));
 
         $this->assertEquals(true, $database->createAttribute($collection, Attribute::boolean(key: 'booleans', required: true, array: true)));
 
@@ -1739,7 +1740,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('datetime');
+        $database->createCollection(new Collection(id: 'datetime'));
         if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->assertEquals(true, $database->createAttribute('datetime', Attribute::datetime(key: 'date', required: true, filters: ['datetime'])));
             $this->assertEquals(true, $database->createAttribute('datetime', Attribute::datetime(key: 'date2', filters: ['datetime'])));
@@ -1887,7 +1888,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('datetime_auto_filter');
+        $database->createCollection(new Collection(id: 'datetime_auto_filter'));
 
         $this->expectException(Exception::class);
         $database->createAttribute('datetime_auto', Attribute::datetime(key: 'date_auto', filters: ['json']));
@@ -1912,7 +1913,7 @@ trait AttributeTests
         }
 
         $collectionName = 'bigint_ignores_size_limit';
-        $database->createCollection($collectionName);
+        $database->createCollection(new Collection(id: $collectionName));
 
         $attributes = [Attribute::bigInteger(key: 'foo', size: 9999)];
 
@@ -1943,7 +1944,7 @@ trait AttributeTests
         $database = $this->getDatabase();
 
         $collectionName = 'bigint_attr_validation';
-        $database->createCollection($collectionName);
+        $database->createCollection(new Collection(id: $collectionName));
 
         $this->assertTrue($database->createAttribute(
             $collectionName,
@@ -2001,7 +2002,7 @@ trait AttributeTests
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection(new Collection(id: __FUNCTION__));
 
         $attributes = [Attribute::string(key: 'a', size: 10), Attribute::integer(key: 'b')];
 
@@ -2034,7 +2035,7 @@ trait AttributeTests
             return;
         }
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection(new Collection(id: __FUNCTION__));
 
         $attributes = [Attribute::string(key: 'a', size: 10), Attribute::integer(key: 'b')];
 
@@ -2060,7 +2061,7 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('stringTypes');
+        $database->createCollection(new Collection(id: 'stringTypes'));
 
         // Create attributes with different string types
         $this->assertEquals(true, $database->createAttribute('stringTypes', Attribute::varchar(key: 'varchar_field', default: 'default varchar')));

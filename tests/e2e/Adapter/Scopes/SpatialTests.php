@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -70,7 +71,7 @@ trait SpatialTests
             ]),
         ];
 
-        $col = $database->createCollection($collectionName, $attributes, $indexes);
+        $col = $database->createCollection(new Collection(id: $collectionName, attributes: $attributes, indexes: $indexes));
 
         $this->assertIsArray($col->getAttribute('attributes'));
         $this->assertCount(2, $col->getAttribute('attributes'));
@@ -112,7 +113,7 @@ trait SpatialTests
         try {
 
             // Create collection first
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
 
             // Create spatial attributes using createAttribute method
             $this->assertEquals(true, $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true)));
@@ -262,8 +263,8 @@ trait SpatialTests
             return;
         }
 
-        $database->createCollection('location');
-        $database->createCollection('building');
+        $database->createCollection(new Collection(id: 'location'));
+        $database->createCollection(new Collection(id: 'building'));
 
         $database->createAttribute('location', Attribute::string(key: 'name', required: true));
         $database->createAttribute('location', Attribute::point(key: 'coordinates', required: true));
@@ -363,7 +364,7 @@ trait SpatialTests
 
         $collectionName = 'spatial_attrs_';
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
 
             $required = $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true;
             $this->assertEquals(true, $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $required)));
@@ -413,8 +414,8 @@ trait SpatialTests
         $parent = 'regions_';
         $child = 'places_';
         try {
-            $database->createCollection($parent);
-            $database->createCollection($child);
+            $database->createCollection(new Collection(id: $parent));
+            $database->createCollection(new Collection(id: $child));
 
             $database->createAttribute($parent, Attribute::string(key: 'name', required: true));
             $database->createAttribute($child, Attribute::string(key: 'name', required: true));
@@ -525,8 +526,8 @@ trait SpatialTests
         $parent = 'cities_';
         $child = 'stops_';
         try {
-            $database->createCollection($parent);
-            $database->createCollection($child);
+            $database->createCollection(new Collection(id: $parent));
+            $database->createCollection(new Collection(id: $child));
 
             $database->createAttribute($parent, Attribute::string(key: 'name', required: true));
             $database->createAttribute($child, Attribute::string(key: 'name', required: true));
@@ -630,8 +631,8 @@ trait SpatialTests
         $a = 'drivers_';
         $b = 'routes_';
         try {
-            $database->createCollection($a);
-            $database->createCollection($b);
+            $database->createCollection(new Collection(id: $a));
+            $database->createCollection(new Collection(id: $b));
 
             $database->createAttribute($a, Attribute::string(key: 'name', required: true));
             $database->createAttribute($a, Attribute::point(key: 'home', required: true));
@@ -735,7 +736,7 @@ trait SpatialTests
         // Basic spatial index create/delete
         $collectionName = 'spatial_index_';
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
             $database->createAttribute($collectionName, Attribute::point(key: 'loc', required: true));
             $this->assertEquals(true, $database->createIndex($collectionName, Index::spatial(key: 'loc_spatial', attributes: ['loc'])));
 
@@ -779,7 +780,7 @@ trait SpatialTests
             ])];
 
             if ($orderSupported) {
-                $database->createCollection($collOrderCreate, $attributes, $indexes);
+                $database->createCollection(new Collection(id: $collOrderCreate, attributes: $attributes, indexes: $indexes));
                 $meta = $database->getCollection($collOrderCreate);
                 $createdIndexes = $meta->getAttribute('indexes');
                 $this->assertIsArray($createdIndexes);
@@ -788,7 +789,7 @@ trait SpatialTests
                 $this->assertSame('idx_loc', $createdIndex->getId());
             } else {
                 try {
-                    $database->createCollection($collOrderCreate, $attributes, $indexes);
+                    $database->createCollection(new Collection(id: $collOrderCreate, attributes: $attributes, indexes: $indexes));
                     $this->fail('Expected exception when orders are provided for spatial index on unsupported adapter');
                 } catch (\Throwable $e) {
                     $this->assertStringContainsString('Spatial index', $e->getMessage());
@@ -803,7 +804,7 @@ trait SpatialTests
         // createIndex with orders
         $collOrderIndex = 'spatial_idx_order_index_'.uniqid();
         try {
-            $database->createCollection($collOrderIndex);
+            $database->createCollection(new Collection(id: $collOrderIndex));
             $database->createAttribute($collOrderIndex, Attribute::point(key: 'loc', required: true));
             if ($orderSupported) {
                 $this->assertTrue($database->createIndex($collOrderIndex, Index::spatial(key: 'idx_loc', attributes: ['loc'], orders: [OrderDirection::Desc->value])));
@@ -843,7 +844,7 @@ trait SpatialTests
             ])];
 
             if ($nullSupported) {
-                $database->createCollection($collNullCreate, $attributes, $indexes);
+                $database->createCollection(new Collection(id: $collNullCreate, attributes: $attributes, indexes: $indexes));
                 $meta = $database->getCollection($collNullCreate);
                 $createdIndexes = $meta->getAttribute('indexes');
                 $this->assertIsArray($createdIndexes);
@@ -852,7 +853,7 @@ trait SpatialTests
                 $this->assertSame('idx_loc', $createdIndex->getId());
             } else {
                 try {
-                    $database->createCollection($collNullCreate, $attributes, $indexes);
+                    $database->createCollection(new Collection(id: $collNullCreate, attributes: $attributes, indexes: $indexes));
                     $this->fail('Expected exception when spatial index is created on NULL-able geometry attribute');
                 } catch (\Throwable $e) {
                     $this->assertTrue(true); // exception expected; exact message is adapter-specific
@@ -867,7 +868,7 @@ trait SpatialTests
         // createIndex with required=false
         $collNullIndex = 'spatial_idx_null_index_'.uniqid();
         try {
-            $database->createCollection($collNullIndex);
+            $database->createCollection(new Collection(id: $collNullIndex));
             $database->createAttribute($collNullIndex, Attribute::point(key: 'loc'));
             if ($nullSupported) {
                 $this->assertTrue($database->createIndex($collNullIndex, Index::spatial(key: 'idx_loc', attributes: ['loc'])));
@@ -885,7 +886,7 @@ trait SpatialTests
 
         $collUpdateNull = 'spatial_idx_req';
         try {
-            $database->createCollection($collUpdateNull);
+            $database->createCollection(new Collection(id: $collUpdateNull));
 
             $database->createAttribute($collUpdateNull, Attribute::point(key: 'loc'));
             if (! $nullSupported) {
@@ -908,7 +909,7 @@ trait SpatialTests
 
         $collUpdateNull = 'spatial_idx_index_null_required_true';
         try {
-            $database->createCollection($collUpdateNull);
+            $database->createCollection(new Collection(id: $collUpdateNull));
 
             $database->createAttribute($collUpdateNull, Attribute::point(key: 'loc'));
             if (! $nullSupported) {
@@ -942,7 +943,7 @@ trait SpatialTests
 
         $collectionName = 'complex_shapes_';
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
 
             // Create spatial attributes for different geometric shapes
             $this->assertEquals(true, $database->createAttribute($collectionName, Attribute::polygon(key: 'rectangle', required: true)));
@@ -1373,7 +1374,7 @@ trait SpatialTests
 
         $collectionName = 'spatial_combinations_';
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
 
             // Create spatial attributes
             $this->assertEquals(true, $database->createAttribute($collectionName, Attribute::point(key: 'location', required: true)));
@@ -1504,7 +1505,7 @@ trait SpatialTests
 
         $collectionName = 'spatial_null_checks';
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
 
             $this->assertTrue($database->createAttribute($collectionName, Attribute::string(key: 'name', required: true)));
             // Optional spatial attribute: some documents legitimately have no location set.
@@ -1590,7 +1591,7 @@ trait SpatialTests
             ]),
         ];
 
-        $database->createCollection($collectionName, $attributes, $indexes);
+        $database->createCollection(new Collection(id: $collectionName, attributes: $attributes, indexes: $indexes));
 
         // Test 1: createDocuments with spatial data
         $spatialDocuments = [];
@@ -1864,7 +1865,7 @@ trait SpatialTests
         $collectionName = 'spatial_agg_';
         try {
             // Create collection with spatial and numeric attributes
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
             $database->createAttribute($collectionName, Attribute::string(key: 'name', required: true));
             $database->createAttribute($collectionName, Attribute::point(key: 'loc', required: true));
             $database->createAttribute($collectionName, Attribute::polygon(key: 'area', required: true));
@@ -1953,7 +1954,7 @@ trait SpatialTests
 
         $collectionName = 'spatial_update_attrs_';
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
 
             // 0) Disallow creation of spatial attributes with size or array
             try {
@@ -2049,7 +2050,7 @@ trait SpatialTests
 
         $collectionName = 'spatial_distance_meters_';
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
             $this->assertEquals(true, $database->createAttribute($collectionName, Attribute::point(key: 'loc', required: true)));
             $this->assertEquals(true, $database->createIndex($collectionName, Index::spatial(key: 'idx_loc', attributes: ['loc'])));
 
@@ -2127,7 +2128,7 @@ trait SpatialTests
 
         $multiCollection = 'spatial_distance_meters_multi_';
         try {
-            $database->createCollection($multiCollection);
+            $database->createCollection(new Collection(id: $multiCollection));
 
             // Create spatial attributes
             $this->assertEquals(true, $database->createAttribute($multiCollection, Attribute::point(key: 'loc', required: true)));
@@ -2330,7 +2331,7 @@ trait SpatialTests
 
         try {
             $collUpdateNull = 'spatial_idx_toggle';
-            $database->createCollection($collUpdateNull);
+            $database->createCollection(new Collection(id: $collUpdateNull));
 
             $database->createAttribute($collUpdateNull, Attribute::point(key: 'loc'));
             try {
@@ -2362,7 +2363,7 @@ trait SpatialTests
 
         $collectionName = 'test_spatial_order_axis';
         // Create collection first
-        $database->createCollection($collectionName);
+        $database->createCollection(new Collection(id: $collectionName));
 
         // Create spatial attributes using createAttribute method
         $this->assertEquals(true, $database->createAttribute($collectionName, Attribute::point(key: 'pointAttr', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true)));
@@ -2408,7 +2409,7 @@ trait SpatialTests
 
         $col = 'spatial_col_existing_data';
         try {
-            $database->createCollection($col);
+            $database->createCollection(new Collection(id: $col));
 
             $database->createAttribute($col, Attribute::string(key: 'name', size: 40));
             $database->createDocument($col, new Document(['name' => 'test-doc', '$permissions' => [Permission::update(Role::any()), Permission::read(Role::any())]]));
@@ -2440,7 +2441,7 @@ trait SpatialTests
         $collectionName = 'test_spatial_wkt_conversion';
 
         try {
-            $database->createCollection($collectionName);
+            $database->createCollection(new Collection(id: $collectionName));
             // Use required=true for spatial attributes to support spatial indexes (MariaDB requires this)
             $database->createAttribute($collectionName, Attribute::point(key: 'location', required: true));
             $database->createAttribute($collectionName, Attribute::linestring(key: 'route', required: $database->getAdapter()->supports(Capability::SpatialIndexNull) ? false : true));

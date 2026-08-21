@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -31,8 +32,8 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('review');
-        $database->createCollection('movie');
+        $database->createCollection(new Collection(id: 'review'));
+        $database->createCollection(new Collection(id: 'movie'));
 
         $database->createAttribute('review', Attribute::string(key: 'name', required: true));
         $database->createAttribute('movie', Attribute::string(key: 'name', required: true));
@@ -380,8 +381,8 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('product');
-        $database->createCollection('store');
+        $database->createCollection(new Collection(id: 'product'));
+        $database->createCollection(new Collection(id: 'store'));
 
         $database->createAttribute('store', Attribute::string(key: 'name', required: true));
         $database->createAttribute('store', Attribute::string(key: 'opensAt', size: 5, required: true));
@@ -868,9 +869,9 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('towns');
-        $database->createCollection('homelands');
-        $database->createCollection('capitals');
+        $database->createCollection(new Collection(id: 'towns'));
+        $database->createCollection(new Collection(id: 'homelands'));
+        $database->createCollection(new Collection(id: 'capitals'));
 
         $database->createAttribute('towns', Attribute::string(key: 'name', required: true));
         $database->createAttribute('homelands', Attribute::string(key: 'name', required: true));
@@ -963,9 +964,9 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('players');
-        $database->createCollection('teams');
-        $database->createCollection('supporters');
+        $database->createCollection(new Collection(id: 'players'));
+        $database->createCollection(new Collection(id: 'teams'));
+        $database->createCollection(new Collection(id: 'supporters'));
 
         $database->createAttribute('players', Attribute::string(key: 'name', required: true));
         $database->createAttribute('teams', Attribute::string(key: 'name', required: true));
@@ -1068,9 +1069,9 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('cows');
-        $database->createCollection('farms');
-        $database->createCollection('farmer');
+        $database->createCollection(new Collection(id: 'cows'));
+        $database->createCollection(new Collection(id: 'farms'));
+        $database->createCollection(new Collection(id: 'farmer'));
 
         $database->createAttribute('cows', Attribute::string(key: 'name', required: true));
         $database->createAttribute('farms', Attribute::string(key: 'name', required: true));
@@ -1159,9 +1160,9 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('books');
-        $database->createCollection('entrants');
-        $database->createCollection('rooms');
+        $database->createCollection(new Collection(id: 'books'));
+        $database->createCollection(new Collection(id: 'entrants'));
+        $database->createCollection(new Collection(id: 'rooms'));
 
         $database->createAttribute('books', Attribute::string(key: 'name', required: true));
         $database->createAttribute('entrants', Attribute::string(key: 'name', required: true));
@@ -1225,10 +1226,10 @@ trait ManyToOneTests
         $level3Collection = 'level3ManyToOneParent';
         $level4Collection = 'level4ManyToOneParent';
 
-        $database->createCollection($level1Collection);
-        $database->createCollection($level2Collection);
-        $database->createCollection($level3Collection);
-        $database->createCollection($level4Collection);
+        $database->createCollection(new Collection(id: $level1Collection));
+        $database->createCollection(new Collection(id: $level2Collection));
+        $database->createCollection(new Collection(id: $level3Collection));
+        $database->createCollection(new Collection(id: $level4Collection));
 
         $database->createRelationship(Relationship::manyToOne(collection: $level1Collection, relatedCollection: $level2Collection, twoWay: true));
         $database->createRelationship(Relationship::manyToOne(collection: $level2Collection, relatedCollection: $level3Collection, twoWay: true));
@@ -1289,8 +1290,8 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('$symbols_coll.ection5');
-        $database->createCollection('$symbols_coll.ection6');
+        $database->createCollection(new Collection(id: '$symbols_coll.ection5'));
+        $database->createCollection(new Collection(id: '$symbols_coll.ection6'));
 
         $database->createRelationship(Relationship::manyToOne(collection: '$symbols_coll.ection5', relatedCollection: '$symbols_coll.ection6', twoWay: true));
 
@@ -1333,22 +1334,22 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
 
@@ -1376,22 +1377,22 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
 
@@ -1419,22 +1420,22 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
@@ -1462,22 +1463,22 @@ trait ManyToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
@@ -1502,8 +1503,8 @@ trait ManyToOneTests
             return;
         }
 
-        $this->getDatabase()->createCollection('bulk_delete_person_m2o');
-        $this->getDatabase()->createCollection('bulk_delete_library_m2o');
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_person_m2o'));
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_library_m2o'));
 
         $this->getDatabase()->createAttribute('bulk_delete_person_m2o', Attribute::string(key: 'name', required: true));
         $this->getDatabase()->createAttribute('bulk_delete_library_m2o', Attribute::string(key: 'name', required: true));
@@ -1588,8 +1589,8 @@ trait ManyToOneTests
         $parentCollection = 'parent_combined_m2o';
         $childCollection = 'child_combined_m2o';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
 
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
@@ -1664,8 +1665,8 @@ trait ManyToOneTests
         $parentCollection = 'parent_relationship_error_many_to_one';
         $childCollection = 'child_relationship_error_many_to_one';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
 
@@ -1717,8 +1718,8 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('companies');
-        $database->createCollection('employees');
+        $database->createCollection(new Collection(id: 'companies'));
+        $database->createCollection(new Collection(id: 'employees'));
 
         $database->createAttribute('companies', Attribute::string(key: 'name', required: true));
         $database->createAttribute('employees', Attribute::string(key: 'name', required: true));
@@ -1795,8 +1796,8 @@ trait ManyToOneTests
             return;
         }
 
-        $database->createCollection('departments');
-        $database->createCollection('staff');
+        $database->createCollection(new Collection(id: 'departments'));
+        $database->createCollection(new Collection(id: 'staff'));
 
         $database->createAttribute('departments', Attribute::string(key: 'name', required: true));
         $database->createAttribute('departments', Attribute::integer(key: 'budget'));

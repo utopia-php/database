@@ -146,7 +146,7 @@ class CollectionValidationTest extends TestCase
         $this->setupExistingCollection('existing');
         $this->expectException(DuplicateException::class);
         $this->expectExceptionMessage('already exists');
-        $this->database->createCollection('existing');
+        $this->database->createCollection(new Collection(id: 'existing'));
     }
 
     public function testCreateCollectionValidatesPermissionsFormat(): void
@@ -155,7 +155,7 @@ class CollectionValidationTest extends TestCase
         $this->database->enableValidation();
 
         $this->expectException(DatabaseException::class);
-        $this->database->createCollection('newCol', permissions: ['bad-format']);
+        $this->database->createCollection(new Collection(id: 'newCol', permissions: ['bad-format']));
     }
 
     public function testCreateCollectionWithAttributeLimits(): void
@@ -205,7 +205,7 @@ class CollectionValidationTest extends TestCase
 
         $this->expectException(LimitException::class);
         $this->expectExceptionMessage('Attribute limit');
-        $db->createCollection('newCol', [$attr]);
+        $db->createCollection(new Collection(id: 'newCol', attributes: [$attr]));
     }
 
     public function testCreateCollectionRejectsPointAttributeOnMemoryWhenValidateIsOn(): void
@@ -220,9 +220,9 @@ class CollectionValidationTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Spatial attributes are not supported');
 
-        $database->createCollection('places', [
+        $database->createCollection(new Collection(id: 'places', attributes: [
             Attribute::point(key: 'location'),
-        ]);
+        ]));
     }
 
     public function testCreateCollectionAllowsJsonAndRequiredDefaultsWhenValidateIsOn(): void
@@ -234,10 +234,10 @@ class CollectionValidationTest extends TestCase
             ->enableValidation();
         $database->create();
 
-        $collection = $database->createCollection('users', [
+        $collection = $database->createCollection(new Collection(id: 'users', attributes: [
             Attribute::string(key: 'prefs', size: 65535, default: new \stdClass(), filters: ['json']),
             Attribute::string(key: 'status', size: 32, required: true, default: 'active'),
-        ]);
+        ]));
 
         $this->assertSame('users', $collection->getId());
     }
@@ -277,7 +277,7 @@ class CollectionValidationTest extends TestCase
         $database->create();
 
         $anon = $database->createCollection(new Collection(id: 'anon'));
-        $control = $database->createCollection('control');
+        $control = $database->createCollection(new Collection(id: 'control'));
 
         $this->assertSame($control->getPermissions(), $anon->getPermissions());
         $this->assertSame([Permission::create(Role::any())], $anon->getPermissions());
@@ -335,7 +335,7 @@ class CollectionValidationTest extends TestCase
 
         $this->expectException(LimitException::class);
         $this->expectExceptionMessage('Index limit');
-        $db->createCollection('newCol', [$attr], [$index]);
+        $db->createCollection(new Collection(id: 'newCol', attributes: [$attr], indexes: [$index]));
     }
 
     public function testDeleteCollectionThrowsOnNotFound(): void

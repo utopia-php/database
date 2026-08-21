@@ -25,6 +25,7 @@ class CollectionModelTest extends TestCase
         $this->assertSame([], $collection->indexes);
         $this->assertSame([], $collection->permissions);
         $this->assertTrue($collection->documentSecurity);
+        $this->assertSame([], $collection->metadata);
     }
 
     public function testConstructorWithValues(): void

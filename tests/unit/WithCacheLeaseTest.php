@@ -8,6 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -30,7 +31,7 @@ class WithCacheLeaseTest extends TestCase
             ->setNamespace('with_cache_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection('projects');
+        $this->database->createCollection(new Collection(id: 'projects'));
         $this->database->createAttribute('projects', Attribute::string(key: 'name'));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',

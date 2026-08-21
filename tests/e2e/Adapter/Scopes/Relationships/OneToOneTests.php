@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -34,8 +35,8 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('person');
-        $database->createCollection('library');
+        $database->createCollection(new Collection(id: 'person'));
+        $database->createCollection(new Collection(id: 'library'));
 
         $database->createAttribute('person', Attribute::string(key: 'name', required: true));
         $database->createAttribute('library', Attribute::string(key: 'name', required: true));
@@ -469,8 +470,8 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('country');
-        $database->createCollection('city');
+        $database->createCollection(new Collection(id: 'country'));
+        $database->createCollection(new Collection(id: 'city'));
 
         $database->createAttribute('country', Attribute::string(key: 'name', required: true));
         $database->createAttribute('city', Attribute::string(key: 'code', size: 3, required: true));
@@ -1048,8 +1049,8 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('parent');
-        $database->createCollection('child');
+        $database->createCollection(new Collection(id: 'parent'));
+        $database->createCollection(new Collection(id: 'child'));
 
         $database->createRelationship(Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'child1'));
 
@@ -1136,9 +1137,9 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('pattern');
-        $database->createCollection('shirt');
-        $database->createCollection('team');
+        $database->createCollection(new Collection(id: 'pattern'));
+        $database->createCollection(new Collection(id: 'shirt'));
+        $database->createCollection(new Collection(id: 'team'));
 
         $database->createAttribute('pattern', Attribute::string(key: 'name', required: true));
         $database->createAttribute('shirt', Attribute::string(key: 'name', required: true));
@@ -1227,9 +1228,9 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('teachers');
-        $database->createCollection('classrooms');
-        $database->createCollection('children');
+        $database->createCollection(new Collection(id: 'teachers'));
+        $database->createCollection(new Collection(id: 'classrooms'));
+        $database->createCollection(new Collection(id: 'children'));
 
         $database->createAttribute('children', Attribute::string(key: 'name', required: true));
         $database->createAttribute('teachers', Attribute::string(key: 'name', required: true));
@@ -1322,9 +1323,9 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('users');
-        $database->createCollection('profiles');
-        $database->createCollection('avatars');
+        $database->createCollection(new Collection(id: 'users'));
+        $database->createCollection(new Collection(id: 'profiles'));
+        $database->createCollection(new Collection(id: 'avatars'));
 
         $database->createAttribute('users', Attribute::string(key: 'name', required: true));
         $database->createAttribute('profiles', Attribute::string(key: 'name', required: true));
@@ -1409,9 +1410,9 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('addresses');
-        $database->createCollection('houses');
-        $database->createCollection('buildings');
+        $database->createCollection(new Collection(id: 'addresses'));
+        $database->createCollection(new Collection(id: 'houses'));
+        $database->createCollection(new Collection(id: 'buildings'));
 
         $database->createAttribute('addresses', Attribute::string(key: 'street', required: true));
         $database->createAttribute('houses', Attribute::string(key: 'name', required: true));
@@ -1514,10 +1515,10 @@ trait OneToOneTests
         $level3Collection = 'level3OneToOne';
         $level4Collection = 'level4OneToOne';
 
-        $database->createCollection($level1Collection);
-        $database->createCollection($level2Collection);
-        $database->createCollection($level3Collection);
-        $database->createCollection($level4Collection);
+        $database->createCollection(new Collection(id: $level1Collection));
+        $database->createCollection(new Collection(id: $level2Collection));
+        $database->createCollection(new Collection(id: $level3Collection));
+        $database->createCollection(new Collection(id: $level4Collection));
 
         $database->createRelationship(Relationship::oneToOne(collection: $level1Collection, relatedCollection: $level2Collection, twoWay: true));
         $database->createRelationship(Relationship::oneToOne(collection: $level2Collection, relatedCollection: $level3Collection, twoWay: true));
@@ -1582,10 +1583,10 @@ trait OneToOneTests
         $level3Collection = 'level3OneToOneNull';
         $level4Collection = 'level4OneToOneNull';
 
-        $database->createCollection($level1Collection);
-        $database->createCollection($level2Collection);
-        $database->createCollection($level3Collection);
-        $database->createCollection($level4Collection);
+        $database->createCollection(new Collection(id: $level1Collection));
+        $database->createCollection(new Collection(id: $level2Collection));
+        $database->createCollection(new Collection(id: $level3Collection));
+        $database->createCollection(new Collection(id: $level4Collection));
 
         $database->createRelationship(Relationship::oneToOne(collection: $level1Collection, relatedCollection: $level2Collection, twoWay: true));
         $database->createRelationship(Relationship::oneToOne(collection: $level2Collection, relatedCollection: $level3Collection, twoWay: true));
@@ -1646,8 +1647,8 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('$symbols_coll.ection1');
-        $database->createCollection('$symbols_coll.ection2');
+        $database->createCollection(new Collection(id: '$symbols_coll.ection1'));
+        $database->createCollection(new Collection(id: '$symbols_coll.ection2'));
 
         $database->createRelationship(Relationship::oneToOne(collection: '$symbols_coll.ection1', relatedCollection: '$symbols_coll.ection2', twoWay: true));
 
@@ -1688,22 +1689,22 @@ trait OneToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two));
 
@@ -1731,22 +1732,22 @@ trait OneToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
@@ -1774,22 +1775,22 @@ trait OneToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
@@ -1817,22 +1818,22 @@ trait OneToOneTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::oneToOne(collection: $one, relatedCollection: $two));
 
@@ -1857,8 +1858,8 @@ trait OneToOneTests
             return;
         }
 
-        $this->getDatabase()->createCollection('bulk_delete_person_o2o');
-        $this->getDatabase()->createCollection('bulk_delete_library_o2o');
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_person_o2o'));
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_library_o2o'));
 
         $this->getDatabase()->createAttribute('bulk_delete_person_o2o', Attribute::string(key: 'name', required: true));
         $this->getDatabase()->createAttribute('bulk_delete_library_o2o', Attribute::string(key: 'name', required: true));
@@ -2052,8 +2053,8 @@ trait OneToOneTests
             return;
         }
 
-        $database->createCollection('drivers');
-        $database->createCollection('licenses');
+        $database->createCollection(new Collection(id: 'drivers'));
+        $database->createCollection(new Collection(id: 'licenses'));
 
         $database->createRelationship(Relationship::oneToOne(
             collection: 'drivers',
@@ -2251,8 +2252,8 @@ trait OneToOneTests
         $parentCollection = 'parent_combined_o2o';
         $childCollection = 'child_combined_o2o';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
 
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
@@ -2327,8 +2328,8 @@ trait OneToOneTests
         $parentCollection = 'parent_relationship_error_one_to_one';
         $childCollection = 'child_relationship_error_one_to_one';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
 
@@ -2379,8 +2380,8 @@ trait OneToOneTests
         }
 
         // Setup collections with relationships
-        $database->createCollection('cities_partial');
-        $database->createCollection('mayors_partial');
+        $database->createCollection(new Collection(id: 'cities_partial'));
+        $database->createCollection(new Collection(id: 'mayors_partial'));
 
         $database->createAttribute('cities_partial', Attribute::string(key: 'name', required: true));
         $database->createAttribute('cities_partial', Attribute::integer(key: 'population'));
@@ -2466,8 +2467,8 @@ trait OneToOneTests
         }
 
         // Recreate the exact scenario from testNestedOneToMany_OneToOneRelationship
-        $database->createCollection('cities_strict');
-        $database->createCollection('mayors_strict');
+        $database->createCollection(new Collection(id: 'cities_strict'));
+        $database->createCollection(new Collection(id: 'mayors_strict'));
 
         $database->createAttribute('cities_strict', Attribute::string(key: 'name', required: true));
         $database->createAttribute('mayors_strict', Attribute::string(key: 'name', required: true));

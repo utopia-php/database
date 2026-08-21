@@ -6,6 +6,7 @@ use Exception;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -31,8 +32,8 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('playlist');
-        $database->createCollection('song');
+        $database->createCollection(new Collection(id: 'playlist'));
+        $database->createCollection(new Collection(id: 'song'));
 
         $database->createAttribute('playlist', Attribute::string(key: 'name', required: true));
         $database->createAttribute('song', Attribute::string(key: 'name', required: true));
@@ -363,8 +364,8 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('students');
-        $database->createCollection('classes');
+        $database->createCollection(new Collection(id: 'students'));
+        $database->createCollection(new Collection(id: 'classes'));
 
         $database->createAttribute('students', Attribute::string(key: 'name', required: true));
         $database->createAttribute('classes', Attribute::string(key: 'name', required: true));
@@ -855,9 +856,9 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('stones');
-        $database->createCollection('hearths');
-        $database->createCollection('plots');
+        $database->createCollection(new Collection(id: 'stones'));
+        $database->createCollection(new Collection(id: 'hearths'));
+        $database->createCollection(new Collection(id: 'plots'));
 
         $database->createAttribute('stones', Attribute::string(key: 'name', required: true));
         $database->createAttribute('hearths', Attribute::string(key: 'name', required: true));
@@ -961,9 +962,9 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('groups');
-        $database->createCollection('tounaments');
-        $database->createCollection('prizes');
+        $database->createCollection(new Collection(id: 'groups'));
+        $database->createCollection(new Collection(id: 'tounaments'));
+        $database->createCollection(new Collection(id: 'prizes'));
 
         $database->createAttribute('groups', Attribute::string(key: 'name', required: true));
         $database->createAttribute('tounaments', Attribute::string(key: 'name', required: true));
@@ -1056,9 +1057,9 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('platforms');
-        $database->createCollection('games');
-        $database->createCollection('publishers');
+        $database->createCollection(new Collection(id: 'platforms'));
+        $database->createCollection(new Collection(id: 'games'));
+        $database->createCollection(new Collection(id: 'publishers'));
 
         $database->createAttribute('platforms', Attribute::string(key: 'name', required: true));
         $database->createAttribute('games', Attribute::string(key: 'name', required: true));
@@ -1165,9 +1166,9 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('sauces');
-        $database->createCollection('pizzas');
-        $database->createCollection('toppings');
+        $database->createCollection(new Collection(id: 'sauces'));
+        $database->createCollection(new Collection(id: 'pizzas'));
+        $database->createCollection(new Collection(id: 'toppings'));
 
         $database->createAttribute('sauces', Attribute::string(key: 'name', required: true));
         $database->createAttribute('pizzas', Attribute::string(key: 'name', required: true));
@@ -1264,8 +1265,8 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('$symbols_coll.ection7');
-        $database->createCollection('$symbols_coll.ection8');
+        $database->createCollection(new Collection(id: '$symbols_coll.ection7'));
+        $database->createCollection(new Collection(id: '$symbols_coll.ection8'));
 
         $database->createRelationship(Relationship::manyToMany(collection: '$symbols_coll.ection7', relatedCollection: '$symbols_coll.ection8', twoWay: true));
 
@@ -1310,22 +1311,22 @@ trait ManyToManyTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToMany(collection: $one, relatedCollection: $two));
 
@@ -1353,22 +1354,22 @@ trait ManyToManyTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToMany(collection: $one, relatedCollection: $two, twoWay: true));
 
@@ -1396,22 +1397,22 @@ trait ManyToManyTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToMany(collection: $one, relatedCollection: $two, twoWay: true));
 
@@ -1439,22 +1440,22 @@ trait ManyToManyTests
         $one = 'one_' . uniqid();
         $two = 'two_' . uniqid();
 
-        $database->createCollection($one, [
+        $database->createCollection(new Collection(id: $one, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
-        $database->createCollection($two, [
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
             Attribute::string(key: 'name', size: 100, format: ''),
-        ], [], [
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createRelationship(Relationship::manyToMany(collection: $one, relatedCollection: $two));
 
@@ -1479,8 +1480,8 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('select_m2m_collection1');
-        $database->createCollection('select_m2m_collection2');
+        $database->createCollection(new Collection(id: 'select_m2m_collection1'));
+        $database->createCollection(new Collection(id: 'select_m2m_collection2'));
 
         $database->createAttribute('select_m2m_collection1', Attribute::string(key: 'name', required: true));
         $database->createAttribute('select_m2m_collection1', Attribute::string(key: 'type', required: true));
@@ -1554,24 +1555,24 @@ trait ManyToManyTests
         }
 
         // Create collections
-        $database->createCollection('artists', permissions: [
+        $database->createCollection(new Collection(id: 'artists', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ], documentSecurity: false);
-        $database->createCollection('albums', permissions: [
+        ], documentSecurity: false));
+        $database->createCollection(new Collection(id: 'albums', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ], documentSecurity: false);
-        $database->createCollection('tracks', permissions: [
+        ], documentSecurity: false));
+        $database->createCollection(new Collection(id: 'tracks', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         // Add attributes
         $database->createAttribute('artists', Attribute::string(key: 'name', required: true));
@@ -1668,8 +1669,8 @@ trait ManyToManyTests
             return;
         }
 
-        $this->getDatabase()->createCollection('bulk_delete_person_m2m');
-        $this->getDatabase()->createCollection('bulk_delete_library_m2m');
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_person_m2m'));
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_library_m2m'));
 
         $this->getDatabase()->createAttribute('bulk_delete_person_m2m', Attribute::string(key: 'name', required: true));
         $this->getDatabase()->createAttribute('bulk_delete_library_m2m', Attribute::string(key: 'name', required: true));
@@ -1748,8 +1749,8 @@ trait ManyToManyTests
         $parentCollection = 'parent_combined_m2m';
         $childCollection = 'child_combined_m2m';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
 
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
@@ -1824,8 +1825,8 @@ trait ManyToManyTests
         $parentCollection = 'parent_relationship_many_to_many';
         $childCollection = 'child_relationship_many_to_many';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
         $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
         $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
 
@@ -1877,8 +1878,8 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('partial_students');
-        $database->createCollection('partial_courses');
+        $database->createCollection(new Collection(id: 'partial_students'));
+        $database->createCollection(new Collection(id: 'partial_courses'));
 
         $database->createAttribute('partial_students', Attribute::string(key: 'name', required: true));
         $database->createAttribute('partial_students', Attribute::string(key: 'grade', size: 10));
@@ -1946,8 +1947,8 @@ trait ManyToManyTests
             return;
         }
 
-        $database->createCollection('tags');
-        $database->createCollection('articles');
+        $database->createCollection(new Collection(id: 'tags'));
+        $database->createCollection(new Collection(id: 'articles'));
 
         $database->createAttribute('tags', Attribute::string(key: 'name', required: true));
         $database->createAttribute('tags', Attribute::string(key: 'color', size: 50));
@@ -2049,9 +2050,9 @@ trait ManyToManyTests
         }
 
         // 3-level many-to-many chain: brands <-> products <-> tags
-        $database->createCollection('brands');
-        $database->createCollection('products');
-        $database->createCollection('tags');
+        $database->createCollection(new Collection(id: 'brands'));
+        $database->createCollection(new Collection(id: 'products'));
+        $database->createCollection(new Collection(id: 'tags'));
 
         $database->createAttribute('brands', Attribute::string(key: 'name', required: true));
         $database->createAttribute('products', Attribute::string(key: 'title', required: true));

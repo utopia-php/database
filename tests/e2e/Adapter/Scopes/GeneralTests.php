@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -40,7 +41,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('global-timeouts');
+        $database->createCollection(new Collection(id: 'global-timeouts'));
 
         $this->assertEquals(
             true,
@@ -100,7 +101,7 @@ trait GeneralTests
             ->create();
 
         try {
-            $database->createCollection(__FUNCTION__, documentSecurity: false);
+            $database->createCollection(new Collection(id: __FUNCTION__, documentSecurity: false));
 
             $database
                 ->setTenant(1)
@@ -161,11 +162,11 @@ trait GeneralTests
             ->create();
 
         // Create collection
-        $database->createCollection(__FUNCTION__, permissions: [
+        $database->createCollection(new Collection(id: __FUNCTION__, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
         $database->createIndex(__FUNCTION__, Index::key(key: 'nameIndex', attributes: ['name']));
@@ -347,12 +348,12 @@ trait GeneralTests
 
         $collection = 'cacheFallback_'.uniqid();
 
-        $database->createCollection($collection, attributes: [
+        $database->createCollection(new Collection(id: $collection, attributes: [
             Attribute::string(key: 'title', size: 128, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument($collection, new Document([
             '$id' => 'doc1',
@@ -393,7 +394,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('transactionAtomicity');
+        $database->createCollection(new Collection(id: 'transactionAtomicity'));
         $database->createAttribute('transactionAtomicity', Attribute::string(key: 'title', size: 128, required: true));
 
         // Verify a successful transaction commits
@@ -444,7 +445,7 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('txKnownException');
+        $database->createCollection(new Collection(id: 'txKnownException'));
         $database->createAttribute('txKnownException', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txKnownException', new Document([
@@ -541,7 +542,7 @@ trait GeneralTests
             return;
         }
 
-        $database->createCollection('txNested');
+        $database->createCollection(new Collection(id: 'txNested'));
         $database->createAttribute('txNested', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txNested', new Document([

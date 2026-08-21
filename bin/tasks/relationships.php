@@ -13,6 +13,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -55,59 +56,59 @@ $cli
             }
             $database->getAuthorization()->addRole(Role::any()->toString());
             $database->create();
-            $database->createCollection('authors', permissions: [
+            $database->createCollection(new Collection(id: 'authors', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-            ]);
+            ]));
             $database->createAttribute('authors', 'name', Database::VAR_STRING, 256, true);
             $database->createAttribute('authors', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
             $database->createAttribute('authors', 'bio', Database::VAR_STRING, 5000, true);
             $database->createAttribute('authors', 'avatar', Database::VAR_STRING, 256, true);
             $database->createAttribute('authors', 'website', Database::VAR_STRING, 256, true);
 
-            $database->createCollection('articles', permissions: [
+            $database->createCollection(new Collection(id: 'articles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-            ]);
+            ]));
             $database->createAttribute('articles', 'title', Database::VAR_STRING, 256, true);
             $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
             $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
             $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
             $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
 
-            $database->createCollection('users', permissions: [
+            $database->createCollection(new Collection(id: 'users', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-            ]);
+            ]));
             $database->createAttribute('users', 'username', Database::VAR_STRING, 256, true);
             $database->createAttribute('users', 'email', Database::VAR_STRING, 256, true);
             $database->createAttribute('users', 'password', Database::VAR_STRING, 256, true);
 
-            $database->createCollection('comments', permissions: [
+            $database->createCollection(new Collection(id: 'comments', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-            ]);
+            ]));
             $database->createAttribute('comments', 'content', Database::VAR_STRING, 256, true);
             $database->createAttribute('comments', 'likes', Database::VAR_INTEGER, 8, true, signed: false);
 
-            $database->createCollection('profiles', permissions: [
+            $database->createCollection(new Collection(id: 'profiles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-            ]);
+            ]));
             $database->createAttribute('profiles', 'bio_extended', Database::VAR_STRING, 10000, true);
             $database->createAttribute('profiles', 'social_links', Database::VAR_STRING, 256, true, array: true);
             $database->createAttribute('profiles', 'verified', Database::VAR_BOOLEAN, 0, true);
 
-            $database->createCollection('categories', permissions: [
+            $database->createCollection(new Collection(id: 'categories', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
-            ]);
+            ]));
             $database->createAttribute('categories', 'name', Database::VAR_STRING, 256, true);
             $database->createAttribute('categories', 'description', Database::VAR_STRING, 1000, true);
 

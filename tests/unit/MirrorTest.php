@@ -7,6 +7,7 @@ use RuntimeException;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -82,10 +83,10 @@ class MirrorTest extends TestCase
             ->setNamespace('myapp')
             ->create();
 
-        $mirror->createCollection('actors', permissions: [
+        $mirror->createCollection(new Collection(id: 'actors', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $listed = $mirror->listCollections();
         $ids = \array_map(static fn ($collection): string => $collection->getId(), $listed);

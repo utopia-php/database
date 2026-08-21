@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -290,10 +291,10 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', permissions: [
+        $database->createCollection(new Collection(id: 'wafRules', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -326,10 +327,10 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', permissions: [
+        $database->createCollection(new Collection(id: 'wafRules', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -366,9 +367,9 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', permissions: [
+        $database->createCollection(new Collection(id: 'wafRules', permissions: [
             Permission::read(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $callbackCalls = 0;
         $collection = $database->getCollection('wafRules');
@@ -401,12 +402,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
             Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -446,12 +447,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
             Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -484,12 +485,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new JsonHashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('metrics', [
+        $database->createCollection(new Collection(id: 'metrics', attributes: [
             Attribute::double(key: 'value'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('metrics', new Document([
             '$id' => 'metric-a',
@@ -531,12 +532,12 @@ class QueryCacheTest extends TestCase
                 },
             ],
         ]);
-        $database->createCollection('secrets', [
+        $database->createCollection(new Collection(id: 'secrets', attributes: [
             Attribute::string(key: 'secret', filters: ['wrapped']),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('secrets', new Document([
             '$id' => 'secret-a',
@@ -559,12 +560,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
             Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -594,11 +595,11 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->getAuthorization()->skip(function () use ($database): void {
-            $database->createCollection('secureRules', [
+            $database->createCollection(new Collection(id: 'secureRules', attributes: [
                 Attribute::string(key: 'projectId'),
             ], permissions: [
                 Permission::create(Role::any()),
-            ], documentSecurity: true);
+            ]));
 
             $database->createDocument('secureRules', new Document([
                 '$id' => 'rule-a',
@@ -645,9 +646,9 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->getAuthorization()->skip(function () use ($database): void {
-            $database->createCollection('secureRules', permissions: [
+            $database->createCollection(new Collection(id: 'secureRules', permissions: [
                 Permission::create(Role::any()),
-            ], documentSecurity: true);
+            ]));
         });
 
         $database->getAuthorization()->addRole(Role::user('user-1')->toString());
@@ -691,9 +692,9 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('parents', permissions: [
+        $database->createCollection(new Collection(id: 'parents', permissions: [
             Permission::read(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $queries = [
             Query::limit(25),
@@ -734,12 +735,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
             Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -776,12 +777,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
             Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',

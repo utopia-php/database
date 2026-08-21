@@ -24,6 +24,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -152,12 +153,12 @@ function setupTestEnvironment(Database $database, string $name, int $seed): void
     $database->getAuthorization()->addRole(Role::any()->toString());
 
     // Create test collection
-    $database->createCollection('operators_test', permissions: [
+    $database->createCollection(new Collection(id: 'operators_test', permissions: [
         Permission::create(Role::any()),
         Permission::read(Role::any()),
         Permission::update(Role::any()),
         Permission::delete(Role::any()),
-    ]);
+    ]));
 
     // Create attributes for all operator types
     // Numeric attributes

@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -51,7 +52,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Create object attribute
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
@@ -586,7 +587,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Create object attribute
         $this->createAttribute($database, $collectionId, 'data', ColumnType::Object, 0, false);
@@ -694,7 +695,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         // An object attribute has no per-key schema, so there is no typed cast
@@ -742,7 +743,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         $created = $database->createDocument($collectionId, new Document([
@@ -788,7 +789,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
         $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
 
         $created = $database->createDocument($collectionId, new Document([
@@ -854,7 +855,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Attributes: 3D vector and nested metadata object
         $this->createAttribute($database, $collectionId, 'embedding', ColumnType::Vector, 3, true);
@@ -1012,7 +1013,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Base attributes
         $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
@@ -1087,7 +1088,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Base attributes
         $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);
@@ -1213,7 +1214,7 @@ trait ObjectAttributeTests
         }
 
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Base attributes
         $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, false);

@@ -3,6 +3,7 @@
 namespace Utopia\Database\Traits;
 
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
@@ -31,7 +32,10 @@ trait Databases
             $attributes[] = Attribute::fromDocument($attribute);
         }
 
-        $this->silent(fn () => $this->createCollection(self::METADATA, $attributes));
+        $this->silent(fn () => $this->createCollection(new Collection(
+            id: self::METADATA,
+            attributes: $attributes,
+        )));
 
         $this->trigger(Event::DatabaseCreate, $database);
 

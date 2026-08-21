@@ -340,18 +340,11 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function createCollection(string|Collection $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, array $metadata = []): Document
+    public function createCollection(Collection $collection): Document
     {
-        $collectionId = $id instanceof Collection ? $id->id : $id;
+        $collectionId = $collection->id;
 
-        $result = $this->source->createCollection(
-            $id,
-            $attributes,
-            $indexes,
-            $permissions,
-            $documentSecurity,
-            $metadata
-        );
+        $result = $this->source->createCollection($collection);
 
         if ($this->destination === null) {
             return $result;
@@ -370,14 +363,7 @@ class Mirror extends Database
                 }
             }
 
-            $this->destination->createCollection(
-                $id,
-                $attributes,
-                $indexes,
-                $permissions,
-                $documentSecurity,
-                $metadata
-            );
+            $this->destination->createCollection($collection);
 
             $this->silent(function () use ($collectionId) {
                 $this->createUpgrades();
@@ -1298,17 +1284,13 @@ class Mirror extends Database
             return;
         }
 
-        $this->source->createCollection(
-            id: 'upgrades',
-            attributes: [
-                Attribute::string(key: 'collectionId', required: true),
-                Attribute::string(key: 'status'),
-            ],
-            indexes: [
-                Index::unique(key: '_unique_collection', attributes: ['collectionId'], lengths: [Database::LENGTH_KEY]),
-                Index::key(key: '_status_index', attributes: ['status'], lengths: [Database::LENGTH_KEY], orders: [OrderDirection::Asc->value]),
-            ],
-        );
+        $this->source->createCollection(new Collection(id: 'upgrades', attributes: [
+            Attribute::string(key: 'collectionId', required: true),
+            Attribute::string(key: 'status'),
+        ], indexes: [
+            Index::unique(key: '_unique_collection', attributes: ['collectionId'], lengths: [Database::LENGTH_KEY]),
+            Index::key(key: '_status_index', attributes: ['status'], lengths: [Database::LENGTH_KEY], orders: [OrderDirection::Asc->value]),
+        ]));
     }
 
     /**

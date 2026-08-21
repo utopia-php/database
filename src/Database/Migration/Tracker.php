@@ -3,6 +3,7 @@
 namespace Utopia\Database\Migration;
 
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\ID;
@@ -33,15 +34,12 @@ class Tracker
             return;
         }
 
-        $this->db->createCollection(
-            id: self::COLLECTION,
-            attributes: [
-                Attribute::string(key: 'version', required: true),
-                Attribute::string(key: 'name', required: true),
-                Attribute::integer(key: 'batch', required: true),
-                Attribute::datetime(key: 'appliedAt', filters: ['datetime']),
-            ],
-        );
+        $this->db->createCollection(new Collection(id: self::COLLECTION, attributes: [
+            Attribute::string(key: 'version', required: true),
+            Attribute::string(key: 'name', required: true),
+            Attribute::integer(key: 'batch', required: true),
+            Attribute::datetime(key: 'appliedAt', filters: ['datetime']),
+        ]));
 
         $this->initialized = true;
     }

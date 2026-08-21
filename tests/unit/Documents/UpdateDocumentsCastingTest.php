@@ -8,6 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Operator;
@@ -67,9 +68,9 @@ final class UpdateDocumentsCastingTest extends TestCase
         $database->getAuthorization()->disable();
         $database->setNamespace('casting');
         $this->assertTrue($database->create());
-        $database->createCollection('counters', [
+        $database->createCollection(new Collection(id: 'counters', attributes: [
             Attribute::integer(key: 'value'),
-        ]);
+        ]));
         $database->createDocuments('counters', [
             new Document(['$id' => 'first', 'value' => 1]),
             new Document(['$id' => 'second', 'value' => 2]),

@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -207,7 +208,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('nested', [
+        $database->createCollection(new Collection(id: 'nested', attributes: [
             new Document([
                 '$id' => 'name',
                 'type' => ColumnType::String->value,
@@ -217,10 +218,10 @@ class MemoryTest extends Base
                 'array' => false,
                 'filters' => [],
             ]),
-        ], [], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $adapter = $database->getAdapter();
         $adapter->startTransaction();
@@ -253,7 +254,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('lists', [
+        $database->createCollection(new Collection(id: 'lists', attributes: [
             new Document([
                 '$id' => 'tags',
                 'type' => ColumnType::String->value,
@@ -263,10 +264,10 @@ class MemoryTest extends Base
                 'array' => true,
                 'filters' => [],
             ]),
-        ], [], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('lists', new Document([
             '$id' => 'l1',
@@ -309,7 +310,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('optional', [
+        $database->createCollection(new Collection(id: 'optional', attributes: [
             new Document([
                 '$id' => 'token',
                 'type' => ColumnType::String->value,
@@ -319,16 +320,16 @@ class MemoryTest extends Base
                 'array' => false,
                 'filters' => [],
             ]),
-        ], [
+        ], indexes: [
             new Document([
                 '$id' => 'unique_token',
                 'type' => IndexType::Unique->value,
                 'attributes' => ['token'],
             ]),
-        ], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('optional', new Document([
             '$id' => 'a',
@@ -426,7 +427,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('handles', [
+        $database->createCollection(new Collection(id: 'handles', attributes: [
             new Document([
                 '$id' => 'handle',
                 'type' => ColumnType::String->value,
@@ -436,17 +437,17 @@ class MemoryTest extends Base
                 'array' => false,
                 'filters' => [],
             ]),
-        ], [
+        ], indexes: [
             new Document([
                 '$id' => 'unique_handle',
                 'type' => IndexType::Unique->value,
                 'attributes' => ['handle'],
             ]),
-        ], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('handles', new Document([
             '$id' => 'h1',
@@ -483,7 +484,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('siblings', [
+        $database->createCollection(new Collection(id: 'siblings', attributes: [
             new Document([
                 '$id' => 'handle',
                 'type' => ColumnType::String->value,
@@ -493,17 +494,17 @@ class MemoryTest extends Base
                 'array' => false,
                 'filters' => [],
             ]),
-        ], [
+        ], indexes: [
             new Document([
                 '$id' => 'unique_handle',
                 'type' => IndexType::Unique->value,
                 'attributes' => ['handle'],
             ]),
-        ], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('siblings', new Document([
             '$id' => 's1',
@@ -538,7 +539,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('cleanup', [
+        $database->createCollection(new Collection(id: 'cleanup', attributes: [
             new Document([
                 '$id' => 'name',
                 'type' => ColumnType::String->value,
@@ -548,10 +549,10 @@ class MemoryTest extends Base
                 'array' => false,
                 'filters' => [],
             ]),
-        ], [], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         for ($i = 0; $i < 3; $i++) {
             $database->createDocument('cleanup', new Document([
@@ -618,7 +619,7 @@ class MemoryTest extends Base
     {
         $database = $this->getDatabase();
         $collection = 'single_date_operations_memory';
-        $database->createCollection($collection);
+        $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'string', size: 128));
 
         $database->setPreserveDates(true);
@@ -815,7 +816,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('flags', [
+        $database->createCollection(new Collection(id: 'flags', attributes: [
             new Document([
                 '$id' => 'active',
                 'type' => ColumnType::Boolean->value,
@@ -825,16 +826,16 @@ class MemoryTest extends Base
                 'array' => false,
                 'filters' => [],
             ]),
-        ], [
+        ], indexes: [
             new Document([
                 '$id' => 'unique_active',
                 'type' => IndexType::Unique->value,
                 'attributes' => ['active'],
             ]),
-        ], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('flags', new Document([
             '$id' => 'first',
@@ -890,7 +891,7 @@ class MemoryTest extends Base
     {
         $database = $this->freshDatabase();
 
-        $database->createCollection('nullable', [
+        $database->createCollection(new Collection(id: 'nullable', attributes: [
             new Document([
                 '$id' => 'name',
                 'type' => ColumnType::String->value,
@@ -909,16 +910,16 @@ class MemoryTest extends Base
                 'size' => 1024,
                 'required' => false,
             ]),
-        ], [
+        ], indexes: [
             new Document([
                 '$id' => 'bio_ft',
                 'type' => IndexType::Fulltext->value,
                 'attributes' => ['bio'],
             ]),
-        ], [
+        ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('nullable', new Document([
             '$id' => 'with_value',

@@ -15,6 +15,7 @@ use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -90,7 +91,7 @@ final class DatabaseQueryCacheTest extends TestCase
     public function testSetQueryCacheInstallsOneInvalidatorAndRemovesIt(): void
     {
         [$database, $queryAdapter] = $this->createDatabase(queryCache: false);
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
 
         $queryCache = new QueryCache(new Cache($queryAdapter));
         $database->setQueryCache($queryCache);
@@ -109,7 +110,7 @@ final class DatabaseQueryCacheTest extends TestCase
     public function testSchemaAndCollectionMutationsInvalidateQueries(): void
     {
         [$database, $queryAdapter] = $this->createDatabase();
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
 
         $queryAdapter->resetPurges();
         $database->updateCollection('users', $this->permissions(), false);
@@ -143,12 +144,12 @@ final class DatabaseQueryCacheTest extends TestCase
     public function testDeleteAndRecreateCannotReuseOldCollectionResults(): void
     {
         [$database] = $this->createDatabase();
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('users', new Document(['$id' => 'old']));
         $this->assertSame(['old'], $this->ids($database->find('users')));
 
         $database->deleteCollection('users');
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('users', new Document(['$id' => 'new']));
 
         $this->assertSame(['new'], $this->ids($database->find('users')));
@@ -157,7 +158,7 @@ final class DatabaseQueryCacheTest extends TestCase
     public function testRolledBackTransactionCannotPoisonQueryCache(): void
     {
         [$database] = $this->createDatabase();
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('users', new Document(['$id' => 'committed']));
         $this->assertSame(['committed'], $this->ids($database->find('users')));
 
@@ -184,7 +185,7 @@ final class DatabaseQueryCacheTest extends TestCase
     {
         $adapter = new ObservedMemory();
         [$database] = $this->createDatabase($adapter, queryCache: false, dataAdapter: new None());
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
         $database->purgeCachedCollection('users');
 
         $adapter->observeMetadata('users', fn () => $database->purgeCachedCollection('users'));
@@ -198,9 +199,9 @@ final class DatabaseQueryCacheTest extends TestCase
     {
         $adapter = new ObservedMemory();
         [$database] = $this->createDatabase($adapter, queryCache: false);
-        $database->createCollection('users', [
+        $database->createCollection(new Collection(id: 'users', attributes: [
             Attribute::string(key: 'name'),
-        ], permissions: $this->permissions(), documentSecurity: false);
+        ], permissions: $this->permissions(), documentSecurity: false));
         $database->getCollection('users');
 
         $adapter->observeValidators(
@@ -217,9 +218,9 @@ final class DatabaseQueryCacheTest extends TestCase
         [$database] = $this->createDatabase(queryCache: false);
         $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
         $database->getAuthorization()->skip(function () use ($database): void {
-            $database->createCollection('private', permissions: [
+            $database->createCollection(new Collection(id: 'private', permissions: [
                 Permission::create(Role::any()),
-            ], documentSecurity: true);
+            ]));
 
             foreach ([
                 ['a', 'user-1'],
@@ -259,10 +260,10 @@ final class DatabaseQueryCacheTest extends TestCase
     public function testMemoryCacheSeparatesPointSelectionVariants(): void
     {
         [$database] = $this->createDatabase(queryCache: false, dataAdapter: new MemoryCache());
-        $database->createCollection('users', [
+        $database->createCollection(new Collection(id: 'users', attributes: [
             Attribute::string(key: 'name'),
             Attribute::string(key: 'email'),
-        ], permissions: $this->permissions(), documentSecurity: false);
+        ], permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('users', new Document([
             '$id' => 'user',
             'name' => 'Alice',
@@ -295,11 +296,11 @@ final class DatabaseQueryCacheTest extends TestCase
         }
 
         $writer->create();
-        $writer->createCollection('users', permissions: [
+        $writer->createCollection(new Collection(id: 'users', permissions: [
             Permission::read(Role::user('user-1')),
             Permission::create(Role::user('user-1')),
             Permission::update(Role::user('user-1')),
-        ]);
+        ]));
         $reader->getCollection('users');
 
         $writer->updateCollection('users', [
@@ -316,9 +317,9 @@ final class DatabaseQueryCacheTest extends TestCase
         [$database] = $this->createDatabase(queryCache: false);
         $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
         $database->getAuthorization()->skip(function () use ($database): void {
-            $database->createCollection('private', permissions: [
+            $database->createCollection(new Collection(id: 'private', permissions: [
                 Permission::create(Role::any()),
-            ], documentSecurity: true);
+            ]));
             $database->createDocument('private', new Document([
                 '$id' => 'secret',
                 '$permissions' => [
@@ -344,8 +345,8 @@ final class DatabaseQueryCacheTest extends TestCase
     {
         $adapter = new JoinMemory();
         [$database] = $this->createDatabase($adapter);
-        $database->createCollection('parents', permissions: $this->permissions(), documentSecurity: false);
-        $database->createCollection('children', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'parents', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'children', permissions: $this->permissions(), documentSecurity: false));
 
         $queries = [Query::join('children', '$id', '$id')];
         $database->find('parents', $queries);
@@ -360,7 +361,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $cache = new FailingMemory();
         [$database] = $this->createDatabase(queryCache: false);
         $database->setQueryCache(new QueryCache(new Cache($cache)));
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
         $database->find('users');
         $cache->seedEpoch('users');
         $cache->failPurges();
@@ -506,9 +507,9 @@ final class DatabaseQueryCacheTest extends TestCase
             ->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->createCollection('users', [
+        $database->createCollection(new Collection(id: 'users', attributes: [
             Attribute::string(key: 'name'),
-        ], permissions: $this->permissions(), documentSecurity: false);
+        ], permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('users', new Document([
             '$id' => 'user',
             'name' => 'committed',
@@ -558,7 +559,7 @@ final class DatabaseQueryCacheTest extends TestCase
 
     private function createUsers(Database $database): void
     {
-        $database->createCollection('users', permissions: $this->permissions(), documentSecurity: false);
+        $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
         foreach (['a', 'b', 'c'] as $id) {
             $database->createDocument('users', new Document(['$id' => $id]));
         }
@@ -578,9 +579,9 @@ final class DatabaseQueryCacheTest extends TestCase
             ->setNamespace('cache_'.\uniqid());
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
-        $database->createCollection('users', [
+        $database->createCollection(new Collection(id: 'users', attributes: [
             Attribute::string(key: 'name', required: true),
-        ], permissions: $this->permissions(), documentSecurity: false);
+        ], permissions: $this->permissions(), documentSecurity: false));
         $database->createDocument('users', new Document([
             '$id' => 'existing',
             'name' => 'original',
@@ -642,9 +643,9 @@ final class DatabaseQueryCacheTest extends TestCase
         $writer->create();
         $writer->getAuthorization()->addRole(Role::any()->toString());
         $reader->getAuthorization()->addRole(Role::any()->toString());
-        $writer->createCollection('users', [
+        $writer->createCollection(new Collection(id: 'users', attributes: [
             Attribute::string(key: 'name', required: true),
-        ], permissions: $this->permissions(), documentSecurity: false);
+        ], permissions: $this->permissions(), documentSecurity: false));
         $writer->createDocument('users', new Document([
             '$id' => 'existing',
             'name' => 'original',

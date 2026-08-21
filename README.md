@@ -355,58 +355,23 @@ $database->getKeywords();
 ### Collection Methods
 
 ```php
-// Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
+// Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions'
 // The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
-$database->createCollection(
-    id: 'users'
-);
+$database->createCollection(new Collection(
+    id: 'users',
+));
 
-// Create collection with attributes and indexes
-$attributes = [
-     new Document([
-         '$id' => ID::unique(),
-         '$permissions' => [
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-         ],
-         'name' => 'Jhon', 
-         'age'  =>  20
-     ]),
-     new Document([
-         '$id' => ID::unique(),
-         '$permissions' => [
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-         ],
-         'name' => 'Doe', 
-         'age'  =>  34
-     ]),
-]
-
-$indexes = [
-     new Document([
-            '$id' => ID::unique(),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['name'],
-            'lengths' => [256],
-            'orders' => ['ASC'],
-        ]),
-     new Document([
-            '$id' => ID::unique(),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['name', 'age'],
-            'lengths' => [128, 128],
-            'orders' => ['ASC'],
-        ])
-];
-
-$database->createCollection(
-    id: 'users', 
-    attributes: $attributes, 
-    indexes: $indexes
-);
+$database->createCollection(new Collection(
+    id: 'users',
+    attributes: [
+        Attribute::string(key: 'name', size: 256),
+        Attribute::integer(key: 'age'),
+    ],
+    indexes: [
+        Index::key(key: 'idx_name', attributes: ['name'], lengths: [256], orders: ['ASC']),
+        Index::key(key: 'idx_name_age', attributes: ['name', 'age'], lengths: [128, 128], orders: ['ASC']),
+    ],
+));
 
 // Update Collection Permissions
 $database->updateCollection(

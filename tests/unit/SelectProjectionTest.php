@@ -8,6 +8,7 @@ use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
@@ -37,7 +38,7 @@ class SelectProjectionTest extends TestCase
             ->setNamespace('select_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection('widgets');
+        $this->database->createCollection(new Collection(id: 'widgets'));
         $this->database->createAttribute('widgets', Attribute::string(key: 'sku'));
         $this->database->createDocument('widgets', new Document([
             '$id' => 'widget',

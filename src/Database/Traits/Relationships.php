@@ -6,6 +6,7 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -231,7 +232,7 @@ trait Relationships
                 Index::key(key: '_index_'.$twoWayKey, attributes: [$twoWayKey]),
             ];
             try {
-                $this->silent(fn () => $this->createCollection($junctionCollection, $junctionAttributes, $junctionIndexes));
+                $this->silent(fn () => $this->createCollection(new Collection(id: $junctionCollection, attributes: $junctionAttributes, indexes: $junctionIndexes)));
             } catch (DuplicateException) {
                 // Junction metadata already exists from a prior partial failure.
                 // Ensure the physical schema also exists.

@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -63,11 +64,11 @@ class DocumentCacheEpochTest extends TestCase
             ->setDatabase('utopiaTests')
             ->setNamespace('epoch_'.\uniqid());
         $database->create();
-        $database->createCollection('webhooks', permissions: [
+        $database->createCollection(new Collection(id: 'webhooks', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-        ]);
+        ]));
 
         return [$database, $adapter];
     }

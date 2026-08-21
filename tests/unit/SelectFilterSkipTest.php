@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -35,7 +36,7 @@ class SelectFilterSkipTest extends TestCase
             }
         );
 
-        $database->createCollection('filterSelect');
+        $database->createCollection(new Collection(id: 'filterSelect'));
         $database->createAttribute('filterSelect', Attribute::string(key: 'plain', size: 128));
         $database->createAttribute('filterSelect', Attribute::string(key: 'kids', size: 128, filters: ['subQueryProbeUnit']));
 

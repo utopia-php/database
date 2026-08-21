@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -53,10 +54,10 @@ class CreateCollectionRaceTest extends TestCase
         ]));
 
         try {
-            $database->createCollection($collection, [$name], permissions: [
+            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
-            ]);
+            ]));
             $this->fail('Expected DuplicateException for an existing physical collection');
         } catch (DuplicateException) {
         }
@@ -99,10 +100,10 @@ class CreateCollectionRaceTest extends TestCase
         $cacheAdapter->failPurge = true;
 
         try {
-            $database->createCollection($collection, [$name], permissions: [
+            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
-            ]);
+            ]));
             $this->fail('Expected DuplicateException even when cache purge fails');
         } catch (DuplicateException $exception) {
             $this->assertSame('Collection ' . $collection . ' already exists', $exception->getMessage());

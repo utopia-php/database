@@ -10,6 +10,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -147,7 +148,7 @@ class PoolTest extends Base
         $database = $this->getDatabase();
         $collection = 'orphanedPermsRecovery';
 
-        $database->createCollection($collection);
+        $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'title', size: 128, required: true));
 
         // Step 1: Create a document with permissions

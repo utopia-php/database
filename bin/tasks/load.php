@@ -10,6 +10,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -45,10 +46,10 @@ $cli
             $database->getAuthorization()->addRole(Role::any()->toString());
             $database->create();
 
-            $database->createCollection('articles', permissions: [
+            $database->createCollection(new Collection(id: 'articles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
-            ]);
+            ]));
 
             $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
             $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);

@@ -7,6 +7,7 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
@@ -150,7 +151,7 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection('testCreateMirroredCollection');
+        $database->createCollection(new Collection(id: 'testCreateMirroredCollection'));
 
         // Assert collection exists in both databases
         $this->assertFalse($database->getSource()->getCollection('testCreateMirroredCollection')->isEmpty());
@@ -170,9 +171,9 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection('testUpdateMirroredCollection', permissions: [
+        $database->createCollection(new Collection(id: 'testUpdateMirroredCollection', permissions: [
             Permission::read(Role::any()),
-        ]);
+        ]));
 
         $collection = $database->getCollection('testUpdateMirroredCollection');
 
@@ -202,7 +203,7 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection('testDeleteMirroredCollection');
+        $database->createCollection(new Collection(id: 'testDeleteMirroredCollection'));
 
         $database->deleteCollection('testDeleteMirroredCollection');
 
@@ -225,12 +226,12 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection('testCreateMirroredDocument', attributes: [
+        $database->createCollection(new Collection(id: 'testCreateMirroredDocument', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $document = $database->createDocument('testCreateMirroredDocument', new Document([
             'name' => 'Jake',
@@ -264,13 +265,13 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection('testUpdateMirroredDocument', attributes: [
+        $database->createCollection(new Collection(id: 'testUpdateMirroredDocument', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $document = $database->createDocument('testUpdateMirroredDocument', new Document([
             'name' => 'Jake',
@@ -301,13 +302,13 @@ class MirrorTest extends Base
     {
         $database = $this->getDatabase();
 
-        $database->createCollection('testDeleteMirroredDocument', attributes: [
+        $database->createCollection(new Collection(id: 'testDeleteMirroredDocument', attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::delete(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         $document = $database->createDocument('testDeleteMirroredDocument', new Document([
             'name' => 'Jake',
@@ -328,12 +329,12 @@ class MirrorTest extends Base
         $database = $this->getDatabase();
         $collection = 'mirrorSkipDup';
 
-        $database->createCollection($collection, attributes: [
+        $database->createCollection(new Collection(id: $collection, attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
         // Seed the SOURCE only (bypass the mirror) with the row we want to
         // skipDuplicates over later. Destination intentionally does NOT have it —

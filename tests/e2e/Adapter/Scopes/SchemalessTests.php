@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -34,7 +35,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
         $database->createAttribute($colName, Attribute::string(key: 'key', size: 50, required: true));
         $database->createAttribute($colName, Attribute::string(key: 'value', size: 50, default: 'value'));
 
@@ -132,7 +133,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
         $docs = [
             new Document(['$id' => 'doc1', '$permissions' => $permissions, 'freeA' => 'doc1']),
@@ -180,7 +181,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_increment');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -243,7 +244,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_decrement');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -298,7 +299,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_update');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -357,7 +358,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_delete');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -407,7 +408,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_bulk_update');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -504,7 +505,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_bulk_delete');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -588,7 +589,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_callbacks');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -673,7 +674,7 @@ trait SchemalessTests
 
         // Schemaless adapter still supports defining attributes/indexes metadata
         $col = uniqid('sl_idx');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $database->createDocument($col, new Document([
             '$id' => 'a',
@@ -720,7 +721,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_obj_idx');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         // Define object attributes in metadata
         $database->createAttribute($col, Attribute::object(key: 'meta'));
@@ -762,7 +763,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_perms');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         // Create with permissive read only
         $doc = $database->createDocument($col, new Document([
@@ -835,7 +836,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_dates');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1148,7 +1149,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_exists');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1266,7 +1267,7 @@ trait SchemalessTests
         }
 
         $colName = uniqid('schemaless_not_exists');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1376,7 +1377,7 @@ trait SchemalessTests
             return;
         }
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Create documents with array of objects
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -1530,7 +1531,7 @@ trait SchemalessTests
             return;
         }
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Create documents with complex nested structures
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -1627,7 +1628,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_nested_obj');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1804,12 +1805,12 @@ trait SchemalessTests
         }
 
         $collectionName = ID::unique();
-        $database->createCollection($collectionName, permissions: [
+        $database->createCollection(new Collection(id: $collectionName, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2091,7 +2092,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_ttl');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2171,7 +2172,7 @@ trait SchemalessTests
             'ttl' => 7200, // 2 hours
         ]);
 
-        $database->createCollection($col2, [$expiresAtAttr], [$ttlIndexDoc]);
+        $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 
         $collection2 = $database->getCollection($col2);
         $indexes2 = $collection2->getAttribute('indexes');
@@ -2196,7 +2197,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_datetime');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2316,7 +2317,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_ttl_expiry');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2452,7 +2453,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_ttl_cache_expiry');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2533,7 +2534,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_str_datetime');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2670,7 +2671,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_str_date_ttl');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -2828,7 +2829,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_mongo_dot_idx');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         // Define top-level object attribute (metadata only; schemaless adapter won't enforce)
         $database->createAttribute($col, Attribute::object(key: 'profile'));
@@ -2905,7 +2906,7 @@ trait SchemalessTests
         }
 
         $col = uniqid('sl_query_datetime');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -3034,12 +3035,12 @@ trait SchemalessTests
         }
 
         // Create a simple schemaless collection and one document.
-        $database->createCollection('schemaless_time', permissions: [
+        $database->createCollection(new Collection(id: 'schemaless_time', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('schemaless_time', new Document([
             '$id' => ID::unique(),

@@ -178,6 +178,53 @@ class DocumentQueriesTest extends TestCase
         $this->assertStringContainsString('Natural joins are not supported', $validator->getDescription());
     }
 
+    public function testNestedJoinOnIsValid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(true, $validator->isValid([
+            Query::leftJoin('orders', 'ord', [
+                Query::on('$id', 'customerId'),
+            ]),
+        ]), $validator->getDescription());
+    }
+
+    public function testNestedJoinOnWithFilterIsValidWithoutFilterValidator(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(true, $validator->isValid([
+            Query::leftJoin('orders', 'ord', [
+                Query::on('$id', 'customerId'),
+                Query::equal('ord.status', ['paid']),
+            ]),
+        ]), $validator->getDescription());
+    }
+
+    public function testNestedJoinOnRequiresColumns(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(false, $validator->isValid([
+            Query::leftJoin('orders', 'ord', [
+                Query::on('', 'customerId'),
+            ]),
+        ]));
+        $this->assertStringContainsString('Join ON requires left and right columns', $validator->getDescription());
+    }
+
+    public function testSelectWithNestedJoinAliasIsValid(): void
+    {
+        $validator = new DocumentQueries($this->documentAttributes());
+
+        $this->assertSame(true, $validator->isValid([
+            Query::select(['ord.amount']),
+            Query::leftJoin('orders', 'ord', [
+                Query::on('$id', 'customerId'),
+            ]),
+        ]), $validator->getDescription());
+    }
+
     /**
      * @return array<Document>
      */

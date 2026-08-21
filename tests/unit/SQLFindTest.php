@@ -101,6 +101,23 @@ final class SQLFindTest extends TestCase
         $this->assertStringContainsString('LEFT JOIN', $sql);
     }
 
+    public function testNestedJoinOnCompilesPredicatesOntoJoin(): void
+    {
+        $sql = $this->captureFindSql([
+            Query::leftJoin('orders', 'ord', [
+                Query::on('$id', 'customerId'),
+                Query::equal('ord.status', ['paid']),
+            ]),
+        ]);
+
+        $this->assertQualifiedJoinStars($sql, joinAlias: 'ord');
+        $this->assertStringContainsString('LEFT JOIN', $sql);
+        $this->assertStringContainsString('AS `ord`', $sql);
+        $this->assertMatchesRegularExpression('/ON\s+`table_main`\.`_uid`\s*=\s*`ord`\.`customerId`/i', $sql);
+        $this->assertStringContainsString('`ord`.`status`', $sql);
+        $this->assertDoesNotMatchRegularExpression('/WHERE[\s\S]*`ord`\.`status`/i', $sql);
+    }
+
     public function testEmulatesFullOuterJoinWithOuterLimit(): void
     {
         $sql = $this->captureFindSql(

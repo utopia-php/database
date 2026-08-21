@@ -10,6 +10,7 @@ use Utopia\Database\Index as IndexVO;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\IndexType;
 
 /**
@@ -64,7 +65,7 @@ class IndexedQueries extends Queries
     /**
      * Count vector queries across entire query tree
      *
-     * @param  array<Query>  $queries
+     * @param  array<BaseQuery>  $queries
      */
     private function countVectorQueries(array $queries): int
     {
@@ -75,8 +76,10 @@ class IndexedQueries extends Queries
                 $count++;
             }
 
-            if ($query->isNested()) {
-                /** @var array<Query> $nestedValues */
+            if ($query->isNestedJoin()) {
+                $count += $this->countVectorQueries($query->getJoinOnQueries());
+            } elseif ($query->isNested()) {
+                /** @var array<BaseQuery> $nestedValues */
                 $nestedValues = $query->getValues();
                 $count += $this->countVectorQueries($nestedValues);
             }
@@ -86,7 +89,7 @@ class IndexedQueries extends Queries
     }
 
     /**
-     * @param  array<Query>  $queries
+     * @param  array<BaseQuery>  $queries
      * @return array<string, true>
      */
     private function joinAliases(array $queries): array
@@ -98,11 +101,8 @@ class IndexedQueries extends Queries
                 continue;
             }
 
-            $method = $query->getMethod();
-            $values = $query->getValues();
-            $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
-            $alias = $values[$aliasIndex] ?? '';
-            if (\is_string($alias) && $alias !== '') {
+            $alias = $query->getJoinAlias();
+            if ($alias !== '') {
                 $aliases[$alias] = true;
             }
         }
@@ -147,7 +147,7 @@ class IndexedQueries extends Queries
     }
 
     /**
-     * @param  array<Query>  $queries
+     * @param  array<BaseQuery>  $queries
      * @param  array<string, true>  $joinAliases
      */
     private function validateSearchIndexes(array $queries, array $joinAliases): bool
@@ -181,8 +181,12 @@ class IndexedQueries extends Queries
                 }
             }
 
-            if ($query->isNested() && $query->getMethod() !== Method::Having) {
-                /** @var array<Query> $nested */
+            if ($query->isNestedJoin()) {
+                if (! $this->validateSearchIndexes($query->getJoinOnQueries(), $joinAliases)) {
+                    return false;
+                }
+            } elseif ($query->isNested() && $query->getMethod() !== Method::Having) {
+                /** @var array<BaseQuery> $nested */
                 $nested = $query->getValues();
                 if (! $this->validateSearchIndexes($nested, $joinAliases)) {
                     return false;

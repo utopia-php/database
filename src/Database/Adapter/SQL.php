@@ -3551,7 +3551,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private function remapDottedQuery(BaseQuery $query, array $aliasSet, array $mainAttributes): void
     {
         $method = $query->getMethod();
-        if ($method->isJoin() || $method === Method::Select) {
+        if ($method === Method::Select) {
+            return;
+        }
+
+        if ($method->isJoin()) {
+            if ($query->isNestedJoin()) {
+                foreach ($query->getJoinOnQueries() as $onQuery) {
+                    if ($onQuery->getMethod() === Method::On) {
+                        continue;
+                    }
+                    $this->remapDottedQuery($onQuery, $aliasSet, $mainAttributes);
+                }
+            }
+
             return;
         }
 
@@ -3815,36 +3828,69 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $resolvedTable = $this->getSQLTableRaw($this->filter($joinTable));
             $query->setAttribute($resolvedTable);
 
-            $values = $query->getValues();
             $method = $query->getMethod();
-            $aliasIndex = ($method === Method::CrossJoin || $method === Method::NaturalJoin) ? 0 : 3;
-            $joinAlias = $this->sanitizeJoinAlias(
-                \is_string($values[$aliasIndex] ?? null) ? $values[$aliasIndex] : ''
-            );
+            $joinAlias = $this->sanitizeJoinAlias($query->getJoinAlias());
             if ($joinAlias === '') {
                 $joinAlias = 'j'.$joinIndex;
             }
             $joinIndex++;
 
-            if ($aliasIndex === 3 && \count($values) >= 3) {
-                $left = $values[0] ?? null;
-                $right = $values[2] ?? null;
-                if (! \is_string($left) || ! \is_string($right)) {
-                    throw new QueryException('Join columns must be strings');
+            if ($method === Method::CrossJoin || $method === Method::NaturalJoin) {
+                $query->setValues([$joinAlias]);
+            } elseif ($query->isNestedJoin()) {
+                $query->setValues($this->remapNestedJoinValues($query, $alias, $joinAlias));
+            } else {
+                $values = $query->getValues();
+                if (\count($values) >= 3) {
+                    $left = $values[0] ?? null;
+                    $right = $values[2] ?? null;
+                    if (! \is_string($left) || ! \is_string($right)) {
+                        throw new QueryException('Join columns must be strings');
+                    }
+                    $values[0] = $this->qualifyJoinColumn($left, $alias);
+                    $values[2] = $this->qualifyJoinColumn($right, $joinAlias);
+                    $values[3] = $joinAlias;
+                    $query->setValues($values);
                 }
-                $values[0] = $this->qualifyJoinColumn($left, $alias);
-                $values[2] = $this->qualifyJoinColumn($right, $joinAlias);
-                $values[3] = $joinAlias;
-                $query->setValues($values);
-            } elseif ($aliasIndex === 0) {
-                $values[0] = $joinAlias;
-                $query->setValues($values);
             }
 
             $joinTablePrefixes[] = ['table' => $joinTable, 'alias' => $joinAlias];
         }
 
         return $joinTablePrefixes;
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function remapNestedJoinValues(BaseQuery $query, string $mainAlias, string $joinAlias): array
+    {
+        $values = [$joinAlias];
+        foreach ($query->getJoinOnQueries() as $onQuery) {
+            $values[] = $this->remapNestedJoinOnQuery($onQuery, $mainAlias, $joinAlias);
+        }
+
+        return $values;
+    }
+
+    private function remapNestedJoinOnQuery(BaseQuery $onQuery, string $mainAlias, string $joinAlias): BaseQuery
+    {
+        if ($onQuery->getMethod() !== Method::On) {
+            return $onQuery;
+        }
+
+        $values = $onQuery->getValues();
+        $left = $values[0] ?? null;
+        $right = $values[2] ?? null;
+        if (! \is_string($left) || $left === '' || ! \is_string($right) || $right === '') {
+            throw new QueryException('Join ON requires left and right columns');
+        }
+
+        $values[0] = $this->qualifyJoinColumn($left, $mainAlias);
+        $values[2] = $this->qualifyJoinColumn($right, $joinAlias);
+        $onQuery->setValues($values);
+
+        return $onQuery;
     }
 
     /**

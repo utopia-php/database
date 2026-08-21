@@ -44,7 +44,7 @@
         "utopia-php/cache": "^4.0",
         "utopia-php/pools": "^2.0",
         "utopia-php/mongo": "^1.0",
-        "utopia-php/query": "^0.4",
+        "utopia-php/query": "^0.5",
         "utopia-php/async": "^0.1"
     },
     "require-dev": {

@@ -5681,10 +5681,10 @@ trait JoinTests
         $cols = [$pCol, $rCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection($pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createCollection(new Collection(id: $pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
         $database->createAttribute($pCol, Attribute::string(key: 'name', size: 100, required: true));
 
-        $database->createCollection($rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createCollection(new Collection(id: $rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
         $database->createAttribute($rCol, Attribute::string(key: 'prod_uid', required: true));
         $database->createAttribute($rCol, Attribute::integer(key: 'score', required: true));
 

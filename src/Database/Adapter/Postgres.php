@@ -625,7 +625,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $rawExpressions = [];
 
         foreach ($attributes as $i => $attr) {
-            $order = empty($orders[$i]) || $type === IndexType::Fulltext ? '' : $orders[$i];
+            $order = $type === IndexType::Fulltext ? '' : Index::direction($orders[$i] ?? null);
             $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === ColumnType::Object->value;
 
             if ($isNestedPath) {

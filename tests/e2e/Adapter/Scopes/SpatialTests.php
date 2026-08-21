@@ -20,6 +20,7 @@ use Utopia\Database\Relationship;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 trait SpatialTests
 {
@@ -769,10 +770,10 @@ trait SpatialTests
             $database->createCollection(new Collection(id: $collOrderIndex));
             $database->createAttribute($collOrderIndex, Attribute::point(key: 'loc', required: true));
             if ($orderSupported) {
-                $this->assertTrue($database->createIndex($collOrderIndex, Index::spatial(key: 'idx_loc', attributes: ['loc'], orders: [OrderDirection::Desc->value])));
+                $this->assertTrue($database->createIndex($collOrderIndex, Index::spatial(key: 'idx_loc', attributes: ['loc'], orders: [Order::Desc])));
             } else {
                 try {
-                    $database->createIndex($collOrderIndex, Index::spatial(key: 'idx_loc', attributes: ['loc'], orders: ['DESC']));
+                    $database->createIndex($collOrderIndex, Index::spatial(key: 'idx_loc', attributes: ['loc'], orders: [Order::Desc]));
                     $this->fail('Expected exception when orders are provided for spatial index on unsupported adapter');
                 } catch (\Throwable $e) {
                     $this->assertStringContainsString('Spatial index', $e->getMessage());
@@ -1943,12 +1944,12 @@ trait SpatialTests
             // 3) Spatial index order support: providing orders should fail if not supported
             $orderSupported = $database->getAdapter()->supports(Capability::SpatialIndexOrder);
             if ($orderSupported) {
-                $this->assertTrue($database->createIndex($collectionName, Index::spatial(key: 'idx_geom_desc', attributes: ['geom'], orders: [OrderDirection::Desc->value])));
+                $this->assertTrue($database->createIndex($collectionName, Index::spatial(key: 'idx_geom_desc', attributes: ['geom'], orders: [Order::Desc])));
                 // cleanup
                 $this->assertTrue($database->deleteIndex($collectionName, 'idx_geom_desc'));
             } else {
                 try {
-                    $database->createIndex($collectionName, Index::spatial(key: 'idx_geom_desc', attributes: ['geom'], orders: ['DESC']));
+                    $database->createIndex($collectionName, Index::spatial(key: 'idx_geom_desc', attributes: ['geom'], orders: [Order::Desc]));
                     $this->fail('Expected error when providing orders for spatial index on adapter without order support');
                 } catch (\Throwable $e) {
                     $this->assertTrue(true);

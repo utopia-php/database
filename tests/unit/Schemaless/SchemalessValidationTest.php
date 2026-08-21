@@ -17,7 +17,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
-use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\Order;
 
 class SchemalessValidationTest extends TestCase
 {
@@ -194,13 +194,13 @@ class SchemalessValidationTest extends TestCase
 
         $this->assertTrue($this->database->createIndex(
             'sl_idx_dup',
-            Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])
+            Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [Order::Asc])
         ));
 
         try {
             $this->database->createIndex(
                 'sl_idx_dup',
-                Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [OrderDirection::Asc->value])
+                Index::key(key: 'duplicate', attributes: ['name'], lengths: [0], orders: [Order::Asc])
             );
             $this->fail('Failed to throw exception');
         } catch (\Exception $e) {
@@ -241,13 +241,13 @@ class SchemalessValidationTest extends TestCase
 
         $this->assertTrue($this->database->createIndex(
             'sl_ttl_dup',
-            Index::ttl(key: 'idx_ttl_expires', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 3600)
+            Index::ttl(key: 'idx_ttl_expires', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600)
         ));
 
         try {
             $this->database->createIndex(
                 'sl_ttl_dup',
-                Index::ttl(key: 'idx_ttl_expires_duplicate', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 7200)
+                Index::ttl(key: 'idx_ttl_expires_duplicate', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200)
             );
             $this->fail('Expected exception for duplicate TTL index');
         } catch (\Exception $e) {

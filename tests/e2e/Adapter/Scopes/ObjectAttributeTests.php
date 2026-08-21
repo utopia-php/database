@@ -17,8 +17,8 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\Order;
 
 trait ObjectAttributeTests
 {
@@ -673,7 +673,7 @@ trait ObjectAttributeTests
         // Test 8: Try to create Object index with orders (should fail)
         $exceptionThrown = false;
         try {
-            $database->createIndex($collectionId, Index::object(key: 'idx_ordered_gin', attributes: ['metadata'], orders: [OrderDirection::Asc->value]));
+            $database->createIndex($collectionId, Index::object(key: 'idx_ordered_gin', attributes: ['metadata'], orders: [Order::Asc]));
         } catch (\Exception $e) {
             $exceptionThrown = true;
             $this->assertInstanceOf(IndexException::class, $e);

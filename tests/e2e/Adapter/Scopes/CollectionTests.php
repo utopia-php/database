@@ -32,6 +32,7 @@ use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 trait CollectionTests
 {
@@ -133,10 +134,10 @@ trait CollectionTests
         ];
 
         $indexes = [
-            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256], orders: ['ASC']),
-            Index::key(key: 'index2', attributes: ['attribute2'], orders: ['DESC']),
-            Index::key(key: 'index3', attributes: ['attribute3', 'attribute2'], orders: ['DESC', 'ASC']),
-            Index::key(key: 'index4', attributes: ['attribute4'], orders: ['DESC']),
+            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256], orders: [Order::Asc]),
+            Index::key(key: 'index2', attributes: ['attribute2'], orders: [Order::Desc]),
+            Index::key(key: 'index3', attributes: ['attribute3', 'attribute2'], orders: [Order::Desc, Order::Asc]),
+            Index::key(key: 'index4', attributes: ['attribute4'], orders: [Order::Desc]),
         ];
 
         $collection = $database->createCollection(new Collection(id: 'withSchema', attributes: $attributes, indexes: $indexes));
@@ -181,7 +182,7 @@ trait CollectionTests
         $collection2 = $database->createCollection(new Collection(id: 'with-dash', attributes: [
             Attribute::string(key: 'attribute-one', size: 256),
         ], indexes: [
-            Index::key(key: 'index-one', attributes: ['attribute-one'], lengths: [256], orders: ['ASC']),
+            Index::key(key: 'index-one', attributes: ['attribute-one'], lengths: [256], orders: [Order::Asc]),
         ]));
 
         $this->assertEquals(false, $collection2->isEmpty());
@@ -408,11 +409,11 @@ trait CollectionTests
 
         $indexes = [
             Index::key(key: 'idx_username', attributes: ['username'], lengths: [100]),
-            Index::key(key: 'idx_username_uid', attributes: ['username', '$id'], lengths: [99, 200], orders: [OrderDirection::Desc->value]),
+            Index::key(key: 'idx_username_uid', attributes: ['username', '$id'], lengths: [99, 200], orders: [Order::Desc]),
         ];
 
         if ($database->getAdapter()->supports(Capability::IndexArray)) {
-            $indexes[] = Index::key(key: 'idx_cards', attributes: ['cards'], lengths: [500], orders: [OrderDirection::Desc->value]);
+            $indexes[] = Index::key(key: 'idx_cards', attributes: ['cards'], lengths: [500], orders: [Order::Desc]);
         }
 
         $collection = $database->createCollection(new Collection(id: 'collection98', attributes: $attributes, indexes: $indexes, permissions: [
@@ -464,7 +465,7 @@ trait CollectionTests
         ];
 
         $indexes = [
-            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256], orders: ['ASC']),
+            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256], orders: [Order::Asc]),
         ];
 
         foreach ($keywords as $keyword) {
@@ -1328,8 +1329,8 @@ trait CollectionTests
         ];
 
         $indexes = [
-            Index::key(key: 'idx_name', attributes: ['name'], lengths: [128], orders: ['ASC']),
-            Index::key(key: 'idx_name_age', attributes: ['name', 'age'], lengths: [128, null], orders: ['ASC', 'DESC']),
+            Index::key(key: 'idx_name', attributes: ['name'], lengths: [128], orders: [Order::Asc]),
+            Index::key(key: 'idx_name_age', attributes: ['name', 'age'], lengths: [128, null], orders: [Order::Asc, Order::Desc]),
         ];
 
         $collectionDocument = $database->createCollection(new Collection(id: $collection, attributes: $attributes, indexes: $indexes, permissions: [

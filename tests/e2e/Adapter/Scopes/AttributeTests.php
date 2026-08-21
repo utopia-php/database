@@ -28,8 +28,8 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
-use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\Order;
 use Utopia\Validator\Range;
 
 trait AttributeTests
@@ -413,7 +413,7 @@ trait AttributeTests
         $database->createAttribute($this->getColorsCollection(), Attribute::string(key: 'name', size: 128, required: true));
         $database->createAttribute($this->getColorsCollection(), Attribute::string(key: 'hex', size: 128, required: true));
 
-        $database->createIndex($this->getColorsCollection(), Index::key(key: 'index1', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($this->getColorsCollection(), Index::key(key: 'index1', attributes: ['name'], lengths: [128], orders: [Order::Asc]));
 
         $database->createDocument($this->getColorsCollection(), new Document([
             '$permissions' => [
@@ -859,7 +859,7 @@ trait AttributeTests
         $this->assertEquals('string', $doc->getAttribute('rename_me'));
 
         // Create an index to check later
-        $database->createIndex('rename_test', Index::key(key: 'renameIndexes', attributes: ['rename_me'], orders: [OrderDirection::Desc->value, OrderDirection::Desc->value]));
+        $database->createIndex('rename_test', Index::key(key: 'renameIndexes', attributes: ['rename_me'], orders: [Order::Desc, Order::Desc]));
 
         $database->updateAttribute(
             collection: 'rename_test',
@@ -989,7 +989,7 @@ trait AttributeTests
         $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
         $database->createAttribute($collection, Attribute::string(key: 'hex', size: 128, required: true));
-        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['name'], lengths: [128], orders: [Order::Asc]));
         $database->createDocument($collection, new Document([
             '$permissions' => [
                 Permission::read(Role::any()),

@@ -413,7 +413,7 @@ class Memory extends Adapter implements Feature\Relationships
                 'type' => $index->type->value,
                 'attributes' => $index->attributes,
                 'lengths' => $index->lengths,
-                'orders' => $index->orders,
+                'orders' => $index->getAttribute('orders', []),
             ];
         }
 
@@ -1067,7 +1067,7 @@ class Memory extends Adapter implements Feature\Relationships
         $type = $index->type->value;
         $attributes = $index->attributes;
         $lengths = $index->lengths;
-        $orders = $index->orders;
+        $orders = $index->getAttribute('orders', []);
 
         $hashTable = [];
         if ($type === IndexType::Unique->value && ! empty($attributes)) {

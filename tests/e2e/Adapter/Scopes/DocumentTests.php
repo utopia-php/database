@@ -32,6 +32,7 @@ use Utopia\Query\CursorDirection;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 trait DocumentTests
 {
@@ -2808,7 +2809,7 @@ trait DocumentTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertEquals(true, $database->createIndex($this->getMoviesCollection(), Index::unique(key: 'uniqueIndex', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex($this->getMoviesCollection(), Index::unique(key: 'uniqueIndex', attributes: ['name'], lengths: [128], orders: [Order::Asc])));
 
         try {
             $database->createDocument($this->getMoviesCollection(), new Document([
@@ -2850,7 +2851,7 @@ trait DocumentTests
 
         // Ensure the unique index exists (created in testUniqueIndexDuplicate)
         try {
-            $database->createIndex($this->getMoviesCollection(), Index::unique(key: 'uniqueIndex', attributes: ['name'], lengths: [128], orders: [OrderDirection::Asc->value]));
+            $database->createIndex($this->getMoviesCollection(), Index::unique(key: 'uniqueIndex', attributes: ['name'], lengths: [128], orders: [Order::Asc]));
         } catch (\Throwable) {
             // Index may already exist
         }

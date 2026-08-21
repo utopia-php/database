@@ -13,9 +13,9 @@ use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Validator\Authorization;
-use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
+use Utopia\Query\Schema\Order;
 
 /**
  * Wraps a source Database and replicates write operations to an optional destination Database.
@@ -1289,7 +1289,7 @@ class Mirror extends Database
             Attribute::string(key: 'status'),
         ], indexes: [
             Index::unique(key: '_unique_collection', attributes: ['collectionId'], lengths: [Database::LENGTH_KEY]),
-            Index::key(key: '_status_index', attributes: ['status'], lengths: [Database::LENGTH_KEY], orders: [OrderDirection::Asc->value]),
+            Index::key(key: '_status_index', attributes: ['status'], lengths: [Database::LENGTH_KEY], orders: [Order::Asc]),
         ]));
     }
 

@@ -31,7 +31,7 @@ class IndexModelTest extends TestCase
             key: 'idx_compound',
             attributes: ['name', 'email'],
             lengths: [128, 256],
-            orders: ['ASC', 'DESC'],
+            orders: [Order::Asc, Order::Desc],
             ttl: 3600,
         );
 
@@ -39,8 +39,17 @@ class IndexModelTest extends TestCase
         $this->assertSame(IndexType::Unique, $index->type);
         $this->assertSame(['name', 'email'], $index->attributes);
         $this->assertSame([128, 256], $index->lengths);
-        $this->assertSame(['ASC', 'DESC'], $index->orders);
+        $this->assertSame([Order::Asc, Order::Desc], $index->orders);
         $this->assertSame(3600, $index->ttl);
+    }
+
+    public function testConstructorRejectsStringOrders(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('Index order must be Order or null');
+
+        // @phpstan-ignore-next-line
+        Index::key(key: 'idx_enabled', attributes: ['enabled'], orders: ['ASC']);
     }
 
     public function testConstructorAcceptsOrderEnum(): void
@@ -51,13 +60,13 @@ class IndexModelTest extends TestCase
             orders: [Order::Asc, Order::Desc],
         );
 
-        $this->assertSame(['ASC', 'DESC'], $index->orders);
+        $this->assertSame([Order::Asc, Order::Desc], $index->orders);
         $this->assertSame(['ASC', 'DESC'], $index->toDocument()->getAttribute('orders'));
     }
 
     public function testToDocumentProducesCorrectStructure(): void
     {
-        $index = Index::unique(key: 'idx_email', attributes: ['email'], lengths: [256], orders: ['ASC']);
+        $index = Index::unique(key: 'idx_email', attributes: ['email'], lengths: [256], orders: [Order::Asc]);
 
         $doc = $index->toDocument();
 
@@ -73,7 +82,7 @@ class IndexModelTest extends TestCase
 
     public function testArrayAccessMatchesDocumentShape(): void
     {
-        $index = Index::unique(key: 'idx_email', attributes: ['email'], lengths: [128], orders: ['ASC']);
+        $index = Index::unique(key: 'idx_email', attributes: ['email'], lengths: [128], orders: [Order::Asc]);
 
         $this->assertSame('idx_email', $index['$id']);
         $this->assertSame('idx_email', $index['key']);
@@ -88,7 +97,7 @@ class IndexModelTest extends TestCase
             key: 'idx_status_name',
             attributes: ['status', 'name'],
             lengths: [32, 128],
-            orders: ['ASC', 'ASC'],
+            orders: [Order::Asc, Order::Asc],
             ttl: 7200,
         );
 
@@ -169,7 +178,7 @@ class IndexModelTest extends TestCase
 
     public function testWithNullLengthsAndOrders(): void
     {
-        $index = Index::key(key: 'idx_mixed', attributes: ['a', 'b'], lengths: [128, null], orders: ['ASC', null]);
+        $index = Index::key(key: 'idx_mixed', attributes: ['a', 'b'], lengths: [128, null], orders: [Order::Asc, null]);
 
         $doc = $index->toDocument();
         $this->assertSame([128, null], $doc->getAttribute('lengths'));
@@ -177,12 +186,12 @@ class IndexModelTest extends TestCase
 
         $restored = Index::fromDocument($doc);
         $this->assertSame([128, null], $restored->lengths);
-        $this->assertSame(['ASC', null], $restored->orders);
+        $this->assertSame([Order::Asc, null], $restored->orders);
     }
 
     public function testMultipleAttributeIndex(): void
     {
-        $index = Index::key(key: 'idx_multi', attributes: ['firstName', 'lastName', 'email'], lengths: [64, 64, 256], orders: ['ASC', 'ASC', 'DESC']);
+        $index = Index::key(key: 'idx_multi', attributes: ['firstName', 'lastName', 'email'], lengths: [64, 64, 256], orders: [Order::Asc, Order::Asc, Order::Desc]);
 
         $doc = $index->toDocument();
         $restored = Index::fromDocument($doc);
@@ -242,7 +251,7 @@ class IndexModelTest extends TestCase
             key: 'idx',
             attributes: ['name', 'email'],
             lengths: [128, 256],
-            orders: ['ASC', 'DESC'],
+            orders: [Order::Asc, Order::Desc],
             ttl: 3600,
         );
 
@@ -251,7 +260,7 @@ class IndexModelTest extends TestCase
         $this->assertSame(IndexType::Key, $index->type);
         $this->assertSame(['name', 'email'], $index->attributes);
         $this->assertSame([128, 256], $index->lengths);
-        $this->assertSame(['ASC', 'DESC'], $index->orders);
+        $this->assertSame([Order::Asc, Order::Desc], $index->orders);
         $this->assertSame(3600, $index->ttl);
     }
 

@@ -15,9 +15,9 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
-use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 trait IndexTests
 {
@@ -70,12 +70,12 @@ trait IndexTests
         $this->assertEquals(true, $database->createAttribute('indexes', Attribute::boolean(key: 'boolean', required: true)));
 
         // Indexes
-        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index1', attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::Asc->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index2', attributes: ['float', 'integer'], orders: [OrderDirection::Asc->value, OrderDirection::Desc->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index3', attributes: ['integer', 'boolean'], orders: [OrderDirection::Asc->value, OrderDirection::Desc->value, OrderDirection::Desc->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', Index::unique(key: 'index4', attributes: ['string'], lengths: [128], orders: [OrderDirection::Asc->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', Index::unique(key: 'index5', attributes: ['$id', 'string'], lengths: [128], orders: [OrderDirection::Asc->value])));
-        $this->assertEquals(true, $database->createIndex('indexes', Index::unique(key: 'order', attributes: ['order'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index1', attributes: ['string', 'integer'], lengths: [128], orders: [Order::Asc])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index2', attributes: ['float', 'integer'], orders: [Order::Asc, Order::Desc])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index3', attributes: ['integer', 'boolean'], orders: [Order::Asc, Order::Desc, Order::Desc])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::unique(key: 'index4', attributes: ['string'], lengths: [128], orders: [Order::Asc])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::unique(key: 'index5', attributes: ['$id', 'string'], lengths: [128], orders: [Order::Asc])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::unique(key: 'order', attributes: ['order'], lengths: [128], orders: [Order::Asc])));
 
         $collection = $database->getCollection('indexes');
         $this->assertCount(6, $collection->getAttribute('indexes'));
@@ -92,21 +92,21 @@ trait IndexTests
         $this->assertCount(0, $collection->getAttribute('indexes'));
 
         // Test non-shared tables duplicates throw duplicate
-        $database->createIndex('indexes', Index::key(key: 'duplicate', attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::Asc->value]));
+        $database->createIndex('indexes', Index::key(key: 'duplicate', attributes: ['string', 'boolean'], lengths: [128], orders: [Order::Asc]));
         try {
-            $database->createIndex('indexes', Index::key(key: 'duplicate', attributes: ['string', 'boolean'], lengths: [128], orders: [OrderDirection::Asc->value]));
+            $database->createIndex('indexes', Index::key(key: 'duplicate', attributes: ['string', 'boolean'], lengths: [128], orders: [Order::Asc]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
         }
 
         // Test delete index when index does not exist
-        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index1', attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index1', attributes: ['string', 'integer'], lengths: [128], orders: [Order::Asc])));
         $this->assertEquals(true, $this->deleteIndex('indexes', 'index1'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
         // Test delete index when attribute does not exist
-        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index1', attributes: ['string', 'integer'], lengths: [128], orders: [OrderDirection::Asc->value])));
+        $this->assertEquals(true, $database->createIndex('indexes', Index::key(key: 'index1', attributes: ['string', 'integer'], lengths: [128], orders: [Order::Asc])));
         $this->assertEquals(true, $database->deleteAttribute('indexes', 'string'));
         $this->assertEquals(true, $database->deleteIndex('indexes', 'index1'));
 
@@ -155,8 +155,8 @@ trait IndexTests
         $database->createAttribute($collection, Attribute::string(key: 'verbose', size: 128, required: true));
         $database->createAttribute($collection, Attribute::integer(key: 'symbol', required: true));
 
-        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
-        $database->createIndex($collection, Index::key(key: 'index2', attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['verbose'], lengths: [128], orders: [Order::Asc]));
+        $database->createIndex($collection, Index::key(key: 'index2', attributes: ['symbol'], lengths: [0], orders: [Order::Asc]));
 
         $index = $database->renameIndex($collection, 'index1', 'index3');
 
@@ -193,8 +193,8 @@ trait IndexTests
         $database->createCollection(new Collection(id: $collection));
         $database->createAttribute($collection, Attribute::string(key: 'verbose', size: 128, required: true));
         $database->createAttribute($collection, Attribute::integer(key: 'symbol', required: true));
-        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['verbose'], lengths: [128], orders: [OrderDirection::Asc->value]));
-        $database->createIndex($collection, Index::key(key: 'index2', attributes: ['symbol'], lengths: [0], orders: [OrderDirection::Asc->value]));
+        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['verbose'], lengths: [128], orders: [Order::Asc]));
+        $database->createIndex($collection, Index::key(key: 'index2', attributes: ['symbol'], lengths: [0], orders: [Order::Asc]));
         $database->renameIndex($collection, 'index1', 'index3');
 
         self::$renameIndexFixtureInit = true;
@@ -355,7 +355,7 @@ trait IndexTests
         ];
 
         $this->assertTrue(
-            $database->createIndex($col, Index::ttl(key: 'idx_ttl_valid', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 3600))
+            $database->createIndex($col, Index::ttl(key: 'idx_ttl_valid', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600))
         );
 
         $collection = $database->getCollection($col);
@@ -392,14 +392,14 @@ trait IndexTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
 
         $this->assertTrue(
-            $database->createIndex($col, Index::ttl(key: 'idx_ttl_min', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value]))
+            $database->createIndex($col, Index::ttl(key: 'idx_ttl_min', attributes: ['expiresAt'], orders: [Order::Asc]))
         );
 
         $col2 = uniqid('sl_ttl_collection');
 
         $expiresAtAttr = Attribute::datetime(key: 'expiresAt', signed: false, filters: ['datetime']);
 
-        $ttlIndexDoc = Index::ttl(key: 'idx_ttl_collection', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 7200);
+        $ttlIndexDoc = Index::ttl(key: 'idx_ttl_collection', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200);
 
         $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 

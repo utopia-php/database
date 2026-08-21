@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\Index as IndexValidator;
-use Utopia\Query\OrderDirection;
+use Utopia\Query\Schema\Order;
 
 class IndexTest extends TestCase
 {
@@ -152,7 +152,7 @@ class IndexTest extends TestCase
         $this->assertStringContainsString('Object index can be created on a single object attribute', $validator->getDescription());
 
         // Invalid: Object index with orders
-        $invalidIndexOrder = Index::object(key: 'idx_gin_order', attributes: ['data'], orders: ['asc']);
+        $invalidIndexOrder = Index::object(key: 'idx_gin_order', attributes: ['data'], orders: [Order::Asc]);
         $this->assertFalse($validator->isValid($invalidIndexOrder));
         $this->assertStringContainsString('Object index do not support explicit orders', $validator->getDescription());
 
@@ -236,7 +236,7 @@ class IndexTest extends TestCase
         ];
 
         $indexes = [
-            Index::fullText(key: 'index1', attributes: ['title', 'title'], orders: ['asc', 'desc']),
+            Index::fullText(key: 'index1', attributes: ['title', 'title'], orders: [Order::Asc, Order::Desc]),
         ];
 
         $validator = new IndexValidator($attributes, $indexes, 768);
@@ -320,7 +320,7 @@ class IndexTest extends TestCase
         $this->assertStringContainsString('Trigram index can only be created on string type attributes', $validator->getDescription());
 
         // Invalid: Trigram index with orders
-        $invalidIndexOrder = Index::trigram(key: 'idx_trigram_order', attributes: ['name'], orders: ['asc']);
+        $invalidIndexOrder = Index::trigram(key: 'idx_trigram_order', attributes: ['name'], orders: [Order::Asc]);
         $this->assertFalse($validator->isValid($invalidIndexOrder));
         $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $validator->getDescription());
 
@@ -371,31 +371,31 @@ class IndexTest extends TestCase
         );
 
         // Valid: TTL index on single datetime attribute with valid TTL
-        $validIndex = Index::ttl(key: 'idx_ttl_valid', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 3600);
+        $validIndex = Index::ttl(key: 'idx_ttl_valid', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600);
         $this->assertTrue($validator->isValid($validIndex));
 
         // Invalid: TTL index with ttl = 0
-        $invalidIndexZero = Index::ttl(key: 'idx_ttl_zero', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 0);
+        $invalidIndexZero = Index::ttl(key: 'idx_ttl_zero', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 0);
         $this->assertFalse($validator->isValid($invalidIndexZero));
         $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
 
         // Invalid: TTL index with TTL < 0
-        $invalidIndexNegative = Index::ttl(key: 'idx_ttl_negative', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: -100);
+        $invalidIndexNegative = Index::ttl(key: 'idx_ttl_negative', attributes: ['expiresAt'], orders: [Order::Asc], ttl: -100);
         $this->assertFalse($validator->isValid($invalidIndexNegative));
         $this->assertEquals('TTL must be at least 1 second', $validator->getDescription());
 
         // Invalid: TTL index on non-datetime attribute
-        $invalidIndexType = Index::ttl(key: 'idx_ttl_invalid_type', attributes: ['name'], orders: [OrderDirection::Asc->value], ttl: 3600);
+        $invalidIndexType = Index::ttl(key: 'idx_ttl_invalid_type', attributes: ['name'], orders: [Order::Asc], ttl: 3600);
         $this->assertFalse($validator->isValid($invalidIndexType));
         $this->assertStringContainsString('TTL index can only be created on datetime attributes', $validator->getDescription());
 
         // Invalid: TTL index on multiple attributes
-        $invalidIndexMulti = Index::ttl(key: 'idx_ttl_multi', attributes: ['expiresAt', 'name'], orders: [OrderDirection::Asc->value, OrderDirection::Asc->value], ttl: 3600);
+        $invalidIndexMulti = Index::ttl(key: 'idx_ttl_multi', attributes: ['expiresAt', 'name'], orders: [Order::Asc, Order::Asc], ttl: 3600);
         $this->assertFalse($validator->isValid($invalidIndexMulti));
         $this->assertStringContainsString('TTL indexes must be created on a single datetime attribute', $validator->getDescription());
 
         // Valid: TTL index with minimum valid TTL (1 second)
-        $validIndexMin = Index::ttl(key: 'idx_ttl_min', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value]);
+        $validIndexMin = Index::ttl(key: 'idx_ttl_min', attributes: ['expiresAt'], orders: [Order::Asc]);
         $this->assertTrue($validator->isValid($validIndexMin));
 
         // Invalid: any additional TTL index when another TTL index already exists
@@ -421,7 +421,7 @@ class IndexTest extends TestCase
             true   // supportForTTLIndexes
         );
 
-        $duplicateTTLIndex = Index::ttl(key: 'idx_ttl_duplicate', attributes: ['expiresAt'], orders: [OrderDirection::Asc->value], ttl: 7200);
+        $duplicateTTLIndex = Index::ttl(key: 'idx_ttl_duplicate', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200);
         $this->assertFalse($validatorWithExisting->isValid($duplicateTTLIndex));
         $this->assertEquals('There can be only one TTL index in a collection', $validatorWithExisting->getDescription());
 

@@ -21,6 +21,7 @@ use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 class MappingAttributeTest extends TestCase
 {
@@ -263,14 +264,14 @@ class MappingAttributeTest extends TestCase
             type: IndexType::Fulltext,
             attributes: ['title', 'content'],
             lengths: [100, 200],
-            orders: ['asc', 'desc'],
+            orders: [Order::Asc, Order::Desc],
         );
 
         $this->assertEquals('idx_test', $index->key);
         $this->assertEquals(IndexType::Fulltext, $index->type);
         $this->assertEquals(['title', 'content'], $index->attributes);
         $this->assertEquals([100, 200], $index->lengths);
-        $this->assertEquals(['asc', 'desc'], $index->orders);
+        $this->assertEquals([Order::Asc, Order::Desc], $index->orders);
     }
 
     public function testTableIndexWithDefaults(): void

@@ -9,6 +9,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Index as IndexVO;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 use Utopia\Validator;
 
 /**
@@ -417,9 +418,9 @@ class Index extends Validator
                     return false;
                 }
 
-                $direction = $index->orders[$attributePosition] ?? '';
-                if (! empty($direction)) {
-                    $this->message = 'Invalid index order "'.$direction.'" on array attribute "'.$attribute->key.'"';
+                $direction = $index->orders[$attributePosition] ?? null;
+                if ($direction !== null) {
+                    $this->message = 'Invalid index order "'.$direction->value.'" on array attribute "'.$attribute->key.'"';
 
                     return false;
                 }
@@ -777,8 +778,10 @@ class Index extends Validator
             }
 
             $ordersMatch = false;
-            if (empty(\array_diff($existingIndex->orders, $index->orders)) &&
-                empty(\array_diff($index->orders, $existingIndex->orders))) {
+            $existingOrders = self::orderValues($existingIndex);
+            $incomingOrders = self::orderValues($index);
+            if (empty(\array_diff($existingOrders, $incomingOrders)) &&
+                empty(\array_diff($incomingOrders, $existingOrders))) {
                 $ordersMatch = true;
             }
 
@@ -915,5 +918,16 @@ class Index extends Validator
     private function getBaseAttributeFromDottedAttribute(string $attribute): string
     {
         return $this->isDottedAttribute($attribute) ? \explode('.', $attribute, 2)[0] : $attribute;
+    }
+
+    /**
+     * @return array<string|null>
+     */
+    private static function orderValues(IndexVO $index): array
+    {
+        return \array_map(
+            static fn (?Order $order): ?string => $order?->value,
+            $index->orders,
+        );
     }
 }

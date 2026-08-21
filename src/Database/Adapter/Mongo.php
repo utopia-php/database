@@ -705,18 +705,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                     switch ($index->type) {
                         case IndexType::Key:
-                            $order = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$j] ?? ''))) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
                             break;
                         case IndexType::Fulltext:
                             // MongoDB fulltext index is just 'text'
                             $order = 'text';
                             break;
                         case IndexType::Unique:
-                            $order = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$j] ?? ''))) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
                             $unique = true;
                             break;
                         case IndexType::Ttl:
-                            $order = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$j] ?? ''))) ?? OrderDirection::Asc);
+                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
                             break;
                         default:
                             // index not supported
@@ -1101,7 +1101,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $attributes[$i] = $this->filter($this->getInternalKeyForAttribute($attribute));
             }
 
-            $orderType = $this->getOrder(OrderDirection::tryFrom(\strtoupper((string) ($orders[$i] ?? ''))) ?? OrderDirection::Asc);
+            $orderType = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$i] ?? null)) ?? OrderDirection::Asc);
             $indexKey[$attributes[$i]] = $orderType;
 
             switch ($type) {
@@ -1299,20 +1299,18 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $indexAttributes = $index['attributes'] ?? [];
             /** @var array<int> $indexLengths */
             $indexLengths = $index['lengths'] ?? [];
-            /** @var array<string> $indexOrders */
-            $indexOrders = $index['orders'] ?? [];
             $rawIndexType = $index['type'] ?? 'key';
             $indexTypeStr = \is_string($rawIndexType) ? $rawIndexType : (\is_scalar($rawIndexType) ? (string) $rawIndexType : 'key');
             $rawIndexTtl = $index['ttl'] ?? 0;
             $indexTtlInt = \is_int($rawIndexTtl) ? $rawIndexTtl : (\is_numeric($rawIndexTtl) ? (int) $rawIndexTtl : 0);
-            $createdindex = $this->createIndex($collection, new Index(
-                key: $new,
-                type: IndexType::from($indexTypeStr),
-                attributes: $indexAttributes,
-                lengths: $indexLengths,
-                orders: $indexOrders,
-                ttl: $indexTtlInt,
-            ), $indexAttributeTypes);
+            $createdindex = $this->createIndex($collection, Index::fromArray([
+                'key' => $new,
+                'type' => $indexTypeStr,
+                'attributes' => $indexAttributes,
+                'lengths' => $indexLengths,
+                'orders' => $index['orders'] ?? [],
+                'ttl' => $indexTtlInt,
+            ]), $indexAttributeTypes);
         } catch (Exception $e) {
             throw $this->processException($e);
         }

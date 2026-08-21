@@ -257,7 +257,7 @@ class Redis extends Adapter implements
                 'type' => $index->type->value,
                 'attributes' => $index->attributes,
                 'lengths' => $index->lengths,
-                'orders' => $index->orders,
+                'orders' => $index->getAttribute('orders', []),
             ];
         }
 
@@ -600,7 +600,7 @@ class Redis extends Adapter implements
         $type = $index->type->value;
         $attributes = $index->attributes;
         $lengths = $index->lengths;
-        $orders = $index->orders;
+        $orders = $index->getAttribute('orders', []);
 
         $this->tx(function (RedisClient $client) use ($metaKey, $collection, $id, $type, $attributes, $lengths, $orders): void {
             $indexes = $this->readIndexesField($client, $metaKey);
@@ -667,7 +667,7 @@ class Redis extends Adapter implements
                 'type' => $type,
                 'attributes' => \array_values($attributes),
                 'lengths' => \array_values($lengths),
-                'orders' => \array_values($orders),
+                'orders' => \array_values(\is_array($orders) ? $orders : []),
             ];
 
             $client->hSet($metaKey, 'indexes', \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));

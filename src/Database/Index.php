@@ -13,7 +13,7 @@ use Utopia\Query\Schema\Order;
  * @property IndexType $type
  * @property array<string> $attributes
  * @property array<int|null> $lengths
- * @property array<string|null> $orders
+ * @property array<Order|null> $orders
  * @property int $ttl
  */
 class Index extends Document
@@ -21,7 +21,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public function __construct(
         string $key,
@@ -62,7 +62,9 @@ class Index extends Document
             case 'lengths':
                 return $this->getAttribute('lengths', []);
             case 'orders':
-                return $this->getAttribute('orders', []);
+                $stored = $this->getAttribute('orders', []);
+
+                return self::decodeOrders(\is_array($stored) ? $stored : []);
             case 'ttl':
                 /** @var int $ttl */
                 $ttl = $this->getAttribute('ttl', 1);
@@ -97,7 +99,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function key(
         string $key,
@@ -119,7 +121,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function index(
         string $key,
@@ -141,7 +143,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function unique(
         string $key,
@@ -163,7 +165,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function fullText(
         string $key,
@@ -185,7 +187,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function spatial(
         string $key,
@@ -207,7 +209,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function object(
         string $key,
@@ -229,7 +231,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function hnswEuclidean(
         string $key,
@@ -251,7 +253,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function hnswCosine(
         string $key,
@@ -273,7 +275,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function hnswDot(
         string $key,
@@ -295,7 +297,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function trigram(
         string $key,
@@ -317,7 +319,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     public static function ttl(
         string $key,
@@ -349,7 +351,7 @@ class Index extends Document
             'type' => $this->type->value,
             'attributes' => $this->attributes,
             'lengths' => $this->lengths,
-            'orders' => $this->orders,
+            'orders' => $this->getAttribute('orders', []),
             'ttl' => $this->ttl,
         ]);
     }
@@ -369,7 +371,7 @@ class Index extends Document
         $attributes = $data['attributes'] ?? [];
         /** @var array<int|null> $lengths */
         $lengths = $data['lengths'] ?? [];
-        /** @var array<string|null> $orders */
+        /** @var array<mixed> $orders */
         $orders = $data['orders'] ?? [];
         /** @var int $ttl */
         $ttl = $data['ttl'] ?? 1;
@@ -379,7 +381,7 @@ class Index extends Document
             type: $type instanceof IndexType ? $type : IndexType::from((string) $type),
             attributes: $attributes,
             lengths: $lengths,
-            orders: $orders,
+            orders: self::decodeOrders($orders),
             ttl: $ttl,
         );
     }
@@ -394,7 +396,7 @@ class Index extends Document
         $attributes = $document->getAttribute('attributes', []);
         /** @var array<int> $lengths */
         $lengths = $document->getAttribute('lengths', []);
-        /** @var array<string> $orders */
+        /** @var array<mixed> $orders */
         $orders = $document->getAttribute('orders', []);
         /** @var int $ttl */
         $ttl = $document->getAttribute('ttl', 1);
@@ -404,7 +406,7 @@ class Index extends Document
             type: IndexType::from($type),
             attributes: $attributes,
             lengths: $lengths,
-            orders: $orders,
+            orders: self::decodeOrders($orders),
             ttl: $ttl,
         );
     }
@@ -412,7 +414,7 @@ class Index extends Document
     /**
      * @param  array<string>  $attributes
      * @param  array<int|null>  $lengths
-     * @param  array<Order|string|null>  $orders
+     * @param  array<Order|null>  $orders
      */
     private static function make(
         string $key,
@@ -503,6 +505,11 @@ class Index extends Document
         };
     }
 
+    public static function direction(?Order $order): string
+    {
+        return $order === null ? '' : $order->value;
+    }
+
     /**
      * @param  array<mixed>  $orders
      * @return array<string|null>
@@ -517,14 +524,39 @@ class Index extends Document
                 continue;
             }
 
-            if ($order === null || \is_string($order)) {
-                $encoded[] = $order;
+            if ($order === null) {
+                $encoded[] = null;
                 continue;
             }
 
-            throw new \InvalidArgumentException('Index order must be Order, string, or null');
+            throw new \InvalidArgumentException('Index order must be Order or null');
         }
 
         return $encoded;
+    }
+
+    /**
+     * @param  array<mixed>  $orders
+     * @return array<Order|null>
+     */
+    private static function decodeOrders(array $orders): array
+    {
+        $decoded = [];
+
+        foreach ($orders as $order) {
+            if ($order instanceof Order || $order === null) {
+                $decoded[] = $order;
+                continue;
+            }
+
+            if (\is_string($order)) {
+                $decoded[] = Order::from($order);
+                continue;
+            }
+
+            throw new \InvalidArgumentException('Index order must be Order or null');
+        }
+
+        return $decoded;
     }
 }

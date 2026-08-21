@@ -12,6 +12,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Query\Schema\Order;
 
 class CollectionModelTest extends TestCase
 {
@@ -36,7 +37,7 @@ class CollectionModelTest extends TestCase
                 Attribute::string(key: 'name', size: 64, required: true),
             ],
             indexes: [
-                Index::key(key: 'idx_name', attributes: ['name'], lengths: [64], orders: ['ASC']),
+                Index::key(key: 'idx_name', attributes: ['name'], lengths: [64], orders: [Order::Asc]),
             ],
         );
 

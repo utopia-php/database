@@ -733,13 +733,13 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $this->deleteIndex($name, $indexId, Event::AttributeDelete);
             } elseif (\in_array($id, \is_array($attributes) ? $attributes : [])) {
                 $this->deleteIndex($name, $indexId, Event::AttributeDelete);
-                $this->createIndex($name, new Index(
-                    key: $indexId,
-                    type: IndexType::from($indexType),
-                    attributes: \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($attributes) ? \array_values(\array_filter($attributes, fn ($v) => $v !== $id)) : []),
-                    lengths: \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
-                    orders: \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($index['orders'] ?? null) ? $index['orders'] : []),
-                ), event: Event::AttributeDelete);
+                $this->createIndex($name, Index::fromArray([
+                    'key' => $indexId,
+                    'type' => $indexType,
+                    'attributes' => \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($attributes) ? \array_values(\array_filter($attributes, fn ($v) => $v !== $id)) : []),
+                    'lengths' => \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
+                    'orders' => \is_array($index['orders'] ?? null) ? $index['orders'] : [],
+                ]), event: Event::AttributeDelete);
             }
         }
 
@@ -1040,13 +1040,13 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             && $this->deleteIndex($collection->getId(), $old, Event::IndexRename)
             && $this->createIndex(
                 $collection->getId(),
-                new Index(
-                    key: $new,
-                    type: IndexType::from(\is_string($index['type'] ?? null) ? (string) $index['type'] : ''),
-                    attributes: \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($index['attributes'] ?? null) ? $index['attributes'] : []),
-                    lengths: \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
-                    orders: \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($index['orders'] ?? null) ? $index['orders'] : []),
-                ),
+                Index::fromArray([
+                    'key' => $new,
+                    'type' => \is_string($index['type'] ?? null) ? (string) $index['type'] : '',
+                    'attributes' => \array_map(fn (mixed $v): string => \is_scalar($v) ? (string) $v : '', \is_array($index['attributes'] ?? null) ? $index['attributes'] : []),
+                    'lengths' => \array_map(fn (mixed $v): int => \is_numeric($v) ? (int) $v : 0, \is_array($index['lengths'] ?? null) ? $index['lengths'] : []),
+                    'orders' => \is_array($index['orders'] ?? null) ? $index['orders'] : [],
+                ]),
                 event: Event::IndexRename,
             )) {
             return true;

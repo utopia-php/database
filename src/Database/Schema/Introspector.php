@@ -20,7 +20,11 @@ class Introspector
             throw new \RuntimeException("Collection '{$collectionId}' not found");
         }
 
-        return Collection::fromDocument($collectionDoc);
+        if (! $collectionDoc instanceof Collection) {
+            throw new \RuntimeException("Collection '{$collectionId}' is not a Collection model");
+        }
+
+        return $collectionDoc;
     }
 
     /**
@@ -32,7 +36,9 @@ class Introspector
         $result = [];
 
         foreach ($collections as $doc) {
-            $result[] = Collection::fromDocument($doc);
+            if ($doc instanceof Collection) {
+                $result[] = $doc;
+            }
         }
 
         return $result;

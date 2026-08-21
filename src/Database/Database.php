@@ -2095,7 +2095,7 @@ class Database
                 Attribute::string(key: 'indexes', size: 1_000_000, filters: ['json']),
                 Attribute::boolean(key: 'documentSecurity', required: true),
             ],
-        ))->toDocument()->getArrayCopy();
+        ))->getArrayCopy();
         $data[Document::COLLECTION] = self::METADATA;
         $data['attributes'] = self::documentArrays($data['attributes'] ?? []);
         $data['indexes'] = self::documentArrays($data['indexes'] ?? []);
@@ -2554,7 +2554,14 @@ class Database
      */
     protected function createDocumentInstance(string $collection, array $data): Document
     {
+        if ($data === []) {
+            return new Document();
+        }
+
         $className = $this->documentTypes[$collection] ?? Document::class;
+        if ($className === Collection::class) {
+            return Collection::fromArray($data);
+        }
 
         return new $className($data);
     }

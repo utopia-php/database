@@ -164,7 +164,10 @@ class EntityManager
         }
 
         $currentDoc = $this->db->getCollection($metadata->collection);
-        $current = \Utopia\Database\Collection::fromDocument($currentDoc);
+        if (! $currentDoc instanceof \Utopia\Database\Collection) {
+            throw new \RuntimeException('Collection metadata is not a Collection model');
+        }
+        $current = $currentDoc;
 
         $differ = new \Utopia\Database\Schema\Diff();
         $diff = $differ->diff($current, $desired);

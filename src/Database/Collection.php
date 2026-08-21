@@ -10,14 +10,13 @@ use Utopia\Database\Helpers\ID;
 class Collection extends Document
 {
     /**
-     * @param  array<string, mixed>|string  $id  Storage payload, or collection id for the named constructor
      * @param  array<Attribute>  $attributes
      * @param  array<Index>  $indexes
      * @param  array<string>|null  $permissions  Null means default create-any; empty means none
      * @param  array<string, mixed>  $metadata
      */
     public function __construct(
-        string|array $id = '',
+        string $id = '',
         string $name = '',
         array $attributes = [],
         array $indexes = [],
@@ -25,18 +24,6 @@ class Collection extends Document
         bool $documentSecurity = true,
         public array $metadata = [],
     ) {
-        if (\is_array($id)) {
-            if (\is_array($id['attributes'] ?? null)) {
-                $id['attributes'] = self::castAttributes($id['attributes']);
-            }
-            if (\is_array($id['indexes'] ?? null)) {
-                $id['indexes'] = self::castIndexes($id['indexes']);
-            }
-            parent::__construct($id);
-
-            return;
-        }
-
         $data = [
             self::ID => ID::custom($id),
             'name' => $name !== '' ? $name : $id,
@@ -49,6 +36,55 @@ class Collection extends Document
         }
 
         parent::__construct(\array_merge($data, $this->metadata));
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function fromArray(array $data): self
+    {
+        $id = $data[self::ID] ?? '';
+        if (! \is_string($id)) {
+            $id = '';
+        }
+
+        $name = $data['name'] ?? $id;
+        if (! \is_string($name)) {
+            $name = $id;
+        }
+
+        $permissions = null;
+        if (\array_key_exists(self::PERMISSIONS, $data) && \is_array($data[self::PERMISSIONS])) {
+            $permissions = $data[self::PERMISSIONS];
+        }
+
+        $rawAttributes = $data['attributes'] ?? [];
+        $rawIndexes = $data['indexes'] ?? [];
+
+        $collection = new self(
+            id: $id,
+            name: $name,
+            attributes: \is_array($rawAttributes) ? self::castAttributes($rawAttributes) : [],
+            indexes: \is_array($rawIndexes) ? self::castIndexes($rawIndexes) : [],
+            permissions: $permissions,
+            documentSecurity: (bool) ($data['documentSecurity'] ?? true),
+        );
+
+        if (\is_string($rawAttributes)) {
+            $collection->setAttribute('attributes', $rawAttributes);
+        }
+        if (\is_string($rawIndexes)) {
+            $collection->setAttribute('indexes', $rawIndexes);
+        }
+
+        foreach ($data as $key => $value) {
+            if (\in_array($key, [self::ID, 'name', 'attributes', 'indexes', self::PERMISSIONS, 'documentSecurity'], true)) {
+                continue;
+            }
+            $collection->setAttribute($key, $value);
+        }
+
+        return $collection;
     }
 
     public function __get(string $name): mixed
@@ -80,24 +116,9 @@ class Collection extends Document
     public function __isset(string $name): bool
     {
         return match ($name) {
-            'id', 'name', 'attributes', 'indexes', 'documentSecurity', 'metadata' => true,
-            'permissions' => true,
+            'id', 'name', 'attributes', 'indexes', 'permissions', 'documentSecurity', 'metadata' => true,
             default => $this->offsetExists($name),
         };
-    }
-
-    public function toDocument(): Document
-    {
-        return $this;
-    }
-
-    public static function fromDocument(Document $document): self
-    {
-        if ($document instanceof self) {
-            return $document;
-        }
-
-        return new self($document->getArrayCopy());
     }
 
     /**

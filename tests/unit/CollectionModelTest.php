@@ -83,7 +83,7 @@ class CollectionModelTest extends TestCase
             documentSecurity: true,
         );
 
-        $doc = $collection->toDocument();
+        $doc = $collection;
 
         $this->assertInstanceOf(Document::class, $doc);
         $this->assertSame('accounts', $doc->getId());
@@ -99,17 +99,15 @@ class CollectionModelTest extends TestCase
     public function testToDocumentUsesIdWhenNameEmpty(): void
     {
         $collection = new Collection(id: 'myCol', name: '');
-        $doc = $collection->toDocument();
 
-        $this->assertSame('myCol', $doc->getAttribute('name'));
+        $this->assertSame('myCol', $collection->getAttribute('name'));
     }
 
     public function testToDocumentPreservesNameWhenSet(): void
     {
         $collection = new Collection(id: 'myCol', name: 'My Collection');
-        $doc = $collection->toDocument();
 
-        $this->assertSame('My Collection', $doc->getAttribute('name'));
+        $this->assertSame('My Collection', $collection->getAttribute('name'));
     }
 
     public function testFromDocumentRoundtrip(): void
@@ -126,8 +124,7 @@ class CollectionModelTest extends TestCase
             documentSecurity: false,
         );
 
-        $doc = $original->toDocument();
-        $restored = Collection::fromDocument($doc);
+        $restored = Collection::fromArray($original->getArrayCopy());
 
         $this->assertSame($original->id, $restored->id);
         $this->assertSame($original->name, $restored->name);
@@ -137,14 +134,13 @@ class CollectionModelTest extends TestCase
         $this->assertSame($original->attributes[0]->key, $restored->attributes[0]->key);
         $this->assertSame($original->indexes[0]->key, $restored->indexes[0]->key);
         $this->assertInstanceOf(StringType::class, $restored->attributes[0]);
-        $this->assertInstanceOf(Attribute::class, $doc->getAttribute('attributes')[0]);
-        $this->assertInstanceOf(Index::class, $doc->getAttribute('indexes')[0]);
+        $this->assertInstanceOf(Attribute::class, $original->getAttribute('attributes')[0]);
+        $this->assertInstanceOf(Index::class, $original->getAttribute('indexes')[0]);
     }
 
-    public function testFromDocumentWithEmptyDocument(): void
+    public function testFromArrayWithEmptyPayload(): void
     {
-        $doc = new Document();
-        $collection = Collection::fromDocument($doc);
+        $collection = Collection::fromArray([]);
 
         $this->assertSame('', $collection->id);
         $this->assertSame('', $collection->name);
@@ -165,11 +161,10 @@ class CollectionModelTest extends TestCase
 
         $collection = new Collection(id: 'users', attributes: $attrs);
 
-        $doc = $collection->toDocument();
-        $restoredAttrs = $doc->getAttribute('attributes');
+        $restoredAttrs = $collection->getAttribute('attributes');
         $this->assertCount(4, $restoredAttrs);
 
-        $restored = Collection::fromDocument($doc);
+        $restored = Collection::fromArray($collection->getArrayCopy());
         $this->assertCount(4, $restored->attributes);
         $this->assertSame('name', $restored->attributes[0]->key);
         $this->assertSame('active', $restored->attributes[3]->key);
@@ -189,10 +184,9 @@ class CollectionModelTest extends TestCase
 
         $collection = new Collection(id: 'users', indexes: $indexes);
 
-        $doc = $collection->toDocument();
-        $this->assertCount(3, $doc->getAttribute('indexes'));
+        $this->assertCount(3, $collection->getAttribute('indexes'));
 
-        $restored = Collection::fromDocument($doc);
+        $restored = Collection::fromArray($collection->getArrayCopy());
         $this->assertCount(3, $restored->indexes);
         $this->assertSame('idx_compound', $restored->indexes[2]->key);
     }
@@ -207,26 +201,23 @@ class CollectionModelTest extends TestCase
         ];
 
         $collection = new Collection(id: 'posts', permissions: $permissions);
-        $doc = $collection->toDocument();
 
-        $this->assertCount(4, $doc->getPermissions());
-        $this->assertContains(Permission::read(Role::any()), $doc->getPermissions());
+        $this->assertCount(4, $collection->getPermissions());
+        $this->assertContains(Permission::read(Role::any()), $collection->getPermissions());
     }
 
     public function testDocumentSecurityTrue(): void
     {
         $collection = new Collection(id: 'secure', documentSecurity: true);
-        $doc = $collection->toDocument();
 
-        $this->assertTrue($doc->getAttribute('documentSecurity'));
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
     }
 
     public function testDocumentSecurityFalse(): void
     {
         $collection = new Collection(id: 'insecure', documentSecurity: false);
-        $doc = $collection->toDocument();
 
-        $this->assertFalse($doc->getAttribute('documentSecurity'));
+        $this->assertFalse($collection->getAttribute('documentSecurity'));
     }
 
     public function testFromDocumentPreservesPermissions(): void
@@ -236,7 +227,7 @@ class CollectionModelTest extends TestCase
             Permission::create(Role::any()),
         ];
 
-        $doc = new Document([
+        $collection = Collection::fromArray([
             '$id' => 'test',
             '$permissions' => $permissions,
             'name' => 'test',
@@ -244,8 +235,6 @@ class CollectionModelTest extends TestCase
             'indexes' => [],
             'documentSecurity' => true,
         ]);
-
-        $collection = Collection::fromDocument($doc);
         $this->assertNotNull($collection->permissions);
         $this->assertCount(2, $collection->permissions);
     }
@@ -255,8 +244,7 @@ class CollectionModelTest extends TestCase
         $attr = Attribute::string(key: 'title', size: 64);
         $collection = new Collection(id: 'articles', attributes: [$attr]);
 
-        $doc = $collection->toDocument();
-        $attributes = $doc->getAttribute('attributes');
+        $attributes = $collection->getAttribute('attributes');
 
         $this->assertInstanceOf(Attribute::class, $attributes[0]);
         $this->assertSame('title', $attributes[0]->key);
@@ -268,8 +256,7 @@ class CollectionModelTest extends TestCase
         $idx = Index::fullText(key: 'idx_test', attributes: ['body']);
         $collection = new Collection(id: 'articles', indexes: [$idx]);
 
-        $doc = $collection->toDocument();
-        $indexes = $doc->getAttribute('indexes');
+        $indexes = $collection->getAttribute('indexes');
 
         $this->assertInstanceOf(Index::class, $indexes[0]);
         $this->assertSame('idx_test', $indexes[0]->key);

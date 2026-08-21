@@ -10,7 +10,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\ORM\EntityManager;
 use Utopia\Database\ORM\MetadataFactory;
-use Utopia\Query\Schema\ColumnType;
 
 class EntitySchemasSyncTest extends TestCase
 {
@@ -58,27 +57,16 @@ class EntitySchemasSyncTest extends TestCase
             ->with('test_db', 'users')
             ->willReturn(true);
 
-        $existingAttrDoc = new Document([
-            'key' => 'name',
-            'type' => ColumnType::String->value,
-            'size' => 255,
-            'required' => true,
-            'default' => null,
-            'signed' => true,
-            'array' => false,
-            'format' => null,
-            'formatOptions' => [],
-            'filters' => [],
-        ]);
-
-        $collectionDoc = new Document([
-            '$id' => 'users',
-            'name' => 'users',
-            'attributes' => [$existingAttrDoc],
-            'indexes' => [],
-            '$permissions' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionDoc = new Collection(
+            id: 'users',
+            name: 'users',
+            attributes: [
+                Attribute::string(key: 'name', size: 255, required: true),
+            ],
+            indexes: [],
+            permissions: [],
+            documentSecurity: true,
+        );
 
         $this->db->expects($this->once())
             ->method('getCollection')
@@ -107,17 +95,14 @@ class EntitySchemasSyncTest extends TestCase
         /** @var \Utopia\Database\Collection $desired */
         $desired = $defs['collection'];
 
-        $attrDocs = array_map(fn (Attribute $a) => $a->toDocument(), $desired->attributes);
-        $indexDocs = array_map(fn (\Utopia\Database\Index $i) => $i->toDocument(), $desired->indexes);
-
-        $collectionDoc = new Document([
-            '$id' => 'users',
-            'name' => 'users',
-            'attributes' => $attrDocs,
-            'indexes' => $indexDocs,
-            '$permissions' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionDoc = new Collection(
+            id: 'users',
+            name: 'users',
+            attributes: $desired->attributes,
+            indexes: $desired->indexes,
+            permissions: [],
+            documentSecurity: true,
+        );
 
         $this->db->expects($this->once())
             ->method('getCollection')
@@ -149,14 +134,14 @@ class EntitySchemasSyncTest extends TestCase
             ->with('test_db', 'users')
             ->willReturn(true);
 
-        $collectionDoc = new Document([
-            '$id' => 'users',
-            'name' => 'users',
-            'attributes' => [],
-            'indexes' => [],
-            '$permissions' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionDoc = new Collection(
+            id: 'users',
+            name: 'users',
+            attributes: [],
+            indexes: [],
+            permissions: [],
+            documentSecurity: true,
+        );
 
         $this->db->expects($this->once())
             ->method('getCollection')
@@ -182,20 +167,16 @@ class EntitySchemasSyncTest extends TestCase
         /** @var \Utopia\Database\Collection $desired */
         $desired = $defs['collection'];
 
-        $attrDocs = array_map(fn (Attribute $a) => $a->toDocument(), $desired->attributes);
-        $indexDocs = array_map(fn (\Utopia\Database\Index $i) => $i->toDocument(), $desired->indexes);
-
         $extraAttr = Attribute::string(key: 'obsolete_field', size: 100);
-        $attrDocs[] = $extraAttr->toDocument();
 
-        $collectionDoc = new Document([
-            '$id' => 'users',
-            'name' => 'users',
-            'attributes' => $attrDocs,
-            'indexes' => $indexDocs,
-            '$permissions' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionDoc = new Collection(
+            id: 'users',
+            name: 'users',
+            attributes: [...$desired->attributes, $extraAttr],
+            indexes: $desired->indexes,
+            permissions: [],
+            documentSecurity: true,
+        );
 
         $this->db->expects($this->once())
             ->method('getCollection')
@@ -222,16 +203,14 @@ class EntitySchemasSyncTest extends TestCase
         /** @var \Utopia\Database\Collection $desired */
         $desired = $defs['collection'];
 
-        $attrDocs = array_map(fn (Attribute $a) => $a->toDocument(), $desired->attributes);
-
-        $collectionDoc = new Document([
-            '$id' => 'users',
-            'name' => 'users',
-            'attributes' => $attrDocs,
-            'indexes' => [],
-            '$permissions' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionDoc = new Collection(
+            id: 'users',
+            name: 'users',
+            attributes: $desired->attributes,
+            indexes: [],
+            permissions: [],
+            documentSecurity: true,
+        );
 
         $this->db->expects($this->once())
             ->method('getCollection')
@@ -257,20 +236,16 @@ class EntitySchemasSyncTest extends TestCase
         /** @var \Utopia\Database\Collection $desired */
         $desired = $defs['collection'];
 
-        $attrDocs = array_map(fn (Attribute $a) => $a->toDocument(), $desired->attributes);
-        $indexDocs = array_map(fn (\Utopia\Database\Index $i) => $i->toDocument(), $desired->indexes);
-
         $extraIndex = new \Utopia\Database\Index(key: 'idx_old', type: \Utopia\Query\Schema\IndexType::Index, attributes: ['name']);
-        $indexDocs[] = $extraIndex->toDocument();
 
-        $collectionDoc = new Document([
-            '$id' => 'users',
-            'name' => 'users',
-            'attributes' => $attrDocs,
-            'indexes' => $indexDocs,
-            '$permissions' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionDoc = new Collection(
+            id: 'users',
+            name: 'users',
+            attributes: $desired->attributes,
+            indexes: [...$desired->indexes, $extraIndex],
+            permissions: [],
+            documentSecurity: true,
+        );
 
         $this->db->expects($this->once())
             ->method('getCollection')
@@ -297,17 +272,14 @@ class EntitySchemasSyncTest extends TestCase
         /** @var \Utopia\Database\Collection $desired */
         $desired = $defs['collection'];
 
-        $attrDocs = array_map(fn (Attribute $a) => $a->toDocument(), $desired->attributes);
-        $indexDocs = array_map(fn (\Utopia\Database\Index $i) => $i->toDocument(), $desired->indexes);
-
-        $collectionDoc = new Document([
-            '$id' => 'users',
-            'name' => 'users',
-            'attributes' => $attrDocs,
-            'indexes' => $indexDocs,
-            '$permissions' => [],
-            'documentSecurity' => true,
-        ]);
+        $collectionDoc = new Collection(
+            id: 'users',
+            name: 'users',
+            attributes: $desired->attributes,
+            indexes: $desired->indexes,
+            permissions: [],
+            documentSecurity: true,
+        );
 
         $this->db->expects($this->once())
             ->method('getCollection')

@@ -3,11 +3,19 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PHPUnit\Framework\Attributes\Depends;
+use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -18,17 +26,35 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Transform;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\ForeignKeyAction;
+use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 trait CollectionTests
 {
+    private static string $createdAtCollection = '';
+
+    protected function getCreatedAtCollection(): string
+    {
+        if (self::$createdAtCollection === '') {
+            self::$createdAtCollection = 'created_at_' . uniqid();
+        }
+        return self::$createdAtCollection;
+    }
+
     public function testCreateExistsDelete(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -38,15 +64,21 @@ trait CollectionTests
         $this->assertEquals(true, $database->create());
     }
 
-    /**
-     * @depends testCreateExistsDelete
-     */
     public function testCreateListExistsDeleteCollection(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors', permissions: [
+        // Clean up any leftover collections from prior runs
+        foreach ($database->listCollections(100) as $col) {
+            try {
+                $database->deleteCollection($col->getId());
+            } catch (\Throwable) {
+                // ignore
+            }
+        }
+
+        $database->createCollection(new Collection(id: 'actors', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
         ]));
@@ -54,7 +86,7 @@ trait CollectionTests
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors'));
 
         // Collection names should not be unique
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('actors2', permissions: [
+        $database->createCollection(new Collection(id: 'actors2', permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
         ]));
@@ -62,11 +94,12 @@ trait CollectionTests
         $this->assertEquals(true, $database->exists($this->testDatabase, 'actors2'));
         $collection = $database->getCollection('actors2');
         $collection->setAttribute('name', 'actors'); // change name to one that exists
-        $this->assertInstanceOf('Utopia\Database\Document', $database->updateDocument(
+        $updated = $database->updateDocument(
             $collection->getCollection(),
             $collection->getId(),
             $collection
-        ));
+        );
+        $this->assertSame('actors', $updated->getAttribute('name'));
         $this->assertEquals(true, $database->deleteCollection('actors2')); // Delete collection when finished
         $this->assertCount(1, $database->listCollections());
 
@@ -81,8 +114,7 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-
-        if (!$database->getAdapter()->getSupportForHostname()) {
+        if (!$database->getAdapter()->supports(Capability::Hostname)) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -97,281 +129,67 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         $attributes = [
-            new Document([
-                '$id' => ID::custom('attribute1'),
-                'type' => Database::VAR_STRING,
-                'size' => 256,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute2'),
-                'type' => Database::VAR_INTEGER,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute3'),
-                'type' => Database::VAR_BOOLEAN,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute4'),
-                'type' => Database::VAR_ID,
-                'size' => 0,
-                'required' => false,
-                'signed' => false,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'attribute1', size: 256),
+            Attribute::integer(key: 'attribute2'),
+            Attribute::boolean(key: 'attribute3'),
+            Attribute::id(key: 'attribute4', signed: false),
         ];
 
         $indexes = [
-            new Document([
-                '$id' => ID::custom('index1'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute1'],
-                'lengths' => [256],
-                'orders' => ['ASC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('index2'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute2'],
-                'lengths' => [],
-                'orders' => ['DESC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('index3'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute3', 'attribute2'],
-                'lengths' => [],
-                'orders' => ['DESC', 'ASC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('index4'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute4'],
-                'lengths' => [],
-                'orders' => ['DESC'],
-            ]),
+            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256], orders: [Order::Asc]),
+            Index::key(key: 'index2', attributes: ['attribute2'], orders: [Order::Desc]),
+            Index::key(key: 'index3', attributes: ['attribute3', 'attribute2'], orders: [Order::Desc, Order::Asc]),
+            Index::key(key: 'index4', attributes: ['attribute4'], orders: [Order::Desc]),
         ];
 
-        $collection = $database->createCollection('withSchema', $attributes, $indexes);
+        $collection = $database->createCollection(new Collection(id: 'withSchema', attributes: $attributes, indexes: $indexes));
 
         $this->assertEquals(false, $collection->isEmpty());
         $this->assertEquals('withSchema', $collection->getId());
 
-        $this->assertIsArray($collection->getAttribute('attributes'));
-        $this->assertCount(4, $collection->getAttribute('attributes'));
-        $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
-        $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
-        $this->assertEquals('attribute2', $collection->getAttribute('attributes')[1]['$id']);
-        $this->assertEquals(Database::VAR_INTEGER, $collection->getAttribute('attributes')[1]['type']);
-        $this->assertEquals('attribute3', $collection->getAttribute('attributes')[2]['$id']);
-        $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[2]['type']);
-        $this->assertEquals('attribute4', $collection->getAttribute('attributes')[3]['$id']);
-        $this->assertEquals(Database::VAR_ID, $collection->getAttribute('attributes')[3]['type']);
+        $this->assertCount(4, $collection->attributes);
+        $this->assertEquals('attribute1', $collection->attributes[0]['$id']);
+        $this->assertSame('attribute1', $collection->attributes[0]->key);
+        $this->assertEquals(ColumnType::String->value, $collection->attributes[0]['type']);
+        $this->assertEquals('attribute2', $collection->attributes[1]['$id']);
+        $this->assertEquals(ColumnType::Integer->value, $collection->attributes[1]['type']);
+        $this->assertEquals('attribute3', $collection->attributes[2]['$id']);
+        $this->assertEquals(ColumnType::Boolean->value, $collection->attributes[2]['type']);
+        $this->assertEquals('attribute4', $collection->attributes[3]['$id']);
+        $this->assertEquals(ColumnType::Id->value, $collection->attributes[3]['type']);
 
-        $this->assertIsArray($collection->getAttribute('indexes'));
-        $this->assertCount(4, $collection->getAttribute('indexes'));
-        $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
-        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[0]['type']);
-        $this->assertEquals('index2', $collection->getAttribute('indexes')[1]['$id']);
-        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[1]['type']);
-        $this->assertEquals('index3', $collection->getAttribute('indexes')[2]['$id']);
-        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[2]['type']);
-        $this->assertEquals('index4', $collection->getAttribute('indexes')[3]['$id']);
-        $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[3]['type']);
+        $this->assertCount(4, $collection->indexes);
+        $this->assertEquals('index1', $collection->indexes[0]['$id']);
+        $this->assertSame('index1', $collection->indexes[0]->key);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[0]['type']);
+        $this->assertEquals('index2', $collection->indexes[1]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[1]['type']);
+        $this->assertEquals('index3', $collection->indexes[2]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[2]['type']);
+        $this->assertEquals('index4', $collection->indexes[3]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection->indexes[3]['type']);
 
+        $fetched = $database->getCollection('withSchema');
+        $this->assertSame('attribute1', $fetched->attributes[0]->key);
 
         $database->deleteCollection('withSchema');
 
         // Test collection with dash (+attribute +index)
-        $collection2 = $database->createCollection('with-dash', [
-            new Document([
-                '$id' => ID::custom('attribute-one'),
-                'type' => Database::VAR_STRING,
-                'size' => 256,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [
-            new Document([
-                '$id' => ID::custom('index-one'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute-one'],
-                'lengths' => [256],
-                'orders' => ['ASC'],
-            ])
-        ]);
+        $collection2 = $database->createCollection(new Collection(id: 'with-dash', attributes: [
+            Attribute::string(key: 'attribute-one', size: 256),
+        ], indexes: [
+            Index::key(key: 'index-one', attributes: ['attribute-one'], lengths: [256], orders: [Order::Asc]),
+        ]));
 
         $this->assertEquals(false, $collection2->isEmpty());
         $this->assertEquals('with-dash', $collection2->getId());
-        $this->assertIsArray($collection2->getAttribute('attributes'));
-        $this->assertCount(1, $collection2->getAttribute('attributes'));
-        $this->assertEquals('attribute-one', $collection2->getAttribute('attributes')[0]['$id']);
-        $this->assertEquals(Database::VAR_STRING, $collection2->getAttribute('attributes')[0]['type']);
-        $this->assertIsArray($collection2->getAttribute('indexes'));
-        $this->assertCount(1, $collection2->getAttribute('indexes'));
-        $this->assertEquals('index-one', $collection2->getAttribute('indexes')[0]['$id']);
-        $this->assertEquals(Database::INDEX_KEY, $collection2->getAttribute('indexes')[0]['type']);
+        $this->assertCount(1, $collection2->attributes);
+        $this->assertEquals('attribute-one', $collection2->attributes[0]['$id']);
+        $this->assertEquals(ColumnType::String->value, $collection2->attributes[0]['type']);
+        $this->assertCount(1, $collection2->indexes);
+        $this->assertEquals('index-one', $collection2->indexes[0]['$id']);
+        $this->assertEquals(IndexType::Key->value, $collection2->indexes[0]['type']);
         $database->deleteCollection('with-dash');
-    }
-
-    public function testCreateCollectionValidator(): void
-    {
-        $collections = [
-            "validatorTest",
-            "validator-test",
-            "validator_test",
-            "validator.test",
-        ];
-
-        $attributes = [
-            new Document([
-                '$id' => ID::custom('attribute1'),
-                'type' => Database::VAR_STRING,
-                'size' => 2500, // longer than 768
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute-2'),
-                'type' => Database::VAR_INTEGER,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute_3'),
-                'type' => Database::VAR_BOOLEAN,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute.4'),
-                'type' => Database::VAR_BOOLEAN,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('attribute5'),
-                'type' => Database::VAR_STRING,
-                'size' => 2500,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ])
-        ];
-
-        $indexes = [
-            new Document([
-                '$id' => ID::custom('index1'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute1'],
-                'lengths' => [256],
-                'orders' => ['ASC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('index-2'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute-2'],
-                'lengths' => [],
-                'orders' => ['ASC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('index_3'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute_3'],
-                'lengths' => [],
-                'orders' => ['ASC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('index.4'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute.4'],
-                'lengths' => [],
-                'orders' => ['ASC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('index_2_attributes'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute1', 'attribute5'],
-                'lengths' => [200, 300],
-                'orders' => ['DESC'],
-            ]),
-        ];
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        foreach ($collections as $id) {
-            $collection = $database->createCollection($id, $attributes, $indexes);
-
-            $this->assertEquals(false, $collection->isEmpty());
-            $this->assertEquals($id, $collection->getId());
-
-            $this->assertIsArray($collection->getAttribute('attributes'));
-            $this->assertCount(5, $collection->getAttribute('attributes'));
-            $this->assertEquals('attribute1', $collection->getAttribute('attributes')[0]['$id']);
-            $this->assertEquals(Database::VAR_STRING, $collection->getAttribute('attributes')[0]['type']);
-            $this->assertEquals('attribute-2', $collection->getAttribute('attributes')[1]['$id']);
-            $this->assertEquals(Database::VAR_INTEGER, $collection->getAttribute('attributes')[1]['type']);
-            $this->assertEquals('attribute_3', $collection->getAttribute('attributes')[2]['$id']);
-            $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[2]['type']);
-            $this->assertEquals('attribute.4', $collection->getAttribute('attributes')[3]['$id']);
-            $this->assertEquals(Database::VAR_BOOLEAN, $collection->getAttribute('attributes')[3]['type']);
-
-            $this->assertIsArray($collection->getAttribute('indexes'));
-            $this->assertCount(5, $collection->getAttribute('indexes'));
-            $this->assertEquals('index1', $collection->getAttribute('indexes')[0]['$id']);
-            $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[0]['type']);
-            $this->assertEquals('index-2', $collection->getAttribute('indexes')[1]['$id']);
-            $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[1]['type']);
-            $this->assertEquals('index_3', $collection->getAttribute('indexes')[2]['$id']);
-            $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[2]['type']);
-            $this->assertEquals('index.4', $collection->getAttribute('indexes')[3]['$id']);
-            $this->assertEquals(Database::INDEX_KEY, $collection->getAttribute('indexes')[3]['type']);
-
-            $database->deleteCollection($id);
-        }
-    }
-
-
-    public function testCollectionNotFound(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        try {
-            $database->find('not_exist', []);
-            $this->fail('Failed to throw Exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Collection not found', $e->getMessage());
-        }
     }
 
     public function testSizeCollection(): void
@@ -379,8 +197,8 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('sizeTest1');
-        $database->createCollection('sizeTest2');
+        $database->createCollection(new Collection(id: 'sizeTest1'));
+        $database->createCollection(new Collection(id: 'sizeTest2'));
 
         $size1 = $database->getSizeOfCollection('sizeTest1');
         $size2 = $database->getSizeOfCollection('sizeTest2');
@@ -389,24 +207,25 @@ trait CollectionTests
         // Therefore asserting with a tolerance of 5000 bytes
         $byteDifference = 5000;
 
-        if (!$database->analyzeCollection('sizeTest2')) {
+        if (! $database->analyzeCollection('sizeTest2')) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $this->assertLessThan($byteDifference, $sizeDifference);
 
-        $database->createAttribute('sizeTest2', 'string1', Database::VAR_STRING, 20000, true);
-        $database->createAttribute('sizeTest2', 'string2', Database::VAR_STRING, 254 + 1, true);
-        $database->createAttribute('sizeTest2', 'string3', Database::VAR_STRING, 254 + 1, true);
-        $database->createIndex('sizeTest2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+        $database->createAttribute('sizeTest2', Attribute::string(key: 'string1', size: 20000, required: true));
+        $database->createAttribute('sizeTest2', Attribute::string(key: 'string2', size: 254 + 1, required: true));
+        $database->createAttribute('sizeTest2', Attribute::string(key: 'string3', size: 254 + 1, required: true));
+        $database->createIndex('sizeTest2', Index::key(key: 'index', attributes: ['string1', 'string2', 'string3'], lengths: [128, 128, 128]));
 
         $loopCount = 100;
 
         for ($i = 0; $i < $loopCount; $i++) {
             $database->createDocument('sizeTest2', new Document([
-                '$id' => 'doc' . $i,
-                'string1' => 'string1' . $i . str_repeat('A', 10000),
+                '$id' => 'doc'.$i,
+                'string1' => 'string1'.$i.str_repeat('A', 10000),
                 'string2' => 'string2',
                 'string3' => 'string3',
             ]));
@@ -420,7 +239,7 @@ trait CollectionTests
 
         $this->getDatabase()->getAuthorization()->skip(function () use ($loopCount) {
             for ($i = 0; $i < $loopCount; $i++) {
-                $this->getDatabase()->deleteDocument('sizeTest2', 'doc' . $i);
+                $this->getDatabase()->deleteDocument('sizeTest2', 'doc'.$i);
             }
         });
 
@@ -435,8 +254,8 @@ trait CollectionTests
 
     public function testSizeCollectionOnDisk(): void
     {
-        $this->getDatabase()->createCollection('sizeTestDisk1');
-        $this->getDatabase()->createCollection('sizeTestDisk2');
+        $this->getDatabase()->createCollection(new Collection(id: 'sizeTestDisk1'));
+        $this->getDatabase()->createCollection(new Collection(id: 'sizeTestDisk2'));
 
         $size1 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk1');
         $size2 = $this->getDatabase()->getSizeOfCollectionOnDisk('sizeTestDisk2');
@@ -446,18 +265,18 @@ trait CollectionTests
         $byteDifference = 5000;
         $this->assertLessThan($byteDifference, $sizeDifference);
 
-        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string1', Database::VAR_STRING, 20000, true);
-        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string2', Database::VAR_STRING, 254 + 1, true);
-        $this->getDatabase()->createAttribute('sizeTestDisk2', 'string3', Database::VAR_STRING, 254 + 1, true);
-        $this->getDatabase()->createIndex('sizeTestDisk2', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+        $this->getDatabase()->createAttribute('sizeTestDisk2', Attribute::string(key: 'string1', size: 20000, required: true));
+        $this->getDatabase()->createAttribute('sizeTestDisk2', Attribute::string(key: 'string2', size: 254 + 1, required: true));
+        $this->getDatabase()->createAttribute('sizeTestDisk2', Attribute::string(key: 'string3', size: 254 + 1, required: true));
+        $this->getDatabase()->createIndex('sizeTestDisk2', Index::key(key: 'index', attributes: ['string1', 'string2', 'string3'], lengths: [128, 128, 128]));
 
         $loopCount = 40;
 
         for ($i = 0; $i < $loopCount; $i++) {
             $this->getDatabase()->createDocument('sizeTestDisk2', new Document([
-                'string1' => 'string1' . $i,
-                'string2' => 'string2' . $i,
-                'string3' => 'string3' . $i,
+                'string1' => 'string1'.$i,
+                'string2' => 'string2'.$i,
+                'string3' => 'string3'.$i,
             ]));
         }
 
@@ -472,27 +291,28 @@ trait CollectionTests
         $database = $this->getDatabase();
 
         // SQLite does not support fulltext indexes
-        if (!$database->getAdapter()->getSupportForFulltextIndex()) {
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('fullTextSizeTest');
+        $database->createCollection(new Collection(id: 'fullTextSizeTest'));
 
         $size1 = $database->getSizeOfCollection('fullTextSizeTest');
 
-        $database->createAttribute('fullTextSizeTest', 'string1', Database::VAR_STRING, 128, true);
-        $database->createAttribute('fullTextSizeTest', 'string2', Database::VAR_STRING, 254, true);
-        $database->createAttribute('fullTextSizeTest', 'string3', Database::VAR_STRING, 254, true);
-        $database->createIndex('fullTextSizeTest', 'index', Database::INDEX_KEY, ['string1', 'string2', 'string3'], [128, 128, 128]);
+        $database->createAttribute('fullTextSizeTest', Attribute::string(key: 'string1', size: 128, required: true));
+        $database->createAttribute('fullTextSizeTest', Attribute::string(key: 'string2', size: 254, required: true));
+        $database->createAttribute('fullTextSizeTest', Attribute::string(key: 'string3', size: 254, required: true));
+        $database->createIndex('fullTextSizeTest', Index::key(key: 'index', attributes: ['string1', 'string2', 'string3'], lengths: [128, 128, 128]));
 
         $loopCount = 10;
 
         for ($i = 0; $i < $loopCount; $i++) {
             $database->createDocument('fullTextSizeTest', new Document([
-                'string1' => 'string1' . $i,
-                'string2' => 'string2' . $i,
-                'string3' => 'string3' . $i,
+                'string1' => 'string1'.$i,
+                'string2' => 'string2'.$i,
+                'string3' => 'string3'.$i,
             ]));
         }
 
@@ -500,54 +320,18 @@ trait CollectionTests
 
         $this->assertGreaterThan($size1, $size2);
 
-        $database->createIndex('fullTextSizeTest', 'fulltext_index', Database::INDEX_FULLTEXT, ['string1']);
+        $database->createIndex('fullTextSizeTest', Index::fullText(key: 'fulltext_index', attributes: ['string1']));
 
         $size3 = $database->getSizeOfCollectionOnDisk('fullTextSizeTest');
 
         $this->assertGreaterThan($size2, $size3);
     }
 
-    public function testPurgeCollectionCache(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $database->createCollection('redis');
-
-        $this->assertEquals(true, $database->createAttribute('redis', 'name', Database::VAR_STRING, 128, true));
-        $this->assertEquals(true, $database->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
-
-        $database->createDocument('redis', new Document([
-            '$id' => 'doc1',
-            'name' => 'Richard',
-            'age' => 15,
-            '$permissions' => [
-                Permission::read(Role::any()),
-            ]
-        ]));
-
-        $document = $database->getDocument('redis', 'doc1');
-
-        $this->assertEquals('Richard', $document->getAttribute('name'));
-        $this->assertEquals(15, $document->getAttribute('age'));
-
-        $this->assertEquals(true, $database->deleteAttribute('redis', 'age'));
-
-        $document = $database->getDocument('redis', 'doc1');
-        $this->assertEquals('Richard', $document->getAttribute('name'));
-        $this->assertArrayNotHasKey('age', $document);
-
-        $this->assertEquals(true, $database->createAttribute('redis', 'age', Database::VAR_INTEGER, 0, true));
-
-        $document = $database->getDocument('redis', 'doc1');
-        $this->assertEquals('Richard', $document->getAttribute('name'));
-        $this->assertArrayHasKey('age', $document);
-    }
-
     public function testSchemaAttributes(): void
     {
-        if (!$this->getDatabase()->getAdapter()->getSupportForSchemaAttributes()) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\SchemaAttributes::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -556,19 +340,18 @@ trait CollectionTests
 
         $this->assertEmpty($db->getSchemaAttributes('no_such_collection'));
 
-        $db->createCollection($collection);
+        $db->createCollection(new Collection(id: $collection));
 
-        $db->createAttribute($collection, 'username', Database::VAR_STRING, 128, true);
-        $db->createAttribute($collection, 'story', Database::VAR_STRING, 20000, true);
-        $db->createAttribute($collection, 'string_list', Database::VAR_STRING, 128, true, null, true, true);
-        $db->createAttribute($collection, 'dob', Database::VAR_DATETIME, 0, false, '2000-06-12T14:12:55.000+00:00', true, false, null, [], ['datetime']);
+        $db->createAttribute($collection, Attribute::string(key: 'username', size: 128, required: true));
+        $db->createAttribute($collection, Attribute::string(key: 'story', size: 20000, required: true));
+        $db->createAttribute($collection, Attribute::string(key: 'string_list', size: 128, required: true, array: true));
+        $db->createAttribute($collection, Attribute::datetime(key: 'dob', default: '2000-06-12T14:12:55.000+00:00', filters: ['datetime']));
 
         $attributes = [];
         foreach ($db->getSchemaAttributes($collection) as $attribute) {
             /**
              * @var Document $attribute
              */
-
             $attributes[$attribute->getId()] = $attribute;
         }
 
@@ -608,188 +391,40 @@ trait CollectionTests
         }
     }
 
-    public function testRowSizeToLarge(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-        /**
-         * getDocumentSizeLimit = 65535
-         * 65535 / 4 = 16383 MB4
-         */
-        $collection_1 = $database->createCollection('row_size_1');
-        $collection_2 = $database->createCollection('row_size_2');
-
-        $this->assertEquals(true, $database->createAttribute($collection_1->getId(), 'attr_1', Database::VAR_STRING, 16000, true));
-
-        try {
-            $database->createAttribute($collection_1->getId(), 'attr_2', Database::VAR_STRING, Database::LENGTH_KEY, true);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(LimitException::class, $e);
-        }
-
-        /**
-         * Relation takes length of Database::LENGTH_KEY so exceeding getDocumentSizeLimit
-         */
-
-        try {
-            $database->createRelationship(
-                collection: $collection_2->getId(),
-                relatedCollection: $collection_1->getId(),
-                type: Database::RELATION_ONE_TO_ONE,
-                twoWay: true,
-            );
-
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(LimitException::class, $e);
-        }
-
-        try {
-            $database->createRelationship(
-                collection: $collection_1->getId(),
-                relatedCollection: $collection_2->getId(),
-                type: Database::RELATION_ONE_TO_ONE,
-                twoWay: true,
-            );
-
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(LimitException::class, $e);
-        }
-    }
-
     public function testCreateCollectionWithSchemaIndexes(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
         $attributes = [
-            new Document([
-                '$id' => ID::custom('username'),
-                'type' => Database::VAR_STRING,
-                'size' => 100,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-            ]),
-            new Document([
-                '$id' => ID::custom('cards'),
-                'type' => Database::VAR_STRING,
-                'size' => 5000,
-                'required' => false,
-                'signed' => true,
-                'array' => true,
-            ]),
+            Attribute::string(key: 'username', size: 100),
+            Attribute::string(key: 'cards', size: 5000, array: true),
         ];
 
         $indexes = [
-            new Document([
-                '$id' => ID::custom('idx_username'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['username'],
-                'lengths' => [100], // Will be removed since equal to attributes size
-                'orders' => [],
-            ]),
-            new Document([
-                '$id' => ID::custom('idx_username_uid'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['username', '$id'], // to solve the same attribute mongo issue
-                'lengths' => [99, 200], // Length not equal to attributes length
-                'orders' => [Database::ORDER_DESC],
-            ]),
+            Index::key(key: 'idx_username', attributes: ['username'], lengths: [100]),
+            Index::key(key: 'idx_username_uid', attributes: ['username', '$id'], lengths: [99, 200], orders: [Order::Desc]),
         ];
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
-            $indexes[] = new Document([
-                '$id' => ID::custom('idx_cards'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['cards'],
-                'lengths' => [500], // Will be changed to Database::ARRAY_INDEX_LENGTH (255)
-                'orders' => [Database::ORDER_DESC],
-            ]);
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
+            $indexes[] = Index::key(key: 'idx_cards', attributes: ['cards'], lengths: [500], orders: [Order::Desc]);
         }
 
-        $collection = $database->createCollection(
-            'collection98',
-            $attributes,
-            $indexes,
-            permissions: [
-                Permission::create(Role::any()),
-            ]
-        );
+        $collection = $database->createCollection(new Collection(id: 'collection98', attributes: $attributes, indexes: $indexes, permissions: [
+            Permission::create(Role::any()),
+        ]));
 
-        $this->assertEquals($collection->getAttribute('indexes')[0]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[0]['lengths'][0], null);
+        $this->assertEquals($collection->indexes[0]->attributes[0], 'username');
+        $this->assertEquals($collection->indexes[0]->lengths[0], null);
 
-        $this->assertEquals($collection->getAttribute('indexes')[1]['attributes'][0], 'username');
-        $this->assertEquals($collection->getAttribute('indexes')[1]['lengths'][0], 99);
-        $this->assertEquals($collection->getAttribute('indexes')[1]['orders'][0], Database::ORDER_DESC);
+        $this->assertEquals($collection->indexes[1]->attributes[0], 'username');
+        $this->assertEquals($collection->indexes[1]->lengths[0], 99);
+        $this->assertEquals($collection->indexes[1]->orders[0], Order::Desc);
 
-        if ($database->getAdapter()->getSupportForIndexArray()) {
-            $this->assertEquals($collection->getAttribute('indexes')[2]['attributes'][0], 'cards');
-            $this->assertEquals($collection->getAttribute('indexes')[2]['lengths'][0], Database::MAX_ARRAY_INDEX_LENGTH);
-            $this->assertEquals($collection->getAttribute('indexes')[2]['orders'][0], null);
-        }
-    }
-
-    public function testCollectionUpdate(): Document
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $collection = $database->createCollection('collectionUpdate', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users())
-        ], documentSecurity: false);
-
-        $this->assertInstanceOf(Document::class, $collection);
-
-        $collection = $database->getCollection('collectionUpdate');
-
-        $this->assertFalse($collection->getAttribute('documentSecurity'));
-        $this->assertIsArray($collection->getPermissions());
-        $this->assertCount(4, $collection->getPermissions());
-
-        $collection = $database->updateCollection('collectionUpdate', [], true);
-
-        $this->assertTrue($collection->getAttribute('documentSecurity'));
-        $this->assertIsArray($collection->getPermissions());
-        $this->assertEmpty($collection->getPermissions());
-
-        $collection = $database->getCollection('collectionUpdate');
-
-        $this->assertTrue($collection->getAttribute('documentSecurity'));
-        $this->assertIsArray($collection->getPermissions());
-        $this->assertEmpty($collection->getPermissions());
-
-        return $collection;
-    }
-
-    public function testUpdateDeleteCollectionNotFound(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        try {
-            $database->deleteCollection('not_found');
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Collection not found', $e->getMessage());
-        }
-
-        try {
-            $database->updateCollection('not_found', [], true);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertEquals('Collection not found', $e->getMessage());
+        if ($database->getAdapter()->supports(Capability::IndexArray)) {
+            $this->assertEquals($collection->indexes[2]->attributes[0], 'cards');
+            $this->assertEquals($collection->indexes[2]->lengths[0], Database::MAX_ARRAY_INDEX_LENGTH);
+            $this->assertEquals($collection->indexes[2]->orders[0], null);
         }
     }
 
@@ -798,12 +433,13 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForGetConnectionId()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\ConnectionId::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $this->assertIsString($database->getConnectionId());
+        $this->assertNotSame('', $database->getConnectionId());
     }
 
     public function testKeywords(): void
@@ -811,31 +447,23 @@ trait CollectionTests
         $database = $this->getDatabase();
         $keywords = $database->getKeywords();
 
+        if ($keywords === []) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
         // Collection name tests
         $attributes = [
-            new Document([
-                '$id' => ID::custom('attribute1'),
-                'type' => Database::VAR_STRING,
-                'size' => 256,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+            Attribute::string(key: 'attribute1', size: 256),
         ];
 
         $indexes = [
-            new Document([
-                '$id' => ID::custom('index1'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['attribute1'],
-                'lengths' => [256],
-                'orders' => ['ASC'],
-            ]),
+            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256], orders: [Order::Asc]),
         ];
 
         foreach ($keywords as $keyword) {
-            $collection = $database->createCollection($keyword, $attributes, $indexes);
+            $collection = $database->createCollection(new Collection(id: $keyword, attributes: $attributes, indexes: $indexes));
             $this->assertEquals($keyword, $collection->getId());
 
             $document = $database->createDocument($keyword, new Document([
@@ -865,12 +493,12 @@ trait CollectionTests
 
         // Attribute name tests
         foreach ($keywords as $keyword) {
-            $collectionName = 'rk' . $keyword; // rk is shorthand for reserved-keyword. We do this since there are some limits (64 chars max)
+            $collectionName = 'rk'.$keyword; // rk is shorthand for reserved-keyword. We do this since there are some limits (64 chars max)
 
-            $collection = $database->createCollection($collectionName);
+            $collection = $database->createCollection(new Collection(id: $collectionName));
             $this->assertEquals($collectionName, $collection->getId());
 
-            $attribute = $database->createAttribute($collectionName, $keyword, Database::VAR_STRING, 128, true);
+            $attribute = $database->createAttribute($collectionName, Attribute::string(key: $keyword, size: 128, required: true));
             $this->assertEquals(true, $attribute);
 
             $document = new Document([
@@ -880,29 +508,29 @@ trait CollectionTests
                     Permission::update(Role::any()),
                     Permission::delete(Role::any()),
                 ],
-                '$id' => 'reservedKeyDocument'
+                '$id' => 'reservedKeyDocument',
             ]);
-            $document->setAttribute($keyword, 'Reserved:' . $keyword);
+            $document->setAttribute($keyword, 'Reserved:'.$keyword);
 
             $document = $database->createDocument($collectionName, $document);
             $this->assertEquals('reservedKeyDocument', $document->getId());
-            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+            $this->assertEquals('Reserved:'.$keyword, $document->getAttribute($keyword));
 
             $document = $database->getDocument($collectionName, 'reservedKeyDocument');
             $this->assertEquals('reservedKeyDocument', $document->getId());
-            $this->assertEquals('Reserved:' . $keyword, $document->getAttribute($keyword));
+            $this->assertEquals('Reserved:'.$keyword, $document->getAttribute($keyword));
 
             $documents = $database->find($collectionName);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
-            $this->assertEquals('Reserved:' . $keyword, $documents[0]->getAttribute($keyword));
+            $this->assertEquals('Reserved:'.$keyword, $documents[0]->getAttribute($keyword));
 
             $documents = $database->find($collectionName, [Query::equal($keyword, ["Reserved:{$keyword}"])]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
 
             $documents = $database->find($collectionName, [
-                Query::orderDesc($keyword)
+                Query::orderDesc($keyword),
             ]);
             $this->assertCount(1, $documents);
             $this->assertEquals('reservedKeyDocument', $documents[0]->getId());
@@ -912,77 +540,32 @@ trait CollectionTests
         }
     }
 
-    public function testLabels(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection(
-            'labels_test',
-        ));
-        $database->createAttribute('labels_test', 'attr1', Database::VAR_STRING, 10, false);
-
-        $database->createDocument('labels_test', new Document([
-            '$id' => 'doc1',
-            'attr1' => 'value1',
-            '$permissions' => [
-                Permission::read(Role::label('reader')),
-            ],
-        ]));
-
-        $documents = $database->find('labels_test');
-
-        $this->assertEmpty($documents);
-
-        $this->getDatabase()->getAuthorization()->addRole(Role::label('reader')->toString());
-
-        $documents = $database->find('labels_test');
-
-        $this->assertCount(1, $documents);
-    }
-
-    public function testMetadata(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $database->setMetadata('key', 'value');
-
-        $database->createCollection('testers');
-
-        $this->assertEquals(['key' => 'value'], $database->getMetadata());
-
-        $database->resetMetadata();
-
-        $this->assertEquals([], $database->getMetadata());
-    }
-
     public function testDeleteCollectionDeletesRelationships(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('devices');
+        // Create 'testers' collection if not already created (was created by testMetadata in sequential mode)
+        if ($database->getCollection('testers')->isEmpty()) {
+            $database->createCollection(new Collection(id: 'testers'));
+        }
 
-        $database->createRelationship(
-            collection: 'testers',
-            relatedCollection: 'devices',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true,
-            twoWayKey: 'tester'
-        );
+        $database->createCollection(new Collection(id: 'devices'));
+
+        $database->createRelationship(Relationship::oneToMany(collection: 'testers', relatedCollection: 'devices', twoWay: true, twoWayKey: 'tester'));
 
         $testers = $database->getCollection('testers');
         $devices = $database->getCollection('devices');
 
-        $this->assertEquals(1, \count($testers->getAttribute('attributes')));
-        $this->assertEquals(1, \count($devices->getAttribute('attributes')));
-        $this->assertEquals(1, \count($devices->getAttribute('indexes')));
+        $this->assertEquals(1, \count($testers->attributes));
+        $this->assertEquals(1, \count($devices->attributes));
+        $this->assertEquals(1, \count($devices->indexes));
 
         $database->deleteCollection('testers');
 
@@ -990,60 +573,48 @@ trait CollectionTests
         $devices = $database->getCollection('devices');
 
         $this->assertEquals(true, $testers->isEmpty());
-        $this->assertEquals(0, \count($devices->getAttribute('attributes')));
-        $this->assertEquals(0, \count($devices->getAttribute('indexes')));
+        $this->assertEquals(0, \count($devices->attributes));
+        $this->assertEquals(0, \count($devices->indexes));
     }
-
 
     public function testCascadeMultiDelete(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('cascadeMultiDelete1');
-        $database->createCollection('cascadeMultiDelete2');
-        $database->createCollection('cascadeMultiDelete3');
+        $database->createCollection(new Collection(id: 'cascadeMultiDelete1'));
+        $database->createCollection(new Collection(id: 'cascadeMultiDelete2'));
+        $database->createCollection(new Collection(id: 'cascadeMultiDelete3'));
 
-        $database->createRelationship(
-            collection: 'cascadeMultiDelete1',
-            relatedCollection: 'cascadeMultiDelete2',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true,
-            onDelete: Database::RELATION_MUTATE_CASCADE
-        );
+        $database->createRelationship(Relationship::oneToMany(collection: 'cascadeMultiDelete1', relatedCollection: 'cascadeMultiDelete2', twoWay: true, onDelete: ForeignKeyAction::Cascade));
 
-        $database->createRelationship(
-            collection: 'cascadeMultiDelete2',
-            relatedCollection: 'cascadeMultiDelete3',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: true,
-            onDelete: Database::RELATION_MUTATE_CASCADE
-        );
+        $database->createRelationship(Relationship::oneToMany(collection: 'cascadeMultiDelete2', relatedCollection: 'cascadeMultiDelete3', twoWay: true, onDelete: ForeignKeyAction::Cascade));
 
         $root = $database->createDocument('cascadeMultiDelete1', new Document([
             '$id' => 'cascadeMultiDelete1',
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::delete(Role::any())
+                Permission::delete(Role::any()),
             ],
             'cascadeMultiDelete2' => [
                 [
                     '$id' => 'cascadeMultiDelete2',
                     '$permissions' => [
                         Permission::read(Role::any()),
-                        Permission::delete(Role::any())
+                        Permission::delete(Role::any()),
                     ],
                     'cascadeMultiDelete3' => [
                         [
                             '$id' => 'cascadeMultiDelete3',
                             '$permissions' => [
                                 Permission::read(Role::any()),
-                                Permission::delete(Role::any())
+                                Permission::delete(Role::any()),
                             ],
                         ],
                     ],
@@ -1051,8 +622,9 @@ trait CollectionTests
             ],
         ]));
 
-        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2'));
-        $this->assertCount(1, $root->getAttribute('cascadeMultiDelete2')[0]->getAttribute('cascadeMultiDelete3'));
+        $cascade2 = $root->getDocuments('cascadeMultiDelete2');
+        $this->assertCount(1, $cascade2);
+        $this->assertCount(1, $cascade2[0]->getDocuments('cascadeMultiDelete3'));
 
         $this->assertEquals(true, $database->deleteDocument('cascadeMultiDelete1', $root->getId()));
 
@@ -1082,38 +654,45 @@ trait CollectionTests
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if ($database->exists('schema1')) {
-            $database->setDatabase('schema1')->delete();
+        $token = static::getTestToken();
+        $schema1 = 'schema1_'.$token;
+        $schema2 = 'schema2_'.$token;
+        $sharedTablesDb = 'sharedTables_'.$token;
+
+        if ($database->exists($schema1)) {
+            $database->setDatabase($schema1)->delete();
         }
-        if ($database->exists('schema2')) {
-            $database->setDatabase('schema2')->delete();
+        if ($database->exists($schema2)) {
+            $database->setDatabase($schema2)->delete();
         }
-        if ($database->exists('sharedTables')) {
-            $database->setDatabase('sharedTables')->delete();
+        if ($database->exists($sharedTablesDb)) {
+            $database->setDatabase($sharedTablesDb)->delete();
         }
 
         /**
          * Schema
          */
         $database
-            ->setDatabase('schema1')
+            ->setDatabase($schema1)
             ->setNamespace('')
             ->create();
 
-        $this->assertEquals(true, $database->exists('schema1'));
+        $this->assertEquals(true, $database->exists($schema1));
 
         $database
-            ->setDatabase('schema2')
+            ->setDatabase($schema2)
             ->setNamespace('')
             ->create();
 
-        $this->assertEquals(true, $database->exists('schema2'));
+        $this->assertEquals(true, $database->exists($schema2));
 
         /**
          * Table
@@ -1122,49 +701,30 @@ trait CollectionTests
         $tenant2 = 2;
 
         $database
-            ->setDatabase('sharedTables')
+            ->setDatabase($sharedTablesDb)
             ->setNamespace('')
             ->setSharedTables(true)
             ->setTenant($tenant1)
             ->create();
 
-        $this->assertEquals(true, $database->exists('sharedTables'));
+        $this->assertEquals(true, $database->exists($sharedTablesDb));
 
-        $database->createCollection('people', [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'size' => 128,
-                'required' => true,
-            ]),
-            new Document([
-                '$id' => 'lifeStory',
-                'type' => Database::VAR_STRING,
-                'size' => 65536,
-                'required' => true,
-            ])
-        ], [
-            new Document([
-                '$id' => 'idx_name',
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['name']
-            ])
-        ], [
+        $database->createCollection(new Collection(id: 'people', attributes: [
+            Attribute::string(key: 'name', size: 128, required: true),
+            Attribute::string(key: 'lifeStory', size: 65536, required: true),
+        ], indexes: [
+            Index::key(key: 'idx_name', attributes: ['name']),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
+            Permission::delete(Role::any()),
+        ]));
 
         $this->assertCount(1, $database->listCollections());
 
-        if ($database->getAdapter()->getSupportForFulltextIndex()) {
-            $database->createIndex(
-                collection: 'people',
-                id: 'idx_lifeStory',
-                type: Database::INDEX_FULLTEXT,
-                attributes: ['lifeStory']
-            );
+        if ($database->getAdapter()->supports(Capability::Fulltext)) {
+            $database->createIndex('people', Index::fullText(key: 'idx_lifeStory', attributes: ['lifeStory']));
         }
 
         $docId = ID::unique();
@@ -1175,7 +735,7 @@ trait CollectionTests
                 Permission::read(Role::any()),
             ],
             'name' => 'Spiderman',
-            'lifeStory' => 'Spider-Man is a superhero appearing in American comic books published by Marvel Comics.'
+            'lifeStory' => 'Spider-Man is a superhero appearing in American comic books published by Marvel Comics.',
         ]));
 
         $doc = $database->getDocument('people', $docId);
@@ -1186,7 +746,7 @@ trait CollectionTests
          * Remove Permissions
          */
         $doc->setAttribute('$permissions', [
-            Permission::read(Role::any())
+            Permission::read(Role::any()),
         ]);
 
         $database->updateDocument('people', $docId, $doc);
@@ -1251,9 +811,11 @@ trait CollectionTests
         // Reset state
         $database
             ->setSharedTables($sharedTables)
+            ->setTenant($tenant)
             ->setNamespace($namespace)
             ->setDatabase($schema);
     }
+
     /**
      * @throws LimitException
      * @throws DuplicateException
@@ -1264,12 +826,12 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('duplicates', permissions: [
-            Permission::read(Role::any())
-        ]);
+        $database->createCollection(new Collection(id: 'duplicates', permissions: [
+            Permission::read(Role::any()),
+        ]));
 
         try {
-            $database->createCollection('duplicates');
+            $database->createCollection(new Collection(id: 'duplicates'));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
@@ -1279,6 +841,7 @@ trait CollectionTests
 
         $database->deleteCollection('duplicates');
     }
+
     public function testSharedTablesDuplicates(): void
     {
         /** @var Database $database */
@@ -1286,60 +849,66 @@ trait CollectionTests
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if ($database->exists('sharedTables')) {
-            $database->setDatabase('sharedTables')->delete();
+        $sharedTablesDb = 'sharedTables_'.static::getTestToken();
+
+        if ($database->exists($sharedTablesDb)) {
+            $database->setDatabase($sharedTablesDb)->delete();
         }
 
         $database
-            ->setDatabase('sharedTables')
+            ->setDatabase($sharedTablesDb)
             ->setNamespace('')
             ->setSharedTables(true)
             ->setTenant(null)
             ->create();
 
         // Create collection
-        $database->createCollection('duplicates', documentSecurity: false);
-        $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
-        $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+        $database->createCollection(new Collection(id: 'duplicates', documentSecurity: false));
+        $database->createAttribute('duplicates', Attribute::string(key: 'name', size: 10));
+        $database->createIndex('duplicates', Index::key(key: 'nameIndex', attributes: ['name']));
 
         $database->setTenant(2);
 
         try {
-            $database->createCollection('duplicates', documentSecurity: false);
+            $database->createCollection(new Collection(id: 'duplicates', documentSecurity: false));
         } catch (DuplicateException) {
             // Ignore
         }
 
         try {
-            $database->createAttribute('duplicates', 'name', Database::VAR_STRING, 10, false);
+            $database->createAttribute('duplicates', Attribute::string(key: 'name', size: 10));
         } catch (DuplicateException) {
             // Ignore
         }
 
         try {
-            $database->createIndex('duplicates', 'nameIndex', Database::INDEX_KEY, ['name']);
+            $database->createIndex('duplicates', Index::key(key: 'nameIndex', attributes: ['name']));
         } catch (DuplicateException) {
             // Ignore
         }
 
         $collection = $database->getCollection('duplicates');
-        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
-        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+        $this->assertEquals(1, \count($collection->attributes));
+        $this->assertEquals(1, \count($collection->indexes));
 
-        $database->setTenant(1);
+        $database->setTenant(null);
+        $database->purgeCachedCollection('duplicates');
 
         $collection = $database->getCollection('duplicates');
-        $this->assertEquals(1, \count($collection->getAttribute('attributes')));
-        $this->assertEquals(1, \count($collection->getAttribute('indexes')));
+        $this->assertEquals(1, \count($collection->attributes));
+        $this->assertEquals(1, \count($collection->indexes));
 
         $database
             ->setSharedTables($sharedTables)
+            ->setTenant($tenant)
             ->setNamespace($namespace)
             ->setDatabase($schema);
     }
@@ -1356,7 +925,7 @@ trait CollectionTests
 
         if ($sharedTables) {
             // Already in shared-tables mode (SharedTables/* test classes)
-        } elseif ($database->getAdapter()->getSupportForSchemas()) {
+        } elseif ($database->getAdapter()->supports(Capability::Schemas)) {
             $dbName = 'stMultiTenant';
             if ($database->exists($dbName)) {
                 $database->setDatabase($dbName)->delete();
@@ -1370,43 +939,34 @@ trait CollectionTests
             $createdDb = true;
         } else {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         try {
-            $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 10 : 'tenant_10';
-            $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 20 : 'tenant_20';
-            $colName = 'multiTenantCol';
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 10 : 'tenant_10';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 20 : 'tenant_20';
+            $colName = 'mt_' . uniqid();
 
             $database->setTenant($tenant1);
 
-            $database->createCollection($colName, [
-                new Document([
-                    '$id' => 'name',
-                    'type' => Database::VAR_STRING,
-                    'size' => 128,
-                    'required' => true,
-                ]),
-            ]);
+            $database->createCollection(new Collection(id: $colName, attributes: [
+                Attribute::string(key: 'name', size: 128, required: true),
+            ]));
 
             $col1 = $database->getCollection($colName);
             $this->assertFalse($col1->isEmpty());
-            $this->assertEquals(1, \count($col1->getAttribute('attributes')));
+            $this->assertEquals(1, \count($col1->attributes));
 
             $database->setTenant($tenant2);
 
-            $database->createCollection($colName, [
-                new Document([
-                    '$id' => 'name',
-                    'type' => Database::VAR_STRING,
-                    'size' => 128,
-                    'required' => true,
-                ]),
-            ]);
+            $database->createCollection(new Collection(id: $colName, attributes: [
+                Attribute::string(key: 'name', size: 128, required: true),
+            ]));
 
             $col2 = $database->getCollection($colName);
             $this->assertFalse($col2->isEmpty());
-            $this->assertEquals(1, \count($col2->getAttribute('attributes')));
+            $this->assertEquals(1, \count($col2->attributes));
 
             $database->setTenant($tenant1);
             $col1Again = $database->getCollection($colName);
@@ -1417,8 +977,11 @@ trait CollectionTests
             } else {
                 $database->setTenant($tenant1);
                 $database->deleteCollection($colName);
-                $database->setTenant($tenant2);
-                $database->deleteCollection($colName);
+                try {
+                    $database->setTenant($tenant2);
+                    $database->deleteCollection($colName);
+                } catch (\Throwable) {
+                }
             }
         } finally {
             $database
@@ -1439,8 +1002,8 @@ trait CollectionTests
         $originalTenant = $database->getTenant();
 
         try {
-            $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 100 : 'tenant_100';
-            $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 200 : 'tenant_200';
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 100 : 'tenant_100';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value ? 200 : 'tenant_200';
 
             if ($sharedTables) {
                 // Already in shared-tables mode; create() should be idempotent.
@@ -1450,8 +1013,8 @@ trait CollectionTests
                 $database->create();
                 $database->setTenant($tenant2);
                 $database->create();
-                $this->assertTrue(true);
-            } elseif ($database->getAdapter()->getSupportForSchemas()) {
+                $this->assertSame($tenant2, $database->getTenant());
+            } elseif ($database->getAdapter()->supports(Capability::Schemas)) {
                 $dbName = 'stMultiCreate';
                 if ($database->exists($dbName)) {
                     $database->setDatabase($dbName)->delete();
@@ -1469,6 +1032,7 @@ trait CollectionTests
                 $database->delete();
             } else {
                 $this->expectNotToPerformAssertions();
+
                 return;
             }
         } finally {
@@ -1486,60 +1050,59 @@ trait CollectionTests
             $database = $this->getDatabase();
 
             $events = [
-                Database::EVENT_DATABASE_CREATE,
-                Database::EVENT_DATABASE_LIST,
-                Database::EVENT_COLLECTION_CREATE,
-                Database::EVENT_COLLECTION_LIST,
-                Database::EVENT_COLLECTION_READ,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_CREATE,
-                Database::EVENT_ATTRIBUTE_UPDATE,
-                Database::EVENT_INDEX_CREATE,
-                Database::EVENT_DOCUMENT_CREATE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_UPDATE,
-                Database::EVENT_DOCUMENT_READ,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_FIND,
-                Database::EVENT_DOCUMENT_COUNT,
-                Database::EVENT_DOCUMENT_SUM,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_INCREASE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_DECREASE,
-                Database::EVENT_DOCUMENTS_CREATE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_UPDATE,
-                Database::EVENT_INDEX_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_DELETE,
-                Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_DOCUMENTS_DELETE,
-                Database::EVENT_DOCUMENT_PURGE,
-                Database::EVENT_ATTRIBUTE_DELETE,
-                Database::EVENT_COLLECTION_DELETE,
-                Database::EVENT_DATABASE_DELETE
+                Event::DatabaseCreate,
+                Event::DatabaseList,
+                Event::CollectionCreate,
+                Event::CollectionList,
+                Event::CollectionRead,
+                Event::DocumentPurge,
+                Event::AttributeCreate,
+                Event::AttributeUpdate,
+                Event::IndexCreate,
+                Event::DocumentCreate,
+                Event::DocumentPurge,
+                Event::DocumentUpdate,
+                Event::DocumentRead,
+                Event::DocumentFind,
+                Event::DocumentFind,
+                Event::DocumentCount,
+                Event::DocumentSum,
+                Event::DocumentPurge,
+                Event::DocumentIncrease,
+                Event::DocumentPurge,
+                Event::DocumentDecrease,
+                Event::DocumentsCreate,
+                Event::DocumentPurge,
+                Event::DocumentPurge,
+                Event::DocumentPurge,
+                Event::DocumentsUpdate,
+                Event::IndexDelete,
+                Event::DocumentPurge,
+                Event::DocumentDelete,
+                Event::DocumentPurge,
+                Event::DocumentPurge,
+                Event::DocumentsDelete,
+                Event::DocumentPurge,
+                Event::AttributeDelete,
+                Event::CollectionDelete,
+                Event::DatabaseDelete,
+                Event::DocumentPurge,
+                Event::DocumentsDelete,
+                Event::DocumentPurge,
+                Event::AttributeDelete,
+                Event::CollectionDelete,
+                Event::DatabaseDelete,
             ];
 
-            $database->on(Database::EVENT_ALL, 'test', function ($event, $data) use (&$events) {
-                $shifted = array_shift($events);
-                $this->assertEquals($shifted, $event);
-            });
+            $supportsSchemas = $this->getDatabase()->getAdapter()->supports(Capability::Schemas);
+            if (! $supportsSchemas) {
+                \array_shift($events);
+            }
+            $database->addHook(new EventRecorder($events, $this));
 
-            if ($this->getDatabase()->getAdapter()->getSupportForSchemas()) {
+            if ($supportsSchemas) {
                 $database->setDatabase('hellodb');
                 $database->create();
-            } else {
-                \array_shift($events);
             }
 
             $database->list();
@@ -1547,13 +1110,13 @@ trait CollectionTests
             $database->setDatabase($this->testDatabase);
 
             $collectionId = ID::unique();
-            $database->createCollection($collectionId);
+            $database->createCollection(new Collection(id: $collectionId));
             $database->listCollections();
             $database->getCollection($collectionId);
-            $database->createAttribute($collectionId, 'attr1', Database::VAR_INTEGER, 2, false);
+            $database->createAttribute($collectionId, Attribute::integer(key: 'attr1', size: 2));
             $database->updateAttributeRequired($collectionId, 'attr1', true);
-            $indexId1 = 'index2_' . uniqid();
-            $database->createIndex($collectionId, $indexId1, Database::INDEX_KEY, ['attr1']);
+            $indexId1 = 'index2_'.uniqid();
+            $database->createIndex($collectionId, Index::key(key: $indexId1, attributes: ['attr1']));
 
             $document = $database->createDocument($collectionId, new Document([
                 '$id' => 'doc1',
@@ -1565,11 +1128,6 @@ trait CollectionTests
                 ],
             ]));
 
-            $executed = false;
-            $database->on(Database::EVENT_ALL, 'should-not-execute', function ($event, $data) use (&$executed) {
-                $executed = true;
-            });
-
             $database->silent(function () use ($database, $collectionId, $document) {
                 $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
                 $database->getDocument($collectionId, 'doc1');
@@ -1579,9 +1137,7 @@ trait CollectionTests
                 $database->sum($collectionId, 'attr1');
                 $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
                 $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            }, ['should-not-execute']);
-
-            $this->assertFalse($executed);
+            });
 
             $database->createDocuments($collectionId, [
                 new Document([
@@ -1603,10 +1159,6 @@ trait CollectionTests
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
-
-            // Remove all listeners
-            $database->on(Database::EVENT_ALL, 'test', null);
-            $database->on(Database::EVENT_ALL, 'should-not-execute', null);
         });
     }
 
@@ -1615,9 +1167,10 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertInstanceOf('Utopia\Database\Document', $database->createCollection('created_at'));
-        $database->createAttribute('created_at', 'title', Database::VAR_STRING, 100, false);
-        $document = $database->createDocument('created_at', new Document([
+        $created = $database->createCollection(new Collection(id: $this->getCreatedAtCollection()));
+        $this->assertSame($this->getCreatedAtCollection(), $created->getId());
+        $database->createAttribute($this->getCreatedAtCollection(), Attribute::string(key: 'title', size: 100));
+        $document = $database->createDocument($this->getCreatedAtCollection(), new Document([
             '$id' => ID::custom('uid123'),
 
             '$permissions' => [
@@ -1632,66 +1185,63 @@ trait CollectionTests
         $this->assertNotNull($document->getSequence());
     }
 
-    /**
-     * @depends testCreatedAtUpdatedAt
-     */
+    #[Depends('testCreatedAtUpdatedAt')]
     public function testCreatedAtUpdatedAtAssert(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->getDocument('created_at', 'uid123');
-        $this->assertEquals(true, !$document->isEmpty());
+        $document = $database->getDocument($this->getCreatedAtCollection(), 'uid123');
+        $this->assertEquals(true, ! $document->isEmpty());
         sleep(1);
         $document->setAttribute('title', 'new title');
-        $database->updateDocument('created_at', 'uid123', $document);
-        $document = $database->getDocument('created_at', 'uid123');
+        $database->updateDocument($this->getCreatedAtCollection(), 'uid123', $document);
+        $document = $database->getDocument($this->getCreatedAtCollection(), 'uid123');
 
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
 
-        $database->createCollection('created_at');
+        $database->createCollection(new Collection(id: $this->getCreatedAtCollection()));
     }
-
 
     public function testTransformations(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('docs', attributes: [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'size' => 767,
-                'required' => true,
-            ])
-        ]);
+        $database->createCollection(new Collection(id: 'docs', attributes: [
+            Attribute::string(key: 'name', size: 767, required: true),
+        ]));
 
         $database->createDocument('docs', new Document([
             '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any())],
             'name' => 'value1',
         ]));
 
-        $database->setMetadata('scope', 'api.users');
+        $collection = $database->getCollection('docs');
+        $adapter = $database->getAdapter();
+        $hook = new class () implements Transform {
+            public function transform(Event $event, string $query): string
+            {
+                return $query.' AND 1 = 0';
+            }
+        };
+        $database->addHook($hook);
 
-        $capturedSql = '';
-        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $sql) use (&$capturedSql) {
-            $sql .= ' AND 1=0';
-            $capturedSql = $sql;
-            return $sql;
-        });
+        try {
+            $result = $adapter->getDocument($collection, 'doc1');
 
-        $result = $database->getDocument('docs', 'doc1');
-
-        $this->assertTrue($result->isEmpty());
-
-        if ($database->getAdapter() instanceof SQL) {
-            $this->assertStringContainsString('/* scope: api.users */', $capturedSql);
+            if ($adapter instanceof SQL || $adapter instanceof Pool) {
+                $this->assertTrue($result->isEmpty());
+            } else {
+                $this->assertFalse($result->isEmpty());
+            }
+        } finally {
+            $database->removeTransform($hook::class);
         }
 
-        $database->before(Database::EVENT_DOCUMENT_READ, 'test', null);
-        $database->resetMetadata();
+        $this->assertFalse($adapter->getDocument($collection, 'doc1')->isEmpty());
     }
 
     public function testSetGlobalCollection(): void
@@ -1715,17 +1265,22 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            $this->assertStringNotContainsString((string)$db->getAdapter()->getTenant(), $collectionKey);
+            // Cache key format: '<cache>-<host>:<namespace>:<tenant>:collection:<id>'.
+            // Substring matching is unsafe because the namespace is a hex
+            // uniqid() that may legitimately contain the tenant digits.
+            $tenantSegment = \explode(':', $collectionKey)[2] ?? null;
+            $this->assertSame('', $tenantSegment);
         }
 
-        // non global collection should containt tenant in the cache key
+        // non global collection should contain tenant in the cache key
         $nonGlobalCollectionId = 'nonGlobalCollection';
         [$collectionKeyRegular] = $db->getCacheKeys(
             Database::METADATA,
             $nonGlobalCollectionId
         );
         if ($db->getSharedTables()) {
-            $this->assertStringContainsString((string)$db->getAdapter()->getTenant(), $collectionKeyRegular);
+            $tenantSegment = \explode(':', $collectionKeyRegular)[2] ?? null;
+            $this->assertSame((string) $db->getAdapter()->getTenant(), $tenantSegment);
         }
 
         // Non metadata collection should contain tenant in the cache key
@@ -1740,81 +1295,46 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            $this->assertStringContainsString((string)$db->getAdapter()->getTenant(), $collectionKey);
+            $this->assertStringContainsString((string) $db->getAdapter()->getTenant(), $collectionKey);
         }
 
         $db->resetGlobalCollections();
         $this->assertEmpty($db->getGlobalCollections());
-
     }
 
     public function testCreateCollectionWithLongId(): void
     {
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForAttributes()) {
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $collection = '019a91aa-58cd-708d-a55c-5f7725ef937a';
 
         $attributes = [
-            new Document([
-                '$id' => 'name',
-                'type' => Database::VAR_STRING,
-                'size' => 256,
-                'required' => true,
-                'array' => false,
-            ]),
-            new Document([
-                '$id' => 'age',
-                'type' => Database::VAR_INTEGER,
-                'size' => 0,
-                'required' => false,
-                'array' => false,
-            ]),
-            new Document([
-                '$id' => 'isActive',
-                'type' => Database::VAR_BOOLEAN,
-                'size' => 0,
-                'required' => false,
-                'array' => false,
-            ]),
+            Attribute::string(key: 'name', size: 256, required: true),
+            Attribute::integer(key: 'age'),
+            Attribute::boolean(key: 'isActive'),
         ];
 
         $indexes = [
-            new Document([
-                '$id' => ID::custom('idx_name'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['name'],
-                'lengths' => [128],
-                'orders' => ['ASC'],
-            ]),
-            new Document([
-                '$id' => ID::custom('idx_name_age'),
-                'type' => Database::INDEX_KEY,
-                'attributes' => ['name', 'age'],
-                'lengths' => [128, null],
-                'orders' => ['ASC', 'DESC'],
-            ]),
+            Index::key(key: 'idx_name', attributes: ['name'], lengths: [128], orders: [Order::Asc]),
+            Index::key(key: 'idx_name_age', attributes: ['name', 'age'], lengths: [128, null], orders: [Order::Asc, Order::Desc]),
         ];
 
-        $collectionDocument = $database->createCollection(
-            $collection,
-            $attributes,
-            $indexes,
-            permissions: [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-        );
+        $collectionDocument = $database->createCollection(new Collection(id: $collection, attributes: $attributes, indexes: $indexes, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
 
         $this->assertEquals($collection, $collectionDocument->getId());
-        $this->assertCount(3, $collectionDocument->getAttribute('attributes'));
-        $this->assertCount(2, $collectionDocument->getAttribute('indexes'));
+        $this->assertCount(3, $collectionDocument->attributes);
+        $this->assertCount(2, $collectionDocument->indexes);
 
         $document = $database->createDocument($collection, new Document([
             '$id' => 'longIdDoc',
@@ -1860,22 +1380,18 @@ trait CollectionTests
 
         // A peer process: same database, its own cache, so its writes do not
         // purge the negative cache entry this process is about to record.
+        $authorization = self::$authorization ?? throw new \RuntimeException('Authorization not initialised');
         $peer = (new Database($database->getAdapter(), new Cache(new NoneCache())))
-            ->setAuthorization(self::$authorization);
+            ->setAuthorization($authorization);
 
         $this->assertTrue($database->getCollection($collection)->isEmpty());
 
-        $peer->createCollection($collection, [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'size' => 128,
-                'required' => false,
-            ]),
-        ], permissions: [
+        $name = Attribute::string(key: 'name', size: 128);
+
+        $peer->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ]));
 
         $peer->createDocument($collection, new Document([
             '$id' => ID::custom('written'),
@@ -1884,17 +1400,10 @@ trait CollectionTests
         ]));
 
         try {
-            $database->createCollection($collection, [
-                new Document([
-                    '$id' => ID::custom('name'),
-                    'type' => Database::VAR_STRING,
-                    'size' => 128,
-                    'required' => false,
-                ]),
-            ], permissions: [
+            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
-            ]);
+            ]));
             $this->fail('Expected DuplicateException for a collection a peer already created');
         } catch (DuplicateException) {
         }
@@ -1932,12 +1441,7 @@ trait CollectionTests
         }
 
         $collection = 'preCommitCreate';
-        $name = new Document([
-            '$id' => ID::custom('name'),
-            'type' => Database::VAR_STRING,
-            'size' => 128,
-            'required' => false,
-        ]);
+        $name = Attribute::string(key: 'name', size: 128);
 
         $database->getAdapter()->createCollection($collection, [$name], []);
 
@@ -1945,7 +1449,7 @@ trait CollectionTests
             '$id' => $collection,
             '$collection' => Database::METADATA,
             'name' => $collection,
-            'attributes' => [$name],
+            'attributes' => [$name->toDocument()],
             'indexes' => [],
             'documentSecurity' => true,
             '$permissions' => [
@@ -1963,10 +1467,10 @@ trait CollectionTests
         ]));
 
         try {
-            $database->createCollection($collection, [$name], permissions: [
+            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
-            ]);
+            ]));
         } catch (DuplicateException) {
             // SQL adapters report the existing table as Duplicate. Mongo's
             // createCollection is idempotent, so this process continues and

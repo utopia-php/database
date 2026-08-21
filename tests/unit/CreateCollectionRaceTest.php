@@ -6,6 +6,8 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
@@ -26,12 +28,7 @@ class CreateCollectionRaceTest extends TestCase
         $database->create();
 
         $collection = 'preCommitCreate';
-        $name = new Document([
-            '$id' => ID::custom('name'),
-            'type' => Database::VAR_STRING,
-            'size' => 128,
-            'required' => false,
-        ]);
+        $name = Attribute::string(key: 'name', size: 128);
 
         $adapter->createCollection($collection, [$name], []);
 
@@ -39,7 +36,7 @@ class CreateCollectionRaceTest extends TestCase
             '$id' => $collection,
             '$collection' => Database::METADATA,
             'name' => $collection,
-            'attributes' => [$name],
+            'attributes' => [$name->toDocument()],
             'indexes' => [],
             'documentSecurity' => true,
             '$permissions' => [
@@ -57,10 +54,10 @@ class CreateCollectionRaceTest extends TestCase
         ]));
 
         try {
-            $database->createCollection($collection, [$name], permissions: [
+            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
-            ]);
+            ]));
             $this->fail('Expected DuplicateException for an existing physical collection');
         } catch (DuplicateException) {
         }
@@ -96,22 +93,17 @@ class CreateCollectionRaceTest extends TestCase
         $database->create();
 
         $collection = 'preCommitCreatePurgeFail';
-        $name = new Document([
-            '$id' => ID::custom('name'),
-            'type' => Database::VAR_STRING,
-            'size' => 128,
-            'required' => false,
-        ]);
+        $name = Attribute::string(key: 'name', size: 128);
 
         $adapter->createCollection($collection, [$name], []);
 
         $cacheAdapter->failPurge = true;
 
         try {
-            $database->createCollection($collection, [$name], permissions: [
+            $database->createCollection(new Collection(id: $collection, attributes: [$name], permissions: [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),
-            ]);
+            ]));
             $this->fail('Expected DuplicateException even when cache purge fails');
         } catch (DuplicateException $exception) {
             $this->assertSame('Collection ' . $collection . ' already exists', $exception->getMessage());

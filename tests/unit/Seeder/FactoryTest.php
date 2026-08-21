@@ -1,0 +1,88 @@
+<?php
+
+namespace Tests\Unit\Seeder;
+
+use Faker\Factory as FakerFactory;
+use Faker\Generator;
+use PHPUnit\Framework\TestCase;
+use Utopia\Database\Seeder\Factory;
+
+class FactoryTest extends TestCase
+{
+    public function testConstructAcceptsInjectedGenerator(): void
+    {
+        $faker = FakerFactory::create();
+        $used = null;
+
+        $factory = new Factory($faker);
+        $factory->define('users', function (Generator $generator) use (&$used) {
+            $used = $generator;
+
+            return ['name' => 'Injected'];
+        });
+
+        $doc = $factory->make('users');
+
+        $this->assertSame($faker, $used);
+        $this->assertSame('Injected', $doc->getAttribute('name'));
+    }
+
+    public function testDefineAndMake(): void
+    {
+        $factory = new Factory();
+        $factory->define('users', function (Generator $faker) {
+            return [
+                'name' => $faker->name(),
+                'email' => $faker->email(),
+                'age' => $faker->numberBetween(18, 65),
+            ];
+        });
+
+        $doc = $factory->make('users');
+
+        $this->assertNotEmpty($doc->getAttribute('name'));
+        $this->assertNotEmpty($doc->getAttribute('email'));
+        $this->assertGreaterThanOrEqual(18, $doc->getAttribute('age'));
+    }
+
+    public function testMakeWithOverrides(): void
+    {
+        $factory = new Factory();
+        $factory->define('users', function (Generator $faker) {
+            return [
+                'name' => $faker->name(),
+                'email' => $faker->email(),
+            ];
+        });
+
+        $doc = $factory->make('users', ['name' => 'Override Name']);
+
+        $this->assertEquals('Override Name', $doc->getAttribute('name'));
+    }
+
+    public function testMakeMany(): void
+    {
+        $factory = new Factory();
+        $factory->define('users', function (Generator $faker) {
+            return [
+                'name' => $faker->name(),
+            ];
+        });
+
+        $docs = $factory->makeMany('users', 5);
+
+        $this->assertCount(5, $docs);
+        foreach ($docs as $doc) {
+            $this->assertNotEmpty($doc->getAttribute('name'));
+        }
+    }
+
+    public function testUndefinedCollectionThrows(): void
+    {
+        $factory = new Factory();
+
+        $this->expectException(\RuntimeException::class);
+        $factory->make('nonexistent');
+    }
+
+}

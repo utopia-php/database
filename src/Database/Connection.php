@@ -3,23 +3,27 @@
 namespace Utopia\Database;
 
 use Swoole\Database\DetectsLostConnections;
+use Throwable;
 
+/**
+ * Provides utilities for detecting lost database connections.
+ */
 class Connection
 {
     /**
      * @var array<string>
      */
     protected static array $errors = [
-        'Max connect timeout reached'
+        'Max connect timeout reached',
     ];
 
     /**
      * Check if the given throwable was caused by a database connection error.
      *
-     * @param \Throwable $e
+     * @param Throwable $e The exception to inspect
      * @return bool
      */
-    public static function hasError(\Throwable $e): bool
+    public static function hasError(Throwable $e): bool
     {
         if (DetectsLostConnections::causedByLostConnection($e)) {
             return true;

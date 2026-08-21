@@ -3,6 +3,10 @@
 namespace Tests\E2E\Adapter\Scopes\Relationships;
 
 use Exception;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Restricted as RestrictedException;
@@ -11,6 +15,10 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\ForeignKeyAction;
 
 trait ManyToOneTests
 {
@@ -19,53 +27,49 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('review');
-        $database->createCollection('movie');
+        $database->createCollection(new Collection(id: 'review'));
+        $database->createCollection(new Collection(id: 'movie'));
 
-        $database->createAttribute('review', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('movie', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('movie', 'length', Database::VAR_INTEGER, 0, true, formatOptions: ['min' => 0, 'max' => 999]);
-        $database->createAttribute('movie', 'date', Database::VAR_DATETIME, 0, false, filters: ['datetime']);
-        $database->createAttribute('review', 'date', Database::VAR_DATETIME, 0, false, filters: ['datetime']);
-        $database->createRelationship(
-            collection: 'review',
-            relatedCollection: 'movie',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWayKey: 'reviews'
-        );
+        $database->createAttribute('review', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('movie', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('movie', Attribute::integer(key: 'length', required: true, formatOptions: ['min' => 0, 'max' => 999]));
+        $database->createAttribute('movie', Attribute::datetime(key: 'date', filters: ['datetime']));
+        $database->createAttribute('review', Attribute::datetime(key: 'date', filters: ['datetime']));
+        $database->createRelationship(Relationship::manyToOne(collection: 'review', relatedCollection: 'movie', twoWayKey: 'reviews'));
 
         // Check metadata for collection
         $collection = $database->getCollection('review');
-        $attributes = $collection->getAttribute('attributes', []);
-        foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'movie') {
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('movie', $attribute['$id']);
-                $this->assertEquals('movie', $attribute['key']);
-                $this->assertEquals('movie', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
-                $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('reviews', $attribute['options']['twoWayKey']);
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === 'movie') {
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('movie', $attribute->getId());
+                $this->assertEquals('movie', $attribute->key);
+                $options = $attribute->options ?? [];
+                $this->assertEquals('movie', $options['relatedCollection'] ?? null);
+                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
+                $this->assertEquals(false, $options['twoWay'] ?? null);
+                $this->assertEquals('reviews', $options['twoWayKey'] ?? null);
             }
         }
 
         // Check metadata for related collection
         $collection = $database->getCollection('movie');
-        $attributes = $collection->getAttribute('attributes', []);
-        foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'reviews') {
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('reviews', $attribute['$id']);
-                $this->assertEquals('reviews', $attribute['key']);
-                $this->assertEquals('review', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
-                $this->assertEquals(false, $attribute['options']['twoWay']);
-                $this->assertEquals('movie', $attribute['options']['twoWayKey']);
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === 'reviews') {
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('reviews', $attribute->getId());
+                $this->assertEquals('reviews', $attribute->key);
+                $options = $attribute->options ?? [];
+                $this->assertEquals('review', $options['relatedCollection'] ?? null);
+                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
+                $this->assertEquals(false, $options['twoWay'] ?? null);
+                $this->assertEquals('movie', $options['twoWayKey'] ?? null);
             }
         }
 
@@ -140,12 +144,12 @@ trait ManyToOneTests
 
         // Get document with relationship
         $review = $database->getDocument('review', 'review1');
-        $movie = $review->getAttribute('movie', []);
-        $this->assertEquals('movie1', $movie['$id']);
+        $movie = $review->getDocument('movie');
+        $this->assertEquals('movie1', $movie->getId());
         $this->assertArrayNotHasKey('reviews', $movie);
 
         $documents = $database->find('review', [
-            Query::select(['date', 'movie.date'])
+            Query::select(['date', 'movie.date']),
         ]);
 
         $this->assertCount(3, $documents);
@@ -153,14 +157,18 @@ trait ManyToOneTests
         $document = $documents[0];
         $this->assertArrayHasKey('date', $document);
         $this->assertArrayHasKey('movie', $document);
-        $this->assertArrayHasKey('date', $document->getAttribute('movie'));
+        $this->assertArrayHasKey('date', $document->getDocument('movie'));
         $this->assertArrayNotHasKey('name', $document);
-        $this->assertEquals(29, strlen($document['date'])); // checks filter
-        $this->assertEquals(29, strlen($document['movie']['date']));
+        $date = $document->getAttribute('date');
+        $this->assertIsString($date);
+        $this->assertEquals(29, strlen($date));
+        $movieDate = $document->getDocument('movie')->getAttribute('date');
+        $this->assertIsString($movieDate);
+        $this->assertEquals(29, strlen($movieDate));
 
         $review = $database->getDocument('review', 'review2');
-        $movie = $review->getAttribute('movie', []);
-        $this->assertEquals('movie2', $movie['$id']);
+        $movie = $review->getDocument('movie');
+        $this->assertEquals('movie2', $movie->getId());
         $this->assertArrayNotHasKey('reviews', $movie);
 
         // Get related document
@@ -176,22 +184,22 @@ trait ManyToOneTests
 
         // Select related document attributes
         $review = $database->findOne('review', [
-            Query::select(['*', 'movie.name'])
+            Query::select(['*', 'movie.name']),
         ]);
 
         if ($review->isEmpty()) {
             throw new Exception('Review not found');
         }
 
-        $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
-        $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
+        $this->assertEquals('Movie 1', $review->getDocument('movie')->getAttribute('name'));
+        $this->assertArrayNotHasKey('length', $review->getDocument('movie'));
 
         $review = $database->getDocument('review', 'review1', [
-            Query::select(['*', 'movie.name'])
+            Query::select(['*', 'movie.name']),
         ]);
 
-        $this->assertEquals('Movie 1', $review->getAttribute('movie')->getAttribute('name'));
-        $this->assertArrayNotHasKey('length', $review->getAttribute('movie'));
+        $this->assertEquals('Movie 1', $review->getDocument('movie')->getAttribute('name'));
+        $this->assertArrayNotHasKey('length', $review->getDocument('movie'));
 
         // Update root document attribute without altering relationship
         $review1 = $database->updateDocument(
@@ -205,7 +213,7 @@ trait ManyToOneTests
         $this->assertEquals('Review 1 Updated', $review1->getAttribute('name'));
 
         // Update nested document attribute
-        $movie = $review1->getAttribute('movie');
+        $movie = $review1->getDocument('movie');
         $movie->setAttribute('name', 'Movie 1 Updated');
 
         $review1 = $database->updateDocument(
@@ -214,9 +222,9 @@ trait ManyToOneTests
             $review1->setAttribute('movie', $movie)
         );
 
-        $this->assertEquals('Movie 1 Updated', $review1->getAttribute('movie')->getAttribute('name'));
+        $this->assertEquals('Movie 1 Updated', $review1->getDocument('movie')->getAttribute('name'));
         $review1 = $database->getDocument('review', 'review1');
-        $this->assertEquals('Movie 1 Updated', $review1->getAttribute('movie')->getAttribute('name'));
+        $this->assertEquals('Movie 1 Updated', $review1->getDocument('movie')->getAttribute('name'));
 
         // Create new document with no relationship
         $review5 = $database->createDocument('review', new Document([
@@ -245,9 +253,9 @@ trait ManyToOneTests
             ]))
         );
 
-        $this->assertEquals('Movie 5', $review5->getAttribute('movie')->getAttribute('name'));
+        $this->assertEquals('Movie 5', $review5->getDocument('movie')->getAttribute('name'));
         $review5 = $database->getDocument('review', 'review5');
-        $this->assertEquals('Movie 5', $review5->getAttribute('movie')->getAttribute('name'));
+        $this->assertEquals('Movie 5', $review5->getDocument('movie')->getAttribute('name'));
 
         // Update document with new related document
         $database->updateDocument(
@@ -265,8 +273,8 @@ trait ManyToOneTests
 
         // Get document with new relationship key
         $review = $database->getDocument('review', 'review1');
-        $movie = $review->getAttribute('newMovie');
-        $this->assertEquals('movie2', $movie['$id']);
+        $movie = $review->getDocument('newMovie');
+        $this->assertEquals('movie2', $movie->getId());
 
         // Reset values
         $review1 = $database->getDocument('review', 'review1');
@@ -308,7 +316,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'review',
             id: 'newMovie',
-            onDelete: Database::RELATION_MUTATE_SET_NULL
+            onDelete: ForeignKeyAction::SetNull
         );
 
         // Delete child, set parent relationship to null
@@ -322,7 +330,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'review',
             id: 'newMovie',
-            onDelete: Database::RELATION_MUTATE_CASCADE
+            onDelete: ForeignKeyAction::Cascade
         );
 
         // Delete child, will delete parent
@@ -334,7 +342,6 @@ trait ManyToOneTests
 
         $library = $database->getDocument('review', 'review2');
         $this->assertEquals(true, $library->isEmpty());
-
 
         // Delete relationship
         $database->deleteRelationship(
@@ -353,60 +360,49 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('product');
-        $database->createCollection('store');
+        $database->createCollection(new Collection(id: 'product'));
+        $database->createCollection(new Collection(id: 'store'));
 
-        $database->createAttribute('store', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('store', 'opensAt', Database::VAR_STRING, 5, true);
+        $database->createAttribute('store', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('store', Attribute::string(key: 'opensAt', size: 5, required: true));
 
-        $database->createAttribute(
-            collection: 'product',
-            id: 'name',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: true
-        );
+        $database->createAttribute('product', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(
-            collection: 'product',
-            relatedCollection: 'store',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            twoWayKey: 'products'
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: 'product', relatedCollection: 'store', twoWay: true, twoWayKey: 'products'));
 
         // Check metadata for collection
         $collection = $database->getCollection('product');
-        $attributes = $collection->getAttribute('attributes', []);
-        foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'store') {
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('store', $attribute['$id']);
-                $this->assertEquals('store', $attribute['key']);
-                $this->assertEquals('store', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
-                $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('products', $attribute['options']['twoWayKey']);
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === 'store') {
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('store', $attribute->getId());
+                $this->assertEquals('store', $attribute->key);
+                $options = $attribute->options ?? [];
+                $this->assertEquals('store', $options['relatedCollection'] ?? null);
+                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
+                $this->assertEquals(true, $options['twoWay'] ?? null);
+                $this->assertEquals('products', $options['twoWayKey'] ?? null);
             }
         }
 
         // Check metadata for related collection
         $collection = $database->getCollection('store');
-        $attributes = $collection->getAttribute('attributes', []);
-        foreach ($attributes as $attribute) {
-            if ($attribute['key'] === 'products') {
-                $this->assertEquals('relationship', $attribute['type']);
-                $this->assertEquals('products', $attribute['$id']);
-                $this->assertEquals('products', $attribute['key']);
-                $this->assertEquals('product', $attribute['options']['relatedCollection']);
-                $this->assertEquals(Database::RELATION_MANY_TO_ONE, $attribute['options']['relationType']);
-                $this->assertEquals(true, $attribute['options']['twoWay']);
-                $this->assertEquals('store', $attribute['options']['twoWayKey']);
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === 'products') {
+                $this->assertEquals(ColumnType::Relationship, $attribute->type);
+                $this->assertEquals('products', $attribute->getId());
+                $this->assertEquals('products', $attribute->key);
+                $options = $attribute->options ?? [];
+                $this->assertEquals('product', $options['relatedCollection'] ?? null);
+                $this->assertEquals(RelationType::ManyToOne->value, $options['relationType'] ?? null);
+                $this->assertEquals(true, $options['twoWay'] ?? null);
+                $this->assertEquals('store', $options['twoWayKey'] ?? null);
             }
         }
 
@@ -510,44 +506,44 @@ trait ManyToOneTests
 
         // Get document with relationship
         $product = $database->getDocument('product', 'product1');
-        $store = $product->getAttribute('store', []);
-        $this->assertEquals('store1', $store['$id']);
+        $store = $product->getDocument('store');
+        $this->assertEquals('store1', $store->getId());
         $this->assertArrayNotHasKey('products', $store);
 
         $product = $database->getDocument('product', 'product2');
-        $store = $product->getAttribute('store', []);
-        $this->assertEquals('store2', $store['$id']);
+        $store = $product->getDocument('store');
+        $this->assertEquals('store2', $store->getId());
         $this->assertArrayNotHasKey('products', $store);
 
         $product = $database->getDocument('product', 'product3');
-        $store = $product->getAttribute('store', []);
-        $this->assertEquals('store3', $store['$id']);
+        $store = $product->getDocument('store');
+        $this->assertEquals('store3', $store->getId());
         $this->assertArrayNotHasKey('products', $store);
 
         $product = $database->getDocument('product', 'product4');
-        $store = $product->getAttribute('store', []);
-        $this->assertEquals('store4', $store['$id']);
+        $store = $product->getDocument('store');
+        $this->assertEquals('store4', $store->getId());
         $this->assertArrayNotHasKey('products', $store);
 
         // Get related document
         $store = $database->getDocument('store', 'store1');
-        $products = $store->getAttribute('products');
-        $this->assertEquals('product1', $products[0]['$id']);
+        $products = $store->getDocuments('products');
+        $this->assertEquals('product1', $products[0]->getId());
         $this->assertArrayNotHasKey('store', $products[0]);
 
         $store = $database->getDocument('store', 'store2');
-        $products = $store->getAttribute('products');
-        $this->assertEquals('product2', $products[0]['$id']);
+        $products = $store->getDocuments('products');
+        $this->assertEquals('product2', $products[0]->getId());
         $this->assertArrayNotHasKey('store', $products[0]);
 
         $store = $database->getDocument('store', 'store3');
-        $products = $store->getAttribute('products');
-        $this->assertEquals('product3', $products[0]['$id']);
+        $products = $store->getDocuments('products');
+        $this->assertEquals('product3', $products[0]->getId());
         $this->assertArrayNotHasKey('store', $products[0]);
 
         $store = $database->getDocument('store', 'store4');
-        $products = $store->getAttribute('products');
-        $this->assertEquals('product4', $products[0]['$id']);
+        $products = $store->getDocuments('products');
+        $this->assertEquals('product4', $products[0]->getId());
         $this->assertArrayNotHasKey('store', $products[0]);
 
         $products = $database->find('product');
@@ -556,22 +552,22 @@ trait ManyToOneTests
 
         // Select related document attributes
         $product = $database->findOne('product', [
-            Query::select(['*', 'store.name'])
+            Query::select(['*', 'store.name']),
         ]);
 
         if ($product->isEmpty()) {
             throw new Exception('Product not found');
         }
 
-        $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
-        $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
+        $this->assertEquals('Store 1', $product->getDocument('store')->getAttribute('name'));
+        $this->assertArrayNotHasKey('opensAt', $product->getDocument('store'));
 
         $product = $database->getDocument('product', 'product1', [
-            Query::select(['*', 'store.name'])
+            Query::select(['*', 'store.name']),
         ]);
 
-        $this->assertEquals('Store 1', $product->getAttribute('store')->getAttribute('name'));
-        $this->assertArrayNotHasKey('opensAt', $product->getAttribute('store'));
+        $this->assertEquals('Store 1', $product->getDocument('store')->getAttribute('name'));
+        $this->assertArrayNotHasKey('opensAt', $product->getDocument('store'));
 
         // Update root document attribute without altering relationship
         $product1 = $database->updateDocument(
@@ -597,7 +593,7 @@ trait ManyToOneTests
         $this->assertEquals('Store 1 Updated', $store1->getAttribute('name'));
 
         // Update nested document attribute
-        $store = $product1->getAttribute('store');
+        $store = $product1->getDocument('store');
         $store->setAttribute('name', 'Store 1 Updated');
 
         $product1 = $database->updateDocument(
@@ -606,12 +602,12 @@ trait ManyToOneTests
             $product1->setAttribute('store', $store)
         );
 
-        $this->assertEquals('Store 1 Updated', $product1->getAttribute('store')->getAttribute('name'));
+        $this->assertEquals('Store 1 Updated', $product1->getDocument('store')->getAttribute('name'));
         $product1 = $database->getDocument('product', 'product1');
-        $this->assertEquals('Store 1 Updated', $product1->getAttribute('store')->getAttribute('name'));
+        $this->assertEquals('Store 1 Updated', $product1->getDocument('store')->getAttribute('name'));
 
         // Update inverse nested document attribute
-        $product = $store1->getAttribute('products')[0];
+        $product = $store1->getDocuments('products')[0];
         $product->setAttribute('name', 'Product 1 Updated');
 
         $store1 = $database->updateDocument(
@@ -620,9 +616,9 @@ trait ManyToOneTests
             $store1->setAttribute('products', [$product])
         );
 
-        $this->assertEquals('Product 1 Updated', $store1->getAttribute('products')[0]->getAttribute('name'));
+        $this->assertEquals('Product 1 Updated', $store1->getDocuments('products')[0]->getAttribute('name'));
         $store1 = $database->getDocument('store', 'store1');
-        $this->assertEquals('Product 1 Updated', $store1->getAttribute('products')[0]->getAttribute('name'));
+        $this->assertEquals('Product 1 Updated', $store1->getDocuments('products')[0]->getAttribute('name'));
 
         // Create new document with no relationship
         $product5 = $database->createDocument('product', new Document([
@@ -651,9 +647,9 @@ trait ManyToOneTests
             ]))
         );
 
-        $this->assertEquals('Store 5', $product5->getAttribute('store')->getAttribute('name'));
+        $this->assertEquals('Store 5', $product5->getDocument('store')->getAttribute('name'));
         $product5 = $database->getDocument('product', 'product5');
-        $this->assertEquals('Store 5', $product5->getAttribute('store')->getAttribute('name'));
+        $this->assertEquals('Store 5', $product5->getDocument('store')->getAttribute('name'));
 
         // Create new child document with no relationship
         $store6 = $database->createDocument('store', new Document([
@@ -682,9 +678,9 @@ trait ManyToOneTests
             ])])
         );
 
-        $this->assertEquals('Product 6', $store6->getAttribute('products')[0]->getAttribute('name'));
+        $this->assertEquals('Product 6', $store6->getDocuments('products')[0]->getAttribute('name'));
         $store6 = $database->getDocument('store', 'store6');
-        $this->assertEquals('Product 6', $store6->getAttribute('products')[0]->getAttribute('name'));
+        $this->assertEquals('Product 6', $store6->getDocuments('products')[0]->getAttribute('name'));
 
         // Update document with new related document
         $database->updateDocument(
@@ -721,13 +717,13 @@ trait ManyToOneTests
 
         // Get document with new relationship key
         $store = $database->getDocument('store', 'store2');
-        $products = $store->getAttribute('newProducts');
-        $this->assertEquals('product1', $products[0]['$id']);
+        $products = $store->getDocuments('newProducts');
+        $this->assertEquals('product1', $products[0]->getId());
 
         // Get inverse document with new relationship key
         $product = $database->getDocument('product', 'product1');
-        $store = $product->getAttribute('newStore');
-        $this->assertEquals('store2', $store['$id']);
+        $store = $product->getDocument('newStore');
+        $this->assertEquals('store2', $store->getId());
 
         // Reset relationships
         $store1 = $database->getDocument('store', 'store1');
@@ -772,7 +768,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'product',
             id: 'newStore',
-            onDelete: Database::RELATION_MUTATE_SET_NULL
+            onDelete: ForeignKeyAction::SetNull
         );
 
         // Delete child, set parent relationship to null
@@ -786,7 +782,7 @@ trait ManyToOneTests
         $database->updateRelationship(
             collection: 'product',
             id: 'newStore',
-            onDelete: Database::RELATION_MUTATE_CASCADE
+            onDelete: ForeignKeyAction::Cascade
         );
 
         // Delete child, will delete parent
@@ -821,34 +817,28 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('towns');
-        $database->createCollection('homelands');
-        $database->createCollection('capitals');
+        $database->createCollection(new Collection(id: 'towns'));
+        $database->createCollection(new Collection(id: 'homelands'));
+        $database->createCollection(new Collection(id: 'capitals'));
 
-        $database->createAttribute('towns', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('homelands', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('capitals', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('towns', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('homelands', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('capitals', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(
-            collection: 'towns',
-            relatedCollection: 'homelands',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'homeland'
-        );
-        $database->createRelationship(
+        $database->createRelationship(Relationship::manyToOne(collection: 'towns', relatedCollection: 'homelands', twoWay: true, key: 'homeland'));
+        $database->createRelationship(Relationship::oneToOne(
             collection: 'homelands',
             relatedCollection: 'capitals',
-            type: Database::RELATION_ONE_TO_ONE,
             twoWay: true,
-            id: 'capital',
+            key: 'capital',
             twoWayKey: 'homeland'
-        );
+        ));
 
         $database->createDocument('towns', new Document([
             '$id' => 'town1',
@@ -873,10 +863,12 @@ trait ManyToOneTests
         ]));
 
         $town1 = $database->getDocument('towns', 'town1');
-        $this->assertEquals('homeland1', $town1['homeland']['$id']);
-        $this->assertArrayNotHasKey('towns', $town1['homeland']);
-        $this->assertEquals('capital1', $town1['homeland']['capital']['$id']);
-        $this->assertArrayNotHasKey('homeland', $town1['homeland']['capital']);
+        $homeland = $town1->getDocument('homeland');
+        $this->assertEquals('homeland1', $homeland->getId());
+        $this->assertArrayNotHasKey('towns', $homeland);
+        $capital = $homeland->getDocument('capital');
+        $this->assertEquals('capital1', $capital->getId());
+        $this->assertArrayNotHasKey('homeland', $capital);
 
         $database->createDocument('capitals', new Document([
             '$id' => 'capital2',
@@ -910,11 +902,13 @@ trait ManyToOneTests
         ]));
 
         $capital2 = $database->getDocument('capitals', 'capital2');
-        $this->assertEquals('homeland2', $capital2['homeland']['$id']);
-        $this->assertArrayNotHasKey('capital', $capital2['homeland']);
-        $this->assertEquals(2, \count($capital2['homeland']['towns']));
-        $this->assertEquals('town2', $capital2['homeland']['towns'][0]['$id']);
-        $this->assertEquals('town3', $capital2['homeland']['towns'][1]['$id']);
+        $homeland = $capital2->getDocument('homeland');
+        $this->assertEquals('homeland2', $homeland->getId());
+        $this->assertArrayNotHasKey('capital', $homeland);
+        $towns = $homeland->getDocuments('towns');
+        $this->assertCount(2, $towns);
+        $this->assertEquals('town2', $towns[0]->getId());
+        $this->assertEquals('town3', $towns[1]->getId());
     }
 
     public function testNestedManyToOne_OneToManyRelationship(): void
@@ -922,34 +916,28 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('players');
-        $database->createCollection('teams');
-        $database->createCollection('supporters');
+        $database->createCollection(new Collection(id: 'players'));
+        $database->createCollection(new Collection(id: 'teams'));
+        $database->createCollection(new Collection(id: 'supporters'));
 
-        $database->createAttribute('players', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('teams', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('supporters', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('players', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('teams', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('supporters', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(
-            collection: 'players',
-            relatedCollection: 'teams',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'team'
-        );
-        $database->createRelationship(
+        $database->createRelationship(Relationship::manyToOne(collection: 'players', relatedCollection: 'teams', twoWay: true, key: 'team'));
+        $database->createRelationship(Relationship::oneToMany(
             collection: 'teams',
             relatedCollection: 'supporters',
-            type: Database::RELATION_ONE_TO_MANY,
             twoWay: true,
-            id: 'supporters',
+            key: 'supporters',
             twoWayKey: 'team'
-        );
+        ));
 
         $database->createDocument('players', new Document([
             '$id' => 'player1',
@@ -983,11 +971,13 @@ trait ManyToOneTests
         ]));
 
         $player1 = $database->getDocument('players', 'player1');
-        $this->assertEquals('team1', $player1['team']['$id']);
-        $this->assertArrayNotHasKey('players', $player1['team']);
-        $this->assertEquals(2, \count($player1['team']['supporters']));
-        $this->assertEquals('supporter1', $player1['team']['supporters'][0]['$id']);
-        $this->assertEquals('supporter2', $player1['team']['supporters'][1]['$id']);
+        $team = $player1->getDocument('team');
+        $this->assertEquals('team1', $team->getId());
+        $this->assertArrayNotHasKey('players', $team);
+        $supporters = $team->getDocuments('supporters');
+        $this->assertCount(2, $supporters);
+        $this->assertEquals('supporter1', $supporters[0]->getId());
+        $this->assertEquals('supporter2', $supporters[1]->getId());
 
         $database->createDocument('supporters', new Document([
             '$id' => 'supporter3',
@@ -1021,11 +1011,13 @@ trait ManyToOneTests
         ]));
 
         $supporter3 = $database->getDocument('supporters', 'supporter3');
-        $this->assertEquals('team2', $supporter3['team']['$id']);
-        $this->assertArrayNotHasKey('supporters', $supporter3['team']);
-        $this->assertEquals(2, \count($supporter3['team']['players']));
-        $this->assertEquals('player2', $supporter3['team']['players'][0]['$id']);
-        $this->assertEquals('player3', $supporter3['team']['players'][1]['$id']);
+        $team = $supporter3->getDocument('team');
+        $this->assertEquals('team2', $team->getId());
+        $this->assertArrayNotHasKey('supporters', $team);
+        $players = $team->getDocuments('players');
+        $this->assertCount(2, $players);
+        $this->assertEquals('player2', $players[0]->getId());
+        $this->assertEquals('player3', $players[1]->getId());
     }
 
     public function testNestedManyToOne_ManyToOne(): void
@@ -1033,33 +1025,22 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('cows');
-        $database->createCollection('farms');
-        $database->createCollection('farmer');
+        $database->createCollection(new Collection(id: 'cows'));
+        $database->createCollection(new Collection(id: 'farms'));
+        $database->createCollection(new Collection(id: 'farmer'));
 
-        $database->createAttribute('cows', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('farms', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('farmer', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('cows', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('farms', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('farmer', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(
-            collection: 'cows',
-            relatedCollection: 'farms',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'farm'
-        );
-        $database->createRelationship(
-            collection: 'farms',
-            relatedCollection: 'farmer',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'farmer'
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: 'cows', relatedCollection: 'farms', twoWay: true, key: 'farm'));
+        $database->createRelationship(Relationship::manyToOne(collection: 'farms', relatedCollection: 'farmer', twoWay: true, key: 'farmer'));
 
         $database->createDocument('cows', new Document([
             '$id' => 'cow1',
@@ -1084,10 +1065,12 @@ trait ManyToOneTests
         ]));
 
         $cow1 = $database->getDocument('cows', 'cow1');
-        $this->assertEquals('farm1', $cow1['farm']['$id']);
-        $this->assertArrayNotHasKey('cows', $cow1['farm']);
-        $this->assertEquals('farmer1', $cow1['farm']['farmer']['$id']);
-        $this->assertArrayNotHasKey('farms', $cow1['farm']['farmer']);
+        $farm = $cow1->getDocument('farm');
+        $this->assertEquals('farm1', $farm->getId());
+        $this->assertArrayNotHasKey('cows', $farm);
+        $farmer = $farm->getDocument('farmer');
+        $this->assertEquals('farmer1', $farmer->getId());
+        $this->assertArrayNotHasKey('farms', $farmer);
 
         $database->createDocument('farmer', new Document([
             '$id' => 'farmer2',
@@ -1123,11 +1106,13 @@ trait ManyToOneTests
         ]));
 
         $farmer2 = $database->getDocument('farmer', 'farmer2');
-        $this->assertEquals('farm2', $farmer2['farms'][0]['$id']);
-        $this->assertArrayNotHasKey('farmer', $farmer2['farms'][0]);
-        $this->assertEquals(2, \count($farmer2['farms'][0]['cows']));
-        $this->assertEquals('cow2', $farmer2['farms'][0]['cows'][0]['$id']);
-        $this->assertEquals('cow3', $farmer2['farms'][0]['cows'][1]['$id']);
+        $farms = $farmer2->getDocuments('farms');
+        $this->assertEquals('farm2', $farms[0]->getId());
+        $this->assertArrayNotHasKey('farmer', $farms[0]);
+        $cows = $farms[0]->getDocuments('cows');
+        $this->assertCount(2, $cows);
+        $this->assertEquals('cow2', $cows[0]->getId());
+        $this->assertEquals('cow3', $cows[1]->getId());
     }
 
     public function testNestedManyToOne_ManyToManyRelationship(): void
@@ -1135,32 +1120,22 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('books');
-        $database->createCollection('entrants');
-        $database->createCollection('rooms');
+        $database->createCollection(new Collection(id: 'books'));
+        $database->createCollection(new Collection(id: 'entrants'));
+        $database->createCollection(new Collection(id: 'rooms'));
 
-        $database->createAttribute('books', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('entrants', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('rooms', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('books', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('entrants', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('rooms', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(
-            collection: 'books',
-            relatedCollection: 'entrants',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-            id: 'entrant'
-        );
-        $database->createRelationship(
-            collection: 'entrants',
-            relatedCollection: 'rooms',
-            type: Database::RELATION_MANY_TO_MANY,
-            twoWay: true,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'entrants', twoWay: true, key: 'entrant'));
+        $database->createRelationship(Relationship::manyToMany(collection: 'entrants', relatedCollection: 'rooms', twoWay: true));
 
         $database->createDocument('books', new Document([
             '$id' => 'book1',
@@ -1194,11 +1169,13 @@ trait ManyToOneTests
         ]));
 
         $book1 = $database->getDocument('books', 'book1');
-        $this->assertEquals('entrant1', $book1['entrant']['$id']);
-        $this->assertArrayNotHasKey('books', $book1['entrant']);
-        $this->assertEquals(2, \count($book1['entrant']['rooms']));
-        $this->assertEquals('class1', $book1['entrant']['rooms'][0]['$id']);
-        $this->assertEquals('class2', $book1['entrant']['rooms'][1]['$id']);
+        $entrant = $book1->getDocument('entrant');
+        $this->assertEquals('entrant1', $entrant->getId());
+        $this->assertArrayNotHasKey('books', $entrant);
+        $rooms = $entrant->getDocuments('rooms');
+        $this->assertCount(2, $rooms);
+        $this->assertEquals('class1', $rooms[0]->getId());
+        $this->assertEquals('class2', $rooms[1]->getId());
     }
 
     public function testExceedMaxDepthManyToOneParent(): void
@@ -1206,8 +1183,9 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1216,29 +1194,14 @@ trait ManyToOneTests
         $level3Collection = 'level3ManyToOneParent';
         $level4Collection = 'level4ManyToOneParent';
 
-        $database->createCollection($level1Collection);
-        $database->createCollection($level2Collection);
-        $database->createCollection($level3Collection);
-        $database->createCollection($level4Collection);
+        $database->createCollection(new Collection(id: $level1Collection));
+        $database->createCollection(new Collection(id: $level2Collection));
+        $database->createCollection(new Collection(id: $level3Collection));
+        $database->createCollection(new Collection(id: $level4Collection));
 
-        $database->createRelationship(
-            collection: $level1Collection,
-            relatedCollection: $level2Collection,
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: $level2Collection,
-            relatedCollection: $level3Collection,
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
-        $database->createRelationship(
-            collection: $level3Collection,
-            relatedCollection: $level4Collection,
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: $level1Collection, relatedCollection: $level2Collection, twoWay: true));
+        $database->createRelationship(Relationship::manyToOne(collection: $level2Collection, relatedCollection: $level3Collection, twoWay: true));
+        $database->createRelationship(Relationship::manyToOne(collection: $level3Collection, relatedCollection: $level4Collection, twoWay: true));
 
         $level1 = $database->createDocument($level1Collection, new Document([
             '$id' => 'level1',
@@ -1257,31 +1220,31 @@ trait ManyToOneTests
             ],
         ]));
         $this->assertArrayHasKey($level2Collection, $level1);
-        $this->assertEquals('level2', $level1[$level2Collection]->getId());
-        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
-        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
-        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+        $this->assertEquals('level2', $level1->getDocument($level2Collection)->getId());
+        $this->assertArrayHasKey($level3Collection, $level1->getDocument($level2Collection));
+        $this->assertEquals('level3', $level1->getDocument($level2Collection)->getDocument($level3Collection)->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1->getDocument($level2Collection)->getDocument($level3Collection));
 
         // Confirm the 4th level document does not exist
         $level3 = $database->getDocument($level3Collection, 'level3');
-        $this->assertNull($level3[$level4Collection]);
+        $this->assertNull($level3->getAttribute($level4Collection));
 
         // Create level 4 document
         $level3->setAttribute($level4Collection, new Document([
             '$id' => 'level4',
         ]));
         $level3 = $database->updateDocument($level3Collection, $level3->getId(), $level3);
-        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+        $this->assertEquals('level4', $level3->getDocument($level4Collection)->getId());
         $level3 = $database->getDocument($level3Collection, 'level3');
-        $this->assertEquals('level4', $level3[$level4Collection]->getId());
+        $this->assertEquals('level4', $level3->getDocument($level4Collection)->getId());
 
         // Exceed fetch depth
         $level1 = $database->getDocument($level1Collection, 'level1');
         $this->assertArrayHasKey($level2Collection, $level1);
-        $this->assertEquals('level2', $level1[$level2Collection]->getId());
-        $this->assertArrayHasKey($level3Collection, $level1[$level2Collection]);
-        $this->assertEquals('level3', $level1[$level2Collection][$level3Collection]->getId());
-        $this->assertArrayNotHasKey($level4Collection, $level1[$level2Collection][$level3Collection]);
+        $this->assertEquals('level2', $level1->getDocument($level2Collection)->getId());
+        $this->assertArrayHasKey($level3Collection, $level1->getDocument($level2Collection));
+        $this->assertEquals('level3', $level1->getDocument($level2Collection)->getDocument($level3Collection)->getId());
+        $this->assertArrayNotHasKey($level4Collection, $level1->getDocument($level2Collection)->getDocument($level3Collection));
     }
 
     public function testManyToOneRelationshipKeyWithSymbols(): void
@@ -1289,109 +1252,81 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('$symbols_coll.ection5');
-        $database->createCollection('$symbols_coll.ection6');
+        $database->createCollection(new Collection(id: '$symbols_coll.ection5'));
+        $database->createCollection(new Collection(id: '$symbols_coll.ection6'));
 
-        $database->createRelationship(
-            collection: '$symbols_coll.ection5',
-            relatedCollection: '$symbols_coll.ection6',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: '$symbols_coll.ection5', relatedCollection: '$symbols_coll.ection6', twoWay: true));
 
         $doc1 = $database->createDocument('$symbols_coll.ection6', new Document([
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
-            ]
+                Permission::update(Role::any()),
+            ],
         ]));
         $doc2 = $database->createDocument('$symbols_coll.ection5', new Document([
             '$id' => ID::unique(),
-            '$symbols_coll.ection6' => $doc1->getId(),
+            'symbols_collection6' => $doc1->getId(),
             '$permissions' => [
                 Permission::read(Role::any()),
-                Permission::update(Role::any())
-            ]
+                Permission::update(Role::any()),
+            ],
         ]));
 
         $doc1 = $database->getDocument('$symbols_coll.ection6', $doc1->getId());
         $doc2 = $database->getDocument('$symbols_coll.ection5', $doc2->getId());
 
-        $this->assertEquals($doc2->getId(), $doc1->getAttribute('$symbols_coll.ection5')[0]->getId());
-        $this->assertEquals($doc1->getId(), $doc2->getAttribute('$symbols_coll.ection6')->getId());
+        $this->assertEquals($doc2->getId(), $doc1->getDocuments('symbols_collection5')[0]->getId());
+        $this->assertEquals($doc1->getId(), $doc2->getDocument('symbols_collection6')->getId());
     }
-
 
     public function testRecreateManyToOneOneWayRelationshipFromParent(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-        $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection(new Collection(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
-        $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
+            Permission::delete(Role::any()),
+        ]));
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
 
-        $database->deleteRelationship('one', 'two');
+        $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-        );
+        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
 
     public function testRecreateManyToOneOneWayRelationshipFromChild(): void
@@ -1399,65 +1334,42 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-        $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection(new Collection(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
-        $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
+            Permission::delete(Role::any()),
+        ]));
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
 
-        $database->deleteRelationship('two', 'one');
+        $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-        );
+        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
 
     public function testRecreateManyToOneTwoWayRelationshipFromParent(): void
@@ -1465,134 +1377,85 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-        $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection(new Collection(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
-        $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
+            Permission::delete(Role::any()),
+        ]));
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
-        $database->deleteRelationship('one', 'two');
+        $database->deleteRelationship($one, $two);
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
+        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
+
     public function testRecreateManyToOneTwoWayRelationshipFromChild(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
-        $database->createCollection('one', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+
+        $one = 'one_' . uniqid();
+        $two = 'two_' . uniqid();
+
+        $database->createCollection(new Collection(id: $one, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
-        $database->createCollection('two', [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'format' => '',
-                'size' => 100,
-                'signed' => true,
-                'required' => false,
-                'default' => null,
-                'array' => false,
-                'filters' => [],
-            ]),
-        ], [], [
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $two, attributes: [
+            Attribute::string(key: 'name', size: 100, format: ''),
+        ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
+            Permission::delete(Role::any()),
+        ]));
 
-        $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
-        $database->deleteRelationship('two', 'one');
+        $database->deleteRelationship($two, $one);
 
-        $result = $database->createRelationship(
-            collection: 'one',
-            relatedCollection: 'two',
-            type: Database::RELATION_MANY_TO_ONE,
-            twoWay: true,
-        );
+        $result = $database->createRelationship(Relationship::manyToOne(collection: $one, relatedCollection: $two, twoWay: true));
 
         $this->assertTrue($result);
 
-        $database->deleteCollection('one');
-        $database->deleteCollection('two');
+        $database->deleteCollection($one);
+        $database->deleteCollection($two);
     }
 
     public function testDeleteBulkDocumentsManyToOneRelationship(): void
@@ -1600,25 +1463,21 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $this->getDatabase()->createCollection('bulk_delete_person_m2o');
-        $this->getDatabase()->createCollection('bulk_delete_library_m2o');
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_person_m2o'));
+        $this->getDatabase()->createCollection(new Collection(id: 'bulk_delete_library_m2o'));
 
-        $this->getDatabase()->createAttribute('bulk_delete_person_m2o', 'name', Database::VAR_STRING, 255, true);
-        $this->getDatabase()->createAttribute('bulk_delete_library_m2o', 'name', Database::VAR_STRING, 255, true);
-        $this->getDatabase()->createAttribute('bulk_delete_library_m2o', 'area', Database::VAR_STRING, 255, true);
+        $this->getDatabase()->createAttribute('bulk_delete_person_m2o', Attribute::string(key: 'name', required: true));
+        $this->getDatabase()->createAttribute('bulk_delete_library_m2o', Attribute::string(key: 'name', required: true));
+        $this->getDatabase()->createAttribute('bulk_delete_library_m2o', Attribute::string(key: 'area', required: true));
 
         // Many-to-One Relationship
-        $this->getDatabase()->createRelationship(
-            collection: 'bulk_delete_person_m2o',
-            relatedCollection: 'bulk_delete_library_m2o',
-            type: Database::RELATION_MANY_TO_ONE,
-            onDelete: Database::RELATION_MUTATE_RESTRICT
-        );
+        $this->getDatabase()->createRelationship(Relationship::manyToOne(collection: 'bulk_delete_person_m2o', relatedCollection: 'bulk_delete_library_m2o'));
 
         $person1 = $this->getDatabase()->createDocument('bulk_delete_person_m2o', new Document([
             '$id' => 'person1',
@@ -1650,12 +1509,12 @@ trait ManyToOneTests
             'name' => 'Person 2',
             'bulk_delete_library_m2o' => [
                 '$id' => 'library1',
-            ]
+            ],
         ]));
 
         $person1 = $this->getDatabase()->getDocument('bulk_delete_person_m2o', 'person1');
-        $library = $person1->getAttribute('bulk_delete_library_m2o');
-        $this->assertEquals('library1', $library['$id']);
+        $library = $person1->getDocument('bulk_delete_library_m2o');
+        $this->assertEquals('library1', $library->getId());
 
         // Delete library
         try {
@@ -1678,34 +1537,32 @@ trait ManyToOneTests
         $this->getDatabase()->deleteDocuments('bulk_delete_person_m2o');
         $this->assertCount(0, $this->getDatabase()->find('bulk_delete_person_m2o'));
     }
+
     public function testUpdateParentAndChild_ManyToOne(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
         if (
-            !$database->getAdapter()->getSupportForRelationships() ||
-            !$database->getAdapter()->getSupportForBatchOperations()
+            ! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) ||
+            ! $database->getAdapter()->supports(Capability::BatchOperations)
         ) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $parentCollection = 'parent_combined_m2o';
         $childCollection = 'child_combined_m2o';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
 
-        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'parentNumber', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
+        $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
+        $database->createAttribute($childCollection, Attribute::integer(key: 'parentNumber'));
 
-        $database->createRelationship(
-            collection: $childCollection,
-            relatedCollection: $parentCollection,
-            type: Database::RELATION_MANY_TO_ONE,
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: $childCollection, relatedCollection: $parentCollection));
 
         $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -1765,25 +1622,21 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships() || !$database->getAdapter()->getSupportForBatchOperations()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $parentCollection = 'parent_relationship_error_many_to_one';
         $childCollection = 'child_relationship_error_many_to_one';
 
-        $database->createCollection($parentCollection);
-        $database->createCollection($childCollection);
-        $database->createAttribute($parentCollection, 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute($childCollection, 'name', Database::VAR_STRING, 255, true);
+        $database->createCollection(new Collection(id: $parentCollection));
+        $database->createCollection(new Collection(id: $childCollection));
+        $database->createAttribute($parentCollection, Attribute::string(key: 'name', required: true));
+        $database->createAttribute($childCollection, Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(
-            collection: $childCollection,
-            relatedCollection: $parentCollection,
-            type: Database::RELATION_MANY_TO_ONE,
-            onDelete: Database::RELATION_MUTATE_RESTRICT
-        );
+        $database->createRelationship(Relationship::manyToOne(collection: $childCollection, relatedCollection: $parentCollection));
 
         $parent = $database->createDocument($parentCollection, new Document([
             '$id' => 'parent1',
@@ -1803,7 +1656,7 @@ trait ManyToOneTests
                 Permission::delete(Role::any()),
             ],
             'name' => 'Child 1',
-            $parentCollection => 'parent1'
+            $parentCollection => 'parent1',
         ]));
 
         try {
@@ -1825,26 +1678,26 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('companies');
-        $database->createCollection('employees');
+        $database->createCollection(new Collection(id: 'companies'));
+        $database->createCollection(new Collection(id: 'employees'));
 
-        $database->createAttribute('companies', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('employees', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 0, false);
+        $database->createAttribute('companies', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('employees', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('employees', Attribute::integer(key: 'salary'));
 
-        $database->createRelationship(
+        $database->createRelationship(Relationship::manyToOne(
             collection: 'employees',
             relatedCollection: 'companies',
-            type: Database::RELATION_MANY_TO_ONE,
             twoWay: true,
-            id: 'company',
+            key: 'company',
             twoWayKey: 'employees'
-        );
+        ));
 
         // Create company
         $database->createDocument('companies', new Document([
@@ -1879,7 +1732,7 @@ trait ManyToOneTests
         $emp = $database->getDocument('employees', 'emp1');
         $this->assertEquals('Alice', $emp->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals(120000, $emp->getAttribute('salary'), 'Salary should be updated');
-        $this->assertEquals('company1', $emp->getAttribute('company')->getId(), 'Company relationship should be preserved');
+        $this->assertEquals('company1', $emp->getDocument('company')->getId(), 'Company relationship should be preserved');
 
         // Partial update - change only company relationship
         $database->updateDocument('employees', 'emp1', new Document([
@@ -1892,7 +1745,7 @@ trait ManyToOneTests
         $emp = $database->getDocument('employees', 'emp1');
         $this->assertEquals('Alice', $emp->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals(120000, $emp->getAttribute('salary'), 'Salary should be preserved');
-        $this->assertEquals('company2', $emp->getAttribute('company')->getId(), 'Company should be updated');
+        $this->assertEquals('company2', $emp->getDocument('company')->getId(), 'Company should be updated');
 
         $database->deleteCollection('companies');
         $database->deleteCollection('employees');
@@ -1903,26 +1756,26 @@ trait ManyToOneTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('departments');
-        $database->createCollection('staff');
+        $database->createCollection(new Collection(id: 'departments'));
+        $database->createCollection(new Collection(id: 'staff'));
 
-        $database->createAttribute('departments', 'name', Database::VAR_STRING, 255, true);
-        $database->createAttribute('departments', 'budget', Database::VAR_INTEGER, 0, false);
-        $database->createAttribute('staff', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('departments', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('departments', Attribute::integer(key: 'budget'));
+        $database->createAttribute('staff', Attribute::string(key: 'name', required: true));
 
-        $database->createRelationship(
+        $database->createRelationship(Relationship::manyToOne(
             collection: 'staff',
             relatedCollection: 'departments',
-            type: Database::RELATION_MANY_TO_ONE,
             twoWay: true,
-            id: 'department',
+            key: 'department',
             twoWayKey: 'staff'
-        );
+        ));
 
         // Create department with staff
         $database->createDocument('departments', new Document([
@@ -1947,7 +1800,7 @@ trait ManyToOneTests
         $dept = $database->getDocument('departments', 'dept1');
         $this->assertEquals('Engineering', $dept->getAttribute('name'), 'Name should be preserved');
         $this->assertEquals(1200000, $dept->getAttribute('budget'), 'Budget should be updated');
-        $this->assertCount(2, $dept->getAttribute('staff'), 'Staff should be preserved');
+        $this->assertCount(2, $dept->getDocuments('staff'), 'Staff should be preserved');
 
         $database->deleteCollection('departments');
         $database->deleteCollection('staff');

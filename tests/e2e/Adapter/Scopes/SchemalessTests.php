@@ -3,35 +3,54 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
-use Throwable;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Query\Schema\IndexType;
+use Utopia\Query\Schema\Order;
 
 trait SchemalessTests
 {
+    private function asString(mixed $value): string
+    {
+        $this->assertIsString($value);
+
+        return $value;
+    }
+
+    private function asDocument(mixed $value): Document
+    {
+        $this->assertInstanceOf(Document::class, $value);
+
+        return $value;
+    }
+
     public function testSchemalessDocumentOperation(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $colName = uniqid('schemaless');
-        $database->createCollection($colName);
-        $database->createAttribute($colName, 'key', Database::VAR_STRING, 50, true);
-        $database->createAttribute($colName, 'value', Database::VAR_STRING, 50, false, 'value');
+        $database->createCollection(new Collection(id: $colName));
+        $database->createAttribute($colName, Attribute::string(key: 'key', size: 50, required: true));
+        $database->createAttribute($colName, Attribute::string(key: 'value', size: 50, default: 'value'));
 
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())];
 
@@ -115,57 +134,19 @@ trait SchemalessTests
         $database->deleteCollection($colName);
     }
 
-    public function testSchemalessDocumentInvalidInteralAttributeValidation(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        // test to ensure internal attributes are checked during creating schemaless document
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $colName = uniqid('schemaless');
-        $database->createCollection($colName);
-        try {
-            $docs = [
-                new Document(['$id' => true, 'freeA' => 'doc1']),
-                new Document(['$id' => true, 'freeB' => 'test']),
-                new Document(['$id' => true]),
-            ];
-            $database->createDocuments($colName, $docs);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-
-        try {
-            $docs = [
-                new Document(['$createdAt' => true, 'freeA' => 'doc1']),
-                new Document(['$updatedAt' => true, 'freeB' => 'test']),
-                new Document(['$permissions' => 12]),
-            ];
-            $database->createDocuments($colName, $docs);
-        } catch (\Throwable $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-        }
-
-        $database->deleteCollection($colName);
-
-    }
-
     public function testSchemalessSelectionOnUnknownAttributes(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $colName = uniqid('schemaless');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
         $permissions = [Permission::read(Role::any()), Permission::write(Role::any()), Permission::update(Role::any())];
         $docs = [
             new Document(['$id' => 'doc1', '$permissions' => $permissions, 'freeA' => 'doc1']),
@@ -180,7 +161,7 @@ trait SchemalessTests
         $docC = $database->getDocument($colName, 'doc1', [Query::select(['freeC'])]);
         $this->assertNull($docC->getAttribute('freeC'));
 
-        $docs = $database->find($colName, [Query::equal('$id', ['doc1','doc2']),Query::select(['freeC'])]);
+        $docs = $database->find($colName, [Query::equal('$id', ['doc1', 'doc2']), Query::select(['freeC'])]);
         foreach ($docs as $doc) {
             $this->assertNull($doc->getAttribute('freeC'));
             // since not selected
@@ -190,13 +171,13 @@ trait SchemalessTests
 
         $docA = $database->find($colName, [
             Query::equal('$id', ['doc1']),
-            Query::select(['freeA'])
+            Query::select(['freeA']),
         ]);
         $this->assertEquals('doc1', $docA[0]->getAttribute('freeA'));
 
         $docC = $database->find($colName, [
             Query::equal('$id', ['doc1']),
-            Query::select(['freeC'])
+            Query::select(['freeC']),
         ]);
         $this->assertArrayNotHasKey('freeC', $docC[0]->getAttributes());
     }
@@ -206,27 +187,29 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $colName = uniqid("schemaless_increment");
-        $database->createCollection($colName);
+        $colName = uniqid('schemaless_increment');
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $docs = [
             new Document(['$id' => 'doc1', '$permissions' => $permissions, 'counter' => 10, 'score' => 5.5]),
             new Document(['$id' => 'doc2', '$permissions' => $permissions, 'counter' => 20, 'points' => 100]),
             new Document(['$id' => 'doc3', '$permissions' => $permissions, 'value' => 0]),
+            new Document(['$id' => 'doc4', '$permissions' => $permissions, 'nullable' => null]),
         ];
-        $this->assertEquals(3, $database->createDocuments($colName, $docs));
+        $this->assertEquals(4, $database->createDocuments($colName, $docs));
 
         $doc1 = $database->increaseDocumentAttribute($colName, 'doc1', 'counter', 5);
         $this->assertEquals(15, $doc1->getAttribute('counter'));
@@ -243,6 +226,13 @@ trait SchemalessTests
         $this->assertEquals(0, $doc3->getAttribute('value'));
 
         try {
+            $database->increaseDocumentAttribute($colName, 'doc4', 'nullable', 1);
+            $this->fail('An explicitly null attribute must not use the missing-attribute numeric default.');
+        } catch (TypeException) {
+            $this->addToAssertionCount(1);
+        }
+
+        try {
             $database->increaseDocumentAttribute($colName, 'doc1', 'counter', 10, 20);
             $this->assertEquals(20, $database->getDocument($colName, 'doc1')->getAttribute('counter'));
         } catch (\Exception $e) {
@@ -250,7 +240,7 @@ trait SchemalessTests
         }
 
         $allDocs = $database->find($colName);
-        $this->assertCount(3, $allDocs);
+        $this->assertCount(4, $allDocs);
 
         $database->deleteCollection($colName);
     }
@@ -260,19 +250,20 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $colName = uniqid("schemaless_decrement");
-        $database->createCollection($colName);
+        $colName = uniqid('schemaless_decrement');
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $docs = [
@@ -314,19 +305,20 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $colName = uniqid("schemaless_update");
-        $database->createCollection($colName);
+        $colName = uniqid('schemaless_update');
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $docs = [
@@ -340,7 +332,7 @@ trait SchemalessTests
         $updatedDoc = $database->updateDocument($colName, 'doc1', new Document([
             'status' => 'updated',
             'lastModified' => '2023-01-01',
-            'newAttribute' => 'added'
+            'newAttribute' => 'added',
         ]));
 
         $this->assertEquals('updated', $updatedDoc->getAttribute('status'));
@@ -356,7 +348,7 @@ trait SchemalessTests
         $updatedDoc2 = $database->updateDocument($colName, 'doc2', new Document([
             'customField1' => 'value1',
             'customField2' => 42,
-            'customField3' => ['array', 'of', 'values']
+            'customField3' => ['array', 'of', 'values'],
         ]));
 
         $this->assertEquals('value1', $updatedDoc2->getAttribute('customField1'));
@@ -372,19 +364,20 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $colName = uniqid("schemaless_delete");
-        $database->createCollection($colName);
+        $colName = uniqid('schemaless_delete');
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $docs = [
@@ -415,24 +408,26 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $colName = uniqid("schemaless_bulk_update");
-        $database->createCollection($colName);
+        $colName = uniqid('schemaless_bulk_update');
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $docs = [];
@@ -443,7 +438,7 @@ trait SchemalessTests
                 'type' => $i <= 5 ? 'typeA' : 'typeB',
                 'status' => 'pending',
                 'score' => $i * 10,
-                'customField' => "value{$i}"
+                'customField' => "value{$i}",
             ]);
         }
         $this->assertEquals(10, $database->createDocuments($colName, $docs));
@@ -451,7 +446,7 @@ trait SchemalessTests
         $updatedCount = $database->updateDocuments($colName, new Document([
             'status' => 'processed',
             'processedAt' => '2023-01-01',
-            'newBulkField' => 'bulk_value'
+            'newBulkField' => 'bulk_value',
         ]), [Query::equal('type', ['typeA'])]);
 
         $this->assertEquals(5, $updatedCount);
@@ -479,7 +474,7 @@ trait SchemalessTests
         }
 
         $highScoreCount = $database->updateDocuments($colName, new Document([
-            'tier' => 'premium'
+            'tier' => 'premium',
         ]), [Query::greaterThan('score', 70)]);
 
         $this->assertEquals(3, $highScoreCount); // docs 8, 9, 10
@@ -489,7 +484,7 @@ trait SchemalessTests
 
         $allUpdateCount = $database->updateDocuments($colName, new Document([
             'globalFlag' => true,
-            'lastUpdate' => '2023-12-31'
+            'lastUpdate' => '2023-12-31',
         ]));
 
         $this->assertEquals(10, $allUpdateCount);
@@ -510,24 +505,26 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $colName = uniqid("schemaless_bulk_delete");
-        $database->createCollection($colName);
+        $colName = uniqid('schemaless_bulk_delete');
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $docs = [];
@@ -539,7 +536,7 @@ trait SchemalessTests
                 'priority' => $i % 3, // 0, 1, or 2
                 'score' => $i * 5,
                 'tags' => ["tag{$i}", 'common'],
-                'metadata' => ['created' => "2023-01-{$i}"]
+                'metadata' => ['created' => "2023-01-{$i}"],
             ]);
         }
         $this->assertEquals(15, $database->createDocuments($colName, $docs));
@@ -566,7 +563,7 @@ trait SchemalessTests
 
         $multiConditionDeleted = $database->deleteDocuments($colName, [
             Query::equal('category', ['archive']),
-            Query::equal('priority', [1])
+            Query::equal('priority', [1]),
         ]);
         $this->assertEquals(2, $multiConditionDeleted); // docs 7 and 10
 
@@ -592,24 +589,26 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (! $database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $colName = uniqid("schemaless_callbacks");
-        $database->createCollection($colName);
+        $colName = uniqid('schemaless_callbacks');
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $docs = [];
@@ -619,7 +618,7 @@ trait SchemalessTests
                 '$permissions' => $permissions,
                 'group' => $i <= 4 ? 'A' : 'B',
                 'value' => $i * 10,
-                'customData' => "data{$i}"
+                'customData' => "data{$i}",
             ]);
         }
         $this->assertEquals(8, $database->createDocuments($colName, $docs));
@@ -644,6 +643,7 @@ trait SchemalessTests
         $processedDocs = $database->find($colName, [Query::equal('processed', [true])]);
         $this->assertCount(4, $processedDocs);
 
+        /** @var list<array{id: string, value: mixed, customData: mixed}> $deleteResults */
         $deleteResults = [];
         $deleteCount = $database->deleteDocuments(
             $colName,
@@ -652,7 +652,7 @@ trait SchemalessTests
                 $deleteResults[] = [
                     'id' => $doc->getId(),
                     'value' => $doc->getAttribute('value'),
-                    'customData' => $doc->getAttribute('customData')
+                    'customData' => $doc->getAttribute('customData'),
                 ];
             }
         );
@@ -662,7 +662,7 @@ trait SchemalessTests
 
         foreach ($deleteResults as $result) {
             $this->assertGreaterThan(50, $result['value']);
-            $this->assertStringStartsWith('data', $result['customData']);
+            $this->assertStringStartsWith('data', $this->asString($result['customData']));
         }
 
         $remainingDocs = $database->find($colName);
@@ -680,14 +680,15 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         // Schemaless adapter still supports defining attributes/indexes metadata
         $col = uniqid('sl_idx');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $database->createDocument($col, new Document([
             '$id' => 'a',
@@ -702,11 +703,11 @@ trait SchemalessTests
             'rank' => 2,
         ]));
 
-        $this->assertTrue($database->createIndex($col, 'idx_title_unique', Database::INDEX_UNIQUE, ['title'], [128], [Database::ORDER_ASC]));
-        $this->assertTrue($database->createIndex($col, 'idx_rank_key', Database::INDEX_KEY, ['rank'], [0], [Database::ORDER_ASC]));
+        $this->assertTrue($database->createIndex($col, Index::unique(key: 'idx_title_unique', attributes: ['title'], lengths: [128], orders: [Order::Asc])));
+        $this->assertTrue($database->createIndex($col, Index::key(key: 'idx_rank_key', attributes: ['rank'], lengths: [0], orders: [Order::Asc])));
 
         $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(2, $indexes);
         $ids = array_map(fn ($i) => $i['$id'], $indexes);
         $this->assertContains('idx_rank_key', $ids);
@@ -714,41 +715,10 @@ trait SchemalessTests
 
         $this->assertTrue($database->deleteIndex($col, 'idx_rank_key'));
         $collection = $database->getCollection($col);
-        $this->assertCount(1, $collection->getAttribute('indexes'));
-        $this->assertEquals('idx_title_unique', $collection->getAttribute('indexes')[0]['$id']);
+        $this->assertCount(1, $collection->indexes);
+        $this->assertEquals('idx_title_unique', $collection->indexes[0]['$id']);
 
         $this->assertTrue($database->deleteIndex($col, 'idx_title_unique'));
-        $database->deleteCollection($col);
-    }
-
-    public function testSchemalessIndexDuplicatePrevention(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $col = uniqid('sl_idx_dup');
-        $database->createCollection($col);
-
-        $database->createDocument($col, new Document([
-            '$id' => 'a',
-            '$permissions' => [Permission::read(Role::any())],
-            'name' => 'x'
-        ]));
-
-        $this->assertTrue($database->createIndex($col, 'duplicate', Database::INDEX_KEY, ['name'], [0], [Database::ORDER_ASC]));
-
-        try {
-            $database->createIndex($col, 'duplicate', Database::INDEX_KEY, ['name'], [0], [Database::ORDER_ASC]);
-            $this->fail('Failed to throw exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DuplicateException::class, $e);
-        }
-
         $database->deleteCollection($col);
     }
 
@@ -758,45 +728,32 @@ trait SchemalessTests
         $database = static::getDatabase();
 
         // Only run for schemaless adapters that support object attributes
-        if ($database->getAdapter()->getSupportForAttributes() || !$database->getAdapter()->getSupportForObject()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes) || ! $database->getAdapter()->supports(Capability::Objects)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_obj_idx');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         // Define object attributes in metadata
-        $database->createAttribute($col, 'meta', Database::VAR_OBJECT, 0, false);
-        $database->createAttribute($col, 'meta2', Database::VAR_OBJECT, 0, false);
+        $database->createAttribute($col, Attribute::object(key: 'meta'));
+        $database->createAttribute($col, Attribute::object(key: 'meta2'));
 
         // Create regular key index on first object attribute
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_meta_key',
-                Database::INDEX_KEY,
-                ['meta'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, Index::key(key: 'idx_meta_key', attributes: ['meta'], lengths: [0], orders: [Order::Asc]))
         );
 
         // Create unique index on second object attribute
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_meta_unique',
-                Database::INDEX_UNIQUE,
-                ['meta2'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, Index::unique(key: 'idx_meta_unique', attributes: ['meta2'], lengths: [0], orders: [Order::Asc]))
         );
 
         // Verify index metadata is stored on the collection
         $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(2, $indexes);
         $ids = array_map(fn ($i) => $i['$id'], $indexes);
         $this->assertContains('idx_meta_key', $ids);
@@ -813,21 +770,22 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_perms');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         // Create with permissive read only
         $doc = $database->createDocument($col, new Document([
             '$id' => 'd1',
             '$permissions' => [
-                Permission::read(Role::any())
+                Permission::read(Role::any()),
             ],
-            'field' => 'value'
+            'field' => 'value',
         ]));
 
         $this->assertFalse($doc->isEmpty());
@@ -858,7 +816,7 @@ trait SchemalessTests
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
-                ]
+                ],
             ]));
         });
 
@@ -869,7 +827,7 @@ trait SchemalessTests
         $database->getAuthorization()->cleanRoles();
         try {
             $database->createDocument($col, new Document([
-                'field' => 'x'
+                'field' => 'x',
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -880,143 +838,34 @@ trait SchemalessTests
         $database->getAuthorization()->cleanRoles();
     }
 
-    public function testSchemalessInternalAttributes(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $col = uniqid('sl_internal_full');
-        $database->createCollection($col);
-
-        $database->getAuthorization()->addRole(Role::any()->toString());
-
-        $doc = $database->createDocument($col, new Document([
-            '$id' => 'i1',
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'name' => 'alpha',
-        ]));
-
-        $this->assertEquals('i1', $doc->getId());
-        $this->assertEquals($col, $doc->getCollection());
-        $this->assertNotEmpty($doc->getSequence());
-        $this->assertNotEmpty($doc->getAttribute('$createdAt'));
-        $this->assertNotEmpty($doc->getAttribute('$updatedAt'));
-        $perms = $doc->getPermissions();
-        $this->assertGreaterThanOrEqual(1, count($perms));
-        $this->assertContains(Permission::read(Role::any()), $perms);
-        $this->assertContains(Permission::update(Role::any()), $perms);
-        $this->assertContains(Permission::delete(Role::any()), $perms);
-
-        $selected = $database->getDocument($col, 'i1', [
-            Query::select(['name', '$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'])
-        ]);
-        $this->assertEquals('alpha', $selected->getAttribute('name'));
-        $this->assertArrayHasKey('$id', $selected);
-        $this->assertArrayHasKey('$sequence', $selected);
-        $this->assertArrayHasKey('$collection', $selected);
-        $this->assertArrayHasKey('$createdAt', $selected);
-        $this->assertArrayHasKey('$updatedAt', $selected);
-        $this->assertArrayHasKey('$permissions', $selected);
-
-        $found = $database->find($col, [
-            Query::equal('$id', ['i1']),
-            Query::select(['$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'])
-        ]);
-        $this->assertCount(1, $found);
-        $this->assertArrayHasKey('$id', $found[0]);
-        $this->assertArrayHasKey('$sequence', $found[0]);
-        $this->assertArrayHasKey('$collection', $found[0]);
-        $this->assertArrayHasKey('$createdAt', $found[0]);
-        $this->assertArrayHasKey('$updatedAt', $found[0]);
-        $this->assertArrayHasKey('$permissions', $found[0]);
-
-        $seq = $doc->getSequence();
-        $bySeq = $database->find($col, [Query::equal('$sequence', [$seq])]);
-        $this->assertCount(1, $bySeq);
-        $this->assertEquals('i1', $bySeq[0]->getId());
-
-        $createdAtBefore = $doc->getAttribute('$createdAt');
-        $updatedAtBefore = $doc->getAttribute('$updatedAt');
-        $updated = $database->updateDocument($col, 'i1', new Document(['name' => 'beta']));
-        $this->assertEquals('beta', $updated->getAttribute('name'));
-        $this->assertEquals($createdAtBefore, $updated->getAttribute('$createdAt'));
-        $this->assertNotEquals($updatedAtBefore, $updated->getAttribute('$updatedAt'));
-
-        $changed = $database->updateDocument($col, 'i1', new Document(['$id' => 'i1-new']));
-        $this->assertEquals('i1-new', $changed->getId());
-        $refetched = $database->getDocument($col, 'i1-new');
-        $this->assertEquals('i1-new', $refetched->getId());
-
-        try {
-            $database->updateDocument($col, 'i1-new', new Document(['$permissions' => 'invalid']));
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertTrue($e instanceof StructureException);
-        }
-
-        $database->setPreserveDates(true);
-        $customCreated = '2000-01-01T00:00:00.000+00:00';
-        $customUpdated = '2000-01-02T00:00:00.000+00:00';
-        $d2 = $database->createDocument($col, new Document([
-            '$id' => 'i2',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$createdAt' => $customCreated,
-            '$updatedAt' => $customUpdated,
-            'v' => 1
-        ]));
-        $this->assertEquals($customCreated, $d2->getAttribute('$createdAt'));
-        $this->assertEquals($customUpdated, $d2->getAttribute('$updatedAt'));
-
-        $newUpdated = '2000-01-03T00:00:00.000+00:00';
-        $d2u = $database->updateDocument($col, 'i2', new Document([
-            'v' => 2,
-            '$updatedAt' => $newUpdated
-        ]));
-        $this->assertEquals($customCreated, $d2u->getAttribute('$createdAt'));
-        $this->assertEquals($newUpdated, $d2u->getAttribute('$updatedAt'));
-        $database->setPreserveDates(false);
-
-        $database->deleteCollection($col);
-        $database->getAuthorization()->cleanRoles();
-    }
-
     public function testSchemalessDates(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_dates');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Seed deterministic date strings
         $createdAt1 = '2000-01-01T10:00:00.000+00:00';
         $updatedAt1 = '2000-01-02T11:11:11.000+00:00';
-        $curDate1   = '2000-01-05T05:05:05.000+00:00';
+        $curDate1 = '2000-01-05T05:05:05.000+00:00';
 
         // createDocument with preserved dates
-        $doc1 = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt1, $updatedAt1, $curDate1) {
+        $doc1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt1, $updatedAt1, $curDate1) {
             return $database->createDocument($col, new Document([
                 '$id' => 'd1',
                 '$permissions' => $permissions,
@@ -1025,13 +874,13 @@ trait SchemalessTests
                 'curDate' => $curDate1,
                 'counter' => 0,
             ]));
-        });
+        }));
 
         $this->assertEquals('d1', $doc1->getId());
         $this->assertTrue(is_string($doc1->getAttribute('curDate')));
         // MongoDB converts ISO 8601 to 'Y-m-d H:i:s.v' format, so compare by parsing
         $curDate1Value = $doc1->getAttribute('curDate');
-        $parsedCurDate1 = new \DateTime($curDate1Value);
+        $parsedCurDate1 = new \DateTime($this->asString($curDate1Value));
         $parsedExpectedCurDate1 = new \DateTime($curDate1);
         $this->assertEquals($parsedExpectedCurDate1->getTimestamp(), $parsedCurDate1->getTimestamp());
         $this->assertTrue(is_string($doc1->getAttribute('$createdAt')));
@@ -1039,8 +888,8 @@ trait SchemalessTests
         // Internal attributes should preserve format better, but verify by parsing for MongoDB
         $createdAt1Value = $doc1->getAttribute('$createdAt');
         $updatedAt1Value = $doc1->getAttribute('$updatedAt');
-        $parsedCreatedAt1 = new \DateTime($createdAt1Value);
-        $parsedUpdatedAt1 = new \DateTime($updatedAt1Value);
+        $parsedCreatedAt1 = new \DateTime($this->asString($createdAt1Value));
+        $parsedUpdatedAt1 = new \DateTime($this->asString($updatedAt1Value));
         $parsedExpectedCreatedAt1 = new \DateTime($createdAt1);
         $parsedExpectedUpdatedAt1 = new \DateTime($updatedAt1);
         $this->assertEquals($parsedExpectedCreatedAt1->getTimestamp(), $parsedCreatedAt1->getTimestamp());
@@ -1049,25 +898,25 @@ trait SchemalessTests
         $fetched1 = $database->getDocument($col, 'd1');
         $fetchedCurDate1 = $fetched1->getAttribute('curDate');
         $this->assertTrue(is_string($fetchedCurDate1));
-        $parsedFetchedCurDate1 = new \DateTime($fetchedCurDate1);
+        $parsedFetchedCurDate1 = new \DateTime($this->asString($fetchedCurDate1));
         $this->assertEquals($parsedExpectedCurDate1->getTimestamp(), $parsedFetchedCurDate1->getTimestamp());
         $this->assertTrue(is_string($fetched1->getAttribute('$createdAt')));
         $this->assertTrue(is_string($fetched1->getAttribute('$updatedAt')));
         $fetchedCreatedAt1 = $fetched1->getAttribute('$createdAt');
         $fetchedUpdatedAt1 = $fetched1->getAttribute('$updatedAt');
-        $parsedFetchedCreatedAt1 = new \DateTime($fetchedCreatedAt1);
-        $parsedFetchedUpdatedAt1 = new \DateTime($fetchedUpdatedAt1);
+        $parsedFetchedCreatedAt1 = new \DateTime($this->asString($fetchedCreatedAt1));
+        $parsedFetchedUpdatedAt1 = new \DateTime($this->asString($fetchedUpdatedAt1));
         $this->assertEquals($parsedExpectedCreatedAt1->getTimestamp(), $parsedFetchedCreatedAt1->getTimestamp());
         $this->assertEquals($parsedExpectedUpdatedAt1->getTimestamp(), $parsedFetchedUpdatedAt1->getTimestamp());
 
         // createDocuments with preserved dates
         $createdAt2 = '2001-02-03T04:05:06.000+00:00';
         $updatedAt2 = '2001-02-04T04:05:07.000+00:00';
-        $curDate2   = '2001-02-05T06:07:08.000+00:00';
+        $curDate2 = '2001-02-05T06:07:08.000+00:00';
 
         $createdAt3 = '2002-03-04T05:06:07.000+00:00';
         $updatedAt3 = '2002-03-05T05:06:08.000+00:00';
-        $curDate3   = '2002-03-06T07:08:09.000+00:00';
+        $curDate3 = '2002-03-06T07:08:09.000+00:00';
 
         $countCreated = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt2, $updatedAt2, $curDate2, $createdAt3, $updatedAt3, $curDate3) {
             return $database->createDocuments($col, [
@@ -1091,13 +940,13 @@ trait SchemalessTests
 
         $fetched2 = $database->getDocument($col, 'd2');
         $fetchedCurDate2 = $fetched2->getAttribute('curDate');
-        $parsedCurDate2 = new \DateTime($fetchedCurDate2);
+        $parsedCurDate2 = new \DateTime($this->asString($fetchedCurDate2));
         $parsedExpectedCurDate2 = new \DateTime($curDate2);
         $this->assertEquals($parsedExpectedCurDate2->getTimestamp(), $parsedCurDate2->getTimestamp());
         $fetchedCreatedAt2 = $fetched2->getAttribute('$createdAt');
         $fetchedUpdatedAt2 = $fetched2->getAttribute('$updatedAt');
-        $parsedCreatedAt2 = new \DateTime($fetchedCreatedAt2);
-        $parsedUpdatedAt2 = new \DateTime($fetchedUpdatedAt2);
+        $parsedCreatedAt2 = new \DateTime($this->asString($fetchedCreatedAt2));
+        $parsedUpdatedAt2 = new \DateTime($this->asString($fetchedUpdatedAt2));
         $parsedExpectedCreatedAt2 = new \DateTime($createdAt2);
         $parsedExpectedUpdatedAt2 = new \DateTime($updatedAt2);
         $this->assertEquals($parsedExpectedCreatedAt2->getTimestamp(), $parsedCreatedAt2->getTimestamp());
@@ -1105,31 +954,31 @@ trait SchemalessTests
 
         $fetched3 = $database->getDocument($col, 'd3');
         $fetchedCurDate3 = $fetched3->getAttribute('curDate');
-        $parsedCurDate3 = new \DateTime($fetchedCurDate3);
+        $parsedCurDate3 = new \DateTime($this->asString($fetchedCurDate3));
         $parsedExpectedCurDate3 = new \DateTime($curDate3);
         $this->assertEquals($parsedExpectedCurDate3->getTimestamp(), $parsedCurDate3->getTimestamp());
         $fetchedCreatedAt3 = $fetched3->getAttribute('$createdAt');
         $fetchedUpdatedAt3 = $fetched3->getAttribute('$updatedAt');
-        $parsedCreatedAt3 = new \DateTime($fetchedCreatedAt3);
-        $parsedUpdatedAt3 = new \DateTime($fetchedUpdatedAt3);
+        $parsedCreatedAt3 = new \DateTime($this->asString($fetchedCreatedAt3));
+        $parsedUpdatedAt3 = new \DateTime($this->asString($fetchedUpdatedAt3));
         $parsedExpectedCreatedAt3 = new \DateTime($createdAt3);
         $parsedExpectedUpdatedAt3 = new \DateTime($updatedAt3);
         $this->assertEquals($parsedExpectedCreatedAt3->getTimestamp(), $parsedCreatedAt3->getTimestamp());
         $this->assertEquals($parsedExpectedUpdatedAt3->getTimestamp(), $parsedUpdatedAt3->getTimestamp());
 
         // updateDocument with preserved $updatedAt and custom date field
-        $newCurDate1   = '2000-02-01T00:00:00.000+00:00';
+        $newCurDate1 = '2000-02-01T00:00:00.000+00:00';
         $newUpdatedAt1 = '2000-02-02T02:02:02.000+00:00';
-        $updated1 = $database->withPreserveDates(function () use ($database, $col, $newCurDate1, $newUpdatedAt1) {
+        $updated1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $newCurDate1, $newUpdatedAt1) {
             return $database->updateDocument($col, 'd1', new Document([
                 'curDate' => $newCurDate1,
                 '$updatedAt' => $newUpdatedAt1,
             ]));
-        });
+        }));
         $updatedCurDate1 = $updated1->getAttribute('curDate');
         $updatedUpdatedAt1 = $updated1->getAttribute('$updatedAt');
-        $parsedUpdatedCurDate1 = new \DateTime($updatedCurDate1);
-        $parsedUpdatedUpdatedAt1 = new \DateTime($updatedUpdatedAt1);
+        $parsedUpdatedCurDate1 = new \DateTime($this->asString($updatedCurDate1));
+        $parsedUpdatedUpdatedAt1 = new \DateTime($this->asString($updatedUpdatedAt1));
         $parsedExpectedNewCurDate1 = new \DateTime($newCurDate1);
         $parsedExpectedNewUpdatedAt1 = new \DateTime($newUpdatedAt1);
         $this->assertEquals($parsedExpectedNewCurDate1->getTimestamp(), $parsedUpdatedCurDate1->getTimestamp());
@@ -1137,13 +986,13 @@ trait SchemalessTests
         $refetched1 = $database->getDocument($col, 'd1');
         $refetchedCurDate1 = $refetched1->getAttribute('curDate');
         $refetchedUpdatedAt1 = $refetched1->getAttribute('$updatedAt');
-        $parsedRefetchedCurDate1 = new \DateTime($refetchedCurDate1);
-        $parsedRefetchedUpdatedAt1 = new \DateTime($refetchedUpdatedAt1);
+        $parsedRefetchedCurDate1 = new \DateTime($this->asString($refetchedCurDate1));
+        $parsedRefetchedUpdatedAt1 = new \DateTime($this->asString($refetchedUpdatedAt1));
         $this->assertEquals($parsedExpectedNewCurDate1->getTimestamp(), $parsedRefetchedCurDate1->getTimestamp());
         $this->assertEquals($parsedExpectedNewUpdatedAt1->getTimestamp(), $parsedRefetchedUpdatedAt1->getTimestamp());
 
         // updateDocuments with preserved $updatedAt over a subset
-        $bulkCurDate   = '2001-01-01T00:00:00.000+00:00';
+        $bulkCurDate = '2001-01-01T00:00:00.000+00:00';
         $bulkUpdatedAt = '2001-01-02T00:00:00.000+00:00';
         $updatedCount = $database->withPreserveDates(function () use ($database, $col, $bulkCurDate, $bulkUpdatedAt) {
             return $database->updateDocuments(
@@ -1162,10 +1011,10 @@ trait SchemalessTests
         $bulkUpdatedAt2 = $afterBulk2->getAttribute('$updatedAt');
         $bulkCurDate3 = $afterBulk3->getAttribute('curDate');
         $bulkUpdatedAt3 = $afterBulk3->getAttribute('$updatedAt');
-        $parsedBulkCurDate2 = new \DateTime($bulkCurDate2);
-        $parsedBulkUpdatedAt2 = new \DateTime($bulkUpdatedAt2);
-        $parsedBulkCurDate3 = new \DateTime($bulkCurDate3);
-        $parsedBulkUpdatedAt3 = new \DateTime($bulkUpdatedAt3);
+        $parsedBulkCurDate2 = new \DateTime($this->asString($bulkCurDate2));
+        $parsedBulkUpdatedAt2 = new \DateTime($this->asString($bulkUpdatedAt2));
+        $parsedBulkCurDate3 = new \DateTime($this->asString($bulkCurDate3));
+        $parsedBulkUpdatedAt3 = new \DateTime($this->asString($bulkUpdatedAt3));
         $parsedExpectedBulkCurDate = new \DateTime($bulkCurDate);
         $parsedExpectedBulkUpdatedAt = new \DateTime($bulkUpdatedAt);
         $this->assertEquals($parsedExpectedBulkCurDate->getTimestamp(), $parsedBulkCurDate2->getTimestamp());
@@ -1176,8 +1025,8 @@ trait SchemalessTests
         // upsertDocument: create new then update existing with preserved dates
         $createdAt4 = '2003-03-03T03:03:03.000+00:00';
         $updatedAt4 = '2003-03-04T04:04:04.000+00:00';
-        $curDate4   = '2003-03-05T05:05:05.000+00:00';
-        $up1 = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt4, $updatedAt4, $curDate4) {
+        $curDate4 = '2003-03-05T05:05:05.000+00:00';
+        $up1 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt4, $updatedAt4, $curDate4) {
             return $database->upsertDocument($col, new Document([
                 '$id' => 'd4',
                 '$permissions' => $permissions,
@@ -1185,14 +1034,14 @@ trait SchemalessTests
                 '$updatedAt' => $updatedAt4,
                 'curDate' => $curDate4,
             ]));
-        });
+        }));
         $this->assertEquals('d4', $up1->getId());
         $up1CurDate4 = $up1->getAttribute('curDate');
         $up1CreatedAt4 = $up1->getAttribute('$createdAt');
         $up1UpdatedAt4 = $up1->getAttribute('$updatedAt');
-        $parsedUp1CurDate4 = new \DateTime($up1CurDate4);
-        $parsedUp1CreatedAt4 = new \DateTime($up1CreatedAt4);
-        $parsedUp1UpdatedAt4 = new \DateTime($up1UpdatedAt4);
+        $parsedUp1CurDate4 = new \DateTime($this->asString($up1CurDate4));
+        $parsedUp1CreatedAt4 = new \DateTime($this->asString($up1CreatedAt4));
+        $parsedUp1UpdatedAt4 = new \DateTime($this->asString($up1UpdatedAt4));
         $parsedExpectedCurDate4 = new \DateTime($curDate4);
         $parsedExpectedCreatedAt4 = new \DateTime($createdAt4);
         $parsedExpectedUpdatedAt4 = new \DateTime($updatedAt4);
@@ -1201,18 +1050,18 @@ trait SchemalessTests
         $this->assertEquals($parsedExpectedUpdatedAt4->getTimestamp(), $parsedUp1UpdatedAt4->getTimestamp());
 
         $updatedAt4b = '2003-03-06T06:06:06.000+00:00';
-        $curDate4b   = '2003-03-07T07:07:07.000+00:00';
-        $up2 = $database->withPreserveDates(function () use ($database, $col, $updatedAt4b, $curDate4b) {
+        $curDate4b = '2003-03-07T07:07:07.000+00:00';
+        $up2 = $this->asDocument($database->withPreserveDates(function () use ($database, $col, $updatedAt4b, $curDate4b) {
             return $database->upsertDocument($col, new Document([
                 '$id' => 'd4',
                 'curDate' => $curDate4b,
                 '$updatedAt' => $updatedAt4b,
             ]));
-        });
+        }));
         $up2CurDate4b = $up2->getAttribute('curDate');
         $up2UpdatedAt4b = $up2->getAttribute('$updatedAt');
-        $parsedUp2CurDate4b = new \DateTime($up2CurDate4b);
-        $parsedUp2UpdatedAt4b = new \DateTime($up2UpdatedAt4b);
+        $parsedUp2CurDate4b = new \DateTime($this->asString($up2CurDate4b));
+        $parsedUp2UpdatedAt4b = new \DateTime($this->asString($up2UpdatedAt4b));
         $parsedExpectedCurDate4b = new \DateTime($curDate4b);
         $parsedExpectedUpdatedAt4b = new \DateTime($updatedAt4b);
         $this->assertEquals($parsedExpectedCurDate4b->getTimestamp(), $parsedUp2CurDate4b->getTimestamp());
@@ -1220,17 +1069,17 @@ trait SchemalessTests
         $refetched4 = $database->getDocument($col, 'd4');
         $refetched4CurDate4b = $refetched4->getAttribute('curDate');
         $refetched4UpdatedAt4b = $refetched4->getAttribute('$updatedAt');
-        $parsedRefetched4CurDate4b = new \DateTime($refetched4CurDate4b);
-        $parsedRefetched4UpdatedAt4b = new \DateTime($refetched4UpdatedAt4b);
+        $parsedRefetched4CurDate4b = new \DateTime($this->asString($refetched4CurDate4b));
+        $parsedRefetched4UpdatedAt4b = new \DateTime($this->asString($refetched4UpdatedAt4b));
         $this->assertEquals($parsedExpectedCurDate4b->getTimestamp(), $parsedRefetched4CurDate4b->getTimestamp());
         $this->assertEquals($parsedExpectedUpdatedAt4b->getTimestamp(), $parsedRefetched4UpdatedAt4b->getTimestamp());
 
         // upsertDocuments: mix create and update with preserved dates
         $createdAt5 = '2004-04-01T01:01:01.000+00:00';
         $updatedAt5 = '2004-04-02T02:02:02.000+00:00';
-        $curDate5   = '2004-04-03T03:03:03.000+00:00';
+        $curDate5 = '2004-04-03T03:03:03.000+00:00';
         $updatedAt2b = '2001-02-08T08:08:08.000+00:00';
-        $curDate2b   = '2001-02-09T09:09:09.000+00:00';
+        $curDate2b = '2001-02-09T09:09:09.000+00:00';
 
         $upCount = $database->withPreserveDates(function () use ($database, $col, $permissions, $createdAt5, $updatedAt5, $curDate5, $updatedAt2b, $curDate2b) {
             return $database->upsertDocuments($col, [
@@ -1254,9 +1103,9 @@ trait SchemalessTests
         $fetched5CurDate5 = $fetched5->getAttribute('curDate');
         $fetched5CreatedAt5 = $fetched5->getAttribute('$createdAt');
         $fetched5UpdatedAt5 = $fetched5->getAttribute('$updatedAt');
-        $parsedFetched5CurDate5 = new \DateTime($fetched5CurDate5);
-        $parsedFetched5CreatedAt5 = new \DateTime($fetched5CreatedAt5);
-        $parsedFetched5UpdatedAt5 = new \DateTime($fetched5UpdatedAt5);
+        $parsedFetched5CurDate5 = new \DateTime($this->asString($fetched5CurDate5));
+        $parsedFetched5CreatedAt5 = new \DateTime($this->asString($fetched5CreatedAt5));
+        $parsedFetched5UpdatedAt5 = new \DateTime($this->asString($fetched5UpdatedAt5));
         $parsedExpectedCurDate5 = new \DateTime($curDate5);
         $parsedExpectedCreatedAt5 = new \DateTime($createdAt5);
         $parsedExpectedUpdatedAt5 = new \DateTime($updatedAt5);
@@ -1267,8 +1116,8 @@ trait SchemalessTests
         $fetched2b = $database->getDocument($col, 'd2');
         $fetched2bCurDate2b = $fetched2b->getAttribute('curDate');
         $fetched2bUpdatedAt2b = $fetched2b->getAttribute('$updatedAt');
-        $parsedFetched2bCurDate2b = new \DateTime($fetched2bCurDate2b);
-        $parsedFetched2bUpdatedAt2b = new \DateTime($fetched2bUpdatedAt2b);
+        $parsedFetched2bCurDate2b = new \DateTime($this->asString($fetched2bCurDate2b));
+        $parsedFetched2bUpdatedAt2b = new \DateTime($this->asString($fetched2bUpdatedAt2b));
         $parsedExpectedCurDate2b = new \DateTime($curDate2b);
         $parsedExpectedUpdatedAt2b = new \DateTime($updatedAt2b);
         $this->assertEquals($parsedExpectedCurDate2b->getTimestamp(), $parsedFetched2bCurDate2b->getTimestamp());
@@ -1307,19 +1156,20 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $colName = uniqid('schemaless_exists');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Create documents with and without the 'optionalField' attribute
@@ -1424,19 +1274,20 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $colName = uniqid('schemaless_not_exists');
-        $database->createCollection($colName);
+        $database->createCollection(new Collection(id: $colName));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Create documents with and without the 'optionalField' attribute
@@ -1534,12 +1385,13 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Create documents with array of objects
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -1548,7 +1400,7 @@ trait SchemalessTests
             'items' => [
                 ['sku' => 'ABC', 'qty' => 5, 'price' => 10.50],
                 ['sku' => 'XYZ', 'qty' => 2, 'price' => 20.00],
-            ]
+            ],
         ]));
 
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1557,7 +1409,7 @@ trait SchemalessTests
             'items' => [
                 ['sku' => 'ABC', 'qty' => 1, 'price' => 10.50],
                 ['sku' => 'DEF', 'qty' => 10, 'price' => 15.00],
-            ]
+            ],
         ]));
 
         $doc3 = $database->createDocument($collectionId, new Document([
@@ -1565,7 +1417,7 @@ trait SchemalessTests
             '$permissions' => [Permission::read(Role::any())],
             'items' => [
                 ['sku' => 'XYZ', 'qty' => 3, 'price' => 20.00],
-            ]
+            ],
         ]));
 
         // Test 1: elemMatch with equal and greaterThan - should match doc1
@@ -1573,7 +1425,7 @@ trait SchemalessTests
             Query::elemMatch('items', [
                 Query::equal('sku', ['ABC']),
                 Query::greaterThan('qty', 1),
-            ])
+            ]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('order1', $results[0]->getId());
@@ -1583,7 +1435,7 @@ trait SchemalessTests
             Query::elemMatch('items', [
                 Query::equal('sku', ['ABC']),
                 Query::greaterThan('qty', 1),
-            ])
+            ]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('order1', $results[0]->getId());
@@ -1592,7 +1444,7 @@ trait SchemalessTests
         $results = $database->find($collectionId, [
             Query::elemMatch('items', [
                 Query::equal('sku', ['ABC']),
-            ])
+            ]),
         ]);
         $this->assertCount(2, $results);
         $ids = array_map(fn ($doc) => $doc->getId(), $results);
@@ -1604,7 +1456,7 @@ trait SchemalessTests
         $results = $database->find($collectionId, [
             Query::elemMatch('items', [
                 Query::greaterThan('qty', 1),
-            ])
+            ]),
         ]);
         $this->assertCount(3, $results);
         $ids = array_map(fn ($doc) => $doc->getId(), $results);
@@ -1617,7 +1469,7 @@ trait SchemalessTests
             Query::elemMatch('items', [
                 Query::equal('sku', ['DEF']),
                 Query::greaterThan('qty', 5),
-            ])
+            ]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('order2', $results[0]->getId());
@@ -1627,7 +1479,7 @@ trait SchemalessTests
             Query::elemMatch('items', [
                 Query::equal('sku', ['ABC']),
                 Query::lessThan('qty', 3),
-            ])
+            ]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('order2', $results[0]->getId());
@@ -1637,7 +1489,7 @@ trait SchemalessTests
             Query::elemMatch('items', [
                 Query::equal('sku', ['ABC']),
                 Query::greaterThanEqual('qty', 1),
-            ])
+            ]),
         ]);
         $this->assertCount(2, $results);
 
@@ -1645,7 +1497,7 @@ trait SchemalessTests
         $results = $database->find($collectionId, [
             Query::elemMatch('items', [
                 Query::equal('sku', ['NONEXISTENT']),
-            ])
+            ]),
         ]);
         $this->assertCount(0, $results);
 
@@ -1654,7 +1506,7 @@ trait SchemalessTests
             Query::elemMatch('items', [
                 Query::equal('sku', ['XYZ']),
                 Query::equal('price', [20.00]),
-            ])
+            ]),
         ]);
         $this->assertCount(2, $results);
         $ids = array_map(fn ($doc) => $doc->getId(), $results);
@@ -1666,7 +1518,7 @@ trait SchemalessTests
             Query::elemMatch('items', [
                 Query::notEqual('sku', ['ABC']),
                 Query::greaterThan('qty', 2),
-            ])
+            ]),
         ]);
         // order 1 has elements where sku == "ABC", qty: 5 => !=ABC fails and sku = XYZ ,qty: 2 => >2 fails
         $this->assertCount(2, $results);
@@ -1687,12 +1539,13 @@ trait SchemalessTests
     {
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
         $collectionId = ID::unique();
-        $database->createCollection($collectionId);
+        $database->createCollection(new Collection(id: $collectionId));
 
         // Create documents with complex nested structures
         $doc1 = $database->createDocument($collectionId, new Document([
@@ -1701,7 +1554,7 @@ trait SchemalessTests
             'products' => [
                 ['name' => 'Widget', 'stock' => 100, 'category' => 'A', 'active' => true],
                 ['name' => 'Gadget', 'stock' => 50, 'category' => 'B', 'active' => false],
-            ]
+            ],
         ]));
 
         $doc2 = $database->createDocument($collectionId, new Document([
@@ -1710,7 +1563,7 @@ trait SchemalessTests
             'products' => [
                 ['name' => 'Widget', 'stock' => 200, 'category' => 'A', 'active' => true],
                 ['name' => 'Thing', 'stock' => 25, 'category' => 'C', 'active' => true],
-            ]
+            ],
         ]));
 
         // Test: elemMatch with multiple conditions including boolean
@@ -1720,7 +1573,7 @@ trait SchemalessTests
                 Query::greaterThan('stock', 50),
                 Query::equal('category', ['A']),
                 Query::equal('active', [true]),
-            ])
+            ]),
         ]);
         $this->assertCount(2, $results);
 
@@ -1729,7 +1582,7 @@ trait SchemalessTests
             Query::elemMatch('products', [
                 Query::equal('category', ['A']),
                 Query::between('stock', 75, 150),
-            ])
+            ]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('store1', $results[0]->getId());
@@ -1742,7 +1595,7 @@ trait SchemalessTests
                     Query::equal('name', ['Thing']),
                 ]),
                 Query::greaterThanEqual('stock', 25),
-            ])
+            ]),
         ]);
         // Both stores have at least one matching product:
         // - store1: Widget (stock 100)
@@ -1763,7 +1616,7 @@ trait SchemalessTests
                     ]),
                 ]),
                 Query::equal('active', [true]),
-            ])
+            ]),
         ]);
         // Only store2 matches:
         // - Widget with stock 200 (>150) and active true
@@ -1782,19 +1635,20 @@ trait SchemalessTests
 
         /** @var Database $database */
         $database = static::getDatabase();
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_nested_obj');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Documents with nested objects
@@ -1960,17 +1814,17 @@ trait SchemalessTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->markTestSkipped('Adapter supports attributes (schemaful mode). Field removal in upsert is tested in schemaful tests.');
         }
 
         $collectionName = ID::unique();
-        $database->createCollection($collectionName, permissions: [
+        $database->createCollection(new Collection(id: $collectionName, permissions: [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -1990,8 +1844,8 @@ trait SchemalessTests
             'tags' => ['php', 'mongodb'],
             'metadata' => [
                 'author' => 'John Doe',
-                'version' => 1
-            ]
+                'version' => 1,
+            ],
         ]));
 
         $this->assertEquals('Original Title', $doc1->getAttribute('title'));
@@ -2051,12 +1905,12 @@ trait SchemalessTests
             'details' => [
                 'color' => 'red',
                 'size' => 'large',
-                'weight' => 10
+                'weight' => 10,
             ],
             'specs' => [
                 'cpu' => 'Intel',
-                'ram' => '8GB'
-            ]
+                'ram' => '8GB',
+            ],
         ]));
 
         // Upsert removing details but keeping specs
@@ -2066,7 +1920,7 @@ trait SchemalessTests
             'name' => 'Updated Product',
             'specs' => [
                 'cpu' => 'AMD',
-                'ram' => '16GB'
+                'ram' => '16GB',
             ],
             // details is removed
         ]));
@@ -2074,7 +1928,7 @@ trait SchemalessTests
         $retrieved3 = $database->getDocument($collectionName, 'doc3');
         $this->assertEquals('Updated Product', $retrieved3->getAttribute('name'));
         $this->assertArrayHasKey('specs', $retrieved3->getArrayCopy());
-        $this->assertEquals('AMD', $retrieved3->getAttribute('specs')['cpu']);
+        $this->assertEquals('AMD', $retrieved3->getArray('specs')['cpu']);
         $this->assertArrayNotHasKey('details', $retrieved3->getArrayCopy());
 
         // Test 4: Remove array fields
@@ -2084,7 +1938,7 @@ trait SchemalessTests
             'title' => 'Article',
             'tags' => ['tag1', 'tag2', 'tag3'],
             'categories' => ['cat1', 'cat2'],
-            'comments' => ['comment1', 'comment2']
+            'comments' => ['comment1', 'comment2'],
         ]));
 
         // Upsert removing tags and comments but keeping categories
@@ -2245,39 +2099,32 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_ttl');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_valid',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                3600 // 1 hour TTL
-            )
+            $database->createIndex($col, Index::ttl(key: 'idx_ttl_valid', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600))
         );
 
         $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
+        $indexes = $collection->indexes;
         $this->assertCount(1, $indexes);
         $ttlIndex = $indexes[0];
         $this->assertEquals('idx_ttl_valid', $ttlIndex->getId());
-        $this->assertEquals(Database::INDEX_TTL, $ttlIndex->getAttribute('type'));
+        $this->assertEquals(IndexType::Ttl->value, $ttlIndex->getAttribute('type'));
         $this->assertEquals(3600, $ttlIndex->getAttribute('ttl'));
 
         $now = new \DateTime();
@@ -2289,21 +2136,21 @@ trait SchemalessTests
             '$id' => 'doc1',
             '$permissions' => $permissions,
             'expiresAt' => $future1->format(\DateTime::ATOM),
-            'data' => 'will expire in 2 hours'
+            'data' => 'will expire in 2 hours',
         ]));
 
         $doc2 = $database->createDocument($col, new Document([
             '$id' => 'doc2',
             '$permissions' => $permissions,
             'expiresAt' => $future2->format(\DateTime::ATOM),
-            'data' => 'will expire in 1 hour'
+            'data' => 'will expire in 1 hour',
         ]));
 
         $doc3 = $database->createDocument($col, new Document([
             '$id' => 'doc3',
             '$permissions' => $permissions,
             'expiresAt' => $past->format(\DateTime::ATOM),
-            'data' => 'already expired'
+            'data' => 'already expired',
         ]));
 
         // Verify documents were created
@@ -2314,43 +2161,19 @@ trait SchemalessTests
         $this->assertTrue($database->deleteIndex($col, 'idx_ttl_valid'));
 
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_min',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                1 // Minimum TTL
-            )
+            $database->createIndex($col, Index::ttl(key: 'idx_ttl_min', attributes: ['expiresAt'], orders: [Order::Asc]))
         );
 
         $col2 = uniqid('sl_ttl_collection');
 
-        $expiresAtAttr = new Document([
-            '$id' => ID::custom('expiresAt'),
-            'type' => Database::VAR_DATETIME,
-            'size' => 0,
-            'signed' => false,
-            'required' => false,
-            'default' => null,
-            'array' => false,
-            'filters' => ['datetime'],
-        ]);
+        $expiresAtAttr = Attribute::datetime(key: 'expiresAt', signed: false, filters: ['datetime']);
 
-        $ttlIndexDoc = new Document([
-            '$id' => ID::custom('idx_ttl_collection'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 7200 // 2 hours
-        ]);
+        $ttlIndexDoc = Index::ttl(key: 'idx_ttl_collection', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200);
 
-        $database->createCollection($col2, [$expiresAtAttr], [$ttlIndexDoc]);
+        $database->createCollection(new Collection(id: $col2, attributes: [$expiresAtAttr], indexes: [$ttlIndexDoc]));
 
         $collection2 = $database->getCollection($col2);
-        $indexes2 = $collection2->getAttribute('indexes');
+        $indexes2 = $collection2->indexes;
         $this->assertCount(1, $indexes2);
         $ttlIndex2 = $indexes2[0];
         $this->assertEquals('idx_ttl_collection', $ttlIndex2->getId());
@@ -2360,169 +2183,25 @@ trait SchemalessTests
         $database->deleteCollection($col2);
     }
 
-    public function testSchemalessTTLIndexDuplicatePrevention(): void
-    {
-        /** @var Database $database */
-        $database = static::getDatabase();
-
-        if ($database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $col = uniqid('sl_ttl_dup');
-        $database->createCollection($col);
-
-        $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expires',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                3600 // 1 hour
-            )
-        );
-
-        try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_expires_duplicate',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                7200 // 2 hours
-            );
-            $this->fail('Expected exception for creating a second TTL index in a collection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                86400 // 24 hours
-            );
-            $this->fail('Expected exception for creating a second TTL index in a collection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
-        $this->assertCount(1, $indexes);
-
-        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
-        $this->assertContains('idx_ttl_expires', $indexIds);
-        $this->assertNotContains('idx_ttl_deleted', $indexIds);
-
-        try {
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted_duplicate',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                172800 // 48 hours
-            );
-            $this->fail('Expected exception for creating a second TTL index in a collection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        $this->assertTrue($database->deleteIndex($col, 'idx_ttl_expires'));
-
-        $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_deleted',
-                Database::INDEX_TTL,
-                ['deletedAt'],
-                [],
-                [Database::ORDER_ASC],
-                1800 // 30 minutes
-            )
-        );
-
-        $collection = $database->getCollection($col);
-        $indexes = $collection->getAttribute('indexes');
-        $this->assertCount(1, $indexes);
-
-        $indexIds = array_map(fn ($idx) => $idx->getId(), $indexes);
-        $this->assertNotContains('idx_ttl_expires', $indexIds);
-        $this->assertContains('idx_ttl_deleted', $indexIds);
-
-        $col3 = uniqid('sl_ttl_dup_collection');
-
-        $expiresAtAttr = new Document([
-            '$id' => ID::custom('expiresAt'),
-            'type' => Database::VAR_DATETIME,
-            'size' => 0,
-            'signed' => false,
-            'required' => false,
-            'default' => null,
-            'array' => false,
-            'filters' => ['datetime'],
-        ]);
-
-        $ttlIndex1 = new Document([
-            '$id' => ID::custom('idx_ttl_1'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 3600
-        ]);
-
-        $ttlIndex2 = new Document([
-            '$id' => ID::custom('idx_ttl_2'),
-            'type' => Database::INDEX_TTL,
-            'attributes' => ['expiresAt'],
-            'lengths' => [],
-            'orders' => [Database::ORDER_ASC],
-            'ttl' => 7200
-        ]);
-
-        try {
-            $database->createCollection($col3, [$expiresAtAttr], [$ttlIndex1, $ttlIndex2]);
-            $this->fail('Expected exception for duplicate TTL indexes in createCollection');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(DatabaseException::class, $e);
-            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
-        }
-
-        $database->deleteCollection($col);
-    }
-
     public function testSchemalessDatetimeCreationAndFetching(): void
     {
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_datetime');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Create documents with ISO 8601 datetime strings (20-40 chars)
@@ -2535,21 +2214,21 @@ trait SchemalessTests
             '$id' => 'dt1',
             '$permissions' => $permissions,
             'eventDate' => $datetime1,
-            'name' => 'Event 1'
+            'name' => 'Event 1',
         ]));
 
         $doc2 = $database->createDocument($col, new Document([
             '$id' => 'dt2',
             '$permissions' => $permissions,
             'eventDate' => $datetime2,
-            'name' => 'Event 2'
+            'name' => 'Event 2',
         ]));
 
         $doc3 = $database->createDocument($col, new Document([
             '$id' => 'dt3',
             '$permissions' => $permissions,
             'eventDate' => $datetime3,
-            'name' => 'Event 3'
+            'name' => 'Event 3',
         ]));
 
         // Verify creation - check that datetime is stored and returned as string
@@ -2567,14 +2246,14 @@ trait SchemalessTests
 
         // Verify datetime values are equivalent by parsing (MongoDB converts to UTC)
         $parsedInput1 = new \DateTime($datetime1);
-        $parsedOutput1 = new \DateTime($fetchedEventDate1);
+        $parsedOutput1 = new \DateTime($this->asString($fetchedEventDate1));
         $this->assertEquals($parsedInput1->getTimestamp(), $parsedOutput1->getTimestamp());
 
         $fetched2 = $database->getDocument($col, 'dt2');
         $fetchedEventDate2 = $fetched2->getAttribute('eventDate');
         $this->assertTrue(is_string($fetchedEventDate2));
         $parsedInput2 = new \DateTime($datetime2);
-        $parsedOutput2 = new \DateTime($fetchedEventDate2);
+        $parsedOutput2 = new \DateTime($this->asString($fetchedEventDate2));
         $this->assertEquals($parsedInput2->getTimestamp(), $parsedOutput2->getTimestamp());
 
         $fetched3 = $database->getDocument($col, 'dt3');
@@ -2583,8 +2262,8 @@ trait SchemalessTests
         // Verify it's a valid datetime string (format may vary slightly)
         $this->assertGreaterThanOrEqual(20, strlen($fetchedEventDate3));
         $this->assertLessThanOrEqual(40, strlen($fetchedEventDate3));
-        $parsedInput3 = new \DateTime($datetime3);
-        $parsedOutput3 = new \DateTime($fetchedEventDate3);
+        $parsedInput3 = new \DateTime($this->asString($datetime3));
+        $parsedOutput3 = new \DateTime($this->asString($fetchedEventDate3));
         // MongoDB converts to UTC, so timestamps should match
         $this->assertEquals($parsedInput3->getTimestamp(), $parsedOutput3->getTimestamp());
 
@@ -2601,7 +2280,7 @@ trait SchemalessTests
         // Update datetime
         $newDatetime = '2024-12-31T23:59:59.999+00:00';
         $updated = $database->updateDocument($col, 'dt1', new Document([
-            'eventDate' => $newDatetime
+            'eventDate' => $newDatetime,
         ]));
         $updatedEventDate = $updated->getAttribute('eventDate');
         $this->assertTrue(is_string($updatedEventDate));
@@ -2612,7 +2291,7 @@ trait SchemalessTests
         $refetchedEventDate = $refetched->getAttribute('eventDate');
         $this->assertTrue(is_string($refetchedEventDate));
         $parsedNewInput = new \DateTime($newDatetime);
-        $parsedNewOutput = new \DateTime($refetchedEventDate);
+        $parsedNewOutput = new \DateTime($this->asString($refetchedEventDate));
         $this->assertEquals($parsedNewInput->getTimestamp(), $parsedNewOutput->getTimestamp());
 
         $database->deleteCollection($col);
@@ -2623,37 +2302,31 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_ttl_expiry');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Create TTL index with 60 seconds expiry
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expiresAt',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                10
-            )
+            $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -2666,7 +2339,7 @@ trait SchemalessTests
             '$permissions' => $permissions,
             'expiresAt' => $expiredTime->format(\DateTime::ATOM),
             'data' => 'This should expire',
-            'type' => 'temporary'
+            'type' => 'temporary',
         ]));
 
         $doc2 = $database->createDocument($col, new Document([
@@ -2674,21 +2347,21 @@ trait SchemalessTests
             '$permissions' => $permissions,
             'expiresAt' => $futureTime->format(\DateTime::ATOM),
             'data' => 'This should not expire yet',
-            'type' => 'temporary'
+            'type' => 'temporary',
         ]));
 
         $doc3 = $database->createDocument($col, new Document([
             '$id' => 'permanent_doc',
             '$permissions' => $permissions,
             'data' => 'This should never expire',
-            'type' => 'permanent'
+            'type' => 'permanent',
         ]));
 
         $doc4 = $database->createDocument($col, new Document([
             '$id' => 'another_permanent',
             '$permissions' => $permissions,
             'data' => 'This should also never expire',
-            'type' => 'permanent'
+            'type' => 'permanent',
         ]));
 
         // Verify all documents were created
@@ -2711,14 +2384,13 @@ trait SchemalessTests
             sleep($retryDelay);
 
             // Fetch collection to trigger TTL cleanup check
-            $collection = $database->getCollection($col);
-            $this->assertNotNull($collection);
+            $database->getCollection($col);
 
             // Check if expired document is gone
             $remainingDocs = $database->find($col);
             $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
 
-            if (!in_array('expired_doc', $remainingIds)) {
+            if (! in_array('expired_doc', $remainingIds)) {
                 $expiredDocDeleted = true;
                 break;
             }
@@ -2765,37 +2437,31 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_ttl_cache_expiry');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Create TTL index with 10 seconds expiry (also used as cache TTL)
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expiresAt',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                10
-            )
+            $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -2831,8 +2497,7 @@ trait SchemalessTests
             sleep($retryDelay);
 
             // Fetch collection to trigger TTL cleanup check in MongoDB
-            $collection = $database->getCollection($col);
-            $this->assertNotNull($collection);
+            $database->getCollection($col);
 
             // Fetch through getDocument, which goes through the cache layer
             $expired = $database->getDocument($col, 'expired_doc');
@@ -2858,19 +2523,20 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_str_datetime');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Create documents with mix of formatted dates (ISO 8601) and non-formatted dates (regular strings)
@@ -2880,31 +2546,31 @@ trait SchemalessTests
                 '$id' => 'doc1',
                 '$permissions' => $permissions,
                 'str' => '2024-01-15T10:30:00.000+00:00', // ISO 8601 formatted date as string
-                'datetime' => '2024-01-15T10:30:00.000+00:00' // ISO 8601 formatted date
+                'datetime' => '2024-01-15T10:30:00.000+00:00', // ISO 8601 formatted date
             ]),
             new Document([
                 '$id' => 'doc2',
                 '$permissions' => $permissions,
                 'str' => 'just a regular string', // Non-formatted string
-                'datetime' => '2024-02-20T14:45:30.123Z' // ISO 8601 formatted date
+                'datetime' => '2024-02-20T14:45:30.123Z', // ISO 8601 formatted date
             ]),
             new Document([
                 '$id' => 'doc3',
                 '$permissions' => $permissions,
                 'str' => '2024-03-25T08:15:45.000000+05:30', // ISO 8601 formatted date as string
-                'datetime' => 'not a date string' // Non-formatted string in datetime field
+                'datetime' => 'not a date string', // Non-formatted string in datetime field
             ]),
             new Document([
                 '$id' => 'doc4',
                 '$permissions' => $permissions,
                 'str' => 'another string value',
-                'datetime' => '2024-12-31T23:59:59.999+00:00' // ISO 8601 formatted date
+                'datetime' => '2024-12-31T23:59:59.999+00:00', // ISO 8601 formatted date
             ]),
             new Document([
                 '$id' => 'doc5',
                 '$permissions' => $permissions,
                 'str' => '2024-06-15T12:00:00.000Z', // ISO 8601 formatted date as string
-                'datetime' => '2024-06-15T12:00:00.000Z' // ISO 8601 formatted date
+                'datetime' => '2024-06-15T12:00:00.000Z', // ISO 8601 formatted date
             ]),
         ];
 
@@ -2924,21 +2590,17 @@ trait SchemalessTests
         $this->assertGreaterThanOrEqual(20, strlen($doc1->getAttribute('str')));
         $this->assertLessThanOrEqual(40, strlen($doc1->getAttribute('str')));
         // datetime field should be converted to MongoDB format if it's a valid ISO date
-        $datetime1 = $doc1->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime1));
+        $datetime1 = $this->asString($doc1->getAttribute('datetime'));
         $this->assertGreaterThanOrEqual(20, strlen($datetime1));
         $this->assertLessThanOrEqual(40, strlen($datetime1));
         // Verify it's a valid datetime by parsing
         $parsed1 = new \DateTime($datetime1);
-        $this->assertInstanceOf(\DateTime::class, $parsed1);
 
         $doc2 = $database->getDocument($col, 'doc2');
         $this->assertEquals('doc2', $doc2->getId());
         $this->assertEquals('just a regular string', $doc2->getAttribute('str'));
-        $datetime2 = $doc2->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime2));
+        $datetime2 = $this->asString($doc2->getAttribute('datetime'));
         $parsed2 = new \DateTime($datetime2);
-        $this->assertInstanceOf(\DateTime::class, $parsed2);
 
         $doc3 = $database->getDocument($col, 'doc3');
         $this->assertEquals('doc3', $doc3->getId());
@@ -2954,10 +2616,8 @@ trait SchemalessTests
         $doc4 = $database->getDocument($col, 'doc4');
         $this->assertEquals('doc4', $doc4->getId());
         $this->assertEquals('another string value', $doc4->getAttribute('str'));
-        $datetime4 = $doc4->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime4));
+        $datetime4 = $this->asString($doc4->getAttribute('datetime'));
         $parsed4 = new \DateTime($datetime4);
-        $this->assertInstanceOf(\DateTime::class, $parsed4);
 
         $doc5 = $database->getDocument($col, 'doc5');
         $this->assertEquals('doc5', $doc5->getId());
@@ -2965,10 +2625,8 @@ trait SchemalessTests
         $this->assertTrue(is_string($str5));
         $this->assertGreaterThanOrEqual(20, strlen($str5));
         $this->assertLessThanOrEqual(40, strlen($str5));
-        $datetime5 = $doc5->getAttribute('datetime');
-        $this->assertTrue(is_string($datetime5));
+        $datetime5 = $this->asString($doc5->getAttribute('datetime'));
         $parsed5 = new \DateTime($datetime5);
-        $this->assertInstanceOf(\DateTime::class, $parsed5);
 
         // Verify all documents are present using simple find
         $allDocs = $database->find($col);
@@ -2988,37 +2646,31 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if (!$database->getAdapter()->getSupportForTTLIndexes()) {
+        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_str_date_ttl');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Create TTL index on expiresAt field
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_ttl_expiresAt',
-                Database::INDEX_TTL,
-                ['expiresAt'],
-                [],
-                [Database::ORDER_ASC],
-                10
-            )
+            $database->createIndex($col, Index::ttl(key: 'idx_ttl_expiresAt', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 10))
         );
 
         $now = new \DateTime();
@@ -3032,35 +2684,35 @@ trait SchemalessTests
                 '$permissions' => $permissions,
                 'expiresAt' => $expiredTime->format(\DateTime::ATOM), // Valid datetime - should expire
                 'data' => 'This should expire',
-                'type' => 'datetime'
+                'type' => 'datetime',
             ]),
             new Document([
                 '$id' => 'doc_datetime_future',
                 '$permissions' => $permissions,
                 'expiresAt' => $futureTime->format(\DateTime::ATOM), // Valid datetime - future
                 'data' => 'This should not expire yet',
-                'type' => 'datetime'
+                'type' => 'datetime',
             ]),
             new Document([
                 '$id' => 'doc_string_random',
                 '$permissions' => $permissions,
                 'expiresAt' => 'random_string_value_12345', // Random string - should not expire
                 'data' => 'This should never expire',
-                'type' => 'string'
+                'type' => 'string',
             ]),
             new Document([
                 '$id' => 'doc_string_another',
                 '$permissions' => $permissions,
                 'expiresAt' => 'another_random_string_xyz', // Random string - should not expire
                 'data' => 'This should also never expire',
-                'type' => 'string'
+                'type' => 'string',
             ]),
             new Document([
                 '$id' => 'doc_datetime_valid',
                 '$permissions' => $permissions,
                 'expiresAt' => $futureTime->format(\DateTime::ATOM), // Valid datetime - future
                 'data' => 'This is a valid datetime',
-                'type' => 'datetime'
+                'type' => 'datetime',
             ]),
         ];
 
@@ -3078,10 +2730,8 @@ trait SchemalessTests
 
         $docDatetimeFuture = $database->getDocument($col, 'doc_datetime_future');
         $this->assertFalse($docDatetimeFuture->isEmpty());
-        $expiresAt2 = $docDatetimeFuture->getAttribute('expiresAt');
-        $this->assertTrue(is_string($expiresAt2));
+        $expiresAt2 = $this->asString($docDatetimeFuture->getAttribute('expiresAt'));
         $parsed2 = new \DateTime($expiresAt2);
-        $this->assertInstanceOf(\DateTime::class, $parsed2);
 
         // Verify documents with random strings remain as strings
         $docStringRandom = $database->getDocument($col, 'doc_string_random');
@@ -3107,13 +2757,12 @@ trait SchemalessTests
             sleep($retryDelay);
 
             // Fetch collection to trigger TTL cleanup check
-            $collection = $database->getCollection($col);
-            $this->assertNotNull($collection);
+            $database->getCollection($col);
 
             $remainingDocs = $database->find($col);
             $remainingIds = array_map(fn ($doc) => $doc->getId(), $remainingDocs);
 
-            if (!in_array('doc_datetime_expired', $remainingIds)) {
+            if (! in_array('doc_datetime_expired', $remainingIds)) {
                 $expiredDocDeleted = true;
                 break;
             }
@@ -3158,16 +2807,17 @@ trait SchemalessTests
         $database = static::getDatabase();
 
         // Only meaningful for schemaless adapters
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_mongo_dot_idx');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         // Define top-level object attribute (metadata only; schemaless adapter won't enforce)
-        $database->createAttribute($col, 'profile', Database::VAR_OBJECT, 0, false);
+        $database->createAttribute($col, Attribute::object(key: 'profile'));
 
         // Seed documents
         $database->createDocuments($col, [
@@ -3177,9 +2827,9 @@ trait SchemalessTests
                 'profile' => [
                     'user' => [
                         'email' => 'alice@example.com',
-                        'id' => 'alice'
-                    ]
-                ]
+                        'id' => 'alice',
+                    ],
+                ],
             ]),
             new Document([
                 '$id' => 'u2',
@@ -3187,34 +2837,20 @@ trait SchemalessTests
                 'profile' => [
                     'user' => [
                         'email' => 'bob@example.com',
-                        'id' => 'bob'
-                    ]
-                ]
+                        'id' => 'bob',
+                    ],
+                ],
             ]),
         ]);
 
         // Create KEY index on nested path
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_profile_user_email_key',
-                Database::INDEX_KEY,
-                ['profile.user.email'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, Index::key(key: 'idx_profile_user_email_key', attributes: ['profile.user.email'], lengths: [0], orders: [Order::Asc]))
         );
 
         // Create UNIQUE index on nested path and verify enforcement
         $this->assertTrue(
-            $database->createIndex(
-                $col,
-                'idx_profile_user_id_unique',
-                Database::INDEX_UNIQUE,
-                ['profile.user.id'],
-                [0],
-                [Database::ORDER_ASC]
-            )
+            $database->createIndex($col, Index::unique(key: 'idx_profile_user_id_unique', attributes: ['profile.user.id'], lengths: [0], orders: [Order::Asc]))
         );
 
         try {
@@ -3224,9 +2860,9 @@ trait SchemalessTests
                 'profile' => [
                     'user' => [
                         'email' => 'eve@example.com',
-                        'id' => 'alice' // duplicate unique nested id
-                    ]
-                ]
+                        'id' => 'alice', // duplicate unique nested id
+                    ],
+                ],
             ]));
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
@@ -3235,7 +2871,7 @@ trait SchemalessTests
 
         // Validate dot-notation querying works (and is the shape that can use indexes)
         $results = $database->find($col, [
-            Query::equal('profile.user.email', ['bob@example.com'])
+            Query::equal('profile.user.email', ['bob@example.com']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('u2', $results[0]->getId());
@@ -3248,19 +2884,20 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         $col = uniqid('sl_query_datetime');
-        $database->createCollection($col);
+        $database->createCollection(new Collection(id: $col));
 
         $permissions = [
             Permission::read(Role::any()),
             Permission::write(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
+            Permission::delete(Role::any()),
         ];
 
         // Documents with datetime field (ISO 8601) for query tests
@@ -3270,13 +2907,13 @@ trait SchemalessTests
                 '$id' => 'dt1',
                 '$permissions' => $permissions,
                 'name' => 'January',
-                'datetime' => '2024-01-15T10:30:00.000+00:00'
+                'datetime' => '2024-01-15T10:30:00.000+00:00',
             ]),
             new Document([
                 '$id' => 'dt2',
                 '$permissions' => $permissions,
                 'name' => 'February',
-                'datetime' => '2024-02-20T14:45:30.123Z'
+                'datetime' => '2024-02-20T14:45:30.123Z',
             ]),
             new Document([
                 '$id' => 'dt3',
@@ -3284,19 +2921,19 @@ trait SchemalessTests
                 'name' => 'March',
                 // Use a valid extended ISO 8601 datetime that will be normalized
                 // to MongoDB UTCDateTime for comparison queries.
-                'datetime' => '2024-03-25T08:15:45.000+00:00'
+                'datetime' => '2024-03-25T08:15:45.000+00:00',
             ]),
             new Document([
                 '$id' => 'dt4',
                 '$permissions' => $permissions,
                 'name' => 'June',
-                'datetime' => '2024-06-15T12:00:00.000Z'
+                'datetime' => '2024-06-15T12:00:00.000Z',
             ]),
             new Document([
                 '$id' => 'dt5',
                 '$permissions' => $permissions,
                 'name' => 'December',
-                'datetime' => '2024-12-31T23:59:59.999+00:00'
+                'datetime' => '2024-12-31T23:59:59.999+00:00',
             ]),
         ];
 
@@ -3305,7 +2942,7 @@ trait SchemalessTests
 
         // Query: equal - find document with exact datetime (Jan 15 2024)
         $equalResults = $database->find($col, [
-            Query::equal('datetime', ['2024-01-15T10:30:00.000+00:00'])
+            Query::equal('datetime', ['2024-01-15T10:30:00.000+00:00']),
         ]);
         $this->assertCount(1, $equalResults);
         $this->assertEquals('dt1', $equalResults[0]->getId());
@@ -3313,7 +2950,7 @@ trait SchemalessTests
 
         // Query: greaterThan - datetimes after 2024-03-01 (dt3, dt4, dt5)
         $greaterResults = $database->find($col, [
-            Query::greaterThan('datetime', '2024-03-01T00:00:00.000Z')
+            Query::greaterThan('datetime', '2024-03-01T00:00:00.000Z'),
         ]);
         $this->assertCount(3, $greaterResults);
         $greaterIds = array_map(fn ($d) => $d->getId(), $greaterResults);
@@ -3323,7 +2960,7 @@ trait SchemalessTests
 
         // Query: lessThan - datetimes before 2024-03-01 (dt1, dt2)
         $lessResults = $database->find($col, [
-            Query::lessThan('datetime', '2024-03-01T00:00:00.000Z')
+            Query::lessThan('datetime', '2024-03-01T00:00:00.000Z'),
         ]);
         $this->assertCount(2, $lessResults);
         $lessIds = array_map(fn ($d) => $d->getId(), $lessResults);
@@ -3332,7 +2969,7 @@ trait SchemalessTests
 
         // Query: greaterThanEqual - datetimes on or after 2024-02-20 (dt2, dt3, dt4, dt5)
         $gteResults = $database->find($col, [
-            Query::greaterThanEqual('datetime', '2024-02-20T14:45:30.123Z')
+            Query::greaterThanEqual('datetime', '2024-02-20T14:45:30.123Z'),
         ]);
         $this->assertCount(4, $gteResults);
         $gteIds = array_map(fn ($d) => $d->getId(), $gteResults);
@@ -3343,7 +2980,7 @@ trait SchemalessTests
 
         // Query: lessThanEqual - datetimes on or before 2024-06-15 (dt1, dt2, dt3, dt4)
         $lteResults = $database->find($col, [
-            Query::lessThanEqual('datetime', '2024-06-15T12:00:00.000Z')
+            Query::lessThanEqual('datetime', '2024-06-15T12:00:00.000Z'),
         ]);
         $this->assertCount(4, $lteResults);
         $lteIds = array_map(fn ($d) => $d->getId(), $lteResults);
@@ -3354,7 +2991,7 @@ trait SchemalessTests
 
         // Query: between - datetimes in range [2024-02-01, 2024-07-01) (dt2, dt3, dt4)
         $betweenResults = $database->find($col, [
-            Query::between('datetime', '2024-02-01T00:00:00.000Z', '2024-07-01T00:00:00.000Z')
+            Query::between('datetime', '2024-02-01T00:00:00.000Z', '2024-07-01T00:00:00.000Z'),
         ]);
         $this->assertCount(3, $betweenResults);
         $betweenIds = array_map(fn ($d) => $d->getId(), $betweenResults);
@@ -3364,7 +3001,7 @@ trait SchemalessTests
 
         // Query: equal with no match
         $noneResults = $database->find($col, [
-            Query::equal('datetime', ['2020-01-01T00:00:00.000Z'])
+            Query::equal('datetime', ['2020-01-01T00:00:00.000Z']),
         ]);
         $this->assertCount(0, $noneResults);
 
@@ -3376,18 +3013,19 @@ trait SchemalessTests
         /** @var Database $database */
         $database = static::getDatabase();
 
-        if ($database->getAdapter()->getSupportForAttributes()) {
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         // Create a simple schemaless collection and one document.
-        $database->createCollection('schemaless_time', permissions: [
+        $database->createCollection(new Collection(id: 'schemaless_time', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ]);
+        ]));
 
         $database->createDocument('schemaless_time', new Document([
             '$id' => ID::unique(),
@@ -3400,7 +3038,7 @@ trait SchemalessTests
         $recentPastDate = '2020-01-01T00:00:00.000Z';
         $nearFutureDate = '2025-01-01T00:00:00.000Z';
 
-        // --- createdBefore ---
+        // createdBefore
         $documents = $database->find('schemaless_time', [
             Query::createdBefore($futureDate),
             Query::limit(1),
@@ -3413,7 +3051,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- createdAfter ---
+        // createdAfter
         $documents = $database->find('schemaless_time', [
             Query::createdAfter($pastDate),
             Query::limit(1),
@@ -3426,7 +3064,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- updatedBefore ---
+        // updatedBefore
         $documents = $database->find('schemaless_time', [
             Query::updatedBefore($futureDate),
             Query::limit(1),
@@ -3439,7 +3077,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- updatedAfter ---
+        // updatedAfter
         $documents = $database->find('schemaless_time', [
             Query::updatedAfter($pastDate),
             Query::limit(1),
@@ -3452,7 +3090,7 @@ trait SchemalessTests
         ]);
         $this->assertEquals(0, count($documents));
 
-        // --- createdBetween ---
+        // createdBetween
         $documents = $database->find('schemaless_time', [
             Query::createdBetween($pastDate, $futureDate),
             Query::limit(25),
@@ -3477,7 +3115,7 @@ trait SchemalessTests
         ]);
         $this->assertGreaterThanOrEqual($count, count($documents));
 
-        // --- updatedBetween ---
+        // updatedBetween
         $documents = $database->find('schemaless_time', [
             Query::updatedBetween($pastDate, $futureDate),
             Query::limit(25),

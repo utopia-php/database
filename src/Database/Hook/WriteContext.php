@@ -1,0 +1,38 @@
+<?php
+
+namespace Utopia\Database\Hook;
+
+use Closure;
+use PDOStatement;
+use Swoole\Database\PDOStatementProxy;
+use Utopia\Database\Event;
+use Utopia\Database\PDOStatement as DatabasePDOStatement;
+use Utopia\Query\Builder\Statement;
+
+/**
+ * Immutable context object passed to Write hooks, providing closures for query building and execution.
+ */
+readonly class WriteContext
+{
+    /**
+     * @param  Closure(string, string=): \Utopia\Query\Builder\SQL  $newBuilder  Create a query builder for a table (with read-side hooks like TenantFilter already applied)
+     * @param  Closure(Statement, Event=): (PDOStatement|DatabasePDOStatement|PDOStatementProxy)  $executeResult  Prepare a Statement with optional event trigger, returns PDO statement
+     * @param  Closure(PDOStatement|DatabasePDOStatement|PDOStatementProxy): bool  $execute  Execute a prepared statement
+     * @param  Closure(array<string, mixed>, array<string, mixed>): array<string, mixed>  $decorateRow  Apply all write hooks' decorateRow to a row
+     * @param  Closure(): \Utopia\Query\Builder\SQL  $createBuilder  Create a raw builder (no hooks, no table)
+     * @param  Closure(string): string  $getTableRaw  Get the raw SQL table name with namespace prefix
+     * @param  bool  $skipDuplicates  Whether duplicate-key errors should be swallowed by this write
+     * @param  string|null  $lookupId  The document id used to load/update, when it may differ in casing from getId()
+     */
+    public function __construct(
+        public Closure $newBuilder,
+        public Closure $executeResult,
+        public Closure $execute,
+        public Closure $decorateRow,
+        public Closure $createBuilder,
+        public Closure $getTableRaw,
+        public bool $skipDuplicates = false,
+        public ?string $lookupId = null,
+    ) {
+    }
+}

@@ -4,6 +4,9 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Database\Database;
 
+/**
+ * Validates unique identifier strings with alphanumeric chars, underscores, hyphens, and periods.
+ */
 class UID extends Key
 {
     /**
@@ -18,11 +21,9 @@ class UID extends Key
      * Get Description.
      *
      * Returns validator description
-     *
-     * @return string
      */
     public function getDescription(): string
     {
-        return 'UID must contain at most ' . $this->maxLength . ' chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore';
+        return 'UID must contain at most '.$this->maxLength.' chars. Valid chars are a-z, A-Z, 0-9, and underscore. Can\'t start with a leading underscore';
     }
 }

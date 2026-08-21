@@ -55,9 +55,6 @@ trait Collections
         $documentSecurity = $collection->documentSecurity;
         $metadata = $collection->metadata;
 
-        $attributes = array_map(fn ($attr): Attribute => $attr instanceof Attribute ? $attr : Attribute::fromDocument($attr), $attributes);
-        $indexes = array_map(fn ($idx): Index => $idx instanceof Index ? $idx : Index::fromDocument($idx), $indexes);
-
         foreach ($attributes as $attribute) {
             if (in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Vector, ColumnType::Object], true)) {
                 $existingFilters = $attribute->filters;

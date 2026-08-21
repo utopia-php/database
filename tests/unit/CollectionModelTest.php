@@ -28,6 +28,36 @@ class CollectionModelTest extends TestCase
         $this->assertSame([], $collection->metadata);
     }
 
+    public function testConstructorNormalizesDocumentAttributesAndIndexes(): void
+    {
+        $collection = new Collection(
+            id: 'nested',
+            attributes: [
+                new Document([
+                    '$id' => 'name',
+                    'type' => 'string',
+                    'size' => 64,
+                    'required' => true,
+                ]),
+            ],
+            indexes: [
+                new Document([
+                    '$id' => 'idx_name',
+                    'key' => 'idx_name',
+                    'type' => 'key',
+                    'attributes' => ['name'],
+                    'lengths' => [64],
+                    'orders' => ['ASC'],
+                ]),
+            ],
+        );
+
+        $this->assertInstanceOf(Attribute::class, $collection->attributes[0]);
+        $this->assertSame('name', $collection->attributes[0]->key);
+        $this->assertInstanceOf(Index::class, $collection->indexes[0]);
+        $this->assertSame('idx_name', $collection->indexes[0]->key);
+    }
+
     public function testConstructorWithValues(): void
     {
         $attr = Attribute::string(key: 'title', size: 128);

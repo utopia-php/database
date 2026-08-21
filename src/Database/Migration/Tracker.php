@@ -22,6 +22,11 @@ class Tracker
         $this->db = $db;
     }
 
+    public function reset(): void
+    {
+        $this->initialized = false;
+    }
+
     public function setup(): void
     {
         if ($this->initialized) {

@@ -110,6 +110,36 @@ class UnitOfWorkAdvancedTest extends TestCase
         $this->assertEquals(['insert', 'update', 'delete'], $callOrder);
     }
 
+    public function testFlushRestoresIdentityMapWhenTransactionFails(): void
+    {
+        $entity = new TestEntity();
+        $entity->id = 'rollback-1';
+        $entity->name = 'Rollback';
+        $entity->email = 'rollback@example.com';
+
+        $this->uow->persist($entity);
+
+        $db = $this->createMock(Database::class);
+        $db->method('withTransaction')->willReturnCallback(function (callable $callback) {
+            $callback();
+            throw new \RuntimeException('commit failed');
+        });
+        $db->method('createDocument')->willReturnCallback(
+            fn (string $collection, Document $doc): Document => $doc
+        );
+
+        try {
+            $this->uow->flush($db);
+            $this->fail('Expected flush to throw');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('commit failed', $exception->getMessage());
+        }
+
+        $this->assertFalse($this->identityMap->has('users', 'rollback-1'));
+        $this->assertSame(EntityState::New, $this->uow->getState($entity));
+        $this->assertSame('rollback-1', $entity->id);
+    }
+
     public function testRegisterManagedSetsStateAndTakesSnapshot(): void
     {
         $entity = new TestEntity();

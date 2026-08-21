@@ -10,6 +10,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Repository\CompositeSpecification;
 use Utopia\Database\Repository\Repository;
 use Utopia\Database\Repository\Specification;
+use Utopia\Query\Method;
 
 class TestRepository extends Repository
 {
@@ -235,9 +236,12 @@ class RepositoryTest extends TestCase
         $composite = $activeSpec->or($adminSpec);
         $queries = $composite->toQueries();
 
-        $this->assertNotEmpty($queries);
-        $methods = array_map(fn (Query $q) => $q->getMethod()->value, $queries);
-        $this->assertContains('or', $methods);
+        $this->assertCount(1, $queries);
+        $this->assertSame(Method::Or, $queries[0]->getMethod());
+        $values = $queries[0]->getValues();
+        $this->assertCount(2, $values);
+        $this->assertContains('status', array_map(fn (Query $q) => $q->getAttribute(), $values));
+        $this->assertContains('role', array_map(fn (Query $q) => $q->getAttribute(), $values));
     }
 
     public function testSpecificationAndCreatesComposite(): void

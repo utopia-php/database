@@ -40,6 +40,14 @@ class Having extends Base
             return false;
         }
 
+        foreach ($conditions as $condition) {
+            if (! $condition instanceof Query) {
+                $this->message = 'Having conditions must be Query instances';
+
+                return false;
+            }
+        }
+
         return true;
     }
 }

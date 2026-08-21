@@ -62,10 +62,11 @@ class MetadataFactory
 
         $softDeleteAttrs = $ref->getAttributes(SoftDelete::class);
         $softDeleteColumn = null;
+        $softDelete = null;
         if ($softDeleteAttrs !== []) {
-            /** @var SoftDelete $sd */
-            $sd = $softDeleteAttrs[0]->newInstance();
-            $softDeleteColumn = $sd->column;
+            /** @var SoftDelete $softDelete */
+            $softDelete = $softDeleteAttrs[0]->newInstance();
+            $softDeleteColumn = $softDelete->column;
         }
 
         $idProperty = null;
@@ -139,6 +140,28 @@ class MetadataFactory
             $rel = $this->parseRelationship($prop, $name);
             if ($rel !== null) {
                 $relationships[$name] = $rel;
+            }
+        }
+
+        if ($softDelete !== null) {
+            if (! $ref->hasProperty($softDeleteColumn)) {
+                throw new \RuntimeException("#[SoftDelete] column '{$softDeleteColumn}' is not a property of {$className}");
+            }
+
+            $mapped = false;
+            foreach ($columns as $mapping) {
+                if ($mapping->propertyName === $softDeleteColumn || $mapping->documentKey === $softDeleteColumn) {
+                    $mapped = true;
+                    break;
+                }
+            }
+
+            if (! $mapped) {
+                $columns[$softDeleteColumn] = new ColumnMapping(
+                    $softDeleteColumn,
+                    $softDeleteColumn,
+                    new Column(type: $softDelete->type, key: $softDeleteColumn),
+                );
             }
         }
 

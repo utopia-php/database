@@ -16,7 +16,19 @@ class Factory
 
     public function __construct(?Generator $faker = null)
     {
-        $this->faker = $faker ?? FakerFactory::create();
+        if ($faker !== null) {
+            $this->faker = $faker;
+
+            return;
+        }
+
+        if (! \class_exists(FakerFactory::class)) {
+            throw new \RuntimeException(
+                'fakerphp/faker is required to construct Factory without an injected generator'
+            );
+        }
+
+        $this->faker = FakerFactory::create();
     }
 
     public function define(string $collection, callable $definition): void

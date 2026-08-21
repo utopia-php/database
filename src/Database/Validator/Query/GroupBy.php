@@ -40,6 +40,14 @@ class GroupBy extends Base
             return false;
         }
 
+        foreach ($columns as $column) {
+            if (! \is_string($column) || $column === '') {
+                $this->message = 'GroupBy attributes must be non-empty strings';
+
+                return false;
+            }
+        }
+
         return true;
     }
 }

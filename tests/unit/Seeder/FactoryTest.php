@@ -2,12 +2,32 @@
 
 namespace Tests\Unit\Seeder;
 
+use Faker\Factory as FakerFactory;
+use Faker\Generator;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Seeder\Factory;
 
 class FactoryTest extends TestCase
 {
+    public function testConstructAcceptsInjectedGenerator(): void
+    {
+        $faker = FakerFactory::create();
+        $used = null;
+
+        $factory = new Factory($faker);
+        $factory->define('users', function (Generator $generator) use ($faker, &$used) {
+            $used = $generator;
+
+            return ['name' => 'Injected'];
+        });
+
+        $doc = $factory->make('users');
+
+        $this->assertSame($faker, $used);
+        $this->assertSame('Injected', $doc->getAttribute('name'));
+    }
+
     public function testDefineAndMake(): void
     {
         $factory = new Factory();

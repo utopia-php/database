@@ -43,8 +43,27 @@ class EntityMapper
         return self::$reflectionClassCache[$class];
     }
 
-    public function toDocument(object $entity, EntityMetadata $metadata): Document
+    /**
+     * @param  \SplObjectStorage<object, mixed>|null  $visited
+     */
+    public function toDocument(object $entity, EntityMetadata $metadata, ?\SplObjectStorage $visited = null): Document
     {
+        $visited ??= new \SplObjectStorage();
+
+        if (isset($visited[$entity])) {
+            $data = [];
+            if ($metadata->idProperty !== null) {
+                $id = $this->getPropertyValue($entity, $metadata->idProperty);
+                if ($id !== null && $id !== '') {
+                    $data[Document::ID] = $id;
+                }
+            }
+
+            return new Document($data);
+        }
+
+        $visited[$entity] = true;
+
         $data = [];
 
         if ($metadata->idProperty !== null) {
@@ -99,18 +118,18 @@ class EntityMapper
             }
 
             if (\is_array($value)) {
-                $data[$mapping->documentKey] = \array_map(function (mixed $item) use ($mapping): mixed {
+                $data[$mapping->documentKey] = \array_map(function (mixed $item) use ($mapping, $visited): mixed {
                     if (\is_object($item)) {
                         $relMeta = $this->metadataFactory->getMetadata($mapping->targetClass);
 
-                        return $this->toDocument($item, $relMeta);
+                        return $this->toDocument($item, $relMeta, $visited);
                     }
 
                     return $item;
                 }, $value);
             } elseif (\is_object($value)) {
                 $relMeta = $this->metadataFactory->getMetadata($mapping->targetClass);
-                $data[$mapping->documentKey] = $this->toDocument($value, $relMeta);
+                $data[$mapping->documentKey] = $this->toDocument($value, $relMeta, $visited);
             } else {
                 $data[$mapping->documentKey] = $value;
             }

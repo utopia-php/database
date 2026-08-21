@@ -180,6 +180,44 @@ class UnitOfWork
             return;
         }
 
+        $previousIdentity = $this->identityMap->snapshot();
+        $previousStates = clone $this->entityStates;
+        $previousSnapshots = clone $this->originalSnapshots;
+        $idBackup = [];
+        foreach ($inserts as $entities) {
+            foreach ($entities as $entity) {
+                $metadata = $this->metadataFactory->getMetadata($entity::class);
+                $idBackup[] = [$entity, $metadata, $this->entityMapper->getId($entity, $metadata)];
+            }
+        }
+
+        try {
+            $this->commit($db, $inserts, $updates, $deletes);
+        } catch (\Throwable $e) {
+            $this->identityMap->restore($previousIdentity);
+            $this->entityStates = $previousStates;
+            $this->originalSnapshots = $previousSnapshots;
+            foreach ($idBackup as [$entity, $metadata, $id]) {
+                if ($metadata->idProperty !== null) {
+                    $ref = new \ReflectionProperty($entity, $metadata->idProperty);
+                    $ref->setValue($entity, $id ?? '');
+                }
+            }
+
+            throw $e;
+        }
+
+        $this->scheduledInsertions = [];
+        $this->scheduledDeletions = [];
+    }
+
+    /**
+     * @param  array<string, array<object>>  $inserts
+     * @param  array<string, array<object>>  $updates
+     * @param  array<string, array<object>>  $deletes
+     */
+    private function commit(Database $db, array $inserts, array $updates, array $deletes): void
+    {
         $db->withTransaction(function () use ($db, $inserts, $updates, $deletes): void {
             foreach ($inserts as $collection => $entities) {
                 $documents = [];
@@ -259,9 +297,6 @@ class UnitOfWork
                 }
             }
         });
-
-        $this->scheduledInsertions = [];
-        $this->scheduledDeletions = [];
     }
 
     public function detach(object $entity): void

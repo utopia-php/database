@@ -118,6 +118,8 @@ class Runner
             }
         }
 
+        $this->tracker->reset();
+
         return $this->migrate($migrations);
     }
 

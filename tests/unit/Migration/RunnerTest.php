@@ -352,4 +352,53 @@ class RunnerTest extends TestCase
         $this->assertStringContainsString('idx_email', $output);
         $this->assertStringContainsString('createIndex', $output);
     }
+
+    public function testGeneratorRendersCollectionIdAndReversesDownStatements(): void
+    {
+        $diff = new DiffResult([
+            new Change(
+                type: ChangeType::AddAttribute,
+                attribute: Attribute::string(key: 'email'),
+                collectionId: 'users',
+            ),
+            new Change(
+                type: ChangeType::AddIndex,
+                index: Index::index(key: 'idx_email', attributes: ['email']),
+                collectionId: 'users',
+            ),
+        ]);
+
+        $output = (new Generator())->generate($diff, 'V005_AddEmailIndex');
+
+        $this->assertStringContainsString("createAttribute('users'", $output);
+        $this->assertStringNotContainsString('{collectionId}', $output);
+
+        $downStart = \strpos($output, 'function down(Database $db): void');
+        $this->assertNotFalse($downStart);
+        $down = \substr($output, $downStart);
+        $deleteIndexAt = \strpos($down, 'deleteIndex');
+        $deleteAttributeAt = \strpos($down, 'deleteAttribute');
+        $this->assertNotFalse($deleteIndexAt);
+        $this->assertNotFalse($deleteAttributeAt);
+        $this->assertTrue($deleteIndexAt < $deleteAttributeAt);
+    }
+
+    public function testFreshResetsTrackerBeforeMigrating(): void
+    {
+        $tracker = $this->createMock(Tracker::class);
+        $tracker->method('setup');
+        $tracker->method('getAppliedVersions')->willReturn([]);
+        $tracker->method('getLastBatch')->willReturn(0);
+        $tracker->method('markApplied');
+        $tracker->expects($this->once())->method('reset');
+
+        $this->db->method('listCollections')->willReturn([
+            new Document(['$id' => 'users']),
+        ]);
+        $this->db->method('deleteCollection')->willReturn(true);
+        $this->db->method('withTransaction')->willReturnCallback(fn (callable $cb) => $cb());
+
+        $runner = new Runner($this->db, $tracker);
+        $runner->fresh([$this->createMigration('001')]);
+    }
 }

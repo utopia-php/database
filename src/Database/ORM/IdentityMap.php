@@ -32,10 +32,31 @@ class IdentityMap
         $this->map = [];
     }
 
+    /**
+     * @return \Generator<int, object>
+     */
     public function all(): \Generator
     {
         foreach ($this->map as $collection) {
-            yield from $collection;
+            foreach ($collection as $entity) {
+                yield $entity;
+            }
         }
+    }
+
+    /**
+     * @return array<string, array<string, object>>
+     */
+    public function snapshot(): array
+    {
+        return $this->map;
+    }
+
+    /**
+     * @param  array<string, array<string, object>>  $map
+     */
+    public function restore(array $map): void
+    {
+        $this->map = $map;
     }
 }

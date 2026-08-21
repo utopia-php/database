@@ -77,6 +77,34 @@ class EntityMapperTest extends TestCase
         $this->assertFalse($entity->active);
     }
 
+    public function testToDocumentBreaksRelationshipCycles(): void
+    {
+        $author = new TestEntity();
+        $author->id = 'user-cycle';
+        $author->name = 'Cyclic';
+        $author->email = 'cycle@example.com';
+
+        $post = new TestPost();
+        $post->id = 'post-cycle';
+        $post->title = 'Loop';
+        $post->author = $author;
+        $author->posts = [$post];
+
+        $metadata = $this->metadataFactory->getMetadata(TestEntity::class);
+        $doc = $this->mapper->toDocument($author, $metadata);
+
+        $this->assertSame('user-cycle', $doc->getId());
+        $posts = $doc->getAttribute('posts');
+        $this->assertIsArray($posts);
+        $this->assertCount(1, $posts);
+        $this->assertInstanceOf(Document::class, $posts[0]);
+        $this->assertSame('post-cycle', $posts[0]->getId());
+        $nestedAuthor = $posts[0]->getAttribute('author');
+        $this->assertInstanceOf(Document::class, $nestedAuthor);
+        $this->assertSame('user-cycle', $nestedAuthor->getId());
+        $this->assertFalse($nestedAuthor->offsetExists('posts'));
+    }
+
     public function testToEntityUsesIdentityMap(): void
     {
         $doc = new Document([

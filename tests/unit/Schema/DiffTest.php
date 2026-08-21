@@ -5,9 +5,13 @@ namespace Tests\Unit\Schema;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
+use Utopia\Database\Database;
 use Utopia\Database\Index;
+use Utopia\Database\Schema\Change;
 use Utopia\Database\Schema\ChangeType;
 use Utopia\Database\Schema\Diff;
+use Utopia\Database\Schema\DiffResult;
+use Utopia\Query\Schema\ColumnType;
 
 class DiffTest extends TestCase
 {
@@ -131,6 +135,32 @@ class DiffTest extends TestCase
         $this->assertEquals('idx_name', $change->index->key);
     }
 
+    public function testDetectModifiedIndexEmitsDropAndAdd(): void
+    {
+        $source = new Collection(
+            id: 'test',
+            indexes: [
+                Index::index(key: 'idx_name', attributes: ['name']),
+            ],
+        );
+        $target = new Collection(
+            id: 'test',
+            indexes: [
+                Index::unique(key: 'idx_name', attributes: ['email']),
+            ],
+        );
+
+        $result = $this->differ->diff($source, $target);
+
+        $this->assertTrue($result->hasChanges());
+        $this->assertCount(1, $result->getRemovals());
+        $this->assertCount(1, $result->getAdditions());
+        $this->assertSame(ChangeType::DropIndex, \array_values($result->getRemovals())[0]->type);
+        $this->assertSame(ChangeType::AddIndex, \array_values($result->getAdditions())[0]->type);
+        $this->assertSame('email', \array_values($result->getAdditions())[0]->index->attributes[0]);
+        $this->assertSame('test', \array_values($result->getAdditions())[0]->collectionId);
+    }
+
     public function testDetectRemovedIndex(): void
     {
         $source = new Collection(
@@ -179,5 +209,32 @@ class DiffTest extends TestCase
         $this->assertNotEmpty($result->getAdditions());
         $this->assertNotEmpty($result->getRemovals());
         $this->assertNotEmpty($result->getModifications());
+    }
+
+    public function testApplyModifyAttributePassesNamedTypeNotAttribute(): void
+    {
+        $attribute = Attribute::string(key: 'name', size: 100, required: true);
+        $result = new DiffResult([
+            new Change(ChangeType::ModifyAttribute, attribute: $attribute),
+        ]);
+
+        $db = $this->createMock(Database::class);
+        $db->expects($this->once())
+            ->method('updateAttribute')
+            ->with(
+                'users',
+                'name',
+                ColumnType::String,
+                100,
+                true,
+                null,
+                true,
+                false,
+                null,
+                [],
+                [],
+            );
+
+        $result->apply($db, 'users');
     }
 }

@@ -413,6 +413,11 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
         return $this;
     }
 
+    public function getAlterLocks(): bool
+    {
+        return $this->alterLocks;
+    }
+
     /**
      * Set support for attributes
      */

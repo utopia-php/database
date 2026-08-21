@@ -30,7 +30,19 @@ class DiffResult
                     ? $db->deleteAttribute($collectionId, $change->attribute->key)
                     : null,
                 ChangeType::ModifyAttribute => $change->attribute !== null
-                    ? $db->updateAttribute($collectionId, $change->attribute->key, $change->attribute)
+                    ? $db->updateAttribute(
+                        $collectionId,
+                        $change->attribute->key,
+                        type: $change->attribute->type,
+                        size: $change->attribute->size,
+                        required: $change->attribute->required,
+                        default: $change->attribute->default,
+                        signed: $change->attribute->signed,
+                        array: $change->attribute->array,
+                        format: $change->attribute->format,
+                        formatOptions: $change->attribute->formatOptions,
+                        filters: $change->attribute->filters,
+                    )
                     : null,
                 ChangeType::AddIndex => $change->index !== null
                     ? $db->createIndex($collectionId, $change->index)

@@ -23,21 +23,17 @@ class CompositeSpecification implements Specification
         $queries = [];
 
         if ($this->operator === 'or') {
-            $groups = [];
+            $alternatives = [];
             foreach ($this->specs as $spec) {
-                $groups[] = $spec->toQueries();
-            }
-
-            if ($groups !== []) {
-                $orQueries = [];
-                foreach ($groups as $group) {
-                    $orQueries[] = Query::or($group);
+                $group = $spec->toQueries();
+                if ($group === []) {
+                    continue;
                 }
 
-                return $orQueries;
+                $alternatives[] = \count($group) === 1 ? $group[0] : Query::and($group);
             }
 
-            return [];
+            return $alternatives === [] ? [] : [Query::or($alternatives)];
         }
 
         foreach ($this->specs as $spec) {

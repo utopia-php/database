@@ -9,20 +9,13 @@ class OnlineSchemaChange
     public function alter(Database $db, string $collection, callable $changes): void
     {
         $adapter = $db->getAdapter();
-
-        $hadLocks = true;
-
-        if (\method_exists($adapter, 'enableAlterLocks')) {
-            $hadLocks = true;
-            $adapter->enableAlterLocks(false);
-        }
+        $hadLocks = $adapter->getAlterLocks();
+        $adapter->enableAlterLocks(false);
 
         try {
             $changes($db, $collection);
         } finally {
-            if (\method_exists($adapter, 'enableAlterLocks') && $hadLocks) {
-                $adapter->enableAlterLocks(true);
-            }
+            $adapter->enableAlterLocks($hadLocks);
         }
     }
 }

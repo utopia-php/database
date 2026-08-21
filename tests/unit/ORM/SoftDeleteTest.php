@@ -72,6 +72,9 @@ class SoftDeleteTest extends TestCase
         $metadata = $this->metadataFactory->getMetadata(SoftDeleteEntity::class);
 
         $this->assertEquals('deletedAt', $metadata->softDeleteColumn);
+        $this->assertArrayHasKey('deletedAt', $metadata->columns);
+        $this->assertSame('deletedAt', $metadata->columns['deletedAt']->documentKey);
+        $this->assertSame(ColumnType::Datetime, $metadata->columns['deletedAt']->column->type);
     }
 
     public function testMetadataFactoryParsesSoftDeleteWithCustomColumn(): void

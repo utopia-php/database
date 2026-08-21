@@ -28,7 +28,7 @@ class Generator
         }
 
         $upBody = $upLines !== [] ? \implode("\n", $upLines) : '        // No changes';
-        $downBody = $downLines !== [] ? \implode("\n", $downLines) : '        // No changes';
+        $downBody = $downLines !== [] ? \implode("\n", \array_reverse($downLines)) : '        // No changes';
 
         return <<<PHP
         <?php
@@ -103,18 +103,20 @@ class Generator
 
     private function generateUpStatement(Change $change): ?string
     {
+        $collectionId = $this->collectionId($change);
+
         return match ($change->type) {
             ChangeType::AddAttribute => $change->attribute !== null
-                ? "\$db->createAttribute('{collectionId}', new \\Utopia\\Database\\Attribute(key: '{$change->attribute->key}', type: \\Utopia\\Query\\Schema\\ColumnType::" . \ucfirst($change->attribute->type->value) . ", size: {$change->attribute->size}));"
+                ? "\$db->createAttribute('{$collectionId}', new \\Utopia\\Database\\Attribute(key: '{$change->attribute->key}', type: \\Utopia\\Query\\Schema\\ColumnType::" . \ucfirst($change->attribute->type->value) . ", size: {$change->attribute->size}));"
                 : null,
             ChangeType::DropAttribute => $change->attribute !== null
-                ? "\$db->deleteAttribute('{collectionId}', '{$change->attribute->key}');"
+                ? "\$db->deleteAttribute('{$collectionId}', '{$change->attribute->key}');"
                 : null,
             ChangeType::AddIndex => $change->index !== null
-                ? "\$db->createIndex('{collectionId}', new \\Utopia\\Database\\Index(key: '{$change->index->key}', type: \\Utopia\\Query\\Schema\\IndexType::" . \ucfirst($change->index->type->value) . ", attributes: " . \var_export($change->index->attributes, true) . '));\\'
+                ? "\$db->createIndex('{$collectionId}', new \\Utopia\\Database\\Index(key: '{$change->index->key}', type: \\Utopia\\Query\\Schema\\IndexType::" . \ucfirst($change->index->type->value) . ", attributes: " . \var_export($change->index->attributes, true) . '));'
                 : null,
             ChangeType::DropIndex => $change->index !== null
-                ? "\$db->deleteIndex('{collectionId}', '{$change->index->key}');"
+                ? "\$db->deleteIndex('{$collectionId}', '{$change->index->key}');"
                 : null,
             default => null,
         };
@@ -122,20 +124,31 @@ class Generator
 
     private function generateDownStatement(Change $change): ?string
     {
+        $collectionId = $this->collectionId($change);
+
         return match ($change->type) {
             ChangeType::AddAttribute => $change->attribute !== null
-                ? "\$db->deleteAttribute('{collectionId}', '{$change->attribute->key}');"
+                ? "\$db->deleteAttribute('{$collectionId}', '{$change->attribute->key}');"
                 : null,
             ChangeType::DropAttribute => $change->attribute !== null
-                ? "\$db->createAttribute('{collectionId}', new \\Utopia\\Database\\Attribute(key: '{$change->attribute->key}', type: \\Utopia\\Query\\Schema\\ColumnType::" . \ucfirst($change->attribute->type->value) . ", size: {$change->attribute->size}));"
+                ? "\$db->createAttribute('{$collectionId}', new \\Utopia\\Database\\Attribute(key: '{$change->attribute->key}', type: \\Utopia\\Query\\Schema\\ColumnType::" . \ucfirst($change->attribute->type->value) . ", size: {$change->attribute->size}));"
                 : null,
             ChangeType::AddIndex => $change->index !== null
-                ? "\$db->deleteIndex('{collectionId}', '{$change->index->key}');"
+                ? "\$db->deleteIndex('{$collectionId}', '{$change->index->key}');"
                 : null,
             ChangeType::DropIndex => $change->index !== null
-                ? "\$db->createIndex('{collectionId}', new \\Utopia\\Database\\Index(key: '{$change->index->key}', type: \\Utopia\\Query\\Schema\\IndexType::" . \ucfirst($change->index->type->value) . ", attributes: " . \var_export($change->index->attributes, true) . '));\\'
+                ? "\$db->createIndex('{$collectionId}', new \\Utopia\\Database\\Index(key: '{$change->index->key}', type: \\Utopia\\Query\\Schema\\IndexType::" . \ucfirst($change->index->type->value) . ", attributes: " . \var_export($change->index->attributes, true) . '));'
                 : null,
             default => null,
         };
+    }
+
+    private function collectionId(Change $change): string
+    {
+        if ($change->collectionId === null || $change->collectionId === '') {
+            return '{collectionId}';
+        }
+
+        return $change->collectionId;
     }
 }

@@ -16,7 +16,7 @@ class FactoryTest extends TestCase
         $used = null;
 
         $factory = new Factory($faker);
-        $factory->define('users', function (Generator $generator) use ($faker, &$used) {
+        $factory->define('users', function (Generator $generator) use (&$used) {
             $used = $generator;
 
             return ['name' => 'Injected'];

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Migration;
 
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
@@ -17,7 +18,7 @@ use Utopia\Database\Schema\DiffResult;
 
 class RunnerTest extends TestCase
 {
-    private Database $db;
+    private Database&Stub $db;
 
     protected function setUp(): void
     {

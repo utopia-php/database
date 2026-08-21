@@ -156,9 +156,11 @@ class DiffTest extends TestCase
         $this->assertCount(1, $result->getRemovals());
         $this->assertCount(1, $result->getAdditions());
         $this->assertSame(ChangeType::DropIndex, \array_values($result->getRemovals())[0]->type);
-        $this->assertSame(ChangeType::AddIndex, \array_values($result->getAdditions())[0]->type);
-        $this->assertSame('email', \array_values($result->getAdditions())[0]->index->attributes[0]);
-        $this->assertSame('test', \array_values($result->getAdditions())[0]->collectionId);
+        $added = \array_values($result->getAdditions())[0];
+        $this->assertSame(ChangeType::AddIndex, $added->type);
+        $this->assertNotNull($added->index);
+        $this->assertSame('email', $added->index->attributes[0]);
+        $this->assertSame('test', $added->collectionId);
     }
 
     public function testDetectRemovedIndex(): void

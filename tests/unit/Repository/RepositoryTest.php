@@ -240,8 +240,13 @@ class RepositoryTest extends TestCase
         $this->assertSame(Method::Or, $queries[0]->getMethod());
         $values = $queries[0]->getValues();
         $this->assertCount(2, $values);
-        $this->assertContains('status', array_map(fn (Query $q) => $q->getAttribute(), $values));
-        $this->assertContains('role', array_map(fn (Query $q) => $q->getAttribute(), $values));
+        $attributes = [];
+        foreach ($values as $value) {
+            $this->assertInstanceOf(Query::class, $value);
+            $attributes[] = $value->getAttribute();
+        }
+        $this->assertContains('status', $attributes);
+        $this->assertContains('role', $attributes);
     }
 
     public function testSpecificationAndCreatesComposite(): void

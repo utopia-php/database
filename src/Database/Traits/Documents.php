@@ -903,13 +903,13 @@ trait Documents
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
         $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
-            $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
                 return new Document();
             }
+            $time = DateTime::nowAfter($old->getUpdatedAt() ?: null);
 
             $skipPermissionsUpdate = true;
 
@@ -1255,7 +1255,7 @@ trait Documents
         }
 
         $updatedAt = $updates->getUpdatedAt();
-        $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
+        $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::nowAfter($updates->getUpdatedAt()) : $updatedAt;
 
         $updates = $this->encode(
             $collection,

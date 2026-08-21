@@ -271,36 +271,6 @@ parameters:
 			path: src/Database/Event/DispatcherHook.php
 
 		-
-			message: '#^Parameter \$attributes of class Utopia\\Database\\Index constructor expects array\<string\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/Index.php
-
-		-
-			message: '#^Parameter \$key of class Utopia\\Database\\Index constructor expects string, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/Index.php
-
-		-
-			message: '#^Parameter \$lengths of class Utopia\\Database\\Index constructor expects array\<int\|null\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/Index.php
-
-		-
-			message: '#^Parameter \$orders of class Utopia\\Database\\Index constructor expects array\<string\|null\>, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/Index.php
-
-		-
-			message: '#^Parameter \$ttl of class Utopia\\Database\\Index constructor expects int, mixed given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Database/Index.php
-
-		-
 			message: '#^Negated boolean expression is always true\.$#'
 			identifier: booleanNot.alwaysTrue
 			count: 1

@@ -17,7 +17,6 @@ use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
-use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\Order;
@@ -739,7 +738,7 @@ trait SpatialTests
             $indexes = [Index::spatial(
                 key: 'idx_loc',
                 attributes: ['loc'],
-                orders: $orderSupported ? [OrderDirection::Asc->value] : ['ASC'],
+                orders: [Order::Asc],
             )];
 
             if ($orderSupported) {

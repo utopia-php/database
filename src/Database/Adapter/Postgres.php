@@ -875,12 +875,8 @@ class Postgres extends SQL
             if ($isNestedPath) {
                 $attributes[$i] = $this->buildJsonbPath($attr, true) . ($order ? " {$order}" : '');
             } else {
-                $attr = match ($attr) {
-                    '$id' => '_uid',
-                    '$createdAt' => '_createdAt',
-                    '$updatedAt' => '_updatedAt',
-                    default => $this->filter($attr),
-                };
+                $attr = $this->getInternalKeyForAttribute($attr);
+                $attr = $this->filter($attr);
 
                 $attributes[$i] = "\"{$attr}\" {$order}";
             }

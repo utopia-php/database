@@ -346,6 +346,171 @@ trait IndexTests
         }
     }
 
+    public function testCreateCollectionWithIndexOnSequence(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = $database->createCollection('sequenceIndexes', [
+            new Document([
+                '$id' => ID::custom('username'),
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => ID::custom('email'),
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => false,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+        ], [
+            new Document([
+                '$id' => ID::custom('_index 123'),
+                'type' => Database::INDEX_KEY,
+                'attributes' => ['username', '$sequence'],
+                'lengths' => [],
+                'orders' => [Database::ORDER_ASC, Database::ORDER_DESC],
+            ]),
+            new Document([
+                '$id' => ID::custom('_index 456'),
+                'type' => Database::INDEX_UNIQUE,
+                'attributes' => ['email', '$sequence'],
+                'lengths' => [],
+                'orders' => [Database::ORDER_ASC, Database::ORDER_DESC],
+            ]),
+        ]);
+
+        $indexes = $collection->getAttribute('indexes');
+        $this->assertCount(2, $indexes);
+        $this->assertEquals('_index 123', $indexes[0]->getId());
+        $this->assertEquals(['username', '$sequence'], $indexes[0]->getAttribute('attributes'));
+        $this->assertEquals('_index 456', $indexes[1]->getId());
+        $this->assertEquals(['email', '$sequence'], $indexes[1]->getAttribute('attributes'));
+
+        $database->createDocument('sequenceIndexes', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'username' => 'chester',
+            'email' => 'chester@example.com',
+        ]));
+
+        $documents = $database->find('sequenceIndexes', [
+            Query::equal('username', ['chester']),
+            Query::orderDesc('$sequence'),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals('chester', $documents[0]->getAttribute('username'));
+
+        /**
+         * $sequence is unique on its own, so a unique index containing it never
+         * conflicts. A duplicate here would mean the adapter built the index
+         * without the $sequence column.
+         */
+        $database->createDocument('sequenceIndexes', new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'username' => 'chester',
+            'email' => 'chester@example.com',
+        ]));
+
+        $this->assertCount(2, $database->find('sequenceIndexes', [
+            Query::equal('email', ['chester@example.com']),
+        ]));
+
+        $database->deleteCollection('sequenceIndexes');
+    }
+
+    public function testCreateIndexOnSequence(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForIndex()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+
+        $this->assertTrue($database->createAttribute(__FUNCTION__, 'username', Database::VAR_STRING, 128, false));
+        $this->assertTrue($database->createAttribute(__FUNCTION__, 'email', Database::VAR_STRING, 128, false));
+
+        $this->assertTrue($database->createIndex(
+            __FUNCTION__,
+            '_index 123',
+            Database::INDEX_KEY,
+            ['username', '$sequence'],
+            [],
+            [Database::ORDER_ASC, Database::ORDER_DESC]
+        ));
+
+        $this->assertTrue($database->createIndex(
+            __FUNCTION__,
+            '_index 456',
+            Database::INDEX_UNIQUE,
+            ['email', '$sequence'],
+            [],
+            [Database::ORDER_ASC, Database::ORDER_DESC]
+        ));
+
+        $indexes = $database->getCollection(__FUNCTION__)->getAttribute('indexes');
+        $this->assertCount(2, $indexes);
+        $this->assertEquals('_index 123', $indexes[0]->getId());
+        $this->assertEquals(['username', '$sequence'], $indexes[0]->getAttribute('attributes'));
+        $this->assertEquals('_index 456', $indexes[1]->getId());
+        $this->assertEquals(['email', '$sequence'], $indexes[1]->getAttribute('attributes'));
+
+        $database->createDocument(__FUNCTION__, new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'username' => 'chester',
+            'email' => 'chester@example.com',
+        ]));
+
+        $documents = $database->find(__FUNCTION__, [
+            Query::equal('username', ['chester']),
+            Query::orderDesc('$sequence'),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals('chester', $documents[0]->getAttribute('username'));
+
+        /**
+         * $sequence is unique on its own, so a unique index containing it never
+         * conflicts. A duplicate here would mean the adapter built the index
+         * without the $sequence column.
+         */
+        $database->createDocument(__FUNCTION__, new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'username' => 'chester',
+            'email' => 'chester@example.com',
+        ]));
+
+        $this->assertCount(2, $database->find(__FUNCTION__, [
+            Query::equal('email', ['chester@example.com']),
+        ]));
+
+        $database->deleteCollection(__FUNCTION__);
+    }
+
     public function testIndexLengthZero(): void
     {
         /** @var Database $database */

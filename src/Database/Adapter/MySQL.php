@@ -32,6 +32,7 @@ class MySQL extends MariaDB
 
         $this->timeout = $milliseconds;
 
+        // Bound reads: the max_execution_time optimizer hint only applies to SELECTs.
         $this->before($event, 'timeout', function ($sql) use ($milliseconds) {
             return \preg_replace(
                 pattern: '/SELECT/',
@@ -40,6 +41,13 @@ class MySQL extends MariaDB
                 limit: 1
             );
         });
+
+        // Bound writes: hints are ignored by INSERT/UPDATE/DDL, so cap how long a
+        // statement waits on row (InnoDB) and metadata locks before failing fast.
+        // This is a connection-scoped floor: Pool re-applies it on each checkout,
+        // so it tracks the latest timeout without a paired reset to leak through.
+        $seconds = \max(1, (int) \ceil($milliseconds / 1000));
+        $this->getPDO()->exec("SET SESSION innodb_lock_wait_timeout = {$seconds}, SESSION lock_wait_timeout = {$seconds}");
     }
 
     /**
@@ -159,6 +167,11 @@ class MySQL extends MariaDB
 
         // Regex timeout
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3699) {
+            return new TimeoutException('Query timed out', $e->getCode(), $e);
+        }
+
+        // Lock wait timeout (blocked write released by innodb_lock_wait_timeout/lock_wait_timeout)
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1205) {
             return new TimeoutException('Query timed out', $e->getCode(), $e);
         }
 

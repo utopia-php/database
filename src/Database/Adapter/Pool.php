@@ -34,9 +34,6 @@ class Pool extends Adapter
      * failed outright while the backing was unreachable, reporting a database
      * as down to a caller that had not yet issued a query.
      *
-     * A cleared event is kept with a timeout of zero instead of being dropped,
-     * so the connection it was applied to has it cleared again on checkout.
-     *
      * @var array<string, int>
      */
     private array $timeouts = [];
@@ -116,37 +113,56 @@ class Pool extends Adapter
 
     /**
      * Zero is the value a caller's own default carries when it wants no
-     * timeout, so it is recorded as a cleared event rather than refused. A
-     * connection is only ever asked for a timeout it can hold.
+     * timeout, so it clears the event rather than being refused. A connection
+     * is only ever asked for a timeout it can hold.
      */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        $this->timeouts[$event] = \max($milliseconds, 0);
-        $this->timeout = \max($milliseconds, 0);
-    }
+        if ($milliseconds <= 0) {
+            $this->clearTimeout($event);
 
-    public function clearTimeout(string $event): void
-    {
-        $this->timeouts[$event] = 0;
-        $this->timeout = 0;
+            return;
+        }
+
+        $this->timeouts[$event] = $milliseconds;
+        $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
     }
 
     /**
-     * Apply this pool's timeouts to a connection as it is checked out. The
-     * connection outlives the handle that configured it and is handed to
-     * handles that want a different timeout or none, so what it carries is
-     * replaced on every checkout rather than only when it is first set.
+     * Clearing one event leaves the others alone. The concrete adapters keep a
+     * single timeout scalar that Postgres and Mongo apply to every statement,
+     * so a clear forwarded verbatim would drop the timeout the caller still
+     * has configured for everything else.
+     */
+    public function clearTimeout(string $event): void
+    {
+        unset($this->timeouts[$event]);
+        $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
+    }
+
+    /**
+     * Put a connection into the timeout state this pool holds, as it is checked
+     * out. The connection outlives the handle that configured it and is handed
+     * on to handles that want a different timeout or none at all, so it is
+     * reset first: a handle carrying no timeout must not inherit one, and a
+     * handle carrying its own must not be left with an event the last holder
+     * set. The global timeout is applied last so the scalar the connection ends
+     * on is the one {@see self::getTimeout()} reports.
      */
     protected function syncTimeouts(Adapter $adapter): void
     {
-        foreach ($this->timeouts as $event => $milliseconds) {
-            if ($milliseconds === 0) {
-                $adapter->clearTimeout($event);
+        $adapter->clearTimeouts();
 
+        foreach ($this->timeouts as $event => $milliseconds) {
+            if ($event === Database::EVENT_ALL) {
                 continue;
             }
 
             $adapter->setTimeout($milliseconds, $event);
+        }
+
+        if (isset($this->timeouts[Database::EVENT_ALL])) {
+            $adapter->setTimeout($this->timeouts[Database::EVENT_ALL]);
         }
     }
 

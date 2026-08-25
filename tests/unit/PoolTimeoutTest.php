@@ -67,6 +67,7 @@ class PoolTimeoutTest extends TestCase
         $adapter->getSupportForTimeouts();
 
         $this->assertSame([], $connection->timeouts);
+        $this->assertSame(0, $connection->getTimeout());
         $this->assertSame(0, $adapter->getTimeout());
     }
 
@@ -81,9 +82,56 @@ class PoolTimeoutTest extends TestCase
         $adapter->getSupportForTimeouts();
 
         $this->assertSame([
-            Database::EVENT_ALL => 300000,
             Database::EVENT_DOCUMENT_READ => 5000,
-        ], $connection->timeouts);
+            Database::EVENT_ALL => 300000,
+        ], $connection->timeouts, 'The global timeout is applied last so the connection ends on the scalar the pool reports');
+        $this->assertSame(300000, $connection->getTimeout());
+    }
+
+    /**
+     * The concrete adapters keep one timeout scalar, which Postgres writes into
+     * `SET statement_timeout` and Mongo into `maxTimeMS` for every statement.
+     * Forwarding a per-event clear verbatim zeroed that scalar, so clearing the
+     * timeout on one event left everything else running unbounded.
+     */
+    public function testClearingOneEventLeavesTheGlobalTimeoutInPlace(): void
+    {
+        $connection = new TimeoutRecordingMemory();
+        $adapter = new Pool(new UtopiaPool(new Stack(), 'memory', 1, fn () => $connection, timeout: 0.0));
+
+        $adapter->setAuthorization(new Authorization());
+        $adapter->setTimeout(300000);
+        $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
+        $adapter->clearTimeout(Database::EVENT_DOCUMENT_READ);
+        $adapter->getSupportForTimeouts();
+
+        $this->assertSame([Database::EVENT_ALL => 300000], $connection->timeouts);
+        $this->assertSame(300000, $connection->getTimeout(), 'Postgres and Mongo bound every statement by this scalar, so clearing one event must not zero it');
+        $this->assertSame(300000, $adapter->getTimeout());
+    }
+
+    /**
+     * A pool is shared: the same connection is handed to a handle built for a
+     * long migration with no timeout and to a request handle bounded at 5s. A
+     * handle holding no timeout must reset what it is given, or it inherits the
+     * bound the last holder left and a migration is killed mid-run.
+     */
+    public function testHandleWithNoTimeoutResetsTheConnectionItIsGiven(): void
+    {
+        $connection = new TimeoutRecordingMemory();
+        $pool = new UtopiaPool(new Stack(), 'memory', 1, fn () => $connection, timeout: 0.0);
+
+        $bounded = new Pool($pool);
+        $bounded->setAuthorization(new Authorization());
+        $bounded->setTimeout(5000);
+        $bounded->getSupportForTimeouts();
+
+        $unbounded = new Pool($pool);
+        $unbounded->setAuthorization(new Authorization());
+        $unbounded->getSupportForTimeouts();
+
+        $this->assertSame([], $connection->timeouts, 'A handle that asked for no timeout must not run under the last holder\'s');
+        $this->assertSame(0, $connection->getTimeout());
     }
 
     /**

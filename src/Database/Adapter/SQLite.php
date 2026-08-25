@@ -1667,12 +1667,7 @@ class SQLite extends MariaDB
                 throw new DatabaseException('Unknown index type: ' . $type . '. Must be one of ' . Database::INDEX_KEY . ', ' . Database::INDEX_UNIQUE . ', ' . Database::INDEX_FULLTEXT);
         }
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            '$id' => ID::custom('_uid'),
-            '$createdAt' => '_createdAt',
-            '$updatedAt' => '_updatedAt',
-            default => $attribute
-        }, $attributes);
+        $attributes = \array_map(fn ($attribute) => $this->getInternalKeyForAttribute($attribute), $attributes);
 
         foreach ($attributes as $key => $attribute) {
             $attribute = $this->filter($attribute);

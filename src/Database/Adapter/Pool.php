@@ -23,6 +23,22 @@ class Pool extends Adapter
     protected ?Adapter $pinnedAdapter = null;
 
     /**
+     * The timeout each event is under, held here rather than on a connection.
+     *
+     * A timeout is adapter state, not a statement: every concrete adapter
+     * records it and applies it to the SQL it builds afterwards, and none of
+     * them contacts the server to set it. Delegating the call therefore opened
+     * a connection for the sole purpose of writing a number onto whichever one
+     * answered, which the pool took back moments later - so the timeout bound
+     * one connection and none of its siblings, and merely building a handle
+     * failed outright while the backing was unreachable, reporting a database
+     * as down to a caller that had not yet issued a query.
+     *
+     * @var array<string, int>
+     */
+    private array $timeouts = [];
+
+    /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
@@ -59,9 +75,7 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
-            }
+            $this->syncTimeouts($adapter);
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);
@@ -97,9 +111,116 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * Zero is the value a caller's own default carries when it wants no
+     * timeout, so it clears the event rather than being refused. A connection
+     * is only ever asked for a timeout it can hold.
+     */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        if ($milliseconds <= 0) {
+            $this->clearTimeout($event);
+
+            return;
+        }
+
+        $this->timeouts[$event] = $milliseconds;
+        $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
+
+        $this->syncPin();
+    }
+
+    /**
+     * Clearing one event leaves the others alone. The concrete adapters keep a
+     * single timeout scalar that Postgres and Mongo apply to every statement,
+     * so a clear forwarded verbatim would drop the timeout the caller still
+     * has configured for everything else.
+     */
+    public function clearTimeout(string $event): void
+    {
+        unset($this->timeouts[$event]);
+        $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
+
+        $this->syncPin();
+    }
+
+    /**
+     * The pool's own map is what a checkout replays, so a clear has to empty
+     * it. Inheriting the base implementation cleared almost nothing: it walks
+     * the events it finds in `$transformations`, and this adapter delegates
+     * `before()`, so its own array never holds more than `EVENT_ALL` however
+     * many events a caller has set a timeout for.
+     */
+    public function clearTimeouts(): void
+    {
+        $this->timeouts = [];
+        $this->timeout = 0;
+
+        $this->syncPin();
+    }
+
+    /**
+     * The connection this caller's open transaction is pinned to, if any.
+     *
+     * A seam: a subclass that keys the pin by coroutine rather than by object
+     * overrides this, and the timeout setters reach the right connection
+     * without knowing how the pin is held.
+     */
+    protected function pin(): ?Adapter
+    {
+        return $this->pinnedAdapter;
+    }
+
+    /**
+     * A timeout changed inside a transaction has to reach the connection
+     * running it. Every statement left in that transaction goes to the pinned
+     * connection, and it will not be checked out again before the commit, so
+     * waiting for the next checkout would leave the rest of the body running
+     * under the timeout the caller just replaced.
+     */
+    private function syncPin(): void
+    {
+        $pinned = $this->pin();
+
+        if ($pinned === null) {
+            return;
+        }
+
+        $this->syncTimeouts($pinned);
+    }
+
+    /**
+     * Put a connection into the timeout state this pool holds, as it is checked
+     * out. The connection outlives the handle that configured it and is handed
+     * on to handles that want a different timeout or none at all, so it is
+     * reset first: a handle carrying no timeout must not inherit one, and a
+     * handle carrying its own must not be left with an event the last holder
+     * set.
+     *
+     * The global timeout is applied last, which decides what an engine with no
+     * per-event timeout does with one. MariaDB and MySQL hang a hook on the
+     * event and are unaffected; Postgres and Mongo take `$event` and discard
+     * it, so every call lands on the one scalar they bound every statement by
+     * and the last one wins. Applying the global last means a per-event
+     * refinement those two cannot express is ignored there. The other order
+     * would let a 5s read deadline silently bound every write on the handle,
+     * which is the failure worth avoiding.
+     */
+    protected function syncTimeouts(Adapter $adapter): void
+    {
+        $adapter->clearTimeouts();
+
+        foreach ($this->timeouts as $event => $milliseconds) {
+            if ($event === Database::EVENT_ALL) {
+                continue;
+            }
+
+            $adapter->setTimeout($milliseconds, $event);
+        }
+
+        if (isset($this->timeouts[Database::EVENT_ALL])) {
+            $adapter->setTimeout($this->timeouts[Database::EVENT_ALL]);
+        }
     }
 
     public function startTransaction(): bool
@@ -147,9 +268,7 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
-            }
+            $this->syncTimeouts($adapter);
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);

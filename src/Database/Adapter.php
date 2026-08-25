@@ -357,6 +357,24 @@ abstract class Adapter
     }
 
     /**
+     * Clears every timeout this adapter carries, for any event.
+     *
+     * A pooled connection outlives the handle that configured it, so the handle
+     * that takes it next has to be able to reset it without knowing which
+     * events the previous one set a timeout for.
+     *
+     * @return void
+     */
+    public function clearTimeouts(): void
+    {
+        foreach (\array_keys($this->transformations) as $event) {
+            $this->clearTimeout($event);
+        }
+
+        $this->timeout = 0;
+    }
+
+    /**
      * Start a new transaction.
      *
      * If a transaction is already active, this will only increment the transaction count and return true.

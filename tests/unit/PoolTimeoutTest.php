@@ -135,6 +135,28 @@ class PoolTimeoutTest extends TestCase
     }
 
     /**
+     * The pool's own map is what a checkout replays, so clearing every timeout
+     * has to empty it. The inherited implementation walks the events it finds
+     * in the adapter's `$transformations`, and this one delegates `before()`,
+     * so its own array holds nothing but `EVENT_ALL` — a per-event timeout
+     * survived the clear and came back on the next checkout.
+     */
+    public function testClearingEveryTimeoutDropsPerEventEntriesToo(): void
+    {
+        $connection = new TimeoutRecordingMemory();
+        $adapter = new Pool(new UtopiaPool(new Stack(), 'memory', 1, fn () => $connection, timeout: 0.0));
+
+        $adapter->setAuthorization(new Authorization());
+        $adapter->setTimeout(300000);
+        $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
+        $adapter->clearTimeouts();
+        $adapter->getSupportForTimeouts();
+
+        $this->assertSame([], $connection->timeouts, 'A timeout the caller cleared must not come back on the next checkout');
+        $this->assertSame(0, $adapter->getTimeout());
+    }
+
+    /**
      * A transaction pins one connection for its whole body and does not check
      * out again before the commit, so a timeout changed inside it has to reach
      * that connection there or not at all - the rest of the body would

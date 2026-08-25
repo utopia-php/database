@@ -145,6 +145,21 @@ class Pool extends Adapter
     }
 
     /**
+     * The pool's own map is what a checkout replays, so a clear has to empty
+     * it. Inheriting the base implementation cleared almost nothing: it walks
+     * the events it finds in `$transformations`, and this adapter delegates
+     * `before()`, so its own array never holds more than `EVENT_ALL` however
+     * many events a caller has set a timeout for.
+     */
+    public function clearTimeouts(): void
+    {
+        $this->timeouts = [];
+        $this->timeout = 0;
+
+        $this->syncPin();
+    }
+
+    /**
      * The connection this caller's open transaction is pinned to, if any.
      *
      * A seam: a subclass that keys the pin by coroutine rather than by object
@@ -180,8 +195,16 @@ class Pool extends Adapter
      * on to handles that want a different timeout or none at all, so it is
      * reset first: a handle carrying no timeout must not inherit one, and a
      * handle carrying its own must not be left with an event the last holder
-     * set. The global timeout is applied last so the scalar the connection ends
-     * on is the one {@see self::getTimeout()} reports.
+     * set.
+     *
+     * The global timeout is applied last, which decides what an engine with no
+     * per-event timeout does with one. MariaDB and MySQL hang a hook on the
+     * event and are unaffected; Postgres and Mongo take `$event` and discard
+     * it, so every call lands on the one scalar they bound every statement by
+     * and the last one wins. Applying the global last means a per-event
+     * refinement those two cannot express is ignored there. The other order
+     * would let a 5s read deadline silently bound every write on the handle,
+     * which is the failure worth avoiding.
      */
     protected function syncTimeouts(Adapter $adapter): void
     {

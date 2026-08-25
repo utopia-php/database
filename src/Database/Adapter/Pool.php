@@ -23,6 +23,25 @@ class Pool extends Adapter
     protected ?Adapter $pinnedAdapter = null;
 
     /**
+     * The timeout each event is under, held here rather than on a connection.
+     *
+     * A timeout is adapter state, not a statement: every concrete adapter
+     * records it and applies it to the SQL it builds afterwards, and none of
+     * them contacts the server to set it. Delegating the call therefore opened
+     * a connection for the sole purpose of writing a number onto whichever one
+     * answered, which the pool took back moments later - so the timeout bound
+     * one connection and none of its siblings, and merely building a handle
+     * failed outright while the backing was unreachable, reporting a database
+     * as down to a caller that had not yet issued a query.
+     *
+     * A cleared event is kept with a timeout of zero instead of being dropped,
+     * so the connection it was applied to has it cleared again on checkout.
+     *
+     * @var array<string, int>
+     */
+    private array $timeouts = [];
+
+    /**
      * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
@@ -59,9 +78,7 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
-            }
+            $this->syncTimeouts($adapter);
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);
@@ -97,9 +114,40 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * Zero is the value a caller's own default carries when it wants no
+     * timeout, so it is recorded as a cleared event rather than refused. A
+     * connection is only ever asked for a timeout it can hold.
+     */
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        $this->timeouts[$event] = \max($milliseconds, 0);
+        $this->timeout = \max($milliseconds, 0);
+    }
+
+    public function clearTimeout(string $event): void
+    {
+        $this->timeouts[$event] = 0;
+        $this->timeout = 0;
+    }
+
+    /**
+     * Apply this pool's timeouts to a connection as it is checked out. The
+     * connection outlives the handle that configured it and is handed to
+     * handles that want a different timeout or none, so what it carries is
+     * replaced on every checkout rather than only when it is first set.
+     */
+    protected function syncTimeouts(Adapter $adapter): void
+    {
+        foreach ($this->timeouts as $event => $milliseconds) {
+            if ($milliseconds === 0) {
+                $adapter->clearTimeout($event);
+
+                continue;
+            }
+
+            $adapter->setTimeout($milliseconds, $event);
+        }
     }
 
     public function startTransaction(): bool
@@ -147,9 +195,7 @@ class Pool extends Adapter
             $adapter->setTenant($this->getTenant());
             $adapter->setAuthorization($this->authorization);
 
-            if ($this->getTimeout() > 0) {
-                $adapter->setTimeout($this->getTimeout());
-            }
+            $this->syncTimeouts($adapter);
             $adapter->resetDebug();
             foreach ($this->getDebug() as $key => $value) {
                 $adapter->setDebug($key, $value);

@@ -136,14 +136,23 @@ final class PoolTest extends TestCase
         $this->assertTrue($pool->ping());
     }
 
-    public function testMemoryPoolSetTimeoutThrows(): void
+    /**
+     * A timeout is adapter state, so setting one must not check a connection out
+     * — a handle built against an unreachable backing would otherwise fail before
+     * the caller had issued a single query. The adapter's capabilities are first
+     * known when the timeout is applied, which is where the refusal belongs.
+     */
+    public function testMemoryPoolSetTimeoutRefusesWhenTheTimeoutWouldBeApplied(): void
     {
         $pool = $this->createPool(new Memory());
+
+        $pool->setTimeout(1000);
+        $this->assertSame(1000, $pool->getTimeout());
 
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Adapter does not support timeouts');
 
-        $pool->setTimeout(1000);
+        $pool->getDriver();
     }
 
     public function testMissingFeatureThrows(): void

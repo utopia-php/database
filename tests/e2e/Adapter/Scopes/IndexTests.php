@@ -146,6 +146,42 @@ trait IndexTests
         }
     }
 
+    /**
+     * An index length may not exceed the size of the attribute it covers. This is
+     * a different bound from the adapter's maximum index length that
+     * {@see self::testIndexLengthZero} covers: 701 is well under the maximum, and
+     * only oversized relative to title1's own 700.
+     *
+     * Ported from main's testIndexValidation, which drove Validator\Index
+     * directly. Going through createIndex() proves the validator is actually
+     * consulted on the path a caller takes, which a direct construction cannot.
+     */
+    public function testIndexLengthExceedsAttributeSize(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)
+            || ! $database->getAdapter()->supports(Capability::IdenticalIndexes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title1', size: 700, required: false));
+        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'title2', size: 500, required: false));
+
+        try {
+            $database->createIndex(__FUNCTION__, Index::key(key: 'index1', attributes: ['title1', 'title2'], lengths: [701, 50]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertEquals('Index length 701 is larger than the size for title1: 700"', $e->getMessage());
+        }
+
+        $database->deleteCollection(__FUNCTION__);
+    }
+
     public function testRenameIndex(): void
     {
         $database = $this->getDatabase();

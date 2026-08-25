@@ -539,6 +539,22 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function reconnect(): void;
 
     /**
+     * Clears every timeout this adapter carries, for any event.
+     *
+     * A pooled connection outlives the handle that configured it, so the handle
+     * that takes it next has to be able to reset it without knowing which
+     * events the previous one set a timeout for.
+     *
+     * @return void
+     */
+    public function clearTimeouts(): void
+    {
+        // Event::All empties the whole map rather than unsetting one entry, so
+        // this needs no knowledge of which events a previous holder set.
+        $this->clearTimeoutState(Event::All);
+    }
+
+    /**
      * Start a new transaction.
      *
      * If a transaction is already active, this will only increment the transaction count and return true.

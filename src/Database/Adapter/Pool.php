@@ -234,14 +234,44 @@ class Pool extends Adapter
      */
     public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
+        // Zero is what a caller's own default carries when it wants no timeout,
+        // so it clears the event rather than pinning every statement to 0.
+        if ($milliseconds <= 0) {
+            $this->clearTimeout($event);
+
+            return;
+        }
+
         $this->setTimeoutState($milliseconds, $event);
-        $this->delegateFeature(Feature\Timeouts::class, __FUNCTION__, \func_get_args());
+        $this->syncPinnedTimeouts();
     }
 
     public function clearTimeout(Event $event = Event::All): void
     {
         $this->clearTimeoutState($event);
-        $this->delegateFeature(Feature\Timeouts::class, __FUNCTION__, \func_get_args());
+        $this->syncPinnedTimeouts();
+    }
+
+    /**
+     * A timeout is adapter state, not a statement: every concrete adapter records
+     * it and applies it to the SQL it builds afterwards, and none of them contacts
+     * the server to set it. Delegating the call therefore checked a connection out
+     * for the sole purpose of writing a number onto whichever one answered, so the
+     * timeout bound that connection and none of its siblings — and merely building
+     * a handle failed outright while the backing was unreachable, reporting a
+     * database as down to a caller that had not yet issued a query.
+     *
+     * The state is replayed onto each connection as it is borrowed
+     * ({@see self::syncTimeouts()}), so the only connection that needs telling now
+     * is one already pinned: a transaction does not check out again before its
+     * commit, and the rest of its body must not run under the timeout the caller
+     * just replaced.
+     */
+    private function syncPinnedTimeouts(): void
+    {
+        if ($this->pinnedAdapter !== null) {
+            $this->syncTimeouts($this->pinnedAdapter);
+        }
     }
 
     /**
@@ -345,6 +375,15 @@ class Pool extends Adapter
     protected function syncTimeouts(Adapter $adapter): void
     {
         if (! ($adapter instanceof Feature\Timeouts)) {
+            // Setting a timeout no longer checks a connection out, so this is the
+            // first moment the adapter's capabilities are known. Staying silent
+            // here would drop a bound the caller asked for and run the statement
+            // unbounded; the refusal belongs where the timeout would be applied,
+            // not where a handle is merely being built.
+            if ($this->timeouts !== []) {
+                throw new DatabaseException($this->unsupportedFeatureMessage(Feature\Timeouts::class));
+            }
+
             return;
         }
 
@@ -360,9 +399,22 @@ class Pool extends Adapter
             return;
         }
 
+        // The concrete adapters keep one timeout scalar, which Postgres writes
+        // into SET statement_timeout and Mongo into maxTimeMS for every
+        // statement, so the last value applied is the one every statement runs
+        // under. Apply the per-event entries first and the global one last, or a
+        // per-event timeout set after the global one bounds everything.
         $adapter->clearTimeout();
         foreach ($this->timeouts as $event => $milliseconds) {
+            if ($event === Event::All->value) {
+                continue;
+            }
+
             $adapter->setTimeout($milliseconds, Event::from($event));
+        }
+
+        if (isset($this->timeouts[Event::All->value])) {
+            $adapter->setTimeout($this->timeouts[Event::All->value]);
         }
     }
 

@@ -126,6 +126,8 @@ class Pool extends Adapter
 
         $this->timeouts[$event] = $milliseconds;
         $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
+
+        $this->syncPin();
     }
 
     /**
@@ -138,6 +140,38 @@ class Pool extends Adapter
     {
         unset($this->timeouts[$event]);
         $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
+
+        $this->syncPin();
+    }
+
+    /**
+     * The connection this caller's open transaction is pinned to, if any.
+     *
+     * A seam: a subclass that keys the pin by coroutine rather than by object
+     * overrides this, and the timeout setters reach the right connection
+     * without knowing how the pin is held.
+     */
+    protected function pin(): ?Adapter
+    {
+        return $this->pinnedAdapter;
+    }
+
+    /**
+     * A timeout changed inside a transaction has to reach the connection
+     * running it. Every statement left in that transaction goes to the pinned
+     * connection, and it will not be checked out again before the commit, so
+     * waiting for the next checkout would leave the rest of the body running
+     * under the timeout the caller just replaced.
+     */
+    private function syncPin(): void
+    {
+        $pinned = $this->pin();
+
+        if ($pinned === null) {
+            return;
+        }
+
+        $this->syncTimeouts($pinned);
     }
 
     /**

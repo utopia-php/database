@@ -135,6 +135,35 @@ class PoolTimeoutTest extends TestCase
     }
 
     /**
+     * A transaction pins one connection for its whole body and does not check
+     * out again before the commit, so a timeout changed inside it has to reach
+     * that connection there or not at all - the rest of the body would
+     * otherwise run under the timeout the caller just replaced.
+     */
+    public function testTimeoutChangedInsideATransactionReachesThePinnedConnection(): void
+    {
+        $connection = new TimeoutRecordingMemory();
+        $adapter = new Pool(new UtopiaPool(new Stack(), 'memory', 1, fn () => $connection, timeout: 0.0));
+
+        $adapter->setAuthorization(new Authorization());
+        $adapter->setTimeout(5000);
+
+        $insideBody = [];
+        $adapter->withTransaction(function () use ($adapter, $connection, &$insideBody): string {
+            $adapter->setTimeout(300000);
+            $insideBody['raised'] = $connection->timeouts;
+
+            $adapter->clearTimeout(Database::EVENT_ALL);
+            $insideBody['cleared'] = $connection->timeouts;
+
+            return 'row-written';
+        });
+
+        $this->assertSame([Database::EVENT_ALL => 300000], $insideBody['raised'], 'The rest of the body runs on this connection, so the new timeout must reach it before the commit');
+        $this->assertSame([], $insideBody['cleared']);
+    }
+
+    /**
      * A caller whose own default is zero is asking for no timeout, which is
      * what a factory building a handle without one passes. It reaches no
      * connection as a timeout the connection would refuse.

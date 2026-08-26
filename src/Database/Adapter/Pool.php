@@ -269,9 +269,22 @@ class Pool extends Adapter
      */
     private function syncPinnedTimeouts(): void
     {
-        if ($this->pinnedAdapter !== null) {
-            $this->syncTimeouts($this->pinnedAdapter);
+        $pinned = $this->pin();
+
+        if ($pinned !== null) {
+            $this->syncTimeouts($pinned);
         }
+    }
+
+    /**
+     * Which connection this handle currently has pinned, if any. Read through a
+     * seam rather than off the property, because a handle that pins per
+     * coroutine keeps its pins somewhere else and would otherwise never be
+     * asked.
+     */
+    protected function pin(): ?Adapter
+    {
+        return $this->pinnedAdapter;
     }
 
     /**

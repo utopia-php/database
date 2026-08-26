@@ -8,10 +8,12 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Tenancy;
@@ -198,6 +200,32 @@ final class PoolTest extends TestCase
         $this->assertSame(300000, $pool->getTimeout(), 'The handle must still hold the timeout it was given');
     }
 
+    /**
+     * syncPinnedTimeouts() reaches whatever the handle has pinned. Upstream that
+     * is one adapter on the object, but a handle that pins per coroutine keeps
+     * its pins elsewhere, and reading the property directly reached none of
+     * them -- a timeout raised inside a transaction then arrived at the next
+     * checkout, long after the body it was meant to bound had run.
+     */
+    public function testTimeoutRaisedWhilePinnedReachesTheSubclassPin(): void
+    {
+        $pinned = new TimeoutRecordingAdapter();
+
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback(new TimeoutRecordingAdapter()),
+        );
+
+        $pool = new ElsewherePinnedPool($connections);
+        $pool->setAuthorization(new Authorization());
+        $pool->pinElsewhere($pinned);
+
+        $pool->setTimeout(300000);
+
+        $this->assertSame(300000, $pinned->getTimeout(), 'The connection the open transaction is running on must get the new bound');
+    }
+
     private function createPool(Adapter $adapter): Pool
     {
         /** @var UtopiaPool<Adapter>&Stub $connections */
@@ -210,5 +238,33 @@ final class PoolTest extends TestCase
         $pool->setAuthorization(new Authorization());
 
         return $pool;
+    }
+}
+
+final class TimeoutRecordingAdapter extends Memory implements Feature\Timeouts
+{
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    {
+        $this->setTimeoutState($milliseconds, $event);
+    }
+
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        $this->clearTimeoutState($event);
+    }
+}
+
+final class ElsewherePinnedPool extends Pool
+{
+    private ?Adapter $elsewhere = null;
+
+    public function pinElsewhere(Adapter $adapter): void
+    {
+        $this->elsewhere = $adapter;
+    }
+
+    protected function pin(): ?Adapter
+    {
+        return $this->elsewhere;
     }
 }

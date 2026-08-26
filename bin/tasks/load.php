@@ -10,12 +10,14 @@ use Utopia\Console;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\PDO;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
@@ -51,13 +53,13 @@ $cli
                 Permission::read(Role::any()),
             ]));
 
-            $database->createAttribute('articles', 'author', Database::VAR_STRING, 256, true);
-            $database->createAttribute('articles', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
-            $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
-            $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
-            $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
-            $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
-            $database->createIndex('articles', 'text', Database::INDEX_FULLTEXT, ['text']);
+            $database->createAttribute('articles', Attribute::string(key: 'author', size: 256, required: true));
+            $database->createAttribute('articles', Attribute::datetime(key: 'created', size: 0, required: true, filters: ['datetime']));
+            $database->createAttribute('articles', Attribute::string(key: 'text', size: 5000, required: true));
+            $database->createAttribute('articles', Attribute::string(key: 'genre', size: 256, required: true));
+            $database->createAttribute('articles', Attribute::integer(key: 'views', size: 0, required: true));
+            $database->createAttribute('articles', Attribute::string(key: 'tags', size: 0, required: true, array: true));
+            $database->createIndex('articles', Index::fullText(key: 'text', attributes: ['text']));
         };
 
         $start = null;
@@ -179,10 +181,10 @@ function createDocuments(Database $database): void
         $documents[] = new Document([
             '$permissions' => [
                 Permission::read(Role::any()),
-                ...array_map(fn () => Permission::read(Role::user(mt_rand(0, 999999999))), range(1, 4)),
-                ...array_map(fn () => Permission::create(Role::user(mt_rand(0, 999999999))), range(1, 3)),
-                ...array_map(fn () => Permission::update(Role::user(mt_rand(0, 999999999))), range(1, 3)),
-                ...array_map(fn () => Permission::delete(Role::user(mt_rand(0, 999999999))), range(1, 3)),
+                ...array_map(fn () => Permission::read(Role::user((string) mt_rand(0, 999999999))), range(1, 4)),
+                ...array_map(fn () => Permission::create(Role::user((string) mt_rand(0, 999999999))), range(1, 3)),
+                ...array_map(fn () => Permission::update(Role::user((string) mt_rand(0, 999999999))), range(1, 3)),
+                ...array_map(fn () => Permission::delete(Role::user((string) mt_rand(0, 999999999))), range(1, 3)),
             ],
             'author' => $namesPool[\array_rand($namesPool)],
             'created' => DateTime::now(),

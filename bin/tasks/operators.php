@@ -24,6 +24,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -162,29 +163,29 @@ function setupTestEnvironment(Database $database, string $name, int $seed): void
 
     // Create attributes for all operator types
     // Numeric attributes
-    $database->createAttribute('operators_test', 'counter', Database::VAR_INTEGER, 0, false, 0);
-    $database->createAttribute('operators_test', 'score', Database::VAR_FLOAT, 0, false, 0.0);
-    $database->createAttribute('operators_test', 'multiplier', Database::VAR_FLOAT, 0, false, 1.0);
-    $database->createAttribute('operators_test', 'divider', Database::VAR_FLOAT, 0, false, 100.0);
-    $database->createAttribute('operators_test', 'modulo_val', Database::VAR_INTEGER, 0, false, 100);
-    $database->createAttribute('operators_test', 'power_val', Database::VAR_FLOAT, 0, false, 2.0);
+    $database->createAttribute('operators_test', Attribute::integer(key: 'counter', size: 0, required: false, default: 0));
+    $database->createAttribute('operators_test', Attribute::float(key: 'score', size: 0, required: false, default: 0.0));
+    $database->createAttribute('operators_test', Attribute::float(key: 'multiplier', size: 0, required: false, default: 1.0));
+    $database->createAttribute('operators_test', Attribute::float(key: 'divider', size: 0, required: false, default: 100.0));
+    $database->createAttribute('operators_test', Attribute::integer(key: 'modulo_val', size: 0, required: false, default: 100));
+    $database->createAttribute('operators_test', Attribute::float(key: 'power_val', size: 0, required: false, default: 2.0));
 
     // String attributes
-    $database->createAttribute('operators_test', 'name', Database::VAR_STRING, 200, false, 'test');
-    $database->createAttribute('operators_test', 'text', Database::VAR_STRING, 500, false, 'initial');
-    $database->createAttribute('operators_test', 'description', Database::VAR_STRING, 500, false, 'foo bar baz');
+    $database->createAttribute('operators_test', Attribute::string(key: 'name', size: 200, required: false, default: 'test'));
+    $database->createAttribute('operators_test', Attribute::string(key: 'text', size: 500, required: false, default: 'initial'));
+    $database->createAttribute('operators_test', Attribute::string(key: 'description', size: 500, required: false, default: 'foo bar baz'));
 
     // Boolean attributes
-    $database->createAttribute('operators_test', 'active', Database::VAR_BOOLEAN, 0, false, true);
+    $database->createAttribute('operators_test', Attribute::boolean(key: 'active', size: 0, required: false, default: true));
 
     // Array attributes
-    $database->createAttribute('operators_test', 'tags', Database::VAR_STRING, 50, false, null, true, true);
-    $database->createAttribute('operators_test', 'numbers', Database::VAR_INTEGER, 0, false, null, true, true);
-    $database->createAttribute('operators_test', 'items', Database::VAR_STRING, 50, false, null, true, true);
+    $database->createAttribute('operators_test', Attribute::string(key: 'tags', size: 50, required: false, default: null, signed: true, array: true));
+    $database->createAttribute('operators_test', Attribute::integer(key: 'numbers', size: 0, required: false, default: null, signed: true, array: true));
+    $database->createAttribute('operators_test', Attribute::string(key: 'items', size: 50, required: false, default: null, signed: true, array: true));
 
     // Date attributes
-    $database->createAttribute('operators_test', 'created_at', Database::VAR_DATETIME, 0, false, null, false, false, null, [], ['datetime']);
-    $database->createAttribute('operators_test', 'updated_at', Database::VAR_DATETIME, 0, false, null, false, false, null, [], ['datetime']);
+    $database->createAttribute('operators_test', Attribute::datetime(key: 'created_at', size: 0, required: false, default: null, signed: false, array: false, format: null, formatOptions: [], filters: ['datetime']));
+    $database->createAttribute('operators_test', Attribute::datetime(key: 'updated_at', size: 0, required: false, default: null, signed: false, array: false, format: null, formatOptions: [], filters: ['datetime']));
 
     // Seed documents if requested
     if ($seed > 0) {

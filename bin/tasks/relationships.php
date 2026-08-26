@@ -13,6 +13,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
@@ -21,6 +22,8 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
+use Utopia\Database\RelationType;
+use Utopia\Database\Relationship;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
@@ -61,62 +64,62 @@ $cli
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
-            $database->createAttribute('authors', 'name', Database::VAR_STRING, 256, true);
-            $database->createAttribute('authors', 'created', Database::VAR_DATETIME, 0, true, filters: ['datetime']);
-            $database->createAttribute('authors', 'bio', Database::VAR_STRING, 5000, true);
-            $database->createAttribute('authors', 'avatar', Database::VAR_STRING, 256, true);
-            $database->createAttribute('authors', 'website', Database::VAR_STRING, 256, true);
+            $database->createAttribute('authors', Attribute::string(key: 'name', size: 256, required: true));
+            $database->createAttribute('authors', Attribute::datetime(key: 'created', size: 0, required: true, filters: ['datetime']));
+            $database->createAttribute('authors', Attribute::string(key: 'bio', size: 5000, required: true));
+            $database->createAttribute('authors', Attribute::string(key: 'avatar', size: 256, required: true));
+            $database->createAttribute('authors', Attribute::string(key: 'website', size: 256, required: true));
 
             $database->createCollection(new Collection(id: 'articles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
-            $database->createAttribute('articles', 'title', Database::VAR_STRING, 256, true);
-            $database->createAttribute('articles', 'text', Database::VAR_STRING, 5000, true);
-            $database->createAttribute('articles', 'genre', Database::VAR_STRING, 256, true);
-            $database->createAttribute('articles', 'views', Database::VAR_INTEGER, 0, true);
-            $database->createAttribute('articles', 'tags', Database::VAR_STRING, 0, true, array: true);
+            $database->createAttribute('articles', Attribute::string(key: 'title', size: 256, required: true));
+            $database->createAttribute('articles', Attribute::string(key: 'text', size: 5000, required: true));
+            $database->createAttribute('articles', Attribute::string(key: 'genre', size: 256, required: true));
+            $database->createAttribute('articles', Attribute::integer(key: 'views', size: 0, required: true));
+            $database->createAttribute('articles', Attribute::string(key: 'tags', size: 0, required: true, array: true));
 
             $database->createCollection(new Collection(id: 'users', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
-            $database->createAttribute('users', 'username', Database::VAR_STRING, 256, true);
-            $database->createAttribute('users', 'email', Database::VAR_STRING, 256, true);
-            $database->createAttribute('users', 'password', Database::VAR_STRING, 256, true);
+            $database->createAttribute('users', Attribute::string(key: 'username', size: 256, required: true));
+            $database->createAttribute('users', Attribute::string(key: 'email', size: 256, required: true));
+            $database->createAttribute('users', Attribute::string(key: 'password', size: 256, required: true));
 
             $database->createCollection(new Collection(id: 'comments', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
-            $database->createAttribute('comments', 'content', Database::VAR_STRING, 256, true);
-            $database->createAttribute('comments', 'likes', Database::VAR_INTEGER, 8, true, signed: false);
+            $database->createAttribute('comments', Attribute::string(key: 'content', size: 256, required: true));
+            $database->createAttribute('comments', Attribute::integer(key: 'likes', size: 8, required: true, signed: false));
 
             $database->createCollection(new Collection(id: 'profiles', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
-            $database->createAttribute('profiles', 'bio_extended', Database::VAR_STRING, 10000, true);
-            $database->createAttribute('profiles', 'social_links', Database::VAR_STRING, 256, true, array: true);
-            $database->createAttribute('profiles', 'verified', Database::VAR_BOOLEAN, 0, true);
+            $database->createAttribute('profiles', Attribute::string(key: 'bio_extended', size: 10000, required: true));
+            $database->createAttribute('profiles', Attribute::string(key: 'social_links', size: 256, required: true, array: true));
+            $database->createAttribute('profiles', Attribute::boolean(key: 'verified', size: 0, required: true));
 
             $database->createCollection(new Collection(id: 'categories', permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ]));
-            $database->createAttribute('categories', 'name', Database::VAR_STRING, 256, true);
-            $database->createAttribute('categories', 'description', Database::VAR_STRING, 1000, true);
+            $database->createAttribute('categories', Attribute::string(key: 'name', size: 256, required: true));
+            $database->createAttribute('categories', Attribute::string(key: 'description', size: 1000, required: true));
 
-            $database->createRelationship('authors', 'articles', Database::RELATION_MANY_TO_MANY, true, onDelete: ForeignKeyAction::SetNull->value);
-            $database->createRelationship('articles', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'article', onDelete: ForeignKeyAction::Cascade->value);
-            $database->createRelationship('users', 'comments', Database::RELATION_ONE_TO_MANY, true, twoWayKey: 'user', onDelete: ForeignKeyAction::Cascade->value);
-            $database->createRelationship('authors', 'profiles', Database::RELATION_ONE_TO_ONE, true, twoWayKey: 'author', onDelete: ForeignKeyAction::Cascade->value);
-            $database->createRelationship('articles', 'categories', Database::RELATION_MANY_TO_ONE, true, id: 'category', twoWayKey: 'articles', onDelete: ForeignKeyAction::SetNull->value);
+            $database->createRelationship(new Relationship(collection: 'authors', relatedCollection: 'articles', type: RelationType::ManyToMany, twoWay: true, onDelete: ForeignKeyAction::SetNull));
+            $database->createRelationship(new Relationship(collection: 'articles', relatedCollection: 'comments', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'article', onDelete: ForeignKeyAction::Cascade));
+            $database->createRelationship(new Relationship(collection: 'users', relatedCollection: 'comments', type: RelationType::OneToMany, twoWay: true, twoWayKey: 'user', onDelete: ForeignKeyAction::Cascade));
+            $database->createRelationship(new Relationship(collection: 'authors', relatedCollection: 'profiles', type: RelationType::OneToOne, twoWay: true, twoWayKey: 'author', onDelete: ForeignKeyAction::Cascade));
+            $database->createRelationship(new Relationship(collection: 'articles', relatedCollection: 'categories', type: RelationType::ManyToOne, twoWay: true, key: 'category', twoWayKey: 'articles', onDelete: ForeignKeyAction::SetNull));
         };
 
         $dbAdapters = [

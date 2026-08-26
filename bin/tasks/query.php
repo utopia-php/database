@@ -187,7 +187,7 @@ function runQueries(Database $database, int $limit): array
 function runQuery(array $query, Database $database)
 {
     $info = array_map(function (Query $q) {
-        return $q->getAttribute().': '.$q->getMethod().' = '.implode(',', $q->getValues());
+        return $q->getAttribute().': '.$q->getMethod()->value.' = '.implode(',', $q->getValues());
     }, $query);
 
     Console::info('Running query: ['.implode(', ', $info).']');

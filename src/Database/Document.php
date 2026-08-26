@@ -335,7 +335,7 @@ class Document extends ArrayObject
     {
         $tenant = $this->getAttribute(self::TENANT);
 
-        if (\is_string($tenant) && \ctype_digit($tenant)) {
+        if (\is_string($tenant) && \ctype_digit($tenant) && (string) (int) $tenant === $tenant) {
             return (int) $tenant;
         }
 

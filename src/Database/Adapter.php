@@ -265,10 +265,14 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * Get tenant to use for shared tables.
      * Numeric values are normalized to int for consistent comparison
      * across adapters that may return string representations.
+     *
+     * Only strings that survive the round trip are normalized, so a padded
+     * or out-of-range identifier keeps its own identity instead of
+     * collapsing onto another tenant's scope.
      */
     public function getTenant(): int|string|null
     {
-        if (\is_string($this->tenant) && \ctype_digit($this->tenant)) {
+        if (\is_string($this->tenant) && \ctype_digit($this->tenant) && (string) (int) $this->tenant === $this->tenant) {
             return (int) $this->tenant;
         }
 

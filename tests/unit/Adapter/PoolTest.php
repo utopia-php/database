@@ -5,9 +5,12 @@ namespace Tests\Unit\Adapter;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Hook\Permissions;
@@ -163,6 +166,36 @@ final class PoolTest extends TestCase
         $this->expectExceptionMessage('Adapter does not support upserts');
 
         $pool->upsertDocuments(new Document(), 'id', []);
+    }
+
+    /**
+     * Configuring a handle must not open a connection, or an unreachable
+     * backing fails a caller that has issued no query yet. Pool::setTimeout()
+     * holds the value without checking out, but Database::setTimeout() guarded
+     * itself with hasFeature(), and on a pool that guard is a delegated call --
+     * which dials.
+     */
+    public function testSettingATimeoutOnAPooledHandleDoesNotOpenAConnection(): void
+    {
+        $dials = 0;
+
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static function (callable $callback) use (&$dials): mixed {
+                $dials++;
+
+                return $callback(new Memory());
+            },
+        );
+
+        $pool = new Pool($connections);
+        $pool->setAuthorization(new Authorization());
+
+        (new Database($pool, new Cache(new NoCache())))->setTimeout(300000);
+
+        $this->assertSame(0, $dials, 'Building a handle must not check a connection out');
+        $this->assertSame(300000, $pool->getTimeout(), 'The handle must still hold the timeout it was given');
     }
 
     private function createPool(Adapter $adapter): Pool

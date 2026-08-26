@@ -8,6 +8,7 @@ use Utopia\Cache\Cache;
 use Utopia\CLI\CLI;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Database;
+use Utopia\Database\Migration\Generator;
 use Utopia\DI\Dependency;
 
 final class CLITasksTest extends TestCase
@@ -92,5 +93,75 @@ final class CLITasksTest extends TestCase
             $source,
         );
         $this->assertStringNotContainsString('$authorization->', $source);
+    }
+
+    /**
+     * migrate:generate writes the class under a namespace, so the runner has to
+     * find it by more than the filename. Looking up the bare filename finds
+     * nothing, and nothing complains -- the migration is skipped and the run
+     * reports success having done none of it.
+     */
+    public function testAGeneratedMigrationIsFoundByTheRunner(): void
+    {
+        $path = \sys_get_temp_dir().'/database-migrations-'.\bin2hex(\random_bytes(8));
+        \mkdir($path);
+
+        $className = 'V20260101000000_AddWidgets';
+        \file_put_contents($path.'/'.$className.'.php', (new Generator())->generateEmpty($className));
+
+        $this->includeMigrationTasks();
+
+        $migrations = \loadMigrations($path);
+
+        $this->assertCount(1, $migrations, 'A migration written by migrate:generate has to be picked up by the runner');
+        $this->assertSame('20260101000000', $migrations[0]->version());
+    }
+
+    public function testAMigrationDeclaredWithoutANamespaceIsStillFound(): void
+    {
+        $path = \sys_get_temp_dir().'/database-migrations-'.\bin2hex(\random_bytes(8));
+        \mkdir($path);
+
+        $className = 'V20260101000001_AddGadgets';
+        \file_put_contents($path.'/'.$className.'.php', <<<PHP
+        <?php
+
+        use Utopia\Database\Database;
+        use Utopia\Database\Migration\Migration;
+
+        class {$className} extends Migration
+        {
+            public function version(): string
+            {
+                return '20260101000001';
+            }
+
+            public function up(Database \$db): void
+            {
+            }
+
+            public function down(Database \$db): void
+            {
+            }
+        }
+        PHP);
+
+        $this->includeMigrationTasks();
+
+        $migrations = \loadMigrations($path);
+
+        $this->assertCount(1, $migrations);
+        $this->assertSame('20260101000001', $migrations[0]->version());
+    }
+
+    private function includeMigrationTasks(): void
+    {
+        if (\function_exists('loadMigrations')) {
+            return;
+        }
+
+        $GLOBALS['cli'] = new CLI(args: ['bin/cli', 'migrate:status']);
+        include __DIR__.'/../../bin/tasks/migrate.php';
+        unset($GLOBALS['cli']);
     }
 }

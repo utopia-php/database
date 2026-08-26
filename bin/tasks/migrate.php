@@ -165,11 +165,18 @@ function loadMigrations(string $path): array
     }
 
     foreach ($files as $file) {
+        $before = \get_declared_classes();
+
         require_once $file;
 
-        $className = \pathinfo($file, PATHINFO_FILENAME);
-        if (\class_exists($className) && \is_subclass_of($className, Migration::class)) {
-            $migrations[] = new $className();
+        // migrate:generate writes the class under a namespace, so the file name
+        // is not the class name and looking it up that way finds nothing --
+        // silently, leaving the run reporting success having skipped it. Take
+        // whatever the file declared instead of guessing at it.
+        foreach (\array_diff(\get_declared_classes(), $before) as $className) {
+            if (\is_subclass_of($className, Migration::class)) {
+                $migrations[] = new $className();
+            }
         }
     }
 

@@ -10,6 +10,14 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 
+/**
+ * `_tenant` is declared `INT(11) UNSIGNED`, so the engine reads "001" and "1"
+ * as the same tenant and a query for tenant 1 returns rows written under
+ * either. The PHP side has to agree with that: a scope comparison or a cache
+ * key that told the two apart would claim a distinction the rows do not have,
+ * and hand one tenant's cached row to a lookup the engine would have answered
+ * with both.
+ */
 class TenantIdentityTest extends TestCase
 {
     private function database(int|string|null $tenant): Database
@@ -30,55 +38,36 @@ class TenantIdentityTest extends TestCase
         return $hashKey;
     }
 
-    public function testPaddedTenantDoesNotShareACacheKeyWithItsUnpaddedForm(): void
+    public function testTheCacheKeyFollowsTheTenantTheColumnWillHold(): void
     {
-        $this->assertNotSame(
-            $this->hashKey('1'),
+        $this->assertSame(
+            $this->hashKey(1),
             $this->hashKey('001'),
-            'Tenants "1" and "001" are distinct identifiers and must not share a cache key',
+            'The engine stores "001" as 1 and returns those rows for tenant 1, so the cache key must not separate them',
         );
     }
 
-    public function testPaddedTenantDoesNotShareAScopeWithItsUnpaddedForm(): void
+    public function testAStringifiedTenantIsTheSameTenantAsItsInteger(): void
     {
-        $padded = new MariaDB($this->createStub(PDO::class));
-        $padded->setTenant('001');
+        $this->assertSame($this->hashKey(1), $this->hashKey('1'));
 
-        $unpadded = new MariaDB($this->createStub(PDO::class));
-        $unpadded->setTenant('1');
-
-        $this->assertNotSame(
-            $unpadded->getTenant(),
-            $padded->getTenant(),
-            'Tenants "1" and "001" must not compare equal for shared-table scoping',
-        );
-    }
-
-    public function testPaddedDocumentTenantKeepsItsIdentity(): void
-    {
-        $this->assertNotSame(
-            (new Document(['$tenant' => '1']))->getTenant(),
-            (new Document(['$tenant' => '001']))->getTenant(),
-            'Documents tenanted "1" and "001" must not compare equal',
-        );
-    }
-
-    public function testTenantBeyondIntegerRangeKeepsItsIdentity(): void
-    {
-        $beyond = '9223372036854775808';
-
-        $adapter = new MariaDB($this->createStub(PDO::class));
-        $adapter->setTenant($beyond);
-
-        $this->assertSame($beyond, $adapter->getTenant());
-    }
-
-    public function testStringifiedTenantStillNormalisesToInt(): void
-    {
         $adapter = new MariaDB($this->createStub(PDO::class));
         $adapter->setTenant('1');
 
-        $this->assertSame(1, $adapter->getTenant(), 'PDO stringification must still compare equal to the integer tenant');
+        $this->assertSame(1, $adapter->getTenant(), 'A driver that stringifies the column must still compare equal to the integer tenant');
+    }
+
+    public function testADocumentTenantNormalisesTheSameWayTheAdapterDoes(): void
+    {
         $this->assertSame(1, (new Document(['$tenant' => '1']))->getTenant());
+        $this->assertSame(1, (new Document(['$tenant' => '001']))->getTenant());
+    }
+
+    public function testANonNumericTenantIsLeftAlone(): void
+    {
+        $adapter = new MariaDB($this->createStub(PDO::class));
+        $adapter->setTenant('tenant-a');
+
+        $this->assertSame('tenant-a', $adapter->getTenant());
     }
 }

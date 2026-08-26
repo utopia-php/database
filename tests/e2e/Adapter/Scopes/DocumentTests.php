@@ -9214,6 +9214,21 @@ trait DocumentTests
             $stored = $database->getDocument(__FUNCTION__, 'lenient');
             $this->assertEquals('changed', $stored->getAttribute('known'));
             $this->assertNull($stored->getAttribute('unknown'), 'Unknown attribute reached storage on update');
+
+            \usleep(5000);
+
+            $unchanged = $database->updateDocument(__FUNCTION__, 'lenient', new Document([
+                '$id' => 'lenient',
+                '$permissions' => $permissions,
+                'known' => 'changed',
+                'unknown' => 'dropped',
+            ]));
+
+            $this->assertEquals(
+                $stored->getUpdatedAt(),
+                $unchanged->getUpdatedAt(),
+                'A write carrying only a dropped attribute counted as a change'
+            );
         } finally {
             $database->setDropUnknownAttributes(false);
         }

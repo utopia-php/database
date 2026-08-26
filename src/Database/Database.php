@@ -6339,6 +6339,11 @@ class Database
             }
             $document = new Document($document);
 
+            // Ahead of change detection: a dropped attribute is never persisted, so
+            // counting it as a change would bump $updatedAt and fire an update event
+            // for a write that leaves the stored document identical.
+            $document = $this->removeUnknownAttributes($collection, $document);
+
             $attributes = $collection->getAttribute('attributes', []);
 
             $relationships = \array_filter($attributes, function ($attribute) {
@@ -6480,7 +6485,6 @@ class Database
             }
 
             $document = $this->encode($collection, $document);
-            $document = $this->removeUnknownAttributes($collection, $document);
 
             if ($this->validate) {
                 $structureValidator = new Structure(
@@ -7417,6 +7421,8 @@ class Database
         foreach ($documents as $key => $document) {
             $old = $existingDocs[$this->tenantKey($document)] ?? new Document();
 
+            $document = $this->removeUnknownAttributes($collection, $document);
+
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();
             $extracted = Operator::extractOperators($documentArray);
@@ -7549,7 +7555,6 @@ class Database
             }
 
             $document = $this->encode($collection, $document);
-            $document = $this->removeUnknownAttributes($collection, $document);
 
             if ($this->validate) {
                 $validator = new Structure(

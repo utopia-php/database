@@ -428,6 +428,8 @@ class Database
 
     protected bool $validate = true;
 
+    protected bool $dropUnknownAttributes = false;
+
     protected bool $preserveDates = false;
 
     protected bool $skipDuplicates = false;
@@ -1493,6 +1495,25 @@ class Database
         $className = $this->documentTypes[$collection] ?? Document::class;
 
         return new $className($data);
+    }
+
+    public function getDropUnknownAttributes(): bool
+    {
+        return $this->dropUnknownAttributes;
+    }
+
+    /**
+     * Drop attributes missing from the collection schema instead of rejecting the write.
+     *
+     * Enable this where the schema is owned by the application rather than the caller, so a
+     * deploy that writes an attribute before its migration has run degrades to a warning
+     * instead of failing every write.
+     */
+    public function setDropUnknownAttributes(bool $drop): static
+    {
+        $this->dropUnknownAttributes = $drop;
+
+        return $this;
     }
 
     public function getPreserveDates(): bool
@@ -5750,6 +5771,7 @@ class Database
         }
 
         $document = $this->encode($collection, $document);
+        $document = $this->removeUnknownAttributes($collection, $document);
 
         if ($this->validate) {
             $validator = new Permissions();
@@ -5871,6 +5893,7 @@ class Database
             }
 
             $document = $this->encode($collection, $document);
+            $document = $this->removeUnknownAttributes($collection, $document);
 
             if ($this->validate) {
                 $validator = new Structure(
@@ -6457,6 +6480,7 @@ class Database
             }
 
             $document = $this->encode($collection, $document);
+            $document = $this->removeUnknownAttributes($collection, $document);
 
             if ($this->validate) {
                 $structureValidator = new Structure(
@@ -6633,6 +6657,7 @@ class Database
             $updates,
             applyDefaults: false
         );
+        $updates = $this->removeUnknownAttributes($collection, $updates);
 
         if ($this->validate) {
             $validator = new PartialStructure(
@@ -7524,6 +7549,7 @@ class Database
             }
 
             $document = $this->encode($collection, $document);
+            $document = $this->removeUnknownAttributes($collection, $document);
 
             if ($this->validate) {
                 $validator = new Structure(
@@ -9229,6 +9255,45 @@ class Database
             'decode' => $decode,
             'signature' => self::computeCallableSignature($encode) . ':' . self::computeCallableSignature($decode),
         ];
+    }
+
+    /**
+     * Remove attributes the collection schema does not declare
+     *
+     * @param Document $collection
+     * @param Document $document
+     *
+     * @return Document
+     */
+    protected function removeUnknownAttributes(Document $collection, Document $document): Document
+    {
+        if (!$this->dropUnknownAttributes || !$this->adapter->getSupportForAttributes()) {
+            return $document;
+        }
+
+        $known = [];
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            $known[$attribute['$id'] ?? ''] = true;
+        }
+
+        $dropped = [];
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with($key, '$') || isset($known[$key])) {
+                continue;
+            }
+
+            $dropped[] = $key;
+            $document->removeAttribute($key);
+        }
+
+        if (!empty($dropped)) {
+            Console::warning(
+                'Dropped unknown attributes "' . \implode('", "', $dropped) . '" from collection "' . $collection->getId() . '"'
+                . ($this->adapter->getTenant() === null ? '' : ' on tenant ' . $this->adapter->getTenant())
+            );
+        }
+
+        return $document;
     }
 
     /**

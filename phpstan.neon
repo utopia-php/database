@@ -7,8 +7,6 @@ parameters:
         - src
         - tests
     scanFiles:
-        # Declares loadMigrations(), which tests/unit/CLITasksTest.php calls.
-        - bin/tasks/migrate.php
         - stubs/Swoole/Database/DetectsLostConnections.stub.php
         - stubs/Swoole/Database/PDOProxy.stub.php
         - stubs/Swoole/Database/PDOStatementProxy.stub.php

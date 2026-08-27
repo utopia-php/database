@@ -59,6 +59,28 @@ class ObjectTest extends TestCase
         ]));
     }
 
+    public function test_scalar_json_strings_are_not_objects(): void
+    {
+        $validator = new ObjectValidator();
+
+        $this->assertFalse($validator->isValid('123'), 'a JSON number is not an object');
+        $this->assertFalse($validator->isValid('0'), 'a falsy JSON number is not an object');
+        $this->assertFalse($validator->isValid('true'), 'a JSON boolean is not an object');
+        $this->assertFalse($validator->isValid('null'), 'JSON null is not an object');
+        $this->assertFalse($validator->isValid('"str"'), 'a JSON string is not an object');
+        $this->assertFalse($validator->isValid('""'), 'an empty JSON string is not an object');
+        $this->assertFalse($validator->isValid('[1, 2]'), 'a JSON list is not an object');
+    }
+
+    public function test_json_object_strings_are_objects(): void
+    {
+        $validator = new ObjectValidator();
+
+        $this->assertTrue($validator->isValid('{"a": 1}'));
+        $this->assertTrue($validator->isValid('{}'));
+        $this->assertTrue($validator->isValid('[]'), 'an empty JSON array matches the empty-array case');
+    }
+
     public function test_empty_cases(): void
     {
         $validator = new ObjectValidator();

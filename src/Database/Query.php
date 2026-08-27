@@ -84,12 +84,60 @@ class Query extends BaseQuery
     public static function parseQuery(array $query, bool $allowRaw = false): static
     {
         try {
-            $parsed = parent::parseQuery($query, $allowRaw);
+            $parsed = parent::parseQuery(self::decodeNestedValues($query, $allowRaw), $allowRaw);
 
             return new static($parsed->getMethod(), $parsed->getAttribute(), $parsed->getValues());
         } catch (BaseQueryException $e) {
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
+    }
+
+    /**
+     * Decode a logical query's children to the array form the parser recurses into.
+     *
+     * Clients may serialise those children as query strings rather than nested
+     * objects. The parser's recursion is typed for arrays and only documented as
+     * such, so a string child reaches it and raises a TypeError, which is not a
+     * QueryException and so escapes every caller that guards for one.
+     *
+     * @param  array<string, mixed>  $query
+     * @return array<string, mixed>
+     *
+     * @throws QueryException
+     */
+    private static function decodeNestedValues(array $query, bool $allowRaw): array
+    {
+        $method = $query['method'] ?? null;
+
+        if (! \is_string($method)) {
+            return $query;
+        }
+
+        if (! (Method::tryFrom($method)?->isNested() ?? false)) {
+            return $query;
+        }
+
+        $values = $query['values'] ?? [];
+
+        if (! \is_array($values)) {
+            return $query;
+        }
+
+        foreach ($values as $index => $value) {
+            if (\is_array($value)) {
+                continue;
+            }
+
+            if (! \is_string($value)) {
+                throw new QueryException('Invalid nested query. Must be an array or string, got '.\gettype($value));
+            }
+
+            $values[$index] = self::parse($value, $allowRaw)->toArray();
+        }
+
+        $query['values'] = $values;
+
+        return $query;
     }
 
     /**

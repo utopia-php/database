@@ -43,7 +43,7 @@ docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/u
   - `Relationship.php` -- relationship definitions
   - `Traits/` -- Database.php composition: Async, Attributes, Collections, Databases, Documents, Entities, Indexes, Relationships, Transactions
   - `Hook/` -- event hooks and interceptors: Lifecycle, Permissions, Relationships, TenantFilter, Transform, Read, Write, WriteContext, Interceptor, Decorator, PermissionFilter, Mongo/PermissionFilter, Mongo/TenantFilter, Tenancy
-  - `Event/` -- DomainEvent, DispatcherHook, plus Collection/{Created,Deleted} and Document/{Created,Deleted,Updated}
+  - `Event/` -- Domain, DispatcherHook, plus Collection/{Created,Deleted} and Document/{Created,Deleted,Updated}
   - `ORM/` -- EntityManager, EntityMapper, EntityMetadata, EntityState, IdentityMap, MetadataFactory, UnitOfWork, ColumnMapping, EmbeddableMapping, RelationshipMapping, plus `Mapping/` (Entity, Column, Id, HasMany, HasOne, BelongsTo, Embedded, Permissions, Tenant, Pre/{Persist,Remove,Update}, Post/{Persist,Remove,Update}, etc.)
   - `Schema/` -- Introspector, Diff, Change, ChangeType, DiffResult
   - `Validator/` -- input validators (19 top-level + subdirectories)

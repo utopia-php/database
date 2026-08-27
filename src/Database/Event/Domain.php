@@ -4,7 +4,7 @@ namespace Utopia\Database\Event;
 
 use Utopia\Database\Event;
 
-class DomainEvent
+class Domain
 {
     public readonly \DateTimeImmutable $occurredAt;
 

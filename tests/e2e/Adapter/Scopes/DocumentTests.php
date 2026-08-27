@@ -9185,6 +9185,16 @@ trait DocumentTests
         $database->setDropUnknownAttributes(true);
 
         try {
+            $collection = $database->getCollection(__FUNCTION__);
+            $encoded = $database->encode($collection, new Document([
+                '$id' => 'encoded',
+                '$collection' => __FUNCTION__,
+                'known' => 'kept',
+                'unknown' => 'dropped',
+            ]));
+            $this->assertEquals('kept', $encoded->getAttribute('known'));
+            $this->assertNull($encoded->getAttribute('unknown'), 'Unknown attribute survived encode');
+
             $created = $database->createDocument(__FUNCTION__, new Document([
                 '$id' => 'lenient',
                 '$permissions' => $permissions,

@@ -5771,7 +5771,6 @@ class Database
         }
 
         $document = $this->encode($collection, $document);
-        $document = $this->removeUnknownAttributes($collection, $document);
 
         if ($this->validate) {
             $validator = new Permissions();
@@ -5893,7 +5892,6 @@ class Database
             }
 
             $document = $this->encode($collection, $document);
-            $document = $this->removeUnknownAttributes($collection, $document);
 
             if ($this->validate) {
                 $validator = new Structure(
@@ -6661,7 +6659,6 @@ class Database
             $updates,
             applyDefaults: false
         );
-        $updates = $this->removeUnknownAttributes($collection, $updates);
 
         if ($this->validate) {
             $validator = new PartialStructure(
@@ -9263,22 +9260,28 @@ class Database
     }
 
     /**
-     * Remove attributes the collection schema does not declare
+     * Remove attributes the collection schema does not declare.
+     *
+     * Used ahead of change detection on update/upsert so a dropped key is not
+     * counted as a write. Encode also calls this after iterating attributes.
      *
      * @param Document $collection
      * @param Document $document
+     * @param array<string, true>|null $known Attribute ids already collected (e.g. during encode)
      *
      * @return Document
      */
-    protected function removeUnknownAttributes(Document $collection, Document $document): Document
+    protected function removeUnknownAttributes(Document $collection, Document $document, ?array $known = null): Document
     {
         if (!$this->dropUnknownAttributes || !$this->adapter->getSupportForAttributes()) {
             return $document;
         }
 
-        $known = [];
-        foreach ($collection->getAttribute('attributes', []) as $attribute) {
-            $known[$attribute['$id'] ?? ''] = true;
+        if ($known === null) {
+            $known = [];
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $known[$attribute['$id'] ?? ''] = true;
+            }
         }
 
         $dropped = [];
@@ -9304,6 +9307,9 @@ class Database
     /**
      * Encode Document
      *
+     * When dropUnknownAttributes is enabled, attributes missing from the
+     * collection schema are removed here while the known set is collected.
+     *
      * @param Document $collection
      * @param Document $document
      * @param bool $applyDefaults Whether to apply default values to null attributes
@@ -9319,8 +9325,10 @@ class Database
             $attributes[] = $attribute;
         }
 
+        $known = [];
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
+            $known[$key] = true;
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
@@ -9373,7 +9381,7 @@ class Database
             $document->setAttribute($key, $value);
         }
 
-        return $document;
+        return $this->removeUnknownAttributes($collection, $document, $known);
     }
 
     /**

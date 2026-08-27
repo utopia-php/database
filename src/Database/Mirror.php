@@ -130,6 +130,15 @@ class Mirror extends Database
         return $this;
     }
 
+    public function setDropUnknownAttributes(bool $drop): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        $this->dropUnknownAttributes = $drop;
+
+        return $this;
+    }
+
     public function setPreserveDates(bool $preserve): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());

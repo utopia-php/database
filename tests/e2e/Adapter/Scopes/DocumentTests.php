@@ -9238,4 +9238,98 @@ trait DocumentTests
         $this->assertSame(['existingChild', 'newChild', 'retryChild'], $allChildIds);
     }
 
+
+    public function testDropUnknownAttributes(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(__FUNCTION__);
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'known', Database::VAR_STRING, 128, false));
+
+        try {
+            $database->createDocument(__FUNCTION__, new Document([
+                '$id' => 'strict',
+                '$permissions' => $permissions,
+                'known' => 'kept',
+                'unknown' => 'dropped',
+            ]));
+            $this->fail('Unknown attribute was accepted while dropping is disabled');
+        } catch (StructureException $e) {
+            $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
+        }
+
+        $database->setDropUnknownAttributes(true);
+
+        try {
+            $collection = $database->getCollection(__FUNCTION__);
+            $encoded = $database->encode($collection, new Document([
+                '$id' => 'encoded',
+                '$collection' => __FUNCTION__,
+                'known' => 'kept',
+                'unknown' => 'dropped',
+            ]));
+            $this->assertEquals('kept', $encoded->getAttribute('known'));
+            $this->assertNull($encoded->getAttribute('unknown'), 'Unknown attribute survived encode');
+
+            $created = $database->createDocument(__FUNCTION__, new Document([
+                '$id' => 'lenient',
+                '$permissions' => $permissions,
+                'known' => 'kept',
+                'unknown' => 'dropped',
+            ]));
+
+            $this->assertEquals('kept', $created->getAttribute('known'));
+            $this->assertNull($created->getAttribute('unknown'), 'Unknown attribute survived the create');
+
+            $database->purgeCachedDocument(__FUNCTION__, 'lenient');
+            $stored = $database->getDocument(__FUNCTION__, 'lenient');
+            $this->assertEquals('kept', $stored->getAttribute('known'));
+            $this->assertNull($stored->getAttribute('unknown'), 'Unknown attribute reached storage on create');
+
+            $updated = $database->updateDocument(__FUNCTION__, 'lenient', new Document([
+                '$id' => 'lenient',
+                '$permissions' => $permissions,
+                'known' => 'changed',
+                'unknown' => 'dropped',
+            ]));
+
+            $this->assertEquals('changed', $updated->getAttribute('known'));
+            $this->assertNull($updated->getAttribute('unknown'), 'Unknown attribute survived the update');
+
+            $database->purgeCachedDocument(__FUNCTION__, 'lenient');
+            $stored = $database->getDocument(__FUNCTION__, 'lenient');
+            $this->assertEquals('changed', $stored->getAttribute('known'));
+            $this->assertNull($stored->getAttribute('unknown'), 'Unknown attribute reached storage on update');
+
+            \usleep(5000);
+
+            $unchanged = $database->updateDocument(__FUNCTION__, 'lenient', new Document([
+                '$id' => 'lenient',
+                '$permissions' => $permissions,
+                'known' => 'changed',
+                'unknown' => 'dropped',
+            ]));
+
+            $this->assertEquals(
+                $stored->getUpdatedAt(),
+                $unchanged->getUpdatedAt(),
+                'A write carrying only a dropped attribute counted as a change'
+            );
+        } finally {
+            $database->setDropUnknownAttributes(false);
+        }
+    }
 }

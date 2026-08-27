@@ -3,9 +3,9 @@
 namespace Utopia\Database\Event\Collection;
 
 use Utopia\Database\Event;
-use Utopia\Database\Event\DomainEvent;
+use Utopia\Database\Event\Domain;
 
-class Deleted extends DomainEvent
+class Deleted extends Domain
 {
     public function __construct(
         string $collection,

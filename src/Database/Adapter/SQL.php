@@ -5382,13 +5382,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             case Method::Search:
                 $searchVal = $query->getValue();
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+                $fulltextValue = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+                if ($fulltextValue === '') {
+                    return '0 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
 
                 return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
 
             case Method::NotSearch:
                 $notSearchVal = $query->getValue();
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
+                $fulltextValue = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
+                if ($fulltextValue === '') {
+                    return '1 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
 
                 return "NOT (MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE))";
 
@@ -5498,10 +5506,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
 
-        /** Replace reserved chars with space. */
-        $specialChars = '@,+,-,*,),(,<,>,~,"';
-        $value = str_replace(explode(',', $specialChars), ' ', $value);
-        $value = (string) preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
+        /** Keep only unicode letters, numbers, underscores, and whitespace. */
+        $value = preg_replace('/[^\p{L}\p{N}_\s]/u', ' ', $value) ?? '';
+        $value = preg_replace('/\s+/', ' ', $value) ?? '';
         $value = trim($value);
 
         if (empty($value)) {

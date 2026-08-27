@@ -52,7 +52,7 @@ class DispatcherHook implements Lifecycle
         }
     }
 
-    private function createDomainEvent(Event $event, mixed $data): ?DomainEvent
+    private function createDomainEvent(Event $event, mixed $data): ?Domain
     {
         return match ($event) {
             Event::DocumentCreate, Event::DocumentsCreate => $data instanceof Document

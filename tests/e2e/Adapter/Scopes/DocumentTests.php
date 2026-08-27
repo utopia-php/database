@@ -1756,6 +1756,95 @@ trait DocumentTests
         $this->assertEquals(1, count($documents));
     }
 
+    /**
+     * Regression: accented characters and non-operator special chars
+     * previously caused SQLSTATE[42000] syntax error in FTS BOOLEAN MODE.
+     *
+     * @see https://appwrite.sentry.io/issues/5628237003
+     */
+    public function testFindFulltextAccentedAndSpecialChars(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'full_text_unicode';
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::users()),
+        ]));
+
+        $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'nombre', size: 128, required: true)));
+        $this->assertTrue($database->createIndex($collection, Index::fullText(key: 'nombre-ft', attributes: ['nombre'])));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'nombre' => 'Luis García'
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'nombre' => 'Álvaro Yair Cuéllar'
+        ]));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'nombre' => 'Fernando naïve über'
+        ]));
+
+        /**
+         * Accented characters must not cause FTS parser errors
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', 'García'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+
+        $documents = $database->find($collection, [
+            Query::search('nombre', 'Álvaro'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+
+        $documents = $database->find($collection, [
+            Query::search('nombre', 'Cuéllar'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+
+        /**
+         * Non-operator special chars (! . #) were not stripped by old code,
+         * producing values like "!!!...###*" that crash MySQL's FTS parser.
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', '!!!...###'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        $documents = $database->find($collection, [
+            Query::search('nombre', '$$$%%%^^^'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        /**
+         * FTS operator-only input also must not error
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', '+-*@<>~'),
+        ]);
+        $this->assertEquals(0, count($documents));
+
+        /**
+         * Mixed special chars + accented word should still find results
+         */
+        $documents = $database->find($collection, [
+            Query::search('nombre', '@García!'),
+        ]);
+        $this->assertGreaterThanOrEqual(1, count($documents));
+    }
+
     public function testFindByID(): void
     {
         $this->initMoviesFixture();
@@ -8239,5 +8328,99 @@ trait DocumentTests
         }
 
         return $cache->load($hashKey.'#'.$epoch, Database::TTL);
+    }
+
+    public function testDropUnknownAttributes(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, Attribute::string(key: 'known', size: 128)));
+
+        try {
+            $database->createDocument(__FUNCTION__, new Document([
+                '$id' => 'strict',
+                '$permissions' => $permissions,
+                'known' => 'kept',
+                'unknown' => 'dropped',
+            ]));
+            $this->fail('Unknown attribute was accepted while dropping is disabled');
+        } catch (StructureException $e) {
+            $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
+        }
+
+        $database->setDropUnknownAttributes(true);
+
+        try {
+            $collection = $database->getCollection(__FUNCTION__);
+            $encoded = $database->encode($collection, new Document([
+                '$id' => 'encoded',
+                '$collection' => __FUNCTION__,
+                'known' => 'kept',
+                'unknown' => 'dropped',
+            ]));
+            $this->assertEquals('kept', $encoded->getAttribute('known'));
+            $this->assertNull($encoded->getAttribute('unknown'), 'Unknown attribute survived encode');
+
+            $created = $database->createDocument(__FUNCTION__, new Document([
+                '$id' => 'lenient',
+                '$permissions' => $permissions,
+                'known' => 'kept',
+                'unknown' => 'dropped',
+            ]));
+
+            $this->assertEquals('kept', $created->getAttribute('known'));
+            $this->assertNull($created->getAttribute('unknown'), 'Unknown attribute survived the create');
+
+            $database->purgeCachedDocument(__FUNCTION__, 'lenient');
+            $stored = $database->getDocument(__FUNCTION__, 'lenient');
+            $this->assertEquals('kept', $stored->getAttribute('known'));
+            $this->assertNull($stored->getAttribute('unknown'), 'Unknown attribute reached storage on create');
+
+            $updated = $database->updateDocument(__FUNCTION__, 'lenient', new Document([
+                '$id' => 'lenient',
+                '$permissions' => $permissions,
+                'known' => 'changed',
+                'unknown' => 'dropped',
+            ]));
+
+            $this->assertEquals('changed', $updated->getAttribute('known'));
+            $this->assertNull($updated->getAttribute('unknown'), 'Unknown attribute survived the update');
+
+            $database->purgeCachedDocument(__FUNCTION__, 'lenient');
+            $stored = $database->getDocument(__FUNCTION__, 'lenient');
+            $this->assertEquals('changed', $stored->getAttribute('known'));
+            $this->assertNull($stored->getAttribute('unknown'), 'Unknown attribute reached storage on update');
+
+            \usleep(5000);
+
+            $unchanged = $database->updateDocument(__FUNCTION__, 'lenient', new Document([
+                '$id' => 'lenient',
+                '$permissions' => $permissions,
+                'known' => 'changed',
+                'unknown' => 'dropped',
+            ]));
+
+            $this->assertEquals(
+                $stored->getUpdatedAt(),
+                $unchanged->getUpdatedAt(),
+                'A write carrying only a dropped attribute counted as a change'
+            );
+        } finally {
+            $database->setDropUnknownAttributes(false);
+        }
     }
 }

@@ -10,13 +10,13 @@ use Utopia\Database\Event\Collection\Deleted as CollectionDeleted;
 use Utopia\Database\Event\Document\Created as DocumentCreated;
 use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
 use Utopia\Database\Event\Document\Updated as DocumentUpdated;
-use Utopia\Database\Event\DomainEvent;
+use Utopia\Database\Event\Domain;
 
-class DomainEventTest extends TestCase
+class DomainTest extends TestCase
 {
     public function testDomainEventConstructorWithCollectionAndEvent(): void
     {
-        $event = new DomainEvent('users', Event::DocumentCreate);
+        $event = new Domain('users', Event::DocumentCreate);
         $this->assertEquals('users', $event->collection);
         $this->assertEquals(Event::DocumentCreate, $event->event);
     }
@@ -24,7 +24,7 @@ class DomainEventTest extends TestCase
     public function testDomainEventOccurredAtAutoSetToNow(): void
     {
         $before = new \DateTimeImmutable();
-        $event = new DomainEvent('users', Event::DocumentCreate);
+        $event = new Domain('users', Event::DocumentCreate);
         $after = new \DateTimeImmutable();
 
         $this->assertGreaterThanOrEqual($before, $event->occurredAt);
@@ -34,7 +34,7 @@ class DomainEventTest extends TestCase
     public function testDomainEventCustomOccurredAt(): void
     {
         $custom = new \DateTimeImmutable('2025-01-01 12:00:00');
-        $event = new DomainEvent('users', Event::DocumentCreate, $custom);
+        $event = new Domain('users', Event::DocumentCreate, $custom);
         $this->assertSame($custom, $event->occurredAt);
     }
 
@@ -101,7 +101,7 @@ class DomainEventTest extends TestCase
 
     public function testDomainEventIsReadonly(): void
     {
-        $event = new DomainEvent('users', Event::DocumentCreate);
+        $event = new Domain('users', Event::DocumentCreate);
 
         $this->assertLessThanOrEqual(new \DateTimeImmutable(), $event->occurredAt);
         $this->assertEquals('users', $event->collection);

@@ -1576,13 +1576,21 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             case Method::Search:
                 $searchVal = $query->getValue();
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+                $fulltextValue = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
+                if ($fulltextValue === '') {
+                    return '0 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
 
                 return "to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0)";
 
             case Method::NotSearch:
                 $notSearchVal = $query->getValue();
-                $binds[":{$placeholder}_0"] = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
+                $fulltextValue = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
+                if ($fulltextValue === '') {
+                    return '1 = 1';
+                }
+                $binds[":{$placeholder}_0"] = $fulltextValue;
 
                 return "NOT (to_tsvector(regexp_replace({$attribute}, '[^\w]+',' ','g')) @@ websearch_to_tsquery(:{$placeholder}_0))";
 
@@ -2280,9 +2288,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     protected function getFulltextValue(string $value): string
     {
         $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
-        $value = str_replace(['@', '+', '-', '*', '.', "'", '"'], ' ', $value);
-        $value = preg_replace('/\s+/', ' ', $value); // Remove multiple whitespaces
-        $value = trim($value ?? '');
+
+        /** Keep only unicode letters, numbers, underscores, and whitespace. */
+        $value = preg_replace('/[^\p{L}\p{N}_\s]/u', ' ', $value) ?? '';
+        $value = preg_replace('/\s+/', ' ', $value) ?? '';
+        $value = trim($value);
 
         if (! $exact) {
             $value = str_replace(' ', ' or ', $value);

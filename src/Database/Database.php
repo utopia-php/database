@@ -271,6 +271,8 @@ class Database
 
     protected bool $validate = true;
 
+    protected bool $dropUnknownAttributes = false;
+
     protected bool $preserveDates = false;
 
     protected bool $preserveSequence = false;
@@ -996,6 +998,25 @@ class Database
         return $this;
     }
 
+    public function getDropUnknownAttributes(): bool
+    {
+        return $this->dropUnknownAttributes;
+    }
+
+    /**
+     * Drop attributes missing from the collection schema instead of rejecting the write.
+     *
+     * Enable this where the schema is owned by the application rather than the caller, so a
+     * deploy that writes an attribute before its migration has run degrades to a warning
+     * instead of failing every write.
+     */
+    public function setDropUnknownAttributes(bool $drop): static
+    {
+        $this->dropUnknownAttributes = $drop;
+
+        return $this;
+    }
+
     /**
      * Get whether date preservation is enabled.
      *
@@ -1542,6 +1563,8 @@ class Database
             $attributes[] = $attribute;
         }
 
+        $known = [];
+
         foreach ($attributes as $attribute) {
             if ($attribute instanceof Attribute) {
                 $key = $attribute->key;
@@ -1561,6 +1584,7 @@ class Database
             } else {
                 continue;
             }
+            $known[$key] = true;
             /** @var array<string> $filters */
             $exists = $document->offsetExists($key);
             $value = $exists ? $document[$key] : null;
@@ -1610,6 +1634,55 @@ class Database
                 $value = $value[0];
             }
             $document->setAttribute($key, $value);
+        }
+
+        return $this->removeUnknownAttributes($collection, $document, $known);
+    }
+
+    /**
+     * Remove attributes the collection schema does not declare.
+     *
+     * Used ahead of change detection on update and upsert so a dropped key is not
+     * counted as a write. encode() also calls this once it has collected the known
+     * set while iterating the schema.
+     *
+     * @param  array<string, true>|null  $known  Attribute ids already collected
+     */
+    protected function removeUnknownAttributes(Document $collection, Document $document, ?array $known = null): Document
+    {
+        if (! $this->dropUnknownAttributes || ! $this->adapter->supports(Capability::DefinedAttributes)) {
+            return $document;
+        }
+
+        if ($known === null) {
+            $known = [];
+            $declared = $collection->getAttribute('attributes', []);
+            foreach (\is_array($declared) ? $declared : [] as $attribute) {
+                $key = match (true) {
+                    $attribute instanceof Attribute => $attribute->key,
+                    $attribute instanceof Document => $attribute->getId(),
+                    \is_array($attribute) => \is_string($attribute[Document::ID] ?? null) ? $attribute[Document::ID] : '',
+                    default => '',
+                };
+                $known[$key] = true;
+            }
+        }
+
+        $dropped = [];
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with((string) $key, '$') || isset($known[$key])) {
+                continue;
+            }
+
+            $dropped[] = $key;
+            $document->removeAttribute((string) $key);
+        }
+
+        if (! empty($dropped)) {
+            Console::warning(
+                'Dropped unknown attributes "'.\implode('", "', $dropped).'" from collection "'.$collection->getId().'"'
+                .($this->adapter->getTenant() === null ? '' : ' on tenant '.$this->adapter->getTenant())
+            );
         }
 
         return $document;

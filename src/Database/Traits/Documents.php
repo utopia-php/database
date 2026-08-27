@@ -936,6 +936,11 @@ trait Documents
             }
             $document = new Document($document);
 
+            // Ahead of change detection: a dropped attribute is never persisted, so
+            // counting it as a change would bump $updatedAt and fire an update event
+            // for a write that leaves the stored document identical.
+            $document = $this->removeUnknownAttributes($collection, $document);
+
             /** @var array<Document> $updateAttrs */
             $updateAttrs = $collection->getAttribute('attributes', []);
             $relationships = \array_filter($updateAttrs, function (Attribute|Document $attribute) {
@@ -1563,6 +1568,8 @@ trait Documents
                     $document->getId(),
                 )));
             }
+
+            $document = $this->removeUnknownAttributes($collection, $document);
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();

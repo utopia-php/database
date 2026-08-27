@@ -1040,6 +1040,56 @@ class AttributeTest extends TestCase
         $this->assertTrue($validator->isValid($attribute));
     }
 
+    public function testInvalidBigIntDefaultValueTypeStringNotNumeric(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('counter'),
+            'key' => 'counter',
+            'type' => Database::VAR_BIGINT,
+            'size' => 0,
+            'required' => false,
+            'default' => 'not_a_bigint',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Default value not_a_bigint is not a valid integer string for type bigint');
+        $validator->isValid($attribute);
+    }
+
+    public function testValidBigIntDefaultValueTypeStringNumeric(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('counter'),
+            'key' => 'counter',
+            'type' => Database::VAR_BIGINT,
+            'size' => 0,
+            'required' => false,
+            'default' => '123',
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
     public function testValidFloatWithDefaultValue(): void
     {
         $validator = new Attribute(
@@ -1137,6 +1187,56 @@ class AttributeTest extends TestCase
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Max size allowed for int is: 100');
         $validator->isValid($attribute);
+    }
+
+    public function testBigIntSizeNotLimited(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            maxBigIntLength: 200,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('counter'),
+            'key' => 'counter',
+            'type' => Database::VAR_BIGINT,
+            'size' => 101,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
+    }
+
+    public function testUnsignedBigIntSizeLimit(): void
+    {
+        $validator = new Attribute(
+            attributes: [],
+            maxStringLength: 16777216,
+            maxVarcharLength: 65535,
+            maxIntLength: PHP_INT_MAX,
+            maxBigIntLength: 200,
+        );
+
+        $attribute = new Document([
+            '$id' => ID::custom('counter'),
+            'key' => 'counter',
+            'type' => Database::VAR_BIGINT,
+            'size' => 200,
+            'required' => false,
+            'default' => null,
+            'signed' => false,
+            'array' => false,
+            'filters' => [],
+        ]);
+
+        $this->assertTrue($validator->isValid($attribute));
     }
 
     public function testDuplicateAttributeIdCaseInsensitive(): void

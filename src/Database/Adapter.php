@@ -23,7 +23,7 @@ abstract class Adapter
 
     protected bool $sharedTables = false;
 
-    protected ?int $tenant = null;
+    protected int|string|null $tenant = null;
 
     protected bool $tenantPerDocument = false;
 
@@ -32,6 +32,8 @@ abstract class Adapter
     protected int $inTransaction = 0;
 
     protected bool $alterLocks = false;
+
+    protected bool $skipDuplicates = false;
 
     /**
      * @var array<string, mixed>
@@ -219,11 +221,11 @@ abstract class Adapter
      *
      * Set tenant to use if tables are shared
      *
-     * @param ?int $tenant
+     * @param int|string|null $tenant
      *
      * @return bool
      */
-    public function setTenant(?int $tenant): bool
+    public function setTenant(int|string|null $tenant): bool
     {
         $this->tenant = $tenant;
 
@@ -235,9 +237,9 @@ abstract class Adapter
      *
      * Get tenant to use for shared tables
      *
-     * @return ?int
+     * @return int|string|null
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->tenant;
     }
@@ -347,6 +349,29 @@ abstract class Adapter
     {
         // Clear existing callback
         $this->before($event, 'timeout');
+
+        // Adapters that apply the timeout from this property on every statement
+        // (e.g. Postgres SET statement_timeout) would otherwise keep enforcing a
+        // cleared timeout on all subsequent queries.
+        $this->timeout = 0;
+    }
+
+    /**
+     * Clears every timeout this adapter carries, for any event.
+     *
+     * A pooled connection outlives the handle that configured it, so the handle
+     * that takes it next has to be able to reset it without knowing which
+     * events the previous one set a timeout for.
+     *
+     * @return void
+     */
+    public function clearTimeouts(): void
+    {
+        foreach (\array_keys($this->transformations) as $event) {
+            $this->clearTimeout($event);
+        }
+
+        $this->timeout = 0;
     }
 
     /**
@@ -393,6 +418,27 @@ abstract class Adapter
     }
 
     /**
+     * Run a callback with skipDuplicates enabled.
+     * Duplicate key errors during createDocuments() will be silently skipped
+     * instead of thrown. Nestable — saves and restores previous state.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
+    }
+
+    /**
      * @template T
      * @param callable(): T $callback
      * @return T
@@ -410,16 +456,15 @@ abstract class Adapter
                 $this->commitTransaction();
                 return $result;
             } catch (\Throwable $action) {
+                $rollback = null;
                 try {
                     $this->rollbackTransaction();
-                } catch (\Throwable $rollback) {
-                    if ($attempts < $retries) {
-                        \usleep($sleep * ($attempts + 1));
-                        continue;
-                    }
-
+                } catch (\Throwable $rollbackError) {
+                    // Not every adapter resets the depth counter when its
+                    // rollback throws (e.g. Redis), so reset it here to avoid
+                    // leaking transaction state onto the reused connection.
+                    $rollback = $rollbackError;
                     $this->inTransaction = 0;
-                    throw $rollback;
                 }
 
                 if (
@@ -428,7 +473,8 @@ abstract class Adapter
                     $action instanceof AuthorizationException ||
                     $action instanceof RelationshipException ||
                     $action instanceof ConflictException ||
-                    $action instanceof LimitException
+                    $action instanceof LimitException ||
+                    $action instanceof TimeoutException
                 ) {
                     throw $action;
                 }
@@ -438,7 +484,7 @@ abstract class Adapter
                     continue;
                 }
 
-                throw $action;
+                throw $rollback ?? $action;
             }
         }
 
@@ -881,6 +927,13 @@ abstract class Adapter
     abstract public function getLimitForInt(): int;
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    abstract public function getLimitForBigInt(): int;
+
+    /**
      * Get maximum attributes limit.
      *
      * @return int
@@ -957,6 +1010,13 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForSchemaAttributes(): bool;
+
+    /**
+     * Are schema indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForSchemaIndexes(): bool;
 
     /**
      * Is index supported?
@@ -1060,6 +1120,13 @@ abstract class Adapter
     abstract public function getSupportForUpserts(): bool;
 
     /**
+     * Is upsert via arbitrary unique indexes supported?
+     *
+     * @return bool
+     */
+    abstract public function getSupportForUpsertOnUniqueIndex(): bool;
+
+    /**
      * Is vector type supported?
      *
      * @return bool
@@ -1072,6 +1139,11 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForCacheSkipOnFailure(): bool;
+
+    /**
+     * @return bool
+     */
+    abstract public function getSupportForCaching(): bool;
 
     /**
      * Is reconnection supported?
@@ -1366,6 +1438,17 @@ abstract class Adapter
     abstract public function getSchemaAttributes(string $collection): array;
 
     /**
+     * Get Schema Indexes
+     *
+     * Returns physical index definitions from the database schema.
+     *
+     * @param string $collection
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    abstract public function getSchemaIndexes(string $collection): array;
+
+    /**
      * Get the expected column type for a given attribute type.
      *
      * Returns the database-native column type string (e.g. "VARCHAR(255)", "BIGINT")
@@ -1423,6 +1506,11 @@ abstract class Adapter
      * @return float[][][] Array of rings, each ring is an array of points [x, y]
      */
     abstract public function decodePolygon(string $wkb): array;
+
+    public function getSupportForUnsignedBigInt(): bool
+    {
+        return false;
+    }
 
     /**
         * Returns the document after casting
@@ -1563,4 +1651,9 @@ abstract class Adapter
      * @return bool
      */
     abstract public function getSupportForNestedTransactions(): bool;
+
+    /**
+     * @return mixed
+     */
+    abstract public function getDriver(): mixed;
 }

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use Utopia\Database\PDO;
+use Utopia\Database\PDOStatement;
 
 class PDOTest extends TestCase
 {
@@ -148,6 +149,40 @@ class PDOTest extends TestCase
 
         $result = $pdoWrapper->prepare('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY]);
 
-        $this->assertSame($pdoStatementMock, $result);
+        $this->assertInstanceOf(PDOStatement::class, $result);
+        $this->assertSame($pdoStatementMock, $result->getStatement());
+    }
+
+    public function testPrepareNativeReconnectsOutsideTransaction(): void
+    {
+        $pdoWrapper = $this->getMockBuilder(PDO::class)
+            ->setConstructorArgs(['sqlite::memory:', null, null, []])
+            ->onlyMethods(['reconnect'])
+            ->getMock();
+
+        $pdoMock = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $statementMock = $this->getMockBuilder(\PDOStatement::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+
+        $pdoMock->method('inTransaction')->willReturn(false);
+        $pdoMock->expects($this->exactly(2))
+            ->method('prepare')
+            ->with('SELECT 1')
+            ->willReturnOnConsecutiveCalls(
+                $this->throwException(new \PDOException('server has gone away')),
+                $statementMock
+            );
+
+        $reflection = new ReflectionClass($pdoWrapper);
+        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoProperty->setAccessible(true);
+        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+
+        $pdoWrapper->expects($this->once())->method('reconnect');
+
+        $this->assertSame($statementMock, $pdoWrapper->prepareNative('SELECT 1'));
     }
 }

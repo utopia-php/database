@@ -150,6 +150,26 @@ class Operator extends Validator
         $type = $attribute instanceof Document ? $attribute->getAttribute('type') : $attribute['type'];
         $isArray = $attribute instanceof Document ? ($attribute->getAttribute('array') ?? false) : ($attribute['array'] ?? false);
 
+        // Array operators that carry a caller-supplied value list are capped to guard against
+        // memory exhaustion. Enforced here so every adapter rejects an oversized list the same way.
+        // The payload may be spread across $values or wrapped in $values[0] (the same shape the
+        // operators normalize with), so measure whichever the operator will actually process.
+        if (
+            \in_array($method, [
+                DatabaseOperator::TYPE_ARRAY_APPEND,
+                DatabaseOperator::TYPE_ARRAY_PREPEND,
+                DatabaseOperator::TYPE_ARRAY_INTERSECT,
+                DatabaseOperator::TYPE_ARRAY_DIFF,
+                DatabaseOperator::TYPE_ARRAY_REMOVE,
+            ], true)
+        ) {
+            $payload = (isset($values[0]) && \is_array($values[0])) ? $values[0] : $values;
+            if (\count($payload) > DatabaseOperator::MAX_ARRAY_OPERATOR_SIZE) {
+                $this->message = "Array size " . \count($payload) . " exceeds maximum allowed size of " . DatabaseOperator::MAX_ARRAY_OPERATOR_SIZE . " for array operations";
+                return false;
+            }
+        }
+
         switch ($method) {
             case DatabaseOperator::TYPE_INCREMENT:
             case DatabaseOperator::TYPE_DECREMENT:
@@ -390,13 +410,8 @@ class Operator extends Validator
                     return false;
                 }
 
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull' // Null checks
-                ];
-                if (!\in_array($values[0], $validConditions, true)) {
-                    $this->message = "Invalid array filter condition '{$values[0]}'. Must be one of: " . \implode(', ', $validConditions);
+                if (!\in_array($values[0], DatabaseOperator::ARRAY_FILTER_CONDITIONS, true)) {
+                    $this->message = "Invalid array filter condition '{$values[0]}'. Must be one of: " . \implode(', ', DatabaseOperator::ARRAY_FILTER_CONDITIONS);
                     return false;
                 }
 

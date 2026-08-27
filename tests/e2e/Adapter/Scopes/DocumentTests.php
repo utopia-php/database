@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -85,13 +86,182 @@ trait DocumentTests
             ],
         ]));
 
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->getDocument(__FUNCTION__, $document->getId());
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
 
         $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [(string)$sequence])]);
-        $this->assertEquals((string)$sequence, $document->getSequence());
+        $this->assertSame((string)$sequence, $document->getSequence());
+
+        /**
+         * Query with int $sequence value (supported by SQL adapters, rejected by MongoDB)
+         */
+        if ($database->getAdapter()->getIdAttributeType() == Database::VAR_INTEGER) {
+            $this->assertTrue($sequence === 5_000_000_000_000_000);
+            $document = $database->findOne(__FUNCTION__, [Query::equal('$sequence', [$sequence])]);
+            $this->assertSame((string)$sequence, $document->getSequence());
+        }
+    }
+
+    public function testCreateDocumentWithBigIntType(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'bigint_signed', Database::VAR_BIGINT, 0, true));
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'bigint_unsigned', Database::VAR_BIGINT, 0, true, signed: false));
+
+        $document = $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'bigint-type-doc',
+            '$permissions' => [Permission::read(Role::any())],
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
+        ]));
+
+        $this->assertIsInt($document->getAttribute('bigint_signed'));
+        $this->assertEquals(-Database::MAX_BIG_INT, $document->getAttribute('bigint_signed'));
+        $this->assertIsInt($document->getAttribute('bigint_unsigned'));
+        $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint_unsigned'));
+
+        $results = $database->find(__FUNCTION__, [
+            Query::equal('bigint_unsigned', [Database::MAX_BIG_INT])
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('bigint-type-doc', $results[0]->getId());
+    }
+
+    public function testBigIntScenariosWithFiltering(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUnsignedBigInt()) {
+            $this->markTestSkipped('Adapter does not support unsigned bigint');
+        }
+
+        $collection = 'bigint_scenarios_filters';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'signed_bigint', Database::VAR_BIGINT, 0, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'unsigned_bigint', Database::VAR_BIGINT, 0, true, signed: false));
+
+        $collectionDoc = $database->getCollection($collection);
+        $this->assertEquals($collection, $collectionDoc->getId());
+        $attributes = $collectionDoc->getAttribute('attributes', []);
+        $signedAttr = null;
+        $unsignedAttr = null;
+        foreach ($attributes as $attribute) {
+            if (($attribute->getAttribute('$id') ?? '') === 'signed_bigint') {
+                $signedAttr = $attribute;
+            }
+            if (($attribute->getAttribute('$id') ?? '') === 'unsigned_bigint') {
+                $unsignedAttr = $attribute;
+            }
+        }
+
+        $this->assertNotNull($signedAttr);
+        $this->assertNotNull($unsignedAttr);
+        $this->assertSame(0, $signedAttr->getAttribute('size'));
+        $this->assertSame(0, $unsignedAttr->getAttribute('size'));
+
+        // "Out of regular int limit" (32-bit) but valid bigint should still normalize to PHP int.
+        $beyond32Bit = '2147483648';
+        $signedMax = (string)\PHP_INT_MAX;
+        $signedMin = (string)\PHP_INT_MIN;
+        $unsignedValue = '18446744073709551615';
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'bigint-scenarios-doc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'signed_bigint' => $beyond32Bit,
+            'unsigned_bigint' => $unsignedValue,
+        ]));
+
+        $this->assertIsInt($document->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$beyond32Bit, $document->getAttribute('signed_bigint'));
+
+        // Compare by string representation to stay adapter-agnostic (int/string return type differs).
+        $this->assertEquals($unsignedValue, (string)$document->getAttribute('unsigned_bigint'));
+        $this->assertTrue(\is_string($document->getAttribute('unsigned_bigint')));
+
+        // Read path: fetch document and ensure unsigned bigint round-trips unchanged.
+        $fetchedDocument = $database->getDocument($collection, $document->getId());
+        $this->assertEquals($unsignedValue, (string)$fetchedDocument->getAttribute('unsigned_bigint'));
+
+        // Update path should apply the same normalization for signed bigint numeric strings.
+        $updated = $database->updateDocument($collection, $document->getId(), new Document([
+            'signed_bigint' => $signedMax,
+        ]));
+        $this->assertIsInt($updated->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMax, $updated->getAttribute('signed_bigint'));
+
+        // Filtering tests: both int and numeric-string filters should match bigint fields.
+        $resultIntFilter = $database->find($collection, [
+            Query::equal('signed_bigint', [(int)$signedMax]),
+        ]);
+        $this->assertCount(1, $resultIntFilter);
+        $this->assertEquals('bigint-scenarios-doc', $resultIntFilter[0]->getId());
+
+        $resultStringFilter = $database->find($collection, [
+            Query::equal('signed_bigint', [$signedMax]),
+        ]);
+        $this->assertCount(1, $resultStringFilter);
+        $this->assertEquals('bigint-scenarios-doc', $resultStringFilter[0]->getId());
+
+        $resultUnsignedFilter = $database->find($collection, [
+            Query::equal('unsigned_bigint', [$unsignedValue]),
+        ]);
+        $this->assertCount(1, $resultUnsignedFilter);
+        $this->assertEquals('bigint-scenarios-doc', $resultUnsignedFilter[0]->getId());
+
+        // Lower signed boundary as numeric-string should also normalize to int.
+        $updatedMin = $database->updateDocument($collection, $document->getId(), new Document([
+            'signed_bigint' => $signedMin,
+        ]));
+        $this->assertIsInt($updatedMin->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMin, $updatedMin->getAttribute('signed_bigint'));
+    }
+
+    public function testWithSingedBigInt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'signed_bigint_only';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'signed_bigint', Database::VAR_BIGINT, 0, true));
+
+        $signedMin = \PHP_INT_MIN;
+        $signedMax = \PHP_INT_MAX;
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'signed-bigint-doc',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'signed_bigint' => $signedMax,
+        ]));
+
+        $this->assertIsInt($document->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMax, $document->getAttribute('signed_bigint'));
+
+        $updated = $database->updateDocument($collection, $document->getId(), new Document([
+            'signed_bigint' => $signedMin,
+        ]));
+
+        $this->assertIsInt($updated->getAttribute('signed_bigint'));
+        $this->assertEquals((int)$signedMin, $updated->getAttribute('signed_bigint'));
+
+        $results = $database->find($collection, [
+            Query::equal('signed_bigint', [$signedMin]),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals('signed-bigint-doc', $results[0]->getId());
     }
 
     public function testCreateDocument(): Document
@@ -495,6 +665,252 @@ trait DocumentTests
         }
     }
 
+    public function testCacheEmptyDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'cacheEmpty';
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+        // A read of a missing id records a negative ("not found") marker so
+        // repeated lookups don't keep hitting the adapter.
+        $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+
+        [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'ghost');
+        $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached); // Database::CACHE_EMPTY_MARKER
+
+        // Creating the id must invalidate that marker so the row is visible.
+        $database->createDocument($collection, new Document([
+            '$id' => 'ghost',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'real',
+        ]));
+
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $hashKey));
+
+        $document = $database->getDocument($collection, 'ghost');
+        $this->assertFalse($document->isEmpty());
+        $this->assertEquals('real', $document->getAttribute('name'));
+
+        // Same guarantee through the batch create path.
+        $this->assertTrue($database->getDocument($collection, 'batch')->isEmpty());
+        [, $batchKey, $batchHash] = $database->getCacheKeys($collection, 'batch');
+        $cached = $cache->load($batchKey, Database::TTL, $batchHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+
+        $database->createDocuments($collection, [
+            new Document([
+                '$id' => 'batch',
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'batched',
+            ]),
+        ]);
+
+        $this->assertFalse($cache->load($batchKey, Database::TTL, $batchHash));
+        $this->assertEquals('batched', $database->getDocument($collection, 'batch')->getAttribute('name'));
+
+        // A locking read must never publish anything to the cache.
+        $this->assertTrue($database->getDocument($collection, 'phantom', forUpdate: true)->isEmpty());
+        [, $phantomKey, $phantomHash] = $database->getCacheKeys($collection, 'phantom');
+        $this->assertFalse($cache->load($phantomKey, Database::TTL, $phantomHash));
+    }
+
+    public function testCacheEmptyDocumentSelect(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'cacheEmptySelect';
+        $database->createCollection($collection, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+
+        $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+        // The document key is select-independent, but the hashKey is not: a
+        // projection is folded into it. So a projected read and a plain read of
+        // the same missing id are cached under different slots of the same key.
+        [, $documentKey, $plainHash] = $database->getCacheKeys($collection, 'ghost');
+
+        // validateSelections() appends the internal attributes to the user
+        // selection before it forms the key; mirror that set to address the
+        // projected slot (getCacheKeys sorts, so order does not matter).
+        $selects = ['name', '$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'];
+        [, , $selectHash] = $database->getCacheKeys($collection, 'ghost', $selects);
+        $this->assertNotEquals($plainHash, $selectHash);
+
+        // Projected read caches its marker under the projected slot only.
+        $this->assertTrue($database->getDocument($collection, 'ghost', [Query::select(['name'])])->isEmpty());
+        $cached = $cache->load($documentKey, Database::TTL, $selectHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+        $this->assertFalse(
+            $cache->load($documentKey, Database::TTL, $plainHash),
+            'A projected read must not populate the no-projection cache slot'
+        );
+
+        // Plain read fills the plain slot with its own marker. Both slots of the
+        // document key now hold an "empty" marker.
+        $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+        $cached = $cache->load($documentKey, Database::TTL, $plainHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+
+        // Inserting the id purges the whole document key, so BOTH slots clear.
+        $database->createDocument($collection, new Document([
+            '$id' => 'ghost',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'real',
+        ]));
+
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $plainHash));
+        $this->assertFalse($cache->load($documentKey, Database::TTL, $selectHash));
+    }
+
+    public function testCacheEmptyGetCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionId = 'cacheEmptyCollection';
+
+        // getCollection() reads getDocument(METADATA, id) under the hood, so a
+        // lookup of a non-existent collection negatively caches its absence
+        // under the metadata key.
+        $this->assertTrue($database->getCollection($collectionId)->isEmpty());
+
+        [, $metaKey, $metaHash] = $database->getCacheKeys(Database::METADATA, $collectionId);
+        $cached = $cache->load($metaKey, Database::TTL, $metaHash);
+        $this->assertIsArray($cached);
+        $this->assertArrayHasKey('$empty', $cached);
+
+        // createCollection() writes the metadata row via createDocument(METADATA),
+        // which must purge that marker — otherwise the collection would keep
+        // reading back as "not found".
+        $collection = $database->createCollection($collectionId, permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+        $this->assertFalse($collection->isEmpty());
+
+        $this->assertFalse($cache->load($metaKey, Database::TTL, $metaHash));
+
+        $fetched = $database->getCollection($collectionId);
+        $this->assertFalse($fetched->isEmpty());
+        $this->assertEquals($collectionId, $fetched->getId());
+
+        // Recreating it must now be rejected as a duplicate. This proves the
+        // marker was genuinely invalidated: a lingering "not found" would make
+        // createCollection's own existence check pass and wrongly proceed.
+        try {
+            $database->createCollection($collectionId);
+            $this->fail('Expected DuplicateException when recreating an existing collection');
+        } catch (DuplicateException) {
+            // expected
+        }
+    }
+
+    public function testCacheEmptyDocumentSecurity(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $auth = $database->getAuthorization();
+        $cache = $database->getCache();
+
+        // The Redis adapter runs with a no-op cache (reads hit Redis directly),
+        // so there is no cache layer to inspect.
+        if (!$database->getAdapter()->getSupportForCaching()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'cacheEmptyDocSecurity';
+
+        // Document-level security with no collection-wide read: access is
+        // decided per document.
+        $auth->skip(function () use ($database, $collection) {
+            $database->createCollection($collection, permissions: [], documentSecurity: true);
+            $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+            $database->createDocument($collection, new Document([
+                '$id' => 'secret',
+                '$permissions' => [
+                    Permission::read(Role::user('userA')),
+                ],
+                'name' => 'classified',
+            ]));
+        });
+
+        try {
+            // userB cannot read 'secret'. The row exists, so this denial must
+            // NOT record a negative marker under the shared (user-independent)
+            // cache key — doing so would hide the row from userA.
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('userB')->toString());
+
+            $this->assertTrue($database->getDocument($collection, 'secret')->isEmpty());
+
+            [, $documentKey, $hashKey] = $database->getCacheKeys($collection, 'secret');
+            $cached = $cache->load($documentKey, Database::TTL, $hashKey);
+            $this->assertFalse(
+                \is_array($cached) && isset($cached['$empty']),
+                'A permission-denied read of an existing document must not populate the negative cache'
+            );
+
+            // userA has read permission and must still see the document,
+            // proving userB's forbidden read did not poison the cache.
+            $auth->cleanRoles();
+            $auth->addRole(Role::user('userA')->toString());
+
+            $document = $database->getDocument($collection, 'secret');
+            $this->assertFalse($document->isEmpty());
+            $this->assertEquals('classified', $document->getAttribute('name'));
+
+            // A genuinely missing id is user-independent, so it is still safe to
+            // cache as empty even under document security.
+            $this->assertTrue($database->getDocument($collection, 'ghost')->isEmpty());
+            [, $ghostKey, $ghostHash] = $database->getCacheKeys($collection, 'ghost');
+            $ghostCached = $cache->load($ghostKey, Database::TTL, $ghostHash);
+            $this->assertIsArray($ghostCached);
+            $this->assertArrayHasKey('$empty', $ghostCached);
+        } finally {
+            $auth->cleanRoles();
+            $auth->addRole(Role::any()->toString());
+        }
+    }
+
     public function testCreateDocumentsWithAutoIncrement(): void
     {
         /** @var Database $database */
@@ -799,6 +1215,125 @@ trait DocumentTests
             $this->assertEquals(10, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(Database::MAX_BIG_INT, $document->getAttribute('bigint'));
+        }
+    }
+
+    public function testTextByteTruncationCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        // Byte-capacity validation relies on attribute metadata, which
+        // schemaless adapters don't store, so there is nothing to enforce.
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+
+        // A `text` attribute at its maximum allowed size. On MySQL/MariaDB this
+        // maps to a TEXT column, which is limited to 65,535 *bytes*.
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        // The Structure validator caps a TEXT column at its 65,535-byte capacity,
+        // measuring the value's actual byte length. A 20,000-char emoji value is
+        // 80,000 bytes (4 bytes per char in utf8mb4), so it exceeds the column's
+        // byte capacity and must be rejected up front with a clean
+        // StructureException, rather than letting the database raise error 1406
+        // (data truncation).
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => $value,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        try {
+            $database->createDocument(__FUNCTION__, $document);
+            $this->fail('Expected StructureException for over-capacity text value');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
+        }
+    }
+
+    public function testTextByteTruncationValid(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        // A value that fills the column's full byte capacity is stored and
+        // round-trips intact. 65,535 ASCII chars are exactly 65,535 bytes, so
+        // byte-based validation accepts the whole column, where the previous
+        // char-based cap would have rejected anything over 16,383 chars.
+        $okValue = \str_repeat('a', 65535);
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => $okValue,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $created = $database->createDocument(__FUNCTION__, $document);
+        $fetched = $database->getDocument(__FUNCTION__, $created->getId());
+        $this->assertEquals($okValue, $fetched->getAttribute('text'));
+    }
+
+    public function testTextByteTruncationUpdate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'text', Database::VAR_TEXT, 65535, false);
+
+        $document = new Document([
+            '$id' => 'first',
+            'text' => \str_repeat('a', 16383),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $created = $database->createDocument(__FUNCTION__, $document);
+
+        // An oversized value is rejected on update, the same as on create.
+        $value = \str_repeat('📝', 20000);
+        $this->assertGreaterThan(65535, \strlen($value)); // exceeds the byte capacity
+
+        try {
+            $database->updateDocument(__FUNCTION__, $created->getId(), $created->setAttribute('text', $value));
+            $this->fail('Expected StructureException for over-capacity text value on update');
+        } catch (StructureException $e) {
+            $this->assertStringContainsString('65535 bytes', $e->getMessage());
         }
     }
 
@@ -1403,6 +1938,113 @@ trait DocumentTests
         $database->deleteCollection('defaults');
     }
 
+    /**
+     * When a document's UID changes on update, its permission rows in the
+     * collection's _perms table must follow the new UID. Otherwise the old
+     * rows are orphaned and the renamed document is left with no permissions,
+     * even when the permission set itself was not changed.
+     */
+    public function testUpdateDocumentChangeIdMigratesPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $auth = $database->getAuthorization();
+
+        $collection = 'update_change_id_perms';
+
+        try {
+            // documentSecurity with no collection-level permissions: reads are
+            // governed purely by the document's rows in the _perms table.
+            $database->createCollection($collection, permissions: [], documentSecurity: true);
+            $this->assertEquals(true, $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, false));
+
+            // Create a document whose read permission is scoped to a single role,
+            // so that find() must consult the _perms table to return it.
+            $document = $auth->skip(fn () => $database->createDocument($collection, new Document([
+                '$id' => 'old_id',
+                'name' => 'test',
+                '$permissions' => [
+                    Permission::read(Role::user('alice')),
+                    Permission::update(Role::user('alice')),
+                    Permission::delete(Role::user('alice')),
+                ],
+            ])));
+            $this->assertEquals('old_id', $document->getId());
+
+            // Sanity: as alice the document is visible via the _perms table.
+            $auth->addRole(Role::user('alice')->toString());
+            $this->assertCount(1, $database->find($collection));
+
+            // Rename the document WITHOUT changing its permission set.
+            $renamed = $auth->skip(fn () => $database->updateDocument($collection, 'old_id', new Document(\array_merge(
+                $document->getArrayCopy(),
+                ['$id' => 'new_id'],
+            ))));
+            $this->assertEquals('new_id', $renamed->getId());
+
+            // The old UID must no longer resolve to a document.
+            $this->assertTrue($auth->skip(fn () => $database->getDocument($collection, 'old_id'))->isEmpty());
+
+            // The new UID must exist and keep its permissions on the main row.
+            $newDoc = $auth->skip(fn () => $database->getDocument($collection, 'new_id'));
+            $this->assertFalse($newDoc->isEmpty());
+            $this->assertContains(Permission::read(Role::user('alice')), $newDoc->getPermissions());
+
+            // The crucial check: the permission rows must have migrated to the new
+            // UID in the _perms table. As alice, find() (which joins _perms) must
+            // still return exactly the renamed document. With orphaned rows under
+            // the old UID this returns 0.
+            $found = $database->find($collection);
+            $this->assertCount(1, $found);
+            $this->assertEquals('new_id', $found[0]->getId());
+
+            /**
+             * Second scenario: change the UID AND the permission set in the same
+             * update. Drop alice's access and grant bob instead. The removed rows
+             * must be gone, the added rows must land under the new UID, and nothing
+             * may be left orphaned under the old UID.
+             */
+            $rekeyed = $auth->skip(fn () => $database->updateDocument($collection, 'new_id', new Document(\array_merge(
+                $newDoc->getArrayCopy(),
+                [
+                    '$id' => 'final_id',
+                    '$permissions' => [
+                        Permission::read(Role::user('bob')),
+                        Permission::read(Role::user('bob')), // Duplication check
+                        Permission::update(Role::user('bob')),
+                        Permission::delete(Role::user('bob')),
+                    ],
+                ],
+            ))));
+            $this->assertEquals('final_id', $rekeyed->getId());
+
+            // The old UID must no longer resolve to a document.
+            $this->assertTrue($auth->skip(fn () => $database->getDocument($collection, 'new_id'))->isEmpty());
+
+            // The main row must reflect the new permission set.
+            $finalDoc = $auth->skip(fn () => $database->getDocument($collection, 'final_id'));
+            $this->assertFalse($finalDoc->isEmpty());
+            $this->assertContains(Permission::read(Role::user('bob')), $finalDoc->getPermissions());
+            $this->assertNotContains(Permission::read(Role::user('alice')), $finalDoc->getPermissions());
+
+            // alice's permission rows were removed: as alice nothing is returned.
+            $this->assertCount(0, $database->find($collection));
+
+            // bob's permission rows landed under the new UID: as bob the renamed
+            // document is returned via the _perms join.
+            $auth->addRole(Role::user('bob')->toString());
+            $foundAsBob = $database->find($collection);
+            $this->assertCount(1, $foundAsBob);
+            $this->assertEquals('final_id', $foundAsBob[0]->getId());
+        } finally {
+            $auth->removeRole(Role::user('alice')->toString());
+            $auth->removeRole(Role::user('bob')->toString());
+
+            $auth->skip(fn () => $database->deleteCollection($collection));
+        }
+    }
+
     public function testIncreaseDecrease(): Document
     {
         /** @var Database $database */
@@ -1433,6 +2075,8 @@ trait DocumentTests
 
         $updatedAt = $document->getUpdatedAt();
 
+        \usleep(2000); // Ensure $updatedAt differs when adapter timestamp precision is milliseconds
+
         $doc = $database->increaseDocumentAttribute($collection, $document->getId(), 'increase', 1, 101);
         $this->assertEquals(101, $doc->getAttribute('increase'));
 
@@ -1456,6 +2100,45 @@ trait DocumentTests
         $this->assertEquals(104.4, $document->getAttribute('increase_float'));
 
         return $document;
+    }
+
+    public function testCreateUpdateBigIntAndIncrementDecrement(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'bigint_update_increase_decrease';
+        $database->createCollection($collection);
+
+        $this->assertEquals(true, $database->createAttribute($collection, 'inc', Database::VAR_BIGINT, 8, true));
+        $this->assertEquals(true, $database->createAttribute($collection, 'dec', Database::VAR_BIGINT, 8, true));
+
+        $document = $database->createDocument($collection, new Document([
+            'inc' => 10,
+            'dec' => 10,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ]
+        ]));
+
+        $this->assertIsInt($document->getAttribute('inc'));
+        $this->assertEquals(10, $document->getAttribute('inc'));
+
+        // Verify regular update works for bigint attributes
+        $updated = $database->updateDocument($collection, $document->getId(), new Document([
+            'inc' => 20,
+        ]));
+        $this->assertEquals(20, $updated->getAttribute('inc'));
+
+        // Verify atomic increment/decrement supports bigint schema attributes
+        $afterInc = $database->increaseDocumentAttribute($collection, $document->getId(), 'inc', 5, 30);
+        $this->assertEquals(25, $afterInc->getAttribute('inc'));
+
+        $afterDec = $database->decreaseDocumentAttribute($collection, $document->getId(), 'dec', 3, 7);
+        $this->assertEquals(7, $afterDec->getAttribute('dec'));
     }
 
     /**
@@ -1534,6 +2217,38 @@ trait DocumentTests
             $this->fail('Expected TypeException not thrown');
         } catch (Exception $e) {
             $this->assertInstanceOf(TypeException::class, $e);
+        }
+    }
+
+    /**
+     * @depends testIncreaseDecrease
+     */
+    public function testIncreaseDecreasePreserveDates(Document $document): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->setPreserveDates(true);
+
+        try {
+            $before = $database->getDocument('increase_decrease', $document->getId());
+            $updatedAt = $before->getUpdatedAt();
+            $increase = $before->getAttribute('increase');
+            $decrease = $before->getAttribute('decrease');
+
+            $database->increaseDocumentAttribute('increase_decrease', $document->getId(), 'increase', 1);
+
+            $after = $database->getDocument('increase_decrease', $document->getId());
+            $this->assertSame($increase + 1, $after->getAttribute('increase'));
+            $this->assertSame($updatedAt, $after->getUpdatedAt());
+
+            $database->decreaseDocumentAttribute('increase_decrease', $document->getId(), 'decrease', 1);
+
+            $after = $database->getDocument('increase_decrease', $document->getId());
+            $this->assertSame($decrease - 1, $after->getAttribute('decrease'));
+            $this->assertSame($updatedAt, $after->getUpdatedAt());
+        } finally {
+            $database->setPreserveDates(false);
         }
     }
 
@@ -3002,6 +3717,68 @@ trait DocumentTests
         $this->assertEquals($documentsTest[1]['$id'], $documents[0]['$id']);
     }
 
+    /**
+     * A batch insert stamps every row with the same `$createdAt` — createDocuments() takes
+     * one timestamp for the whole batch — so ordering by that timestamp alone leaves the
+     * order of those rows to the tie break Database::find() appends.
+     *
+     * The tie break follows the direction of the leading timestamp, so a descending order
+     * returns the batch newest-inserted first. It used to be appended ascending regardless,
+     * which both reversed the rows inside a tied group and produced a mixed-direction
+     * ORDER BY that no ascending index can answer.
+     */
+    public function testFindOrderByCreateDateTieBreak(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('tieBreak', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        $this->assertEquals(true, $database->createAttribute('tieBreak', 'name', Database::VAR_STRING, 128, true));
+
+        $documents = [];
+        foreach (['alpha', 'bravo', 'charlie'] as $name) {
+            $documents[] = new Document([
+                'name' => $name,
+                '$permissions' => [Permission::read(Role::any())],
+            ]);
+        }
+
+        $this->assertEquals(3, $database->createDocuments('tieBreak', $documents));
+
+        $created = $database->find('tieBreak', [Query::orderAsc('$sequence')]);
+        $this->assertCount(3, $created);
+
+        // The batch shares one timestamp, otherwise the tie break is never consulted.
+        $this->assertEquals($created[0]->getCreatedAt(), $created[2]->getCreatedAt());
+
+        $descending = $database->find('tieBreak', [Query::orderDesc('$createdAt')]);
+        $this->assertEquals(
+            [$created[2]->getSequence(), $created[1]->getSequence(), $created[0]->getSequence()],
+            \array_map(fn (Document $document) => $document->getSequence(), $descending)
+        );
+
+        $ascending = $database->find('tieBreak', [Query::orderAsc('$createdAt')]);
+        $this->assertEquals(
+            [$created[0]->getSequence(), $created[1]->getSequence(), $created[2]->getSequence()],
+            \array_map(fn (Document $document) => $document->getSequence(), $ascending)
+        );
+
+        // The tie break sits behind the caller's own order, so `name` still decides the
+        // rows the timestamp ties — placing a unique key ahead of it would leave it unread.
+        $byName = $database->find('tieBreak', [
+            Query::orderDesc('$createdAt'),
+            Query::orderAsc('name'),
+        ]);
+        $this->assertEquals(
+            ['alpha', 'bravo', 'charlie'],
+            \array_map(fn (Document $document) => $document->getAttribute('name'), $byName)
+        );
+    }
+
     public function testFindCreatedBefore(): void
     {
         /** @var Database $database */
@@ -4246,6 +5023,77 @@ trait DocumentTests
         $this->assertEquals(round(39.50 + 25.99, 2), round($sum, 2));
     }
 
+    public function testIntegersBeyondInt32(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__, attributes: [
+            new Document([
+                '$id' => 'amount',
+                'type' => Database::VAR_INTEGER,
+                'size' => 8,
+                'required' => true,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ]),
+            new Document([
+                '$id' => 'amounts',
+                'type' => Database::VAR_INTEGER,
+                'size' => 8,
+                'required' => true,
+                'signed' => true,
+                'array' => true,
+                'filters' => [],
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ], documentSecurity: false);
+
+        // Small values encode as int32, large ones as int64. Mongo hands the
+        // latter back wrapped, so both widths have to appear in one row.
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'row1',
+            'amount' => 2000000000,
+            'amounts' => [-3408048000, -42, 3408048000, Database::MAX_BIG_INT],
+        ]));
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => 'row2',
+            'amount' => 2000000000,
+            'amounts' => [-42],
+        ]));
+
+        foreach (['getDocument' => $database->getDocument(__FUNCTION__, 'row1'), 'find' => $database->find(__FUNCTION__, [Query::equal('$id', ['row1'])])[0]] as $path => $document) {
+            $this->assertIsInt($document->getAttribute('amount'), $path . ' returned a non-int scalar');
+
+            $amounts = $document->getAttribute('amounts');
+            foreach ($amounts as $index => $amount) {
+                $this->assertIsInt($amount, $path . ' returned a non-int at amounts[' . $index . ']');
+            }
+
+            $this->assertSame([-3408048000, -42, 3408048000, Database::MAX_BIG_INT], $amounts);
+
+            // An Int64 wrapper survives assertSame above but serialises as
+            // {"$numberLong":"..."}, which is what reaches an API client.
+            $this->assertSame(
+                '{"amount":2000000000,"amounts":[-3408048000,-42,3408048000,' . Database::MAX_BIG_INT . ']}',
+                \json_encode([
+                    'amount' => $document->getAttribute('amount'),
+                    'amounts' => $amounts,
+                ]),
+                $path . ' did not serialise as plain JSON numbers'
+            );
+        }
+
+        // sum() declares float|int, so a total past int32 is a return type
+        // violation unless the adapter hands back a native integer.
+        $sum = $database->sum(__FUNCTION__, 'amount');
+        $this->assertIsInt($sum);
+        $this->assertSame(4000000000, $sum);
+    }
+
     public function testEncodeDecode(): void
     {
         $collection = new Document([
@@ -4680,6 +5528,17 @@ trait DocumentTests
                 'array' => false,
                 'filters' => [],
             ]),
+            new Document([
+                '$id' => ID::custom('boolean'),
+                'type' => Database::VAR_BOOLEAN,
+                'format' => '',
+                'size' => 0,
+                'signed' => true,
+                'required' => false,
+                'default' => false, // not null
+                'array' => false,
+                'filters' => [],
+            ]),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -4691,7 +5550,8 @@ trait DocumentTests
             $database->createDocument($collection, new Document([
                 '$id' => 'doc' . $i,
                 'string' => 'text📝 ' . $i,
-                'integer' => $i
+                'integer' => $i,
+                'boolean' => true
             ]));
         }
 
@@ -4709,6 +5569,7 @@ trait DocumentTests
 
         foreach ($results as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertEquals(true, $document->getAttribute('boolean'));
         }
 
         $updatedDocuments = $database->find($collection, [
@@ -4720,6 +5581,7 @@ trait DocumentTests
         foreach ($updatedDocuments as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
             $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+            $this->assertEquals(true, $document->getAttribute('boolean'));
         }
 
         $controlDocuments = $database->find($collection, [
@@ -5094,11 +5956,12 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 
     /**
-     * Test that DuplicateException messages differentiate between
+     * Test that duplicate exceptions differentiate between
      * document ID duplicates and unique index violations.
      */
     public function testDuplicateExceptionMessages(): void
@@ -5135,10 +5998,11 @@ trait DocumentTests
             ]));
             $this->fail('Expected DuplicateException for duplicate document ID');
         } catch (DuplicateException $e) {
+            $this->assertNotInstanceOf(UniqueException::class, $e);
             $this->assertStringContainsString('Document already exists', $e->getMessage());
         }
 
-        // Test 2: Unique index violation should mention "unique attributes"
+        // Test 2: Unique index violation should use UniqueException
         try {
             $database->createDocument('duplicateMessages', new Document([
                 '$id' => 'dup_msg_2',
@@ -5149,11 +6013,37 @@ trait DocumentTests
             ]));
             $this->fail('Expected DuplicateException for unique index violation');
         } catch (DuplicateException $e) {
-            $this->assertStringContainsString('unique attributes', $e->getMessage());
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('Unique index violation', $e->getMessage());
+        }
+
+        // Test 3: A conflicting value containing "_uid" must not be mistaken
+        // for a document identifier conflict
+        $database->createDocument('duplicateMessages', new Document([
+            '$id' => 'dup_msg_3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'email' => 'prefix_uid_suffix@example.com',
+        ]));
+
+        try {
+            $database->createDocument('duplicateMessages', new Document([
+                '$id' => 'dup_msg_4',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'email' => 'prefix_uid_suffix@example.com',
+            ]));
+            $this->fail('Expected DuplicateException for unique index violation');
+        } catch (DuplicateException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('Unique index violation', $e->getMessage());
         }
 
         $database->deleteCollection('duplicateMessages');
     }
+
     /**
      * @depends testUniqueIndexDuplicate
      */
@@ -5194,6 +6084,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 
@@ -5849,6 +6740,100 @@ trait DocumentTests
         $database->deleteCollection($collection);
     }
 
+    public function testDateTimeArrayDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'datetime_array_doc';
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'dates', Database::VAR_DATETIME, 0, false, null, false, true, null, [], ['datetime']));
+
+        $d1 = '2000-01-01T10:00:00.000+00:00';
+        $d2 = '2001-02-03T05:06:07.000+00:00';
+
+        $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'dates' => [$d1, $d2],
+        ]));
+
+        // Regression: reading a datetime (object) array used to throw in Mongo with
+        // "Cannot use object of type MongoDB\BSON\UTCDateTime as array" because the
+        // Document constructor tried to array-access non-array elements.
+        $doc = $database->getDocument($collection, 'doc1');
+        $dates = $doc->getAttribute('dates');
+        $this->assertIsArray($dates);
+        $this->assertCount(2, $dates);
+        $this->assertEquals($d1, $dates[0]);
+        $this->assertEquals($d2, $dates[1]);
+
+        // Same values must round-trip through find()
+        $found = $database->find($collection, [Query::equal('$id', ['doc1'])]);
+        $this->assertCount(1, $found);
+        $this->assertEquals([$d1, $d2], $found[0]->getAttribute('dates'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testInvalidCreatedAndUpdatedAtThrowStructureException(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collection = 'invalid_date_attributes';
+
+        $database->createCollection($collection);
+        $this->assertEquals(true, $database->createAttribute($collection, 'string', Database::VAR_STRING, 128, false));
+
+        $database->setPreserveDates(true);
+
+        try {
+            // Outside allowed year range (Structure uses DatetimeValidator min/max, e.g. 0000–9999).
+            $invalidDate = '10000-01-01T00:00:00.000+00:00';
+
+            try {
+                $database->createDocument($collection, new Document([
+                    '$id' => 'doc1',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    '$createdAt' => $invalidDate,
+                ]));
+                $this->fail('Expected StructureException for invalid $createdAt');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'doc2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'string' => 'x',
+            ]));
+
+            try {
+                $database->updateDocument($collection, 'doc2', new Document([
+                    '$updatedAt' => $invalidDate,
+                ]));
+                $this->fail('Expected StructureException for invalid $updatedAt');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+            }
+        } finally {
+            $database->setPreserveDates(false);
+            $database->deleteCollection($collection);
+        }
+    }
+
     public function testSingleDocumentDateOperations(): void
     {
         /** @var Database $database */
@@ -6011,6 +6996,8 @@ trait DocumentTests
         ]));
 
         $newUpdatedAt = $doc11->getUpdatedAt();
+
+        \usleep(2000); // Ensure $updatedAt differs when adapter timestamp precision is milliseconds
 
         $newDoc11 = new Document([
             'string' => 'no_dates_update',
@@ -6713,6 +7700,81 @@ trait DocumentTests
 
         // Cleanup
         $database->deleteCollection($collection);
+    }
+
+    /**
+     * SQL adapters store columns under filter(attributeId). After getDocument + decode, and after
+     * updateDocument (return value + refetch), the document must expose only schema ids (e.g.
+     * pb.e_DSS.FIRMWARE_VERSION), never the filtered alias.
+     */
+    public function testDottedAttributeKeyGetDocumentExposesOnlySchemaKeys(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // Keep id short: MySQL/MariaDB table names are limited to 64 characters (namespace + collection).
+        $collectionId = 'dotkey_' . ID::unique();
+        $attrId = 'pb.e_DSS.FIRMWARE_VERSION';
+        $filteredStorageKey = $database->getAdapter()->filter($attrId);
+
+        $database->createCollection($collectionId);
+        $this->assertTrue($database->createAttribute($collectionId, $attrId, Database::VAR_STRING, 128, false));
+
+        // Optional attribute omitted: DB column is NULL — decode must not leave the SQL column name as a key.
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'dev1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]));
+
+        $doc = $database->getDocument($collectionId, 'dev1');
+        $this->assertSame('dev1', $doc->getId());
+        $this->assertNull($doc->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $doc->getAttributes());
+        $userKeys = array_keys($doc->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $updated = $database->updateDocument($collectionId, 'dev1', new Document([
+            $attrId => '1.0.0',
+        ]));
+        $this->assertSame('1.0.0', $updated->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $updated->getAttributes());
+        $userKeys = array_keys($updated->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $doc = $database->getDocument($collectionId, 'dev1');
+        $this->assertSame('1.0.0', $doc->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $doc->getAttributes());
+        $userKeys = array_keys($doc->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $updated = $database->updateDocument($collectionId, 'dev1', new Document([
+            $attrId => '2.0.0',
+        ]));
+        $this->assertSame('2.0.0', $updated->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $updated->getAttributes());
+        $userKeys = array_keys($updated->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $doc = $database->getDocument($collectionId, 'dev1');
+        $this->assertSame('2.0.0', $doc->getAttribute($attrId));
+        $this->assertArrayNotHasKey($filteredStorageKey, $doc->getAttributes());
+        $userKeys = array_keys($doc->getAttributes());
+        sort($userKeys);
+        $this->assertSame([$attrId], $userKeys);
+
+        $database->deleteCollection($collectionId);
     }
 
     public function testUpsertWithJSONFilters(): void
@@ -7770,4 +8832,410 @@ trait DocumentTests
     //        }
     //        $database->deleteCollection($collectionName);
     //    }
+
+    public function testCreateDocumentsIgnoreDuplicates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+
+        // Insert initial documents
+        $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => 'doc1',
+                'name' => 'Original A',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            new Document([
+                '$id' => 'doc2',
+                'name' => 'Original B',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]);
+
+        // Without ignore, duplicates should throw
+        try {
+            $database->createDocuments(__FUNCTION__, [
+                new Document([
+                    '$id' => 'doc1',
+                    'name' => 'Duplicate A',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+            ]);
+            $this->fail('Expected DuplicateException');
+        } catch (DuplicateException $e) {
+            $this->assertNotEmpty($e->getMessage());
+        }
+
+        // With skipDuplicates, duplicates should be silently skipped
+        $emittedIds = [];
+        $collection = __FUNCTION__;
+        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+            return $database->createDocuments($collection, [
+                new Document([
+                    '$id' => 'doc1',
+                    'name' => 'Duplicate A',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+                new Document([
+                    '$id' => 'doc3',
+                    'name' => 'New C',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+            ], onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
+
+        $this->assertSame(2, $count);
+        $this->assertCount(2, $emittedIds);
+        \sort($emittedIds);
+        $this->assertSame(['doc1', 'doc3'], $emittedIds);
+
+        $doc1 = $database->getDocument(__FUNCTION__, 'doc1');
+        $this->assertSame('Original A', $doc1->getAttribute('name'));
+
+        $doc3 = $database->getDocument(__FUNCTION__, 'doc3');
+        $this->assertSame('New C', $doc3->getAttribute('name'));
+
+        // Total should be 3 (doc1, doc2, doc3)
+        $all = $database->find(__FUNCTION__);
+        $this->assertCount(3, $all);
+    }
+
+    public function testCreateDocumentsIgnoreAllDuplicates(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 128, true);
+
+        // Insert initial document
+        $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => 'existing',
+                'name' => 'Original',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+        ]);
+
+        // With skipDuplicates, inserting only duplicates should succeed with no new rows
+        $emittedIds = [];
+        $collection = __FUNCTION__;
+        $count = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds) {
+            return $database->createDocuments($collection, [
+                new Document([
+                    '$id' => 'existing',
+                    'name' => 'Duplicate',
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::create(Role::any()),
+                    ],
+                ]),
+            ], onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
+
+        $this->assertSame(1, $count);
+        $this->assertSame(['existing'], $emittedIds);
+
+        $doc = $database->getDocument(__FUNCTION__, 'existing');
+        $this->assertSame('Original', $doc->getAttribute('name'));
+
+        // Still only 1 document
+        $all = $database->find(__FUNCTION__);
+        $this->assertCount(1, $all);
+    }
+
+    public function testCreateDocumentsSkipDuplicatesEmptyBatch(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupEmpty';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
+
+        $count = $database->skipDuplicates(fn () => $database->createDocuments($collection, []));
+
+        $this->assertSame(0, $count);
+        $this->assertCount(0, $database->find($collection));
+    }
+
+    public function testCreateDocumentsSkipDuplicatesNestedScope(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupNested';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
+
+        $makeDoc = fn (string $id, string $name) => new Document([
+            '$id' => $id,
+            'name' => $name,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ],
+        ]);
+
+        // Seed an existing doc
+        $database->createDocuments($collection, [$makeDoc('seed', 'Seed')]);
+
+        // Nested scope — inner scope runs inside outer scope.
+        // After inner exits, outer state should still be "skip enabled".
+        // After outer exits, state should restore to "skip disabled".
+        $countOuter = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+            // Inner scope: add dup + new
+            $countInner = $database->skipDuplicates(function () use ($database, $collection, $makeDoc) {
+                return $database->createDocuments($collection, [
+                    $makeDoc('seed', 'Dup'),
+                    $makeDoc('innerNew', 'InnerNew'),
+                ]);
+            });
+            $this->assertSame(2, $countInner);
+
+            // Still inside outer scope — skip flag should still be on
+            return $database->createDocuments($collection, [
+                $makeDoc('seed', 'Dup2'),
+                $makeDoc('outerNew', 'OuterNew'),
+            ]);
+        });
+        $this->assertSame(2, $countOuter);
+
+        // After both scopes exit, skip flag is off again — a plain createDocuments
+        // call with a duplicate should throw.
+        $thrown = null;
+        try {
+            $database->createDocuments($collection, [$makeDoc('seed', 'ShouldThrow')]);
+        } catch (DuplicateException $e) {
+            $thrown = $e;
+        }
+        $this->assertNotNull($thrown, 'Plain createDocuments after nested scopes should throw on duplicate');
+
+        // Final state: seed + innerNew + outerNew
+        $all = $database->find($collection);
+        $ids = \array_map(fn (Document $d) => $d->getId(), $all);
+        \sort($ids);
+        $this->assertSame(['innerNew', 'outerNew', 'seed'], $ids);
+    }
+
+    public function testCreateDocumentsSkipDuplicatesLargeBatch(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupLarge';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'idx', Database::VAR_INTEGER, 0, true);
+
+        // Seed 50 docs
+        $seed = [];
+        for ($i = 0; $i < 50; $i++) {
+            $seed[] = new Document([
+                '$id' => 'doc_' . $i,
+                'idx' => $i,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]);
+        }
+        $database->createDocuments($collection, $seed);
+
+        // Now call skipDuplicates with 300 docs: 50 existing (0-49) + 250 new (50-299).
+        // 300 > default INSERT_BATCH_SIZE, so this exercises the chunk loop.
+        $batch = [];
+        for ($i = 0; $i < 300; $i++) {
+            $batch[] = new Document([
+                '$id' => 'doc_' . $i,
+                'idx' => $i + 1000, // different value so we can detect if existing got overwritten
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]);
+        }
+
+        $emittedIds = [];
+        $count = $database->skipDuplicates(function () use ($database, $collection, $batch, &$emittedIds) {
+            return $database->createDocuments($collection, $batch, onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
+
+        $this->assertSame(300, $count);
+        $this->assertCount(300, $emittedIds);
+
+        $seedDoc = $database->getDocument($collection, 'doc_25');
+        $this->assertSame(25, $seedDoc->getAttribute('idx'));
+
+        $newDoc = $database->getDocument($collection, 'doc_100');
+        $this->assertSame(1100, $newDoc->getAttribute('idx'));
+
+        $total = $database->count($collection);
+        $this->assertSame(300, $total);
+    }
+
+    public function testCreateDocumentsSkipDuplicatesSecondCallSkipsAll(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = 'skipDupSecond';
+        $database->createCollection($collection);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 128, true);
+
+        $makeBatch = fn (string $name) => \array_map(
+            fn (string $id) => new Document([
+                '$id' => $id,
+                'name' => $name,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ],
+            ]),
+            ['a', 'b', 'c']
+        );
+
+        // First call — all new
+        $firstCount = $database->skipDuplicates(
+            fn () => $database->createDocuments($collection, $makeBatch('First'))
+        );
+        $this->assertSame(3, $firstCount);
+
+        $emittedIds = [];
+        $secondCount = $database->skipDuplicates(function () use ($database, $collection, $makeBatch, &$emittedIds) {
+            return $database->createDocuments($collection, $makeBatch('Second'), onNext: function (Document $doc) use (&$emittedIds) {
+                $emittedIds[] = $doc->getId();
+            });
+        });
+        $this->assertSame(3, $secondCount);
+        \sort($emittedIds);
+        $this->assertSame(['a', 'b', 'c'], $emittedIds);
+
+        // All three should retain the First values
+        foreach (['a', 'b', 'c'] as $id) {
+            $doc = $database->getDocument($collection, $id);
+            $this->assertSame('First', $doc->getAttribute('name'), "Doc {$id} should not have been overwritten");
+        }
+    }
+
+    public function testCreateDocumentsSkipDuplicatesRelationships(): void
+    {
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parent = 'skipDupParent';
+        $child = 'skipDupChild';
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection($parent);
+        $database->createCollection($child);
+        $database->createAttribute($parent, 'name', Database::VAR_STRING, 128, true);
+        $database->createAttribute($child, 'name', Database::VAR_STRING, 128, true);
+        $database->createRelationship(
+            collection: $parent,
+            relatedCollection: $child,
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children',
+        );
+
+        $database->createDocument($parent, new Document([
+            '$id' => 'existingParent',
+            'name' => 'ExistingParent',
+            '$permissions' => $permissions,
+            'children' => [
+                new Document([
+                    '$id' => 'existingChild',
+                    'name' => 'ExistingChild',
+                    '$permissions' => $permissions,
+                ]),
+            ],
+        ]));
+
+        $batch = [
+            new Document([
+                '$id' => 'existingParent',
+                'name' => 'ShouldNotOverwrite',
+                '$permissions' => $permissions,
+                'children' => [
+                    new Document([
+                        '$id' => 'existingChild',
+                        'name' => 'ExistingChild',
+                        '$permissions' => $permissions,
+                    ]),
+                    new Document([
+                        '$id' => 'retryChild',
+                        'name' => 'RetryChild',
+                        '$permissions' => $permissions,
+                    ]),
+                ],
+            ]),
+            new Document([
+                '$id' => 'newParent',
+                'name' => 'NewParent',
+                '$permissions' => $permissions,
+                'children' => [
+                    new Document([
+                        '$id' => 'newChild',
+                        'name' => 'NewChild',
+                        '$permissions' => $permissions,
+                    ]),
+                ],
+            ]),
+        ];
+
+        $database->skipDuplicates(fn () => $database->createDocuments($parent, $batch));
+
+        $existing = $database->getDocument($parent, 'existingParent');
+        $this->assertFalse($existing->isEmpty());
+        $this->assertSame('ExistingParent', $existing->getAttribute('name'));
+
+        $existingChildren = $existing->getAttribute('children', []);
+        $childIds = \array_map(fn (Document $d) => $d->getId(), $existingChildren);
+        \sort($childIds);
+        $this->assertSame(['existingChild', 'retryChild'], $childIds);
+
+        $new = $database->getDocument($parent, 'newParent');
+        $this->assertFalse($new->isEmpty());
+        $this->assertSame('NewParent', $new->getAttribute('name'));
+        $newChildren = $new->getAttribute('children', []);
+        $this->assertCount(1, $newChildren);
+        $this->assertSame('newChild', $newChildren[0]->getId());
+
+        $allChildren = $database->find($child);
+        $allChildIds = \array_map(fn (Document $d) => $d->getId(), $allChildren);
+        \sort($allChildIds);
+        $this->assertSame(['existingChild', 'newChild', 'retryChild'], $allChildIds);
+    }
+
 }

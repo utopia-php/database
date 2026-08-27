@@ -1477,6 +1477,53 @@ trait SpatialTests
         }
     }
 
+    public function testSpatialIsNullIsNotNull(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (!$database->getAdapter()->getSupportForSpatialAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'spatial_null_checks';
+        try {
+            $database->createCollection($collectionName);
+
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 255, true));
+            // Optional spatial attribute: some documents legitimately have no location set.
+            $this->assertEquals(true, $database->createAttribute($collectionName, 'location', Database::VAR_POINT, 0, false));
+
+            $database->createDocument($collectionName, new Document([
+                '$id' => 'withLocation',
+                'name' => 'Has a location',
+                'location' => [40.7829, -73.9654],
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+
+            $database->createDocument($collectionName, new Document([
+                '$id' => 'withoutLocation',
+                'name' => 'No location set',
+                'location' => null,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+
+            $withLocation = $database->find($collectionName, [
+                Query::isNotNull('location'),
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $withLocation);
+            $this->assertEquals('withLocation', $withLocation[0]->getId());
+
+            $withoutLocation = $database->find($collectionName, [
+                Query::isNull('location'),
+            ], Database::PERMISSION_READ);
+            $this->assertCount(1, $withoutLocation);
+            $this->assertEquals('withoutLocation', $withoutLocation[0]->getId());
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
     public function testSpatialBulkOperation(): void
     {
         /** @var Database $database */

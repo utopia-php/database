@@ -123,7 +123,7 @@ class Mirror extends Database
         return $this;
     }
 
-    public function setTenant(?int $tenant): static
+    public function setTenant(int|string|null $tenant): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
 
@@ -601,13 +601,11 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
-        $modified = $this->source->createDocuments(
-            $collection,
-            $documents,
-            $batchSize,
-            $onNext,
-            $onError,
-        );
+        $modified = $this->skipDuplicates
+            ? $this->source->skipDuplicates(
+                fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
+            )
+            : $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -621,12 +619,14 @@ class Mirror extends Database
             return $modified;
         }
 
+        // Forward every input to destination. "upgraded" status means the schema
+        // is mirrored, not that every row is backfilled, so a row that is a
+        // duplicate on source may not yet exist on destination. In skipDuplicates
+        // mode the destination runs its own INSERT IGNORE and decides per-row.
         try {
             $clones = [];
-
             foreach ($documents as $document) {
                 $clone = clone $document;
-
                 foreach ($this->writeFilters as $filter) {
                     $clone = $filter->beforeCreateDocument(
                         source: $this->source,
@@ -635,18 +635,25 @@ class Mirror extends Database
                         document: $clone,
                     );
                 }
-
                 $clones[] = $clone;
             }
 
-            $this->destination->withPreserveDates(
-                fn () =>
-                $this->destination->createDocuments(
-                    $collection,
-                    $clones,
-                    $batchSize,
-                )
-            );
+            if ($this->skipDuplicates) {
+                $this->destination->skipDuplicates(
+                    fn () => $this->destination->withPreserveDates(
+                        fn () => $this->destination->createDocuments($collection, $clones, $batchSize)
+                    )
+                );
+            } else {
+                $this->destination->withPreserveDates(
+                    fn () =>
+                    $this->destination->createDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                );
+            }
 
             foreach ($clones as $clone) {
                 foreach ($this->writeFilters as $filter) {

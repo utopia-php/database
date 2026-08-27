@@ -4,7 +4,6 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
-use Swoole\Database\PDOStatementProxy;
 use Utopia\Database\Adapter;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -15,18 +14,15 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 abstract class SQL extends Adapter
 {
-    protected mixed $pdo;
+    protected const VECTOR_DISTANCE_COLUMN = '_distance';
 
-    /**
-     * Maximum array size for array operations to prevent memory exhaustion.
-     * Large arrays in JSON_TABLE operations can cause significant memory usage.
-     */
-    protected const MAX_ARRAY_OPERATOR_SIZE = 10000;
+    protected mixed $pdo;
 
     /**
      * Controls how many fractional digits are used when binding float parameters.
@@ -50,6 +46,18 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Build conditions threading `$name` to per-query builders so adapter
+     * overrides (SQLite FTS5 routing) can resolve auxiliary tables.
+     *
+     * @param array<Query> $queries
+     * @param array<string,mixed> $binds
+     */
+    protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
+    {
+        return $this->getSQLConditions($queries, $binds, $separator, $name);
+    }
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -68,11 +76,18 @@ abstract class SQL extends Adapter
     {
         try {
             if ($this->inTransaction === 0) {
-                if ($this->getPDO()->inTransaction()) {
-                    $this->getPDO()->rollBack();
-                } else {
-                    // If no active transaction, this has no effect.
-                    $this->getPDO()->prepare('ROLLBACK')->execute();
+                try {
+                    if ($this->getPDO()->inTransaction()) {
+                        $this->getPDO()->rollBack();
+                    } else {
+                        // If no active transaction, this has no effect.
+                        $this->getPDO()->prepare('ROLLBACK')->execute();
+                    }
+                } catch (PDOException) {
+                    // A pooled connection can report a transaction it no longer
+                    // holds after a reconnect (e.g. Swoole PDOProxy keeps its own
+                    // counter), making this cleanup rollback throw. It is best
+                    // effort; swallow it and begin a fresh transaction below.
                 }
 
                 $this->getPDO()->beginTransaction();
@@ -382,17 +397,38 @@ abstract class SQL extends Adapter
             $sql .= " {$forUpdate}";
         }
 
-        $stmt = $this->getPDO()->prepare($sql);
+        $sql = $this->trigger(Database::EVENT_DOCUMENT_READ, $sql);
 
-        $stmt->bindValue(':_uid', $id);
+        $stmt = null;
+        $document = [];
+        $exception = null;
 
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->getTenant());
+        try {
+            $stmt = $this->getPDO()->prepare($sql);
+
+            $stmt->bindValue(':_uid', $id);
+
+            if ($this->sharedTables) {
+                $stmt->bindValue(':_tenant', $this->getTenant());
+            }
+
+            $this->execute($stmt);
+            $document = $stmt->fetchAll();
+        } catch (PDOException $e) {
+            $exception = $e;
+        } finally {
+            if ($stmt !== null) {
+                try {
+                    $stmt->closeCursor();
+                } catch (PDOException $e) {
+                    $exception ??= $e;
+                }
+            }
         }
 
-        $stmt->execute();
-        $document = $stmt->fetchAll();
-        $stmt->closeCursor();
+        if ($exception !== null) {
+            throw $this->processException($exception);
+        }
 
         if (empty($document)) {
             return new Document([]);
@@ -419,6 +455,10 @@ abstract class SQL extends Adapter
         if (\array_key_exists('_updatedAt', $document)) {
             $document['$updatedAt'] = $document['_updatedAt'];
             unset($document['_updatedAt']);
+        }
+        if (\array_key_exists('_deletedAt', $document)) {
+            $document['$deletedAt'] = $document['_deletedAt'];
+            unset($document['_deletedAt']);
         }
         if (\array_key_exists('_permissions', $document)) {
             $document['$permissions'] = json_decode($document['_permissions'] ?? '[]', true);
@@ -489,23 +529,15 @@ abstract class SQL extends Adapter
         }
 
         $keyIndex = 0;
-        $opIndex = 0;
+        $operatorBinds = [];
         $columns = '';
-        $operators = [];
-
-        // Separate regular attributes from operators
-        foreach ($attributes as $attribute => $value) {
-            if (Operator::isOperator($value)) {
-                $operators[$attribute] = $value;
-            }
-        }
 
         foreach ($attributes as $attribute => $value) {
             $column = $this->filter($attribute);
 
             // Check if this is an operator, spatial attribute, or regular attribute
-            if (isset($operators[$attribute])) {
-                $columns .= $this->getOperatorSQL($column, $operators[$attribute], $opIndex);
+            if (Operator::isOperator($value)) {
+                $columns .= $this->getOperatorSQL($column, $value, $operatorBinds);
             } elseif (\in_array($attribute, $spatialAttributes)) {
                 $columns .= "{$this->quote($column)} = " . $this->getSpatialGeomFromText(":key_{$keyIndex}");
                 $keyIndex++;
@@ -548,11 +580,9 @@ abstract class SQL extends Adapter
         }
 
         $keyIndex = 0;
-        $opIndexForBinding = 0;
         foreach ($attributes as $attributeName => $value) {
             // Skip operators as they don't need value binding
-            if (isset($operators[$attributeName])) {
-                $this->bindOperatorParams($stmt, $operators[$attributeName], $opIndexForBinding);
+            if (Operator::isOperator($value)) {
                 continue;
             }
 
@@ -571,6 +601,10 @@ abstract class SQL extends Adapter
             }
             $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
             $keyIndex++;
+        }
+
+        foreach ($operatorBinds as $bindKey => $bindValue) {
+            $stmt->bindValue($bindKey, $bindValue, $this->getPDOType($bindValue));
         }
 
         try {
@@ -897,6 +931,16 @@ abstract class SQL extends Adapter
     }
 
     /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
+    }
+
+    /**
      * Get maximum column limit.
      * https://mariadb.com/kb/en/innodb-limitations/#limitations-on-schema
      * Can be inherited by MySQL since we utilize the InnoDB engine
@@ -1019,6 +1063,11 @@ abstract class SQL extends Adapter
         return true;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        return true;
+    }
+
     /**
      * Is hostname supported?
      *
@@ -1027,6 +1076,33 @@ abstract class SQL extends Adapter
     public function getSupportForHostname(): bool
     {
         return true;
+    }
+
+    /**
+     * Returns the INSERT keyword, optionally with IGNORE for duplicate handling.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertKeyword(): string
+    {
+        return $this->skipDuplicates ? 'INSERT IGNORE INTO' : 'INSERT INTO';
+    }
+
+    /**
+     * Returns a suffix appended after VALUES clause for duplicate handling.
+     * Override in adapter subclasses (e.g., Postgres uses ON CONFLICT DO NOTHING).
+     */
+    protected function getInsertSuffix(string $table): string
+    {
+        return '';
+    }
+
+    /**
+     * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
+     * Override in adapter subclasses for DB-specific syntax.
+     */
+    protected function getInsertPermissionsSuffix(): string
+    {
+        return '';
     }
 
     /**
@@ -1162,6 +1238,10 @@ abstract class SQL extends Adapter
                     } else {
                         $total += 4; // INT 4 bytes
                     }
+                    break;
+
+                case Database::VAR_BIGINT:
+                    $total += 8; //  BIGINT 8 bytes
                     break;
 
                 case Database::VAR_FLOAT:
@@ -1732,16 +1812,31 @@ abstract class SQL extends Adapter
     ): mixed;
 
     /**
-     * Get vector distance calculation for ORDER BY clause
+     * Get the SQL expression measuring distance between a vector attribute and the query vector
      *
      * @param Query $query
      * @param array<string, mixed> $binds
      * @param string $alias
      * @return string|null
      */
-    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
+    protected function getSQLVectorDistance(Query $query, array &$binds, string $alias): ?string
     {
         return null;
+    }
+
+    /**
+     * Render a vector distance expression in a form safe to read back into PHP
+     *
+     * A distance is undefined for a zero vector and can overflow for a large one, so the
+     * expression can evaluate to NaN or infinity. Those cannot survive the trip into a PHP
+     * float, so the value is carried as text and interpreted during hydration.
+     *
+     * @param string $distance
+     * @return string
+     */
+    protected function getSQLReadableDistance(string $distance): string
+    {
+        return $distance;
     }
 
     /**
@@ -1903,180 +1998,24 @@ abstract class SQL extends Adapter
      *
      * @param string $column
      * @param Operator $operator
-     * @param int &$bindIndex
+     * @param array<string, mixed> $binds
      * @return string|null Returns null if operator can't be expressed in SQL
      */
-    abstract protected function getOperatorSQL(string $column, Operator $operator, int &$bindIndex): ?string;
+    abstract protected function getOperatorSQL(string $column, Operator $operator, array &$binds): ?string;
 
     /**
-     * Bind operator parameters to prepared statement
+     * Register an operator bind value and return its placeholder name (without leading colon).
+     * Lets getOperatorSQL() capture a parameter's value as it emits the placeholder, so SQL and
+     * binds can never drift out of sync. The placeholder is unique by construction (ID::unique()),
+     * so no shared counter needs to be threaded between callers.
      *
-     * @param \PDOStatement|PDOStatementProxy $stmt
-     * @param \Utopia\Database\Operator $operator
-     * @param int &$bindIndex
-     * @return void
+     * @param array<string, mixed> $binds
      */
-    protected function bindOperatorParams(\PDOStatement|PDOStatementProxy $stmt, Operator $operator, int &$bindIndex): void
+    protected function registerOperatorBind(array &$binds, mixed $value): string
     {
-        $method = $operator->getMethod();
-        $values = $operator->getValues();
-
-        switch ($method) {
-            // Numeric operators with optional limits
-            case Operator::TYPE_INCREMENT:
-            case Operator::TYPE_DECREMENT:
-            case Operator::TYPE_MULTIPLY:
-            case Operator::TYPE_DIVIDE:
-                $value = $values[0] ?? 1;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $bindIndex++;
-
-                // Bind limit if provided
-                if (isset($values[1])) {
-                    $limitKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':' . $limitKey, $values[1], $this->getPDOType($values[1]));
-                    $bindIndex++;
-                }
-                break;
-
-            case Operator::TYPE_MODULO:
-                $value = $values[0] ?? 1;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_POWER:
-                $value = $values[0] ?? 1;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, $this->getPDOType($value));
-                $bindIndex++;
-
-                // Bind max limit if provided
-                if (isset($values[1])) {
-                    $maxKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':' . $maxKey, $values[1], $this->getPDOType($values[1]));
-                    $bindIndex++;
-                }
-                break;
-
-                // String operators
-            case Operator::TYPE_STRING_CONCAT:
-                $value = $values[0] ?? '';
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $value, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_STRING_REPLACE:
-                $search = $values[0] ?? '';
-                $replace = $values[1] ?? '';
-                $searchKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $searchKey, $search, \PDO::PARAM_STR);
-                $bindIndex++;
-                $replaceKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $replaceKey, $replace, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-                // Boolean operators
-            case Operator::TYPE_TOGGLE:
-                // No parameters to bind
-                break;
-
-                // Date operators
-            case Operator::TYPE_DATE_ADD_DAYS:
-            case Operator::TYPE_DATE_SUB_DAYS:
-                $days = $values[0] ?? 0;
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $days, \PDO::PARAM_INT);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_DATE_SET_NOW:
-                // No parameters to bind
-                break;
-
-                // Array operators
-            case Operator::TYPE_ARRAY_APPEND:
-            case Operator::TYPE_ARRAY_PREPEND:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
-
-                // Bind JSON array
-                $arrayValue = json_encode($values);
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_REMOVE:
-                $value = $values[0] ?? null;
-                $bindKey = "op_{$bindIndex}";
-                if (is_array($value)) {
-                    $value = json_encode($value);
-                }
-                $stmt->bindValue(':' . $bindKey, $value, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_UNIQUE:
-                // No parameters to bind
-                break;
-
-                // Complex array operators
-            case Operator::TYPE_ARRAY_INSERT:
-                $index = $values[0] ?? 0;
-                $value = $values[1] ?? null;
-                $indexKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $indexKey, $index, \PDO::PARAM_INT);
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $valueKey, json_encode($value), \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_INTERSECT:
-            case Operator::TYPE_ARRAY_DIFF:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
-                if (\count($values) > self::MAX_ARRAY_OPERATOR_SIZE) {
-                    throw new DatabaseException("Array size " . \count($values) . " exceeds maximum allowed size of " . self::MAX_ARRAY_OPERATOR_SIZE . " for array operations");
-                }
-
-                $arrayValue = json_encode($values);
-                $bindKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $bindKey, $arrayValue, \PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case Operator::TYPE_ARRAY_FILTER:
-                $condition = $values[0] ?? 'equal';
-                $value = $values[1] ?? null;
-
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull'  // Null checks
-                ];
-                if (!in_array($condition, $validConditions, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: " . implode(', ', $validConditions));
-                }
-
-                $conditionKey = "op_{$bindIndex}";
-                $stmt->bindValue(':' . $conditionKey, $condition, \PDO::PARAM_STR);
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                if ($value !== null) {
-                    $stmt->bindValue(':' . $valueKey, json_encode($value), \PDO::PARAM_STR);
-                } else {
-                    $stmt->bindValue(':' . $valueKey, null, \PDO::PARAM_NULL);
-                }
-                $bindIndex++;
-                break;
-        }
+        $key = ID::unique();
+        $binds[":{$key}"] = $value;
+        return $key;
     }
 
     /**
@@ -2178,8 +2117,18 @@ abstract class SQL extends Adapter
     /**
      * Returns the current PDO object
      * @return mixed
+     * @deprecated Use getDriver() instead
      */
     protected function getPDO(): mixed
+    {
+        return $this->pdo;
+    }
+
+    /**
+     * Returns the current PDO object
+     * @return mixed
+     */
+    public function getDriver(): mixed
     {
         return $this->pdo;
     }
@@ -2270,19 +2219,21 @@ abstract class SQL extends Adapter
     /**
      * @param Query $query
      * @param array<string, mixed> $binds
+     * @param ?string $forCollection Filtered collection id (for FTS5 routing).
      * @return string
      * @throws Exception
      */
-    abstract protected function getSQLCondition(Query $query, array &$binds): string;
+    abstract protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string;
 
     /**
      * @param array<Query> $queries
      * @param array<string, mixed> $binds
      * @param string $separator
+     * @param ?string $forCollection See {@see getSQLCondition}.
      * @return string
      * @throws Exception
      */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND'): string
+    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null): string
     {
         $conditions = [];
         foreach ($queries as $query) {
@@ -2291,9 +2242,9 @@ abstract class SQL extends Adapter
             }
 
             if ($query->isNested()) {
-                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod());
+                $conditions[] = $this->getSQLConditions($query->getValues(), $binds, $query->getMethod(), $forCollection);
             } else {
-                $conditions[] = $this->getSQLCondition($query, $binds);
+                $conditions[] = $this->getSQLCondition($query, $binds, $forCollection);
             }
         }
 
@@ -2325,6 +2276,16 @@ abstract class SQL extends Adapter
     public function getSchemaAttributes(string $collection): array
     {
         return [];
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
     }
 
     public function getTenantQuery(
@@ -2384,10 +2345,16 @@ abstract class SQL extends Adapter
             '$updatedAt',
         ];
 
-        $selections = \array_diff($selections, [...$internalKeys, '$collection']);
+        $hasDeletedAt = \in_array('$deletedAt', $selections);
+
+        $selections = \array_diff($selections, [...$internalKeys, '$deletedAt', '$collection']);
 
         foreach ($internalKeys as $internalKey) {
             $selections[] = $this->getInternalKeyForAttribute($internalKey);
+        }
+
+        if ($hasDeletedAt) {
+            $selections[] = $this->getInternalKeyForAttribute('$deletedAt');
         }
 
         $projections = [];
@@ -2409,6 +2376,7 @@ abstract class SQL extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
             default => $attribute
         };
@@ -2455,6 +2423,7 @@ abstract class SQL extends Adapter
         if (empty($documents)) {
             return $documents;
         }
+
         $spatialAttributes = $this->getSpatialAttributes($collection);
         $collection = $collection->getId();
         try {
@@ -2552,8 +2521,9 @@ abstract class SQL extends Adapter
             $batchKeys = \implode(', ', $batchKeys);
 
             $stmt = $this->getPDO()->prepare("
-                INSERT INTO {$this->getSQLTable($name)} {$columns}
+                {$this->getInsertKeyword()} {$this->getSQLTable($name)} {$columns}
                 VALUES {$batchKeys}
+                {$this->getInsertSuffix($name)}
             ");
 
             foreach ($bindValues as $key => $value) {
@@ -2567,8 +2537,9 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
-                    VALUES {$permissions};
+                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    VALUES {$permissions}
+                    {$this->getInsertPermissionsSuffix()}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
@@ -3093,7 +3064,7 @@ abstract class SQL extends Adapter
             $where[] = '(' . implode(' OR ', $cursorWhere) . ')';
         }
 
-        $conditions = $this->getSQLConditions($queries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $queries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3109,18 +3080,17 @@ abstract class SQL extends Adapter
 
         $sqlWhere = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
-        // Add vector distance calculations to ORDER BY
-        $vectorOrders = [];
+        $vectorDistances = [];
         foreach ($vectorQueries as $query) {
-            $vectorOrder = $this->getVectorDistanceOrder($query, $binds, $alias);
-            if ($vectorOrder) {
-                $vectorOrders[] = $vectorOrder;
+            $vectorDistance = $this->getSQLVectorDistance($query, $binds, $alias);
+            if ($vectorDistance) {
+                $vectorDistances[] = $vectorDistance;
             }
         }
 
-        if (!empty($vectorOrders)) {
+        if (!empty($vectorDistances)) {
             // Vector orders should come first for similarity search
-            $orders = \array_merge($vectorOrders, $orders);
+            $orders = \array_merge($vectorDistances, $orders);
         }
 
         $sqlOrder = !empty($orders) ? 'ORDER BY ' . implode(', ', $orders) : '';
@@ -3138,8 +3108,15 @@ abstract class SQL extends Adapter
 
         $selections = $this->getAttributeSelections($queries);
 
+        $projection = $this->getAttributeProjection($selections, $alias);
+
+        if (!empty($vectorDistances)) {
+            $readable = $this->getSQLReadableDistance($vectorDistances[0]);
+            $projection .= ", {$readable} AS {$this->quote(static::VECTOR_DISTANCE_COLUMN)}";
+        }
+
         $sql = "
-            SELECT {$this->getAttributeProjection($selections, $alias)}
+            SELECT {$projection}
             FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
             {$sqlWhere}
             {$sqlOrder}
@@ -3192,6 +3169,11 @@ abstract class SQL extends Adapter
                 $results[$index]['$permissions'] = \json_decode($document['_permissions'] ?? '[]', true);
                 unset($results[$index]['_permissions']);
             }
+            if (\array_key_exists(static::VECTOR_DISTANCE_COLUMN, $document)) {
+                $value = $document[static::VECTOR_DISTANCE_COLUMN];
+                $results[$index][Database::VECTOR_DISTANCE] = \is_numeric($value) ? (float)$value : null;
+                unset($results[$index][static::VECTOR_DISTANCE_COLUMN]);
+            }
 
             $results[$index] = new Document($results[$index]);
         }
@@ -3237,7 +3219,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3255,7 +3237,14 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        $sql = "
+        if (empty($limit)) {
+            $sql = "
+            SELECT COUNT(1) as sum
+			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			{$sqlWhere}
+        ";
+        } else {
+            $sql = "
 			SELECT COUNT(1) as sum FROM (
 				SELECT 1
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
@@ -3263,6 +3252,7 @@ abstract class SQL extends Adapter
                 {$limit}
 			) table_count
         ";
+        }
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_COUNT, $sql);
 
@@ -3323,7 +3313,7 @@ abstract class SQL extends Adapter
             }
         }
 
-        $conditions = $this->getSQLConditions($otherQueries, $binds);
+        $conditions = $this->getSQLConditionsForCollection($name, $otherQueries, $binds);
         if (!empty($conditions)) {
             $where[] = $conditions;
         }
@@ -3341,7 +3331,14 @@ abstract class SQL extends Adapter
             ? 'WHERE ' . \implode(' AND ', $where)
             : '';
 
-        $sql = "
+        if (empty($limit)) {
+            $sql = "
+			SELECT SUM({$this->quote($attribute)}) as sum
+			FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
+			{$sqlWhere}
+        ";
+        } else {
+            $sql = "
 			SELECT SUM({$this->quote($attribute)}) as sum FROM (
 				SELECT {$this->quote($attribute)}
 				FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}
@@ -3349,6 +3346,8 @@ abstract class SQL extends Adapter
 				{$limit}
 			) table_count
         ";
+        }
+
 
         $sql = $this->trigger(Database::EVENT_DOCUMENT_SUM, $sql);
 

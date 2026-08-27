@@ -6,7 +6,7 @@ use Exception;
 use Swoole\Coroutine;
 use Throwable;
 use Utopia\Cache\Cache;
-use Utopia\CLI\Console;
+use Utopia\Console;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
@@ -28,6 +28,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Attribute as AttributeValidator;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
+use Utopia\Database\Validator\BigInt as BigIntValidator;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
 use Utopia\Database\Validator\PartialStructure;
@@ -42,6 +43,7 @@ class Database
     // Simple Types
     public const VAR_STRING = 'string';
     public const VAR_INTEGER = 'integer';
+    public const VAR_BIGINT = 'bigint';
     public const VAR_FLOAT = 'double';
     public const VAR_BOOLEAN = 'boolean';
     public const VAR_DATETIME = 'datetime';
@@ -60,6 +62,9 @@ class Database
 
     // Vector types
     public const VAR_VECTOR = 'vector';
+
+    // Vector query result key
+    public const VECTOR_DISTANCE = '$distance';
 
     // Relationship Types
     public const VAR_RELATIONSHIP = 'relationship';
@@ -112,6 +117,11 @@ class Database
     public const MAX_VECTOR_DIMENSIONS = 16000;
     public const MAX_ARRAY_INDEX_LENGTH = 255;
     public const MAX_UID_DEFAULT_LENGTH = 36;
+
+    // Maximum byte capacity for TEXT
+    public const MAX_TEXT_BYTES = 65535;
+    public const MAX_MEDIUMTEXT_BYTES = 16777215;
+    public const MAX_LONGTEXT_BYTES = 4294967295;
 
     // Min limits
     public const MIN_INT = -2147483648;
@@ -171,6 +181,9 @@ class Database
 
     // Cache
     public const TTL = 60 * 60 * 24; // 24 hours
+
+    // Cache "Not Found" results
+    private const CACHE_EMPTY_MARKER = '$empty';
 
     // Events
     public const EVENT_ALL = '*';
@@ -251,8 +264,7 @@ class Database
         ],
         [
             '$id' => '$tenant',
-            'type' => self::VAR_INTEGER,
-            //'type' => self::VAR_ID, // Inconsistency with other VAR_ID since this is an INT
+            'type' => self::VAR_ID,
             'size' => 0,
             'required' => false,
             'default' => null,
@@ -372,12 +384,12 @@ class Database
     protected string $cacheName = 'default';
 
     /**
-     * @var array<string, array{encode: callable, decode: callable}>
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected static array $filters = [];
 
     /**
-     * @var array<string, array{encode: callable, decode: callable}>
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
 
@@ -417,6 +429,8 @@ class Database
     protected bool $validate = true;
 
     protected bool $preserveDates = false;
+
+    protected bool $skipDuplicates = false;
 
     protected bool $preserveSequence = false;
 
@@ -471,6 +485,10 @@ class Database
     ) {
         $this->adapter = $adapter;
         $this->cache = $cache;
+        foreach ($filters as $name => $callbacks) {
+            $filters[$name]['signature'] = self::computeCallableSignature($callbacks['encode'])
+                . ':' . self::computeCallableSignature($callbacks['decode']);
+        }
         $this->instanceFilters = $filters;
 
         $this->setAuthorization(new Authorization());
@@ -651,7 +669,7 @@ class Database
             },
             /**
              * @param string|null $value
-             * @return array|null
+             * @return mixed
              */
             function (?string $value) {
                 if (is_null($value)) {
@@ -672,7 +690,7 @@ class Database
              * @return mixed
              */
             function (mixed $value) {
-                if (!\is_array($value)) {
+                if (!\is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
 
@@ -690,10 +708,58 @@ class Database
                 if (!is_string($value)) {
                     return $value;
                 }
-                $decoded = json_decode($value, true);
-                return is_array($decoded) ? $decoded : $value;
+                $decoded = self::decodeObject($value);
+
+                return is_array($decoded) || $decoded instanceof \stdClass ? $decoded : $value;
             }
         );
+    }
+
+    private static function decodeObject(string $value): mixed
+    {
+        if (preg_match('/\{\s*\}/', $value) === 0) {
+            return json_decode($value, true);
+        }
+
+        return self::toAssociative(json_decode($value));
+    }
+
+    private static function toAssociative(mixed $value): mixed
+    {
+        if ($value instanceof \stdClass) {
+            $properties = (array)$value;
+
+            return $properties === [] ? $value : array_map(self::toAssociative(...), $properties);
+        }
+
+        if (is_array($value)) {
+            return array_map(self::toAssociative(...), $value);
+        }
+
+        return $value;
+    }
+
+    private static function valuesEqual(mixed $value, mixed $old): bool
+    {
+        if ($value instanceof \stdClass && $old instanceof \stdClass) {
+            return self::valuesEqual((array)$value, (array)$old);
+        }
+
+        if (is_array($value) && is_array($old)) {
+            if (array_keys($value) !== array_keys($old)) {
+                return false;
+            }
+
+            foreach ($value as $key => $item) {
+                if (!self::valuesEqual($item, $old[$key])) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        return $value === $old;
     }
 
     /**
@@ -725,10 +791,10 @@ class Database
      *
      * @param string $event
      * @param string $name
-     * @param callable $callback
+     * @param ?callable $callback
      * @return $this
      */
-    public function before(string $event, string $name, callable $callback): static
+    public function before(string $event, string $name, ?callable $callback): static
     {
         $this->adapter->before($event, $name, $callback);
 
@@ -799,29 +865,47 @@ class Database
      *
      * @param Document $collection
      * @param array<Document> $documents
+     * @param array<Query> $selections Select queries from the caller, preserved so the refetch honors the original projection
      * @return array<Document>
+     * @throws DatabaseException
      */
-    protected function refetchDocuments(Document $collection, array $documents): array
+    protected function refetchDocuments(Document $collection, array $documents, array $selections = []): array
     {
         if (empty($documents)) {
             return $documents;
         }
 
-        $docIds = array_map(fn ($doc) => $doc->getId(), $documents);
+        $sequences = array_map(function ($doc) {
+            $sequence = $doc->getSequence();
+            if ($sequence === null) {
+                throw new DatabaseException('Cannot refetch document without a $sequence: ' . $doc->getId());
+            }
+            return $sequence;
+        }, $documents);
 
-        // Fetch fresh copies with computed operator values
-        $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
-            fn () => $this->find($collection->getId(), [Query::equal('$id', $docIds)])
-        ));
-
+        // Fetch fresh copies with computed operator values, preserving the caller's projection.
+        // Chunk by maxQueryValues (the batch can be up to INSERT_BATCH_SIZE) and bound each find()
+        // to the chunk size, otherwise find()'s default limit would silently drop rows past it.
         $refetchedMap = [];
-        foreach ($refetched as $doc) {
-            $refetchedMap[$doc->getId()] = $doc;
+        foreach (\array_chunk($sequences, \max(1, $this->maxQueryValues)) as $chunk) {
+            $refetched = $this->getAuthorization()->skip(fn () => $this->silent(
+                fn () => $this->find(
+                    $collection->getId(),
+                    array_merge([
+                        Query::equal('$sequence', $chunk),
+                        Query::limit(\count($chunk)),
+                    ], $selections)
+                )
+            ));
+
+            foreach ($refetched as $doc) {
+                $refetchedMap[$doc->getSequence()] = $doc;
+            }
         }
 
         $result = [];
-        foreach ($documents as $doc) {
-            $result[] = $refetchedMap[$doc->getId()] ?? $doc;
+        foreach ($documents as $index => $doc) {
+            $result[$index] = $refetchedMap[$sequences[$index]] ?? $doc;
         }
 
         return $result;
@@ -837,6 +921,29 @@ class Database
         } finally {
             $this->checkRelationshipsExist = $previous;
         }
+    }
+
+    public function skipDuplicates(callable $callback): mixed
+    {
+        $previous = $this->skipDuplicates;
+        $this->skipDuplicates = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipDuplicates = $previous;
+        }
+    }
+
+    /**
+     * Build a tenant-aware identity key for a document.
+     * Returns "<tenant>:<id>" in tenant-per-document shared-table mode, otherwise just the id.
+     */
+    private function tenantKey(Document $document): string
+    {
+        return ($this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument())
+            ? $document->getTenant() . ':' . $document->getId()
+            : $document->getId();
     }
 
     /**
@@ -914,6 +1021,18 @@ class Database
     public function getNamespace(): string
     {
         return $this->adapter->getNamespace();
+    }
+
+    /**
+     * Get ID Attribute Type.
+     *
+     * Returns the type of the internal ID attribute (e.g. VAR_INTEGER for SQL, VAR_UUID7 for MongoDB)
+     *
+     * @return string
+     */
+    public function getIdAttributeType(): string
+    {
+        return $this->adapter->getIdAttributeType();
     }
 
     /**
@@ -1137,7 +1256,7 @@ class Database
     /**
      * Get instance filters
      *
-     * @return array<string, array{encode: callable, decode: callable}>
+     * @return array<string, array{encode: callable, decode: callable, signature: string}>
      */
     public function getInstanceFilters(): array
     {
@@ -1220,10 +1339,10 @@ class Database
      *
      * Set tenant to use if tables are shared
      *
-     * @param ?int $tenant
+     * @param int|string|null $tenant
      * @return static
      */
-    public function setTenant(?int $tenant): static
+    public function setTenant(int|string|null $tenant): static
     {
         $this->adapter->setTenant($tenant);
 
@@ -1235,9 +1354,9 @@ class Database
      *
      * Get tenant to use if tables are shared
      *
-     * @return ?int
+     * @return int|string|null
      */
-    public function getTenant(): ?int
+    public function getTenant(): int|string|null
     {
         return $this->adapter->getTenant();
     }
@@ -1247,11 +1366,11 @@ class Database
      *
      * Execute a callback with a specific tenant
      *
-     * @param int|null $tenant
+     * @param int|string|null $tenant
      * @param callable $callback
      * @return mixed
      */
-    public function withTenant(?int $tenant, callable $callback): mixed
+    public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
         $previous = $this->adapter->getTenant();
         $this->adapter->setTenant($tenant);
@@ -1775,16 +1894,34 @@ class Database
             }
         }
 
-        $created = false;
+        $createdPhysicalTable = false;
 
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
-            $created = true;
+            $createdPhysicalTable = true;
         } catch (DuplicateException $e) {
-            // Metadata check (above) already verified collection is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // collection exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata creation.
+            if ($id === self::METADATA
+                || ($this->adapter->getSharedTables()
+                    && $this->adapter->exists($this->adapter->getDatabase(), $id))) {
+                // The metadata table must never be dropped during reconciliation.
+                // In shared-tables mode the physical table is reused across
+                // tenants. A DuplicateException simply means the table already
+                // exists for another tenant — not an orphan.
+            } else {
+                // The table exists and this process did not create it. It may
+                // belong to a peer that has not committed metadata yet, or it
+                // may be an orphan. Dropping it destroyed live collections
+                // during concurrent boot; attaching this caller's metadata to
+                // an unknown physical schema can invent columns that are not
+                // there. Leave the table and report Duplicate. Claiming the
+                // metadata row first is #939.
+                try {
+                    $this->purgeCachedDocument(self::METADATA, $id);
+                } catch (\Throwable $cacheError) {
+                    Console::warning('Warning: Failed to purge stale collection cache: ' . $cacheError->getMessage());
+                }
+                throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
+            }
         }
 
         if ($id === self::METADATA) {
@@ -1793,8 +1930,18 @@ class Database
 
         try {
             $createdCollection = $this->silent(fn () => $this->createDocument(self::METADATA, $collection));
+        } catch (DuplicateException $e) {
+            // A concurrent creator committed the metadata for this id first, so
+            // the physical table is the one its metadata describes. Rolling back
+            // here would drop a live collection out from under it.
+            try {
+                $this->purgeCachedDocument(self::METADATA, $id);
+            } catch (\Throwable $cacheError) {
+                Console::warning('Warning: Failed to purge stale collection cache: ' . $cacheError->getMessage());
+            }
+            throw new DuplicateException('Collection ' . $id . ' already exists', previous: $e);
         } catch (\Throwable $e) {
-            if ($created) {
+            if ($createdPhysicalTable) {
                 try {
                     $this->cleanupCollection($id);
                 } catch (\Throwable $e) {
@@ -1841,7 +1988,7 @@ class Database
 
         if (
             $this->adapter->getSharedTables()
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             throw new NotFoundException('Collection not found');
         }
@@ -1877,7 +2024,7 @@ class Database
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
             && $collection->getTenant() !== null
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $collection->getTenant() != $this->adapter->getTenant()
         ) {
             return new Document();
         }
@@ -1932,7 +2079,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1958,7 +2105,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1992,7 +2139,7 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        if ($this->adapter->getSharedTables() && $collection->getTenant() !== $this->adapter->getTenant()) {
+        if ($this->adapter->getSharedTables() && $collection->getTenant() != $this->adapter->getTenant()) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -2087,6 +2234,8 @@ class Database
             $filters[] = $type;
             $filters = array_unique($filters);
         }
+
+        $size = $this->normalizeBigIntSize($type, $size);
 
         $existsInSchema = false;
 
@@ -2281,6 +2430,8 @@ class Database
                 $attribute['filters'] = [];
             }
 
+            $attribute['size'] = $this->normalizeBigIntSize($attribute['type'], $attribute['size']);
+
             $existsInSchema = false;
 
             try {
@@ -2422,6 +2573,14 @@ class Database
     }
 
     /**
+     * Normalize BIGINT size metadata.
+     */
+    private function normalizeBigIntSize(string $type, int $size): int
+    {
+        return $type === self::VAR_BIGINT ? 0 : $size;
+    }
+
+    /**
      * @param Document $collection
      * @param string $id
      * @param string $type
@@ -2453,6 +2612,8 @@ class Database
         array $filters,
         ?array $schemaAttributes = null
     ): Document {
+        $size = $this->normalizeBigIntSize($type, $size);
+
         $attribute = new Document([
             '$id' => ID::custom($id),
             'key' => $id,
@@ -2480,10 +2641,12 @@ class Database
             maxStringLength: $this->adapter->getLimitForString(),
             maxVarcharLength: $this->adapter->getMaxVarcharLength(),
             maxIntLength: $this->adapter->getLimitForInt(),
+            maxBigIntLength: $this->adapter->getLimitForBigInt(),
             supportForSchemaAttributes: $this->adapter->getSupportForSchemaAttributes(),
             supportForVectors: $this->adapter->getSupportForVectors(),
             supportForSpatialAttributes: $this->adapter->getSupportForSpatialAttributes(),
             supportForObject: $this->adapter->getSupportForObject(),
+            supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
             attributeCountCallback: fn () => $this->adapter->getCountOfAttributes($collectionClone),
             attributeWidthCallback: fn () => $this->adapter->getAttributeWidth($collectionClone),
             filterCallback: fn ($id) => $this->adapter->filter($id),
@@ -2556,6 +2719,14 @@ class Database
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
                 }
                 break;
+            case Database::VAR_BIGINT:
+                if ($defaultType !== 'integer' && $defaultType !== 'string') {
+                    throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
+                }
+                if ($defaultType === 'string' && !BigIntValidator::isIntegerString($default)) {
+                    throw new DatabaseException('Default value ' . $default . ' is not a valid integer string for type bigint');
+                }
+                break;
             case self::VAR_DATETIME:
                 if ($defaultType !== self::VAR_STRING) {
                     throw new DatabaseException('Default value ' . $default . ' does not match given type ' . $type);
@@ -2575,6 +2746,7 @@ class Database
                     self::VAR_MEDIUMTEXT,
                     self::VAR_LONGTEXT,
                     self::VAR_INTEGER,
+                    self::VAR_BIGINT,
                     self::VAR_FLOAT,
                     self::VAR_BOOLEAN,
                     self::VAR_DATETIME,
@@ -2835,6 +3007,8 @@ class Database
         $formatOptions ??= $attribute->getAttribute('formatOptions');
         $filters ??= $attribute->getAttribute('filters');
 
+        $size = $this->normalizeBigIntSize($type, $size);
+
         if ($required === true && !\is_null($default)) {
             $default = null;
         }
@@ -2876,6 +3050,8 @@ class Database
                 if ($size > $limit) {
                     throw new DatabaseException('Max size allowed for int is: ' . number_format($limit));
                 }
+                break;
+            case self::VAR_BIGINT:
                 break;
             case self::VAR_FLOAT:
             case self::VAR_BOOLEAN:
@@ -2943,6 +3119,7 @@ class Database
                     self::VAR_MEDIUMTEXT,
                     self::VAR_LONGTEXT,
                     self::VAR_INTEGER,
+                    self::VAR_BIGINT,
                     self::VAR_FLOAT,
                     self::VAR_BOOLEAN,
                     self::VAR_DATETIME,
@@ -3105,7 +3282,7 @@ class Database
                 $collection,
                 $newKey ?? $id,
                 $originalType,
-                $originalSize,
+                (int)$originalSize,
                 $originalSigned,
                 $originalArray,
                 $originalKey,
@@ -4544,18 +4721,49 @@ class Database
         }
 
         $created = false;
+        $existsInSchema = false;
 
-        try {
-            $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes, [], $ttl);
+        if ($this->adapter->getSupportForSchemaIndexes()
+            && !($this->adapter->getSharedTables() && $this->isMigrating())) {
+            $schemaIndexes = $this->getSchemaIndexes($collection->getId());
+            $filteredId = $this->adapter->filter($id);
 
-            if (!$created) {
-                throw new DatabaseException('Failed to create index');
+            foreach ($schemaIndexes as $schemaIndex) {
+                if (\strtolower($schemaIndex->getId()) === \strtolower($filteredId)) {
+                    $schemaColumns = $schemaIndex->getAttribute('columns', []);
+                    $schemaLengths = $schemaIndex->getAttribute('lengths', []);
+
+                    $filteredAttributes = \array_map(fn ($a) => $this->adapter->filter($a), $attributes);
+                    $match = ($schemaColumns === $filteredAttributes && $schemaLengths === $lengths);
+
+                    if ($match) {
+                        $existsInSchema = true;
+                    } else {
+                        // Orphan index with wrong definition — drop so it
+                        // gets recreated with the correct shape.
+                        try {
+                            $this->adapter->deleteIndex($collection->getId(), $id);
+                        } catch (NotFoundException) {
+                        }
+                    }
+                    break;
+                }
             }
-        } catch (DuplicateException $e) {
-            // Metadata check (lines above) already verified index is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // index exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata update.
+        }
+
+        if (!$existsInSchema) {
+            try {
+                $created = $this->adapter->createIndex($collection->getId(), $id, $type, $attributes, $lengths, $orders, $indexAttributesWithTypes, [], $ttl);
+
+                if (!$created) {
+                    throw new DatabaseException('Failed to create index');
+                }
+            } catch (DuplicateException) {
+                // Metadata check (lines above) already verified index is absent
+                // from metadata. A DuplicateException from the adapter means the
+                // index exists only in physical schema — an orphan from a prior
+                // partial failure. Skip creation and proceed to metadata update.
+            }
         }
 
         $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
@@ -4720,15 +4928,30 @@ class Database
             $selections
         );
 
-        try {
-            $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
-        } catch (Exception $e) {
-            Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
-            $cached = null;
+        // A locking read must observe the current row, not a cached copy:
+        // updateDocument merges the changes into this read and writes the result
+        // back, so serving it from a stale cache would persist the staleness.
+        $cached = null;
+        if (!$forUpdate) {
+            try {
+                $cached = $this->cache->load($documentKey, self::TTL, $hashKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get document from cache: ' . $e->getMessage());
+            }
+        }
+
+        // Negative cache hit
+        if (\is_array($cached) && isset($cached[self::CACHE_EMPTY_MARKER])) {
+            return $this->createDocumentInstance($collection->getId(), []);
         }
 
         if ($cached) {
             $document = $this->createDocumentInstance($collection->getId(), $cached);
+
+            // JSON serialization in cache backends collapses floats with zero
+            // fractions to ints. Re-cast so cached and freshly-loaded documents
+            // compare equal under strict equality (e.g. in updateDocument).
+            $document = $this->casting($collection, $document);
 
             if ($collection->getId() !== self::METADATA) {
 
@@ -4749,6 +4972,17 @@ class Database
             return $document;
         }
 
+        // Capture the generation before reading: if a concurrent purge advances
+        // it, saveWithLease() below rejects this now-stale value. '0' means no lease.
+        $generation = '0';
+        if (!$forUpdate) {
+            try {
+                $generation = $this->cache->getGeneration($documentKey);
+            } catch (Exception $e) {
+                Console::warning('Warning: Failed to get cache generation: ' . $e->getMessage());
+            }
+        }
+
         $document = $this->adapter->getDocument(
             $collection,
             $id,
@@ -4757,6 +4991,18 @@ class Database
         );
 
         if ($document->isEmpty()) {
+            if (!$forUpdate && empty($relationships)) {
+                try {
+                    $marker = [self::CACHE_EMPTY_MARKER => true];
+
+                    if ($this->cache->saveWithLease($documentKey, $marker, $hashKey, $generation) !== false) {
+                        $this->cache->save($collectionKey, 'empty', $documentKey);
+                    }
+                } catch (Exception $e) {
+                    Console::warning('Failed to save empty document to cache: ' . $e->getMessage());
+                }
+            }
+
             return $this->createDocumentInstance($collection->getId(), []);
         }
 
@@ -4796,11 +5042,15 @@ class Database
             fn ($attribute) => $attribute['type'] === Database::VAR_RELATIONSHIP
         );
 
-        // Don't save to cache if it's part of a relationship
-        if (empty($relationships)) {
+        // Don't save to cache if it's part of a relationship, or if this is a
+        // locking read: a forUpdate read happens inside an open transaction, and
+        // caching the pre-commit row would poison the cache for other readers.
+        if (!$forUpdate && empty($relationships)) {
             try {
-                $this->cache->save($documentKey, $document->getArrayCopy(), $hashKey);
-                $this->cache->save($collectionKey, 'empty', $documentKey);
+                // Index for invalidation only when the value was actually cached.
+                if ($this->cache->saveWithLease($documentKey, $document->getArrayCopy(), $hashKey, $generation) !== false) {
+                    $this->cache->save($collectionKey, 'empty', $documentKey);
+                }
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: ' . $e->getMessage());
             }
@@ -5514,7 +5764,9 @@ class Database
                 $this->adapter->getIdAttributeType(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                currentDocument: null
             );
             if (!$structure->isValid($document)) {
                 throw new StructureException($structure->getDescription());
@@ -5529,6 +5781,10 @@ class Database
             }
             return $this->adapter->createDocument($collection, $document);
         });
+
+        // Clear any negative-cache entry for this id: a prior read may have
+        // recorded it as missing before this insert committed.
+        $this->withDocumentTenant($document, fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId()));
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             // Use the write stack depth for proper MAX_DEPTH enforcement during creation
@@ -5622,7 +5878,9 @@ class Database
                     $this->adapter->getIdAttributeType(),
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
-                    $this->adapter->getSupportForAttributes()
+                    $this->adapter->getSupportForAttributes(),
+                    supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                    currentDocument: null
                 );
                 if (!$validator->isValid($document)) {
                     throw new StructureException($validator->getDescription());
@@ -5637,9 +5895,11 @@ class Database
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $batch = $this->withTransaction(function () use ($collection, $chunk) {
-                return $this->adapter->createDocuments($collection, $chunk);
-            });
+            $insert = fn () => $this->withTransaction(fn () => $this->adapter->createDocuments($collection, $chunk));
+            // Set adapter flag before withTransaction so Mongo can opt out of a real txn.
+            $batch = $this->skipDuplicates
+                ? $this->adapter->skipDuplicates($insert)
+                : $insert();
 
             $batch = $this->adapter->getSequences($collection->getId(), $batch);
 
@@ -5651,6 +5911,9 @@ class Database
                 $document = $this->adapter->castingAfter($collection, $document);
                 $document = $this->casting($collection, $document);
                 $document = $this->decode($collection, $document);
+
+                // Clear any negative-cache entry recorded before this insert.
+                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId()));
 
                 try {
                     $onNext && $onNext($document);
@@ -6012,7 +6275,8 @@ class Database
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
-        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt) {
+        $hasOperators = false;
+        $document = $this->withTransaction(function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $time = DateTime::now();
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
@@ -6032,18 +6296,29 @@ class Database
 
                 $skipPermissionsUpdate = ($originalPermissions === $currentPermissions);
             }
+
+            // UID change
+            if ($document->offsetExists('$id') && $document->getId() !== $id) {
+                $skipPermissionsUpdate = false;
+            }
+
             $createdAt = $document->getCreatedAt();
 
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document['$collection'] = $old->getAttribute('$collection'); // Make sure user doesn't switch collection ID
+            $document['$sequence'] = $old->getSequence(); // Sequence is immutable
             $document['$createdAt'] = ($createdAt === null || !$this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
-                $document['$tenant'] = $old->getTenant(); // Make sure user doesn't switch tenant
+                $tenant = $old->getTenant();
+                $document['$tenant'] = $tenant;
+                $old->setAttribute('$tenant', $tenant); // Normalize for strict comparison
             }
             $document = new Document($document);
 
-            $relationships = \array_filter($collection->getAttribute('attributes', []), function ($attribute) {
+            $attributes = $collection->getAttribute('attributes', []);
+
+            $relationships = \array_filter($attributes, function ($attribute) {
                 return $attribute['type'] === Database::VAR_RELATIONSHIP;
             });
 
@@ -6144,8 +6419,7 @@ class Database
 
                     $oldValue = $old->getAttribute($key);
 
-                    // If values are not equal we need to update document.
-                    if ($value !== $oldValue) {
+                    if (!self::valuesEqual($value, $oldValue)) {
                         $shouldUpdate = true;
                         break;
                     }
@@ -6191,7 +6465,8 @@ class Database
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->getSupportForAttributes(),
-                    $old
+                    supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                    currentDocument: $old
                 );
                 if (!$structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());
@@ -6214,8 +6489,9 @@ class Database
                 $this->purgeCachedDocument($collection->getId(), $document->getId());
             }
 
-            // If operators were used, refetch document to get computed values
-            $hasOperators = false;
+            // If operators were used, refetch inside the transaction so the returned value reflects
+            // this operation's own write (read-your-writes). Refetching after commit could observe a
+            // concurrent update and return that value instead of the result of this operation.
             foreach ($document->getArrayCopy() as $value) {
                 if (Operator::isOperator($value)) {
                     $hasOperators = true;
@@ -6235,12 +6511,19 @@ class Database
             return $document;
         }
 
+        // Purge again after commit so readers cannot re-cache the pre-commit version
+        $this->purgeCachedDocumentInternal($collection->getId(), $id);
+
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
             $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth));
             $document = $documents[0];
         }
 
-        $document = $this->decode($collection, $document);
+        // The operator refetch already returns a decoded document (via find()); decoding again
+        // would double-apply the decode filters.
+        if (!$hasOperators) {
+            $document = $this->decode($collection, $document);
+        }
 
         // Convert to custom document type if mapped
         if (isset($this->documentTypes[$collection->getId()])) {
@@ -6312,7 +6595,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
 
             if (!$validator->isValid($queries)) {
@@ -6357,7 +6641,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                null // No old document available in bulk updates
+                supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                currentDocument: null // No old document available in bulk updates
             );
 
             if (!$validator->isValid($updates)) {
@@ -6456,14 +6741,19 @@ class Database
             }
 
             if ($hasOperators) {
-                $batch = $this->refetchDocuments($collection, $batch);
+                $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
             }
 
             foreach ($batch as $index => $doc) {
                 $doc = $this->adapter->castingAfter($collection, $doc);
                 $doc->removeAttribute('$skipPermissionsUpdate');
                 $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                $doc = $this->decode($collection, $doc);
+                // The operator refetch goes through find(), which already returns fully decoded
+                // documents. Decoding again would double-apply the decode filters (and, because
+                // this call passes no selections, re-materialize non-selected attributes).
+                if (!$hasOperators) {
+                    $doc = $this->decode($collection, $doc);
+                }
                 try {
                     $onNext && $onNext($doc, $old[$index]);
                 } catch (Throwable $th) {
@@ -7050,18 +7340,57 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
-        foreach ($documents as $key => $document) {
-            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                $old = $this->authorization->skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId(),
-                ))));
-            } else {
-                $old = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId(),
-                )));
+
+        // Batch-fetch existing documents in one query instead of N individual getDocument() calls.
+        // tenantPerDocument: group ids by tenant and run one find() per tenant under withTenant,
+        // so cross-tenant batches (e.g. StatsUsage worker) don't get silently scoped to the
+        // session tenant and miss rows belonging to other tenants.
+        $existingDocs = [];
+
+        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            $idsByTenant = [];
+            foreach ($documents as $doc) {
+                if ($doc->getId() !== '') {
+                    $idsByTenant[$doc->getTenant()][] = $doc->getId();
+                }
             }
+            foreach ($idsByTenant as $tenant => $tenantIds) {
+                $tenantIds = \array_values(\array_unique($tenantIds));
+                foreach (\array_chunk($tenantIds, \max(1, $this->maxQueryValues)) as $chunk) {
+                    $found = $this->authorization->skip(fn () => $this->withTenant($tenant, fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $chunk),
+                            Query::limit($this->maxQueryValues),
+                        ])
+                    )));
+                    foreach ($found as $doc) {
+                        $existingDocs[$this->tenantKey($doc)] = $doc;
+                    }
+                }
+            }
+        } else {
+            $docIds = \array_values(\array_unique(\array_filter(
+                \array_map(fn (Document $doc) => $doc->getId(), $documents),
+                fn ($id) => $id !== ''
+            )));
+
+            if (!empty($docIds)) {
+                foreach (\array_chunk($docIds, \max(1, $this->maxQueryValues)) as $chunk) {
+                    $existing = $this->authorization->skip(fn () => $this->silent(
+                        fn () => $this->find($collection->getId(), [
+                            Query::equal('$id', $chunk),
+                            Query::limit($this->maxQueryValues),
+                        ])
+                    ));
+                    foreach ($existing as $doc) {
+                        $existingDocs[$this->tenantKey($doc)] = $doc;
+                    }
+                }
+            }
+        }
+
+        foreach ($documents as $key => $document) {
+            $old = $existingDocs[$this->tenantKey($document)] ?? new Document();
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();
@@ -7186,7 +7515,7 @@ class Database
                     if ($document->getTenant() === null) {
                         throw new DatabaseException('Missing tenant. Tenant must be set when tenant per document is enabled.');
                     }
-                    if (!$old->isEmpty() && $old->getTenant() !== $document->getTenant()) {
+                    if (!$old->isEmpty() && $old->getTenant() != $document->getTenant()) {
                         throw new DatabaseException('Tenant cannot be changed.');
                     }
                 } else {
@@ -7203,7 +7532,8 @@ class Database
                     $this->adapter->getMinDateTime(),
                     $this->adapter->getMaxDateTime(),
                     $this->adapter->getSupportForAttributes(),
-                    $old->isEmpty() ? null : $old
+                    supportUnsignedBigInt: $this->adapter->getSupportForUnsignedBigInt(),
+                    currentDocument: $old->isEmpty() ? null : $old
                 );
 
                 if (!$validator->isValid($document)) {
@@ -7228,7 +7558,7 @@ class Database
                 $document = $this->silent(fn () => $this->createDocumentRelationships($collection, $document));
             }
 
-            $seenIds[] = $document->getId();
+            $seenIds[] = $this->tenantKey($document);
             $old = $this->adapter->castingBefore($collection, $old);
             $document = $this->adapter->castingBefore($collection, $document);
 
@@ -7287,13 +7617,7 @@ class Database
                     $doc = $this->decode($collection, $doc);
                 }
 
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($doc->getTenant(), function () use ($collection, $doc) {
-                        $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $doc->getId());
-                }
+                $this->withDocumentTenant($doc, fn () => $this->purgeCachedDocument($collection->getId(), $doc->getId()));
 
                 $old = $chunk[$index]->getOld();
 
@@ -7357,6 +7681,7 @@ class Database
 
             $whiteList = [
                 self::VAR_INTEGER,
+                self::VAR_BIGINT,
                 self::VAR_FLOAT
             ];
 
@@ -7392,7 +7717,7 @@ class Database
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : DateTime::format(new \DateTime($updatedAt));
             $max = $max ? $max - $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -7455,6 +7780,7 @@ class Database
 
             $whiteList = [
                 self::VAR_INTEGER,
+                self::VAR_BIGINT,
                 self::VAR_FLOAT
             ];
 
@@ -7492,7 +7818,7 @@ class Database
 
             $time = DateTime::now();
             $updatedAt = $document->getUpdatedAt();
-            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : $updatedAt;
+            $updatedAt = (empty($updatedAt) || !$this->preserveDates) ? $time : DateTime::format(new \DateTime($updatedAt));
             $min = $min ? $min + $value : null;
 
             $this->adapter->increaseDocumentAttribute(
@@ -7577,6 +7903,8 @@ class Database
         });
 
         if ($deleted) {
+            // Purge again after commit so readers cannot re-cache the pre-commit version
+            $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
         }
 
@@ -8018,7 +8346,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
 
             if (!$validator->isValid($queries)) {
@@ -8104,13 +8433,7 @@ class Database
             });
 
             foreach ($batch as $index => $document) {
-                if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                    $this->withTenant($document->getTenant(), function () use ($collection, $document) {
-                        $this->purgeCachedDocument($collection->getId(), $document->getId());
-                    });
-                } else {
-                    $this->purgeCachedDocument($collection->getId(), $document->getId());
-                }
+                $this->withDocumentTenant($document, fn () => $this->purgeCachedDocument($collection->getId(), $document->getId()));
                 try {
                     $onNext && $onNext($document, $old[$index]);
                 } catch (Throwable $th) {
@@ -8182,6 +8505,27 @@ class Database
     }
 
     /**
+     * Run a per-document cache operation under the document's own tenant.
+     *
+     * With tenant-per-document, cache keys are scoped by the adapter's current
+     * tenant, so a document's purge must run under that document's tenant to
+     * target the right key; otherwise the callback runs as-is.
+     *
+     * @param Document $document
+     * @param callable():mixed $callback
+     * @return void
+     * @throws Exception
+     */
+    private function withDocumentTenant(Document $document, callable $callback): void
+    {
+        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
+            $this->withTenant($document->getTenant(), $callback);
+        } else {
+            $callback();
+        }
+    }
+
+    /**
      * Cleans a specific document from cache and triggers EVENT_DOCUMENT_PURGE.
      * And related document reference in the collection cache.
      *
@@ -8240,7 +8584,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8276,8 +8621,29 @@ class Database
             }
         }
 
-        if ($uniqueOrderBy === false) {
-            $orderAttributes[] = '$sequence';
+        $vectorSearch = false;
+        foreach ($filters as $filter) {
+            if (\in_array($filter->getMethod(), Query::VECTOR_TYPES)) {
+                $vectorSearch = true;
+                break;
+            }
+        }
+
+        // A vector search is ordered by distance, and a vector index can only answer that one
+        // sort key. Appending a tie break makes the ordering unsatisfiable from the index and
+        // costs a full scan of the collection. The tie break exists to hold a page boundary
+        // still, so it is only owed to a cursor.
+        if ($uniqueOrderBy === false && (!$vectorSearch || !empty($cursor))) {
+            $leadingAttribute = $orderAttributes[0] ?? null;
+            $leadingOrderType = $orderTypes[0] ?? Database::ORDER_ASC;
+
+            if (\in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)) {
+                $orderAttributes[] = '$sequence';
+                $orderTypes[] = $leadingOrderType;
+            } else {
+                $orderAttributes[] = '$sequence';
+                $orderTypes[] = Database::ORDER_ASC;
+            }
         }
 
         if (!empty($cursor)) {
@@ -8362,6 +8728,245 @@ class Database
         $this->trigger(self::EVENT_DOCUMENT_FIND, $results);
 
         return $results;
+    }
+
+    /**
+     * Purge all cached query entries for a collection namespace.
+     *
+     * @param string $collection
+     * @param string|null $namespace
+     * @return bool
+     */
+    public function purgeCachedQueries(string $collection, ?string $namespace = null): bool
+    {
+        $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
+        $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
+
+        return $this->cache->purge(
+            $this->getQueryCacheKey($collection, $namespace)
+        );
+    }
+
+    /**
+     * Execute a callback behind a cache-aside lookup.
+     *
+     * The callback runs on cache miss and its value is returned to the caller.
+     * Query document payloads are converted to arrays before save and restored
+     * back into Documents on cache hits. A rejected document payload refreshes
+     * the cached value.
+     * A literal false value is treated as a cache miss and is not cacheable.
+     *
+     * @template T
+     * @param string $key
+     * @param callable(): T $callback
+     * @param string|null $hash
+     * @return T
+     * @throws AuthorizationException
+     * @throws Exception
+     */
+    public function withCache(
+        string $key,
+        callable $callback,
+        ?string $hash = '',
+    ): mixed {
+        if ($hash === null) {
+            return $callback();
+        }
+
+        $shouldRefreshCache = false;
+
+        try {
+            $cached = $this->cache->load($key, self::TTL, $hash);
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to load cache value: ' . $e->getMessage());
+            $cached = false;
+        }
+
+        if ($cached !== false && $cached !== null) {
+            $cachedValue = \is_array($cached) && \array_key_exists('value', $cached) ? $cached['value'] : false;
+
+            if ($cachedValue !== false) {
+                $decoded = $cachedValue;
+                $collection = $cached['collection'] ?? null;
+
+                if (\is_string($collection) && $collection !== '') {
+                    // Cached document payloads are stored as arrays; restore them
+                    // to the same Document shape that find()/getDocument() return.
+                    $collection = $this->silent(fn () => $this->getCollection($collection));
+
+                    if ($collection->isEmpty()) {
+                        $decoded = false;
+                    } else {
+                        $documentSecurity = $collection->getAttribute('documentSecurity', false);
+                        $skipAuth = $this->authorization->isValid(new Input(self::PERMISSION_READ, $collection->getRead()));
+
+                        if (!$skipAuth && !$documentSecurity && $collection->getId() !== self::METADATA) {
+                            throw new AuthorizationException($this->authorization->getDescription());
+                        }
+
+                        $payload = ($cached['type'] ?? null) === 'document' ? [$cachedValue] : $cachedValue;
+
+                        if (!\is_array($payload)) {
+                            $decoded = false;
+                        } else {
+                            $documents = [];
+
+                            foreach ($payload as $document) {
+                                if (!\is_array($document)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                $document = $this->createDocumentInstance($collection->getId(), $document);
+                                $document = $this->casting($collection, $document);
+
+                                if ($this->isTtlExpired($collection, $document)) {
+                                    $decoded = false;
+                                    break;
+                                }
+
+                                if (!$skipAuth && $documentSecurity && $collection->getId() !== self::METADATA) {
+                                    if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $document->getRead()))) {
+                                        if (($cached['type'] ?? null) === 'document') {
+                                            $decoded = false;
+                                            break;
+                                        }
+
+                                        continue;
+                                    }
+                                }
+
+                                $documents[] = $document;
+                            }
+
+                            if ($decoded !== false) {
+                                $decoded = ($cached['type'] ?? null) === 'document' ? ($documents[0] ?? false) : $documents;
+                            }
+                        }
+                    }
+                }
+
+                if ($decoded !== false) {
+                    return $decoded;
+                }
+            }
+
+            $shouldRefreshCache = true;
+        }
+
+        if ($shouldRefreshCache) {
+            try {
+                $this->cache->purge($key, $hash);
+            } catch (Throwable $e) {
+                Console::warning('Warning: Failed to purge rejected cache value: ' . $e->getMessage());
+            }
+        }
+
+        // Capture the generation before the callback runs its read: if a
+        // concurrent write purges this query key in between, saveWithLease()
+        // below rejects the now-stale list instead of re-poisoning the cache.
+        $generation = '0';
+        try {
+            $generation = $this->cache->getGeneration($key);
+        } catch (Throwable $e) {
+            Console::warning('Warning: Failed to get cache generation: ' . $e->getMessage());
+        }
+
+        $callbackValue = $callback();
+
+        if ($callbackValue !== false) {
+            try {
+                $encoded = false;
+
+                if ($callbackValue instanceof Document) {
+                    $collection = $callbackValue->getCollection();
+
+                    if ($collection !== '') {
+                        $encoded = [
+                            'collection' => $collection,
+                            'type' => 'document',
+                            'value' => $callbackValue->getArrayCopy(),
+                        ];
+                    }
+                } elseif (!\is_array($callbackValue)) {
+                    $encoded = ['value' => $callbackValue];
+                } else {
+                    // Only homogeneous top-level document lists are safe to restore
+                    // from cache. Plain arrays containing Documents are left uncached.
+                    $collection = null;
+                    $hasDocuments = false;
+                    $hasNonDocuments = false;
+                    $cacheable = true;
+                    $documents = [];
+                    $containsDocument = function (mixed $item) use (&$containsDocument): bool {
+                        if ($item instanceof Document) {
+                            return true;
+                        }
+
+                        if (!\is_array($item)) {
+                            return false;
+                        }
+
+                        foreach ($item as $child) {
+                            if ($containsDocument($child)) {
+                                return true;
+                            }
+                        }
+
+                        return false;
+                    };
+
+                    foreach ($callbackValue as $item) {
+                        if (!$item instanceof Document) {
+                            if ($hasDocuments || $containsDocument($item)) {
+                                $cacheable = false;
+                                break;
+                            }
+
+                            $hasNonDocuments = true;
+                            continue;
+                        }
+
+                        if ($hasNonDocuments) {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        $documentCollection = $item->getCollection();
+                        if ($documentCollection === '') {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        if ($collection !== null && $collection !== $documentCollection) {
+                            $cacheable = false;
+                            break;
+                        }
+
+                        $collection = $documentCollection;
+                        $hasDocuments = true;
+                        $documents[] = $item->getArrayCopy();
+                    }
+
+                    if ($cacheable) {
+                        $encoded = $hasDocuments ? [
+                            'collection' => $collection,
+                            'type' => 'documents',
+                            'value' => $documents,
+                        ] : ['value' => $callbackValue];
+                    }
+                }
+
+                if ($encoded !== false) {
+                    $this->cache->saveWithLease($key, $encoded, $hash, $generation);
+                }
+            } catch (Throwable $e) {
+                Console::warning('Warning: Failed to save cache value: ' . $e->getMessage());
+            }
+        }
+
+        /** @var T $callbackValue */
+        return $callbackValue;
     }
 
     /**
@@ -8477,6 +9082,11 @@ class Database
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -8491,7 +9101,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8545,6 +9156,11 @@ class Database
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -8559,7 +9175,8 @@ class Database
                 $this->adapter->getMaxUIDLength(),
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
-                $this->adapter->getSupportForAttributes()
+                $this->adapter->getSupportForAttributes(),
+                $this->adapter->getSupportForUnsignedBigInt()
             );
             if (!$validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -8610,6 +9227,7 @@ class Database
         self::$filters[$name] = [
             'encode' => $encode,
             'decode' => $decode,
+            'signature' => self::computeCallableSignature($encode) . ':' . self::computeCallableSignature($decode),
         ];
     }
 
@@ -8729,6 +9347,14 @@ class Database
             $attributes[] = $attribute;
         }
 
+        $hasRelationshipSelections = false;
+        foreach ($selections as $selection) {
+            if (\str_contains($selection, '.')) {
+                $hasRelationshipSelections = true;
+                break;
+            }
+        }
+
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
@@ -8741,10 +9367,15 @@ class Database
             }
 
             if (\is_null($value)) {
-                $value = $document->getAttribute($this->adapter->filter($key));
+                $filteredKey = $this->adapter->filter($key);
+                $value = $document->getAttribute($filteredKey);
 
                 if (!\is_null($value)) {
-                    $document->removeAttribute($this->adapter->filter($key));
+                    $document->removeAttribute($filteredKey);
+                } elseif ($filteredKey !== $key && $document->offsetExists($filteredKey)) {
+                    // SQL adapter column names use filter($key); remove the alias so the
+                    // in-memory document only exposes keys (e.g. "a.b") that match the schema.
+                    $document->removeAttribute($filteredKey);
                 }
             }
 
@@ -8756,31 +9387,23 @@ class Database
             $value = ($array) ? $value : [$value];
             $value = (is_null($value)) ? [] : $value;
 
-            foreach ($value as $index => $node) {
-                foreach (\array_reverse($filters) as $filter) {
-                    $node = $this->decodeAttribute($filter, $node, $document, $key);
+            $selected = empty($selections)
+                || \in_array($key, $selections)
+                || \in_array('*', $selections);
+
+            if ($selected || $hasRelationshipSelections) {
+                foreach ($value as $index => $node) {
+                    foreach (\array_reverse($filters) as $filter) {
+                        $node = $this->decodeAttribute($filter, $node, $document, $key);
+                    }
+                    $value[$index] = $node;
                 }
-                $value[$index] = $node;
             }
 
             $filteredValue[$key] = ($array) ? $value : $value[0];
 
-            if (
-                empty($selections)
-                || \in_array($key, $selections)
-                || \in_array('*', $selections)
-            ) {
+            if ($selected) {
                 $document->setAttribute($key, ($array) ? $value : $value[0]);
-            }
-        }
-
-        $hasRelationshipSelections = false;
-        if (!empty($selections)) {
-            foreach ($selections as $selection) {
-                if (\str_contains($selection, '.')) {
-                    $hasRelationshipSelections = true;
-                    break;
-                }
             }
         }
 
@@ -8823,6 +9446,7 @@ class Database
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
             $type = $attribute['type'] ?? '';
+            $signed = $attribute['signed'] ?? true;
             $array = $attribute['array'] ?? false;
             $value = $document->getAttribute($key, null);
             if (is_null($value)) {
@@ -8855,6 +9479,11 @@ class Database
                     case self::VAR_INTEGER:
                         $node = (int)$node;
                         break;
+                    case self::VAR_BIGINT:
+                        if (\is_string($node) && BigIntValidator::fitsPhpInt($node, $signed)) {
+                            $node = (int)$node;
+                        }
+                        break;
                     case self::VAR_FLOAT:
                         $node = (float)$node;
                         break;
@@ -8870,7 +9499,6 @@ class Database
 
         return $document;
     }
-
 
     /**
      * Encode Attribute
@@ -8960,6 +9588,9 @@ class Database
         foreach ($queries as $query) {
             if ($query->getMethod() == Query::TYPE_SELECT) {
                 foreach ($query->getValues() as $value) {
+                    if (!\is_string($value)) {
+                        throw new QueryException('Attribute selection must be a string, got ' . \get_debug_type($value));
+                    }
                     if (\str_contains($value, '.')) {
                         $relationshipSelections[] = $value;
                         continue;
@@ -9177,6 +9808,15 @@ class Database
     }
 
     /**
+     * @param string $collection
+     * @return array<Document>
+     */
+    public function getSchemaIndexes(string $collection): array
+    {
+        return $this->adapter->getSchemaIndexes($collection);
+    }
+
+    /**
      * @param string $collectionId
      * @param string|null $documentId
      * @param array<string> $selects
@@ -9190,7 +9830,11 @@ class Database
 
         $tenantSegment = $this->adapter->getTenant();
 
-        if ($collectionId === self::METADATA && isset($this->globalCollections[$documentId])) {
+        if (
+            $collectionId === self::METADATA &&
+            $this->adapter->getSharedTables() &&
+            isset($this->globalCollections[$documentId])
+        ) {
             $tenantSegment = null;
         }
 
@@ -9206,9 +9850,15 @@ class Database
         if ($documentId) {
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
 
-            if (!empty($selects)) {
-                $documentHashKey = $documentKey . ':' . \md5(\implode($selects));
-            }
+            $sortedSelects = $selects;
+            \sort($sortedSelects);
+
+            $payload = \json_encode([
+                'selects' => $sortedSelects,
+                'relationships' => $this->resolveRelationships,
+                'filters' => $this->getActiveFilterSignatures(),
+            ]) ?: '';
+            $documentHashKey = $documentKey . ':' . \md5($payload);
         }
 
         return [
@@ -9216,6 +9866,182 @@ class Database
             $documentKey ?? '',
             $documentHashKey ?? ''
         ];
+    }
+
+    /**
+     * Stable cache key for cached query entries on a collection.
+     *
+     * @param string $collectionId
+     * @param string|null $namespace
+     * @return string
+     */
+    public function getQueryCacheKey(string $collectionId, ?string $namespace = null): string
+    {
+        $hostname = $this->adapter->getSupportForHostname()
+            ? $this->adapter->getHostname()
+            : '';
+
+        return \sprintf(
+            '%s-cache-%s:%s:%s:collection:%s:query',
+            $this->cacheName,
+            $hostname,
+            $namespace ?? $this->getNamespace(),
+            $this->adapter->getTenant(),
+            $collectionId,
+        );
+    }
+
+    /**
+     * Stable cache field for cached query entries on a collection.
+     *
+     * @param Document|null $collection
+     * @param array<Query> $queries
+     * @param string $field
+     * @param string $forPermission
+     * @return string|null
+     */
+    public function getQueryCacheField(
+        ?Document $collection = null,
+        array $queries = [],
+        string $field = 'documents',
+        string $forPermission = self::PERMISSION_READ,
+    ): ?string {
+        $this->checkQueryTypes($queries);
+
+        if ($forPermission !== self::PERMISSION_READ) {
+            return null;
+        }
+
+        $authorizationRoles = \array_values(\array_unique($this->authorization->getRoles()));
+        \sort($authorizationRoles);
+
+        $queryPayload = [
+            'version' => 1,
+            'authorization' => [
+                'enabled' => $this->authorization->getStatus(),
+                'roles' => $authorizationRoles,
+            ],
+            'database' => $this->getDatabase(),
+            'queries' => \array_map(
+                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                $queries,
+            ),
+            'relationships' => $this->resolveRelationships,
+            'filters' => $this->getActiveFilterSignatures(),
+        ];
+
+        $schemaHash = '';
+        if ($collection !== null && !$collection->isEmpty()) {
+            // Schema-affecting changes must move callers onto a fresh cache field.
+            $schemaHash = \md5(
+                \json_encode($collection->getAttribute('attributes', []))
+                . \json_encode($collection->getAttribute('indexes', []))
+                . \json_encode($collection->getAttribute('$permissions', []))
+                . \json_encode($collection->getAttribute('documentSecurity', false))
+            );
+        }
+
+        return \sprintf(
+            '%s:%s:%s',
+            $schemaHash,
+            \md5(\json_encode($queryPayload) ?: ''),
+            $field,
+        );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function serializeQueryCacheQuery(Query $query): array
+    {
+        $serialized = [
+            'method' => $query->getMethod(),
+        ];
+
+        if ($query->getAttribute() !== '') {
+            $serialized['attribute'] = $query->getAttribute();
+        }
+
+        $values = [];
+        foreach ($query->getValues() as $value) {
+            if ($value instanceof Query) {
+                $values[] = $this->serializeQueryCacheQuery($value);
+                continue;
+            }
+
+            $values[] = $this->normalizeQueryCacheQueryValue($value);
+        }
+
+        $serialized['values'] = $values;
+
+        return $serialized;
+    }
+
+    private function normalizeQueryCacheQueryValue(mixed $value): mixed
+    {
+        if ($value instanceof Document) {
+            $value = $value->getArrayCopy();
+        }
+
+        if (!\is_array($value)) {
+            return $value;
+        }
+
+        foreach ($value as $key => $item) {
+            $value[$key] = $this->normalizeQueryCacheQueryValue($item);
+        }
+
+        return $value;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function getActiveFilterSignatures(): array
+    {
+        $filterSignatures = [];
+        if (!$this->filter) {
+            return $filterSignatures;
+        }
+
+        $disabled = $this->disabledFilters ?? [];
+
+        foreach (self::$filters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            if (\array_key_exists($name, $this->instanceFilters)) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        foreach ($this->instanceFilters as $name => $callbacks) {
+            if (isset($disabled[$name])) {
+                continue;
+            }
+            $filterSignatures[$name] = $callbacks['signature'];
+        }
+
+        \ksort($filterSignatures);
+
+        return $filterSignatures;
+    }
+
+    private static function computeCallableSignature(callable $callable): string
+    {
+        if (\is_string($callable)) {
+            return $callable;
+        }
+
+        if (\is_array($callable)) {
+            $class = \is_object($callable[0]) ? \get_class($callable[0]) : $callable[0];
+            return $class . '::' . $callable[1];
+        }
+
+        $closure = \Closure::fromCallable($callable);
+        $ref = new \ReflectionFunction($closure);
+        return ($ref->getFileName() ?: 'unknown') . ':' . $ref->getStartLine();
     }
 
     /**
@@ -9256,7 +10082,7 @@ class Database
 
             $values = $query->getValues();
             foreach ($values as $valueIndex => $value) {
-                if (!\str_contains($value, '.')) {
+                if (!\is_string($value) || !\str_contains($value, '.')) {
                     continue;
                 }
 

@@ -3,7 +3,7 @@
 require_once '/usr/src/code/vendor/autoload.php';
 
 use Utopia\CLI\CLI;
-use Utopia\CLI\Console;
+use Utopia\Console;
 
 ini_set('memory_limit', '-1');
 

@@ -6,7 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
-use Utopia\CLI\Console;
+use Utopia\Console;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -86,7 +86,61 @@ trait GeneralTests
         }
     }
 
+    public function testCountTimeout(): void
+    {
+        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection('count-timeouts');
+
+        $this->assertEquals(
+            true,
+            $database->createAttribute(
+                collection: 'count-timeouts',
+                id: 'longtext',
+                type: Database::VAR_STRING,
+                size: 100000000,
+                required: true
+            )
+        );
+
+        $longtext = file_get_contents(__DIR__ . '/../../../resources/longtext.txt');
+        for ($i = 0; $i < 20; $i++) {
+            $database->createDocument('count-timeouts', new Document([
+                'longtext' => $longtext,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any())
+                ]
+            ]));
+        }
+
+        try {
+            $database->setTimeout(1);
+
+            $thrown = null;
+            try {
+                // A substring scan forces the engine to walk every huge value; a
+                // cheap filter (e.g. notEqual) lets COUNT finish inside the timeout.
+                $database->count('count-timeouts', [
+                    Query::contains('longtext', ['needle-that-does-not-exist']),
+                ]);
+            } catch (\Exception $e) {
+                $thrown = $e;
+            }
+
+            $this->assertInstanceOf(TimeoutException::class, $thrown, 'count() must throw a timeout exception');
+        } finally {
+            $database->clearTimeout();
+            $database->deleteCollection('count-timeouts');
+        }
+    }
 
     public function testPreserveDatesUpdate(): void
     {

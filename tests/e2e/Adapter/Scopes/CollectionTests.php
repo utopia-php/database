@@ -3,6 +3,9 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Cache\Adapter\None as NoneCache;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -71,6 +74,21 @@ trait CollectionTests
         $this->assertEquals(true, $database->deleteCollection('actors'));
         $this->assertEquals(true, $database->getCollection('actors')->isEmpty());
         $this->assertEquals(false, $database->exists($this->testDatabase, 'actors'));
+    }
+
+    public function testDatabaseHostname(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+
+        if (!$database->getAdapter()->getSupportForHostname()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $host = $database->getAdapter()->getHostname();
+        $this->assertContains($host, ['mysql', 'mariadb', 'postgres', 'mongo']);
     }
 
     public function testCreateCollectionWithSchema(): void
@@ -1326,6 +1344,142 @@ trait CollectionTests
             ->setDatabase($schema);
     }
 
+    public function testSharedTablesMultiTenantCreateCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+        $createdDb = false;
+
+        if ($sharedTables) {
+            // Already in shared-tables mode (SharedTables/* test classes)
+        } elseif ($database->getAdapter()->getSupportForSchemas()) {
+            $dbName = 'stMultiTenant';
+            if ($database->exists($dbName)) {
+                $database->setDatabase($dbName)->delete();
+            }
+            $database
+                ->setDatabase($dbName)
+                ->setNamespace('')
+                ->setSharedTables(true)
+                ->setTenant(10)
+                ->create();
+            $createdDb = true;
+        } else {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        try {
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 10 : 'tenant_10';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 20 : 'tenant_20';
+            $colName = 'multiTenantCol';
+
+            $database->setTenant($tenant1);
+
+            $database->createCollection($colName, [
+                new Document([
+                    '$id' => 'name',
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => true,
+                ]),
+            ]);
+
+            $col1 = $database->getCollection($colName);
+            $this->assertFalse($col1->isEmpty());
+            $this->assertEquals(1, \count($col1->getAttribute('attributes')));
+
+            $database->setTenant($tenant2);
+
+            $database->createCollection($colName, [
+                new Document([
+                    '$id' => 'name',
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => true,
+                ]),
+            ]);
+
+            $col2 = $database->getCollection($colName);
+            $this->assertFalse($col2->isEmpty());
+            $this->assertEquals(1, \count($col2->getAttribute('attributes')));
+
+            $database->setTenant($tenant1);
+            $col1Again = $database->getCollection($colName);
+            $this->assertFalse($col1Again->isEmpty());
+
+            if ($createdDb) {
+                $database->delete();
+            } else {
+                $database->setTenant($tenant1);
+                $database->deleteCollection($colName);
+                $database->setTenant($tenant2);
+                $database->deleteCollection($colName);
+            }
+        } finally {
+            $database
+                ->setSharedTables($sharedTables)
+                ->setNamespace($namespace)
+                ->setDatabase($schema)
+                ->setTenant($originalTenant);
+        }
+    }
+
+    public function testSharedTablesMultiTenantCreate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $sharedTables = $database->getSharedTables();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $originalTenant = $database->getTenant();
+
+        try {
+            $tenant1 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 100 : 'tenant_100';
+            $tenant2 = $database->getAdapter()->getIdAttributeType() === Database::VAR_INTEGER ? 200 : 'tenant_200';
+
+            if ($sharedTables) {
+                // Already in shared-tables mode; create() should be idempotent.
+                // No assertion on exists() since SQLite always returns false for
+                // database-level exists. The test verifies create() doesn't throw.
+                $database->setTenant($tenant1);
+                $database->create();
+                $database->setTenant($tenant2);
+                $database->create();
+                $this->assertTrue(true);
+            } elseif ($database->getAdapter()->getSupportForSchemas()) {
+                $dbName = 'stMultiCreate';
+                if ($database->exists($dbName)) {
+                    $database->setDatabase($dbName)->delete();
+                }
+                $database
+                    ->setDatabase($dbName)
+                    ->setNamespace('')
+                    ->setSharedTables(true)
+                    ->setTenant($tenant1)
+                    ->create();
+                $this->assertTrue($database->exists($dbName));
+                $database->setTenant($tenant2);
+                $database->create();
+                $this->assertTrue($database->exists($dbName));
+                $database->delete();
+            } else {
+                $this->expectNotToPerformAssertions();
+                return;
+            }
+        } finally {
+            $database
+                ->setSharedTables($sharedTables)
+                ->setNamespace($namespace)
+                ->setDatabase($schema)
+                ->setTenant($originalTenant);
+        }
+    }
+
     public function testEvents(): void
     {
         $this->getDatabase()->getAuthorization()->skip(function () {
@@ -1519,13 +1673,25 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $query) {
-            return "SELECT 1";
+        $database->setMetadata('scope', 'api.users');
+
+        $capturedSql = '';
+        $database->before(Database::EVENT_DOCUMENT_READ, 'test', function (string $sql) use (&$capturedSql) {
+            $sql .= ' AND 1=0';
+            $capturedSql = $sql;
+            return $sql;
         });
 
         $result = $database->getDocument('docs', 'doc1');
 
         $this->assertTrue($result->isEmpty());
+
+        if ($database->getAdapter() instanceof SQL) {
+            $this->assertStringContainsString('/* scope: api.users */', $capturedSql);
+        }
+
+        $database->before(Database::EVENT_DOCUMENT_READ, 'test', null);
+        $database->resetMetadata();
     }
 
     public function testSetGlobalCollection(): void
@@ -1677,5 +1843,146 @@ trait CollectionTests
         $this->assertEquals('LongId Test', $fetched->getAttribute('name'));
 
         $this->assertTrue($database->deleteCollection($collection));
+    }
+
+    /**
+     * Two processes reconciling the same schema race: one reads the collection
+     * as missing, a peer creates it and commits, and only then does the first
+     * process try to create it. The loser must not mistake the peer's table for
+     * an orphan and drop it.
+     */
+    public function testCreateCollectionConcurrentlyKeepsPeerData(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'concurrentCreate';
+
+        // A peer process: same database, its own cache, so its writes do not
+        // purge the negative cache entry this process is about to record.
+        $peer = (new Database($database->getAdapter(), new Cache(new NoneCache())))
+            ->setAuthorization(self::$authorization);
+
+        $this->assertTrue($database->getCollection($collection)->isEmpty());
+
+        $peer->createCollection($collection, [
+            new Document([
+                '$id' => ID::custom('name'),
+                'type' => Database::VAR_STRING,
+                'size' => 128,
+                'required' => false,
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        $peer->createDocument($collection, new Document([
+            '$id' => ID::custom('written'),
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'peer',
+        ]));
+
+        try {
+            $database->createCollection($collection, [
+                new Document([
+                    '$id' => ID::custom('name'),
+                    'type' => Database::VAR_STRING,
+                    'size' => 128,
+                    'required' => false,
+                ]),
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ]);
+            $this->fail('Expected DuplicateException for a collection a peer already created');
+        } catch (DuplicateException) {
+        }
+
+        $survivor = $peer->getDocument($collection, 'written');
+        $this->assertSame('peer', $survivor->getAttribute('name'), 'Peer document was destroyed by the losing creator');
+
+        $metadata = $peer->getCollection($collection);
+        $this->assertFalse($metadata->isEmpty(), 'Peer collection metadata was destroyed by the losing creator');
+
+        // The loser's cache still held the collection as missing from the read
+        // it took before the peer committed, and the peer's purge cannot reach
+        // this instance. Losing the race has to clear it, or the collection
+        // stays invisible here until the entry expires.
+        $this->assertFalse($database->getCollection($collection)->isEmpty(), 'Losing creator kept a stale empty collection cached');
+        $this->assertSame('peer', $database->getDocument($collection, 'written')->getAttribute('name'));
+
+        $this->assertTrue($database->deleteCollection($collection));
+    }
+
+    /**
+     * A physical collection with no metadata is indistinguishable from a peer
+     * that has created the table and not yet committed its metadata row.
+     * createCollection must leave that table alone.
+     */
+    public function testCreateCollectionDoesNotDropUncommittedPeerTable(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if ($database->getAdapter()->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'preCommitCreate';
+        $name = new Document([
+            '$id' => ID::custom('name'),
+            'type' => Database::VAR_STRING,
+            'size' => 128,
+            'required' => false,
+        ]);
+
+        $database->getAdapter()->createCollection($collection, [$name], []);
+
+        $schema = new Document([
+            '$id' => $collection,
+            '$collection' => Database::METADATA,
+            'name' => $collection,
+            'attributes' => [$name],
+            'indexes' => [],
+            'documentSecurity' => true,
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]);
+
+        $database->getAdapter()->createDocument($schema, new Document([
+            '$id' => ID::custom('written'),
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'peer',
+        ]));
+
+        try {
+            $database->createCollection($collection, [$name], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+            ]);
+        } catch (DuplicateException) {
+            // SQL adapters report the existing table as Duplicate. Mongo's
+            // createCollection is idempotent, so this process continues and
+            // claims metadata. Either way the physical collection must stay.
+        }
+
+        $this->assertSame(
+            'peer',
+            $database->getAdapter()->getDocument($schema, 'written')->getAttribute('name'),
+            'Physical collection was dropped while metadata was still uncommitted'
+        );
+
+        try {
+            $database->deleteCollection($collection);
+        } catch (\Throwable) {
+            $database->getAdapter()->deleteCollection($collection);
+        }
     }
 }

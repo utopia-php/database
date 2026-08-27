@@ -12,10 +12,18 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
@@ -77,6 +85,20 @@ class Mongo extends Adapter
         $this->client->connect();
     }
 
+    public function getHostname(): string
+    {
+        return $this->client->getHost();
+    }
+
+    /**
+     * Returns the current Mongo client
+     * @return mixed
+     */
+    public function getDriver(): mixed
+    {
+        return $this->client;
+    }
+
     public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
     {
         if (!$this->getSupportForTimeouts()) {
@@ -112,33 +134,62 @@ class Mongo extends Adapter
             return $callback();
         }
 
-        try {
-            $this->startTransaction();
-            $result = $callback();
-            $this->commitTransaction();
-            return $result;
-        } catch (\Throwable $action) {
-            try {
-                $this->rollbackTransaction();
-            } catch (\Throwable) {
-                // Throw the original exception, not the rollback one
-                // Since if it's a duplicate key error, the rollback will fail,
-                // and we want to throw the original exception.
-            } finally {
-                // Ensure state is cleaned up even if rollback fails
-                if ($this->session) {
-                    try {
-                        $this->client->endSessions([$this->session]);
-                    } catch (\Throwable $endSessionError) {
-                        // Ignore errors when ending session during error cleanup
-                    }
-                }
-                $this->inTransaction = 0;
-                $this->session = null;
-            }
-
-            throw $action;
+        // upsert + $setOnInsert hits WriteConflict (E112) under txn snapshot isolation.
+        if ($this->skipDuplicates) {
+            return $callback();
         }
+
+        $sleep = 50_000; // 50 milliseconds
+        $retries = 2;
+
+        for ($attempts = 0; $attempts <= $retries; $attempts++) {
+            try {
+                $this->startTransaction();
+                $result = $callback();
+                $this->commitTransaction();
+                return $result;
+            } catch (\Throwable $action) {
+                try {
+                    $this->rollbackTransaction();
+                } catch (\Throwable) {
+                    // Throw the original exception, not the rollback one
+                    // Since if it's a duplicate key error, the rollback will fail,
+                    // and we want to throw the original exception.
+                } finally {
+                    // Ensure state is cleaned up even if rollback fails
+                    if ($this->session) {
+                        try {
+                            $this->client->endSessions([$this->session]);
+                        } catch (\Throwable $endSessionError) {
+                            // Ignore errors when ending session during error cleanup
+                        }
+                    }
+                    $this->inTransaction = 0;
+                    $this->session = null;
+                }
+
+                if (
+                    $action instanceof DuplicateException ||
+                    $action instanceof RestrictedException ||
+                    $action instanceof AuthorizationException ||
+                    $action instanceof RelationshipException ||
+                    $action instanceof ConflictException ||
+                    $action instanceof LimitException ||
+                    $action instanceof TimeoutException
+                ) {
+                    throw $action;
+                }
+
+                if ($attempts < $retries) {
+                    \usleep($sleep * ($attempts + 1));
+                    continue;
+                }
+
+                throw $action;
+            }
+        }
+
+        throw new TransactionException('Failed to execute transaction');
     }
 
     public function startTransaction(): bool
@@ -414,8 +465,10 @@ class Mongo extends Adapter
     {
         $id = $this->getNamespace() . '_' . $this->filter($name);
 
-        // For metadata collections outside transactions, check if exists first
-        if (!$this->inTransaction && $name === Database::METADATA && $this->exists($this->getNamespace(), $name)) {
+        // In shared-tables mode or for metadata, the physical collection may
+        // already exist for another tenant. Return early to avoid a
+        // "Collection Exists" exception from the client.
+        if (!$this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
             return true;
         }
 
@@ -426,7 +479,20 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
-                return true;
+                if ($this->getSharedTables() || $name === Database::METADATA) {
+                    return true;
+                }
+                throw $e;
+            }
+            // Client throws code-0 "Collection Exists" when its pre-check
+            // finds the collection. In shared-tables/metadata context this
+            // is a no-op; otherwise re-throw as DuplicateException so
+            // Database::createCollection() can run orphan reconciliation.
+            if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
+                if ($this->getSharedTables() || $name === Database::METADATA) {
+                    return true;
+                }
+                throw new DuplicateException('Collection already exists', $e->getCode(), $e);
             }
             throw $e;
         }
@@ -1283,6 +1349,11 @@ class Mongo extends Adapter
                 continue;
             }
 
+            // Operators are resolved by the database (aggregation pipeline); skip casting
+            if (Operator::isOperator($value)) {
+                continue;
+            }
+
             if ($array) {
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
@@ -1298,6 +1369,7 @@ class Mongo extends Adapter
             foreach ($value as &$node) {
                 switch ($type) {
                     case Database::VAR_INTEGER:
+                    case Database::VAR_BIGINT:
                         $node = (int)$node;
                         break;
                     case Database::VAR_DATETIME:
@@ -1333,7 +1405,9 @@ class Mongo extends Adapter
     private function convertStdClassToArray(mixed $value): mixed
     {
         if (is_object($value) && get_class($value) === stdClass::class) {
-            return array_map($this->convertStdClassToArray(...), get_object_vars($value));
+            $properties = get_object_vars($value);
+
+            return $properties === [] ? $value : array_map($this->convertStdClassToArray(...), $properties);
         }
 
         if (is_array($value)) {
@@ -1377,6 +1451,11 @@ class Mongo extends Adapter
                 continue;
             }
 
+            // Operators are resolved by the database (aggregation pipeline); skip casting
+            if (Operator::isOperator($value)) {
+                continue;
+            }
+
             if ($array) {
                 if (is_string($value)) {
                     $decoded = json_decode($value, true);
@@ -1393,7 +1472,11 @@ class Mongo extends Adapter
                 switch ($type) {
                     case Database::VAR_DATETIME:
                         if (!($node instanceof UTCDateTime)) {
-                            $node = new UTCDateTime(new \DateTime($node));
+                            try {
+                                $node = new UTCDateTime(new \DateTime($node));
+                            } catch (\Throwable $e) {
+                                throw new StructureException('Invalid datetime value for attribute "' . $key . '": ' . $e->getMessage());
+                            }
                         }
                         break;
                     case Database::VAR_OBJECT:
@@ -1464,6 +1547,42 @@ class Mongo extends Adapter
             }
 
             $records[] = $record;
+        }
+
+        // insertMany aborts the txn on any duplicate; upsert + $setOnInsert no-ops instead.
+        if ($this->skipDuplicates) {
+            if (empty($records)) {
+                return [];
+            }
+
+            $operations = [];
+            foreach ($records as $record) {
+                $filter = ['_uid' => $record['_uid'] ?? ''];
+                if ($this->sharedTables) {
+                    $filter['_tenant'] = $record['_tenant'] ?? $this->getTenant();
+                }
+
+                // Filter fields can't reappear in $setOnInsert (mongo path-conflict error).
+                $setOnInsert = $record;
+                unset($setOnInsert['_uid'], $setOnInsert['_tenant']);
+
+                if (empty($setOnInsert)) {
+                    continue;
+                }
+
+                $operations[] = [
+                    'filter' => $filter,
+                    'update' => ['$setOnInsert' => $setOnInsert],
+                ];
+            }
+
+            try {
+                $this->client->upsert($name, $operations, $options);
+            } catch (MongoException $e) {
+                throw $this->processException($e);
+            }
+
+            return $documents;
         }
 
         try {
@@ -1546,10 +1665,16 @@ class Mongo extends Adapter
             unset($record['_id']); // Don't update _id
 
             $options = $this->getTransactionOptions();
-            $updateQuery = [
-                '$set' => $record,
-            ];
-            $this->client->update($name, $filters, $updateQuery, $options);
+
+            $pipeline = $this->buildOperatorPipeline($record);
+            if ($pipeline !== null) {
+                $this->updateWithPipeline($name, $filters, $pipeline, $options);
+            } else {
+                $updateQuery = [
+                    '$set' => $record,
+                ];
+                $this->client->update($name, $filters, $updateQuery, $options);
+            }
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -1588,11 +1713,16 @@ class Mongo extends Adapter
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
 
-        $updateQuery = [
-            '$set' => $record,
-        ];
-
         try {
+            $pipeline = $this->buildOperatorPipeline($record);
+            if ($pipeline !== null) {
+                return $this->updateWithPipeline($name, $filters, $pipeline, $options, multi: true);
+            }
+
+            $updateQuery = [
+                '$set' => $record,
+            ];
+
             return $this->client->update(
                 $name,
                 $filters,
@@ -1603,6 +1733,319 @@ class Mongo extends Adapter
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * Build an aggregation pipeline update from a record that may contain Operator instances.
+     *
+     * Returns null when the record contains no operators, so the caller can fall back to a
+     * plain `$set` update. When operators are present, every regular value is wrapped in
+     * `$literal` (so it is never interpreted as an aggregation expression) and every operator
+     * is translated into the equivalent aggregation expression, all merged into a single
+     * `$set` stage.
+     *
+     * @param array<string, mixed> $record
+     * @return array<int, array<string, mixed>>|null
+     * @throws DatabaseException
+     */
+    private function buildOperatorPipeline(array $record): ?array
+    {
+        $hasOperators = false;
+        foreach ($record as $value) {
+            if (Operator::isOperator($value)) {
+                $hasOperators = true;
+                break;
+            }
+        }
+
+        if (!$hasOperators) {
+            return null;
+        }
+
+        $set = [];
+        foreach ($record as $key => $value) {
+            if (Operator::isOperator($value)) {
+                $set[$key] = $this->getOperatorExpression($value, $key);
+            } else {
+                // Wrap literals so values are never parsed as aggregation expressions/field paths
+                $set[$key] = ['$literal' => $value];
+            }
+        }
+
+        return [['$set' => $set]];
+    }
+
+    /**
+     * Execute an aggregation pipeline update.
+     *
+     * The Mongo client's update() helper wraps the update document in toObject(), which would
+     * turn a pipeline (a list) into an object and break it. We therefore build the raw update
+     * command and send it through query(), letting BSON encode the pipeline as an array.
+     *
+     * @param string $collection
+     * @param array<string, mixed> $filters
+     * @param array<int, array<string, mixed>> $pipeline
+     * @param array<string, mixed> $options
+     * @param bool $multi
+     * @return int Number of matched documents
+     * @throws MongoException
+     */
+    private function updateWithPipeline(string $collection, array $filters, array $pipeline, array $options = [], bool $multi = false): int
+    {
+        $command = [
+            'update' => $collection,
+            'updates' => [
+                [
+                    'q' => $this->client->toObject($filters),
+                    'u' => $pipeline,
+                    'multi' => $multi,
+                    'upsert' => false,
+                ],
+            ],
+        ];
+
+        if (isset($options['session'])) {
+            $command['session'] = $options['session'];
+        }
+
+        $result = $this->client->query($command);
+
+        return \is_int($result) ? $result : 0;
+    }
+
+    /**
+     * Execute a batch of upsert operations, supporting aggregation-pipeline updates.
+     *
+     * Mirrors the Mongo client's upsert() helper but does not wrap each update in toObject(),
+     * so an update may be either a classic update document or an aggregation pipeline (list).
+     *
+     * @param string $collection
+     * @param array<int, array{filter: array<string, mixed>, update: array<mixed>}> $operations
+     * @param array<string, mixed> $options
+     * @return int
+     * @throws MongoException
+     */
+    private function executeUpsert(string $collection, array $operations, array $options = []): int
+    {
+        $updates = [];
+        foreach ($operations as $op) {
+            $updates[] = [
+                'q' => $this->client->toObject($op['filter']),
+                'u' => $op['update'],
+                'upsert' => true,
+                'multi' => false,
+            ];
+        }
+
+        $command = \array_merge(
+            [
+                'update' => $collection,
+                'updates' => $updates,
+            ],
+            $options
+        );
+
+        $result = $this->client->query($command);
+
+        return \is_int($result) ? $result : 0;
+    }
+
+    /**
+     * Translate an Operator into a MongoDB aggregation expression for use inside a `$set` stage.
+     *
+     * @param Operator $operator
+     * @param string $field The (already escaped) field name the expression is assigned to
+     * @return mixed
+     * @throws DatabaseException
+     */
+    private function getOperatorExpression(Operator $operator, string $field): mixed
+    {
+        $ref = '$' . $field;
+        $method = $operator->getMethod();
+        $values = $operator->getValues();
+
+        switch ($method) {
+            // Numeric operators
+            case Operator::TYPE_INCREMENT:
+                $expr = ['$add' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
+                if (isset($values[1])) {
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
+                }
+                return $expr;
+
+            case Operator::TYPE_DECREMENT:
+                $expr = ['$subtract' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
+                if (isset($values[1])) {
+                    $expr = ['$cond' => [['$gte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
+                }
+                return $expr;
+
+            case Operator::TYPE_MULTIPLY:
+                $expr = ['$multiply' => [['$ifNull' => [$ref, 0]], $values[0] ?? 1]];
+                if (isset($values[1])) {
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
+                }
+                return $expr;
+
+            case Operator::TYPE_DIVIDE:
+                $expr = ['$divide' => [['$ifNull' => [$ref, 0]], $values[0]]];
+                if (isset($values[1])) {
+                    $expr = ['$cond' => [['$gte' => [$expr, $values[1]]], $expr, ['$ifNull' => [$ref, 0]]]];
+                }
+                return $expr;
+
+            case Operator::TYPE_MODULO:
+                return ['$mod' => [['$ifNull' => [$ref, 0]], $values[0]]];
+
+            case Operator::TYPE_POWER:
+                $base = ['$ifNull' => [$ref, 0]];
+                $exponent = $values[0];
+                $expr = ['$pow' => [$base, $exponent]];
+                if (isset($values[1])) {
+                    // Apply the power only if the result stays within the max; otherwise leave the
+                    // value unchanged. Overflow yields Infinity, which is greater than the max, so
+                    // it correctly stays put.
+                    $expr = ['$cond' => [['$lte' => [$expr, $values[1]]], $expr, $base]];
+
+                    // Never compute $pow for an undefined input (0 to a negative power, or a
+                    // negative base to a fractional exponent): it yields NaN, which Mongo orders
+                    // below every number, so a plain `<= max` check would wrongly apply it. The
+                    // exponent is constant, so only guard the base condition it can actually trigger.
+                    $guards = [];
+                    if ($exponent < 0) {
+                        $guards[] = ['$eq' => [$base, 0]];
+                    }
+                    if (\floor($exponent) != $exponent) {
+                        $guards[] = ['$lt' => [$base, 0]];
+                    }
+                    if (!empty($guards)) {
+                        $undefined = \count($guards) === 1 ? $guards[0] : ['$or' => $guards];
+                        $expr = ['$cond' => [$undefined, $base, $expr]];
+                    }
+                }
+                return $expr;
+
+                // String operators
+            case Operator::TYPE_STRING_CONCAT:
+                return ['$concat' => [['$ifNull' => [$ref, '']], ['$literal' => $values[0] ?? '']]];
+
+            case Operator::TYPE_STRING_REPLACE:
+                // An empty search is a no-op (matches SQL REPLACE semantics); MongoDB's
+                // $replaceAll would otherwise insert the replacement between every character.
+                if (($values[0] ?? '') === '') {
+                    return ['$ifNull' => [$ref, '']];
+                }
+                return ['$replaceAll' => [
+                    'input' => ['$ifNull' => [$ref, '']],
+                    'find' => ['$literal' => $values[0]],
+                    'replacement' => ['$literal' => $values[1] ?? ''],
+                ]];
+
+                // Boolean operators
+            case Operator::TYPE_TOGGLE:
+                return ['$not' => [['$ifNull' => [$ref, false]]]];
+
+                // Array operators
+            case Operator::TYPE_ARRAY_APPEND:
+                return ['$concatArrays' => [['$ifNull' => [$ref, []]], ['$literal' => \array_values($values)]]];
+
+            case Operator::TYPE_ARRAY_PREPEND:
+                return ['$concatArrays' => [['$literal' => \array_values($values)], ['$ifNull' => [$ref, []]]]];
+
+            case Operator::TYPE_ARRAY_INSERT:
+                $index = (int)($values[0] ?? 0);
+                $value = $values[1] ?? null;
+                $size = ['$size' => '$$arr'];
+                $before = ['$cond' => [['$lte' => [$index, 0]], [], ['$slice' => ['$$arr', $index]]]];
+                $after = ['$cond' => [['$gte' => [$index, $size]], [], ['$slice' => ['$$arr', ['$subtract' => [$index, $size]]]]]];
+                return ['$let' => [
+                    'vars' => ['arr' => ['$ifNull' => [$ref, []]]],
+                    'in' => ['$concatArrays' => [$before, ['$literal' => [$value]], $after]],
+                ]];
+
+            case Operator::TYPE_ARRAY_REMOVE:
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$ref, []]],
+                    'cond' => ['$ne' => ['$$this', ['$literal' => $values[0] ?? null]]],
+                ]];
+
+            case Operator::TYPE_ARRAY_UNIQUE:
+                // Preserve first-occurrence order while removing duplicates
+                return ['$reduce' => [
+                    'input' => ['$ifNull' => [$ref, []]],
+                    'initialValue' => [],
+                    'in' => ['$cond' => [
+                        ['$in' => ['$$this', '$$value']],
+                        '$$value',
+                        ['$concatArrays' => ['$$value', ['$$this']]],
+                    ]],
+                ]];
+
+            case Operator::TYPE_ARRAY_INTERSECT:
+                // Keep elements present in the given set, preserving original order
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$ref, []]],
+                    'cond' => ['$in' => ['$$this', ['$literal' => \array_values($values)]]],
+                ]];
+
+            case Operator::TYPE_ARRAY_DIFF:
+                // Remove elements present in the given set, preserving original order
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$ref, []]],
+                    'cond' => ['$not' => [['$in' => ['$$this', ['$literal' => \array_values($values)]]]]],
+                ]];
+
+            case Operator::TYPE_ARRAY_FILTER:
+                return ['$filter' => [
+                    'input' => ['$ifNull' => [$ref, []]],
+                    'cond' => $this->getArrayFilterCondition((string)($values[0] ?? ''), $values[1] ?? null),
+                ]];
+
+                // Date operators
+            case Operator::TYPE_DATE_ADD_DAYS:
+                return ['$dateAdd' => [
+                    'startDate' => ['$ifNull' => [$ref, '$$NOW']],
+                    'unit' => 'day',
+                    'amount' => (int)($values[0] ?? 0),
+                ]];
+
+            case Operator::TYPE_DATE_SUB_DAYS:
+                return ['$dateSubtract' => [
+                    'startDate' => ['$ifNull' => [$ref, '$$NOW']],
+                    'unit' => 'day',
+                    'amount' => (int)($values[0] ?? 0),
+                ]];
+
+            case Operator::TYPE_DATE_SET_NOW:
+                return '$$NOW';
+
+            default:
+                throw new DatabaseException("Unsupported operator: {$method}");
+        }
+    }
+
+    /**
+     * Build the aggregation condition expression used by the arrayFilter operator.
+     *
+     * @param string $condition
+     * @param mixed $compare
+     * @return array<string, mixed>
+     */
+    private function getArrayFilterCondition(string $condition, mixed $compare): array
+    {
+        $value = ['$literal' => $compare];
+
+        return match ($condition) {
+            'equal' => ['$eq' => ['$$this', $value]],
+            'notEqual' => ['$ne' => ['$$this', $value]],
+            'greaterThan' => ['$gt' => ['$$this', $value]],
+            'greaterThanEqual' => ['$gte' => ['$$this', $value]],
+            'lessThan' => ['$lt' => ['$$this', $value]],
+            'lessThanEqual' => ['$lte' => ['$$this', $value]],
+            'isNull' => ['$eq' => ['$$this', null]],
+            'isNotNull' => ['$ne' => ['$$this', null]],
+            default => ['$literal' => true], // unknown condition keeps every element
+        };
     }
 
     /**
@@ -1623,6 +2066,7 @@ class Mongo extends Adapter
             $attribute = $this->filter($attribute);
 
             $operations = [];
+            $hasPipeline = false;
             foreach ($changes as $change) {
                 $document = $change->getNew();
                 $oldDocument = $change->getOld();
@@ -1675,20 +2119,41 @@ class Mongo extends Adapter
                         $update['$unset'] = $unsetFields;
                     }
                 } else {
-                    // Update all fields
-                    $update = [
-                        '$set' => $record
-                    ];
+                    $pipeline = $this->buildOperatorPipeline($record);
 
-                    if (!empty($unsetFields)) {
-                        $update['$unset'] = $unsetFields;
-                    }
+                    if ($pipeline !== null) {
+                        // Operator-based upsert: resolve operators via an aggregation pipeline
+                        // so they apply atomically, with $ifNull defaults on insert.
+                        $set = $pipeline[0]['$set'];
 
-                    // Add UUID7 _id for new documents in upsert operations
-                    if (empty($document->getSequence())) {
-                        $update['$setOnInsert'] = [
-                            '_id' => $this->client->createUuid()
+                        // Generate an _id only on insert; keep the existing one on update.
+                        if (empty($document->getSequence())) {
+                            $set['_id'] = ['$ifNull' => ['$_id', $this->client->createUuid()]];
+                        }
+
+                        $update = [['$set' => $set]];
+
+                        if (!empty($unsetFields)) {
+                            $update[] = ['$unset' => \array_keys($unsetFields)];
+                        }
+
+                        $hasPipeline = true;
+                    } else {
+                        // Update all fields
+                        $update = [
+                            '$set' => $record
                         ];
+
+                        if (!empty($unsetFields)) {
+                            $update['$unset'] = $unsetFields;
+                        }
+
+                        // Add UUID7 _id for new documents in upsert operations
+                        if (empty($document->getSequence())) {
+                            $update['$setOnInsert'] = [
+                                '_id' => $this->client->createUuid()
+                            ];
+                        }
                     }
                 }
 
@@ -1700,11 +2165,17 @@ class Mongo extends Adapter
 
             $options = $this->getTransactionOptions();
 
-            $this->client->upsert(
-                $name,
-                $operations,
-                options: $options
-            );
+            if ($hasPipeline) {
+                // The client's upsert() wraps each update in toObject(), which would corrupt a
+                // pipeline (a list). Send the raw command so BSON encodes pipelines as arrays.
+                $this->executeUpsert($name, $operations, $options);
+            } else {
+                $this->client->upsert(
+                    $name,
+                    $operations,
+                    options: $options
+                );
+            }
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
@@ -1983,11 +2454,24 @@ class Mongo extends Adapter
             '$tenant' => '_tenant',
             '$createdAt' => '_createdAt',
             '$updatedAt' => '_updatedAt',
+            '$deletedAt' => '_deletedAt',
             '$permissions' => '_permissions',
             default => $attribute
         };
     }
 
+    /**
+     * @return list<string>
+     */
+    private function permissionStrings(string $type): array
+    {
+        $permissions = [];
+        foreach ($this->authorization->getRoles() as $role) {
+            $permissions[] = $type . '("' . $role . '")';
+        }
+
+        return $permissions;
+    }
 
     /**
      * Find Documents
@@ -2025,8 +2509,7 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) {
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("{$forPermission}\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = $this->permissionStrings($forPermission);
         }
 
         $options = [];
@@ -2199,6 +2682,7 @@ class Mongo extends Adapter
             Database::VAR_MEDIUMTEXT => 'string',
             Database::VAR_LONGTEXT => 'string',
             Database::VAR_INTEGER => 'int',
+            Database::VAR_BIGINT => 'long',
             Database::VAR_FLOAT => 'double',
             Database::VAR_BOOLEAN => 'bool',
             Database::VAR_DATETIME => 'date',
@@ -2267,15 +2751,6 @@ class Mongo extends Adapter
         $this->escapeQueryAttributes($collection, $queries);
 
         $filters = [];
-        $options = [];
-
-        if (!\is_null($max) && $max > 0) {
-            $options['limit'] = $max;
-        }
-
-        if ($this->timeout) {
-            $options['maxTimeMS'] = $this->timeout;
-        }
 
         // Build filters from queries
         $filters = $this->buildFilters($queries);
@@ -2286,8 +2761,7 @@ class Mongo extends Adapter
 
         // Add permissions filter if authorization is enabled
         if ($this->authorization->getStatus()) {
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
         }
 
         /**
@@ -2300,6 +2774,11 @@ class Mongo extends Adapter
          **/
 
         $options = $this->getTransactionOptions();
+
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
+
         $pipeline = [];
 
         // Add match stage if filters are provided
@@ -2345,6 +2824,11 @@ class Mongo extends Adapter
 
             return 0;
         } catch (MongoException $e) {
+            $processed = $this->processException($e);
+            if ($processed instanceof TimeoutException) {
+                throw $processed;
+            }
+
             return 0;
         }
     }
@@ -2376,8 +2860,7 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $roles = \implode('|', $this->authorization->getRoles());
-            $filters['_permissions']['$in'] = [new Regex("read\\(\".*(?:{$roles}).*\"\\)", 'i')];
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
         }
 
         // using aggregation to get sum an attribute as described in
@@ -2403,7 +2886,16 @@ class Mongo extends Adapter
         ];
 
         $options = $this->getTransactionOptions();
-        return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+
+        if ($this->timeout) {
+            $options['maxTimeMS'] = $this->timeout;
+        }
+
+        try {
+            return $this->client->aggregate($name, $pipeline, $options)->cursor->firstBatch[0]->total ?? 0;
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -2902,7 +3394,7 @@ class Mongo extends Adapter
      */
     protected function getOrder(string $order): int
     {
-        return match ($order) {
+        return match (\strtoupper($order)) {
             Database::ORDER_ASC => 1,
             Database::ORDER_DESC => -1,
             default => throw new DatabaseException('Unknown sort order:' . $order . '. Must be one of ' . Database::ORDER_ASC . ', ' . Database::ORDER_DESC),
@@ -2990,6 +3482,16 @@ class Mongo extends Adapter
     {
         // Mongo does not handle integers directly, so using MariaDB limit for now
         return 4294967295;
+    }
+
+    /**
+     * Get max BIGINT limit
+     *
+     * @return int
+     */
+    public function getLimitForBigInt(): int
+    {
+        return Database::MAX_BIG_INT;
     }
 
     /**
@@ -3196,6 +3698,11 @@ class Mongo extends Adapter
         return false;
     }
 
+    public function getSupportForCaching(): bool
+    {
+        return true;
+    }
+
     /**
      * Is hostname supported?
      *
@@ -3224,6 +3731,11 @@ class Mongo extends Adapter
     public function getSupportForUpserts(): bool
     {
         return true;
+    }
+
+    public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return false;
     }
 
     public function getSupportForReconnection(): bool
@@ -3359,7 +3871,7 @@ class Mongo extends Adapter
      */
     public function getSupportForOperators(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -3511,9 +4023,9 @@ class Mongo extends Adapter
 
         // Duplicate key error
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
-            $message = $e->getMessage();
-            if (!\str_contains($message, '_uid')) {
-                return new DuplicateException('Document with the requested unique attributes already exists', $e->getCode(), $e);
+            $index = $this->getViolatedIndex($e->getMessage());
+            if ($index !== null && $index !== '_uid' && $index !== '_id_') {
+                return new UniqueException('Unique index violation', $e->getCode(), $e);
             }
             return new DuplicateException('Document already exists', $e->getCode(), $e);
         }
@@ -3543,7 +4055,27 @@ class Mongo extends Adapter
             return new TypeException('Invalid operation', $e->getCode(), $e);
         }
 
+        // Invalid $pow argument (0 raised to a negative power) — matches the SQL adapters, which
+        // report an undefined power as a numeric range error.
+        if ($e->getCode() === 28764) {
+            return new LimitException('Value out of range', $e->getCode(), $e);
+        }
+
         return $e;
+    }
+
+    /**
+     * Extract the index name from a duplicate key error, e.g.
+     * "E11000 duplicate key error collection: db.movies index: _uid dup key: { _uid: \"movie\" }"
+     * resolves to "_uid". Returns null when the message cannot be parsed.
+     */
+    protected function getViolatedIndex(string $message): ?string
+    {
+        if (\preg_match('/index:\s*(\S+)\s+dup key/', $message, $matches) !== 1) {
+            return null;
+        }
+
+        return $matches[1];
     }
 
     protected function quote(string $string): string
@@ -3599,15 +4131,25 @@ class Mongo extends Adapter
         return [];
     }
 
+    public function getSupportForSchemaIndexes(): bool
+    {
+        return false;
+    }
+
+    public function getSchemaIndexes(string $collection): array
+    {
+        return [];
+    }
+
     /**
      * @param string $collection
-     * @param array<int> $tenants
-     * @return int|null|array<string, array<int>>
+     * @param array<int|string> $tenants
+     * @return int|string|null|array<string, array<int|string|null>>
      */
     public function getTenantFilters(
         string $collection,
         array $tenants = [],
-    ): int|null|array {
+    ): int|string|null|array {
         $values = [];
         if (!$this->sharedTables) {
             return $values;

@@ -393,7 +393,13 @@ class Query
 
         if (\in_array($method, self::LOGICAL_TYPES)) {
             foreach ($values as $index => $value) {
-                $values[$index] = self::parseQuery($value);
+                if (\is_string($value)) {
+                    $values[$index] = self::parse($value);
+                } elseif (\is_array($value)) {
+                    $values[$index] = self::parseQuery($value);
+                } else {
+                    throw new QueryException('Invalid nested query. Must be an array or string, got ' . \gettype($value));
+                }
             }
         }
 

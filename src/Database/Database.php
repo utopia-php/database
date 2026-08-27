@@ -428,6 +428,8 @@ class Database
 
     protected bool $validate = true;
 
+    protected bool $dropUnknownAttributes = false;
+
     protected bool $preserveDates = false;
 
     protected bool $skipDuplicates = false;
@@ -1493,6 +1495,25 @@ class Database
         $className = $this->documentTypes[$collection] ?? Document::class;
 
         return new $className($data);
+    }
+
+    public function getDropUnknownAttributes(): bool
+    {
+        return $this->dropUnknownAttributes;
+    }
+
+    /**
+     * Drop attributes missing from the collection schema instead of rejecting the write.
+     *
+     * Enable this where the schema is owned by the application rather than the caller, so a
+     * deploy that writes an attribute before its migration has run degrades to a warning
+     * instead of failing every write.
+     */
+    public function setDropUnknownAttributes(bool $drop): static
+    {
+        $this->dropUnknownAttributes = $drop;
+
+        return $this;
     }
 
     public function getPreserveDates(): bool
@@ -6316,6 +6337,11 @@ class Database
             }
             $document = new Document($document);
 
+            // Ahead of change detection: a dropped attribute is never persisted, so
+            // counting it as a change would bump $updatedAt and fire an update event
+            // for a write that leaves the stored document identical.
+            $document = $this->removeUnknownAttributes($collection, $document);
+
             $attributes = $collection->getAttribute('attributes', []);
 
             $relationships = \array_filter($attributes, function ($attribute) {
@@ -7391,6 +7417,8 @@ class Database
 
         foreach ($documents as $key => $document) {
             $old = $existingDocs[$this->tenantKey($document)] ?? new Document();
+
+            $document = $this->removeUnknownAttributes($collection, $document);
 
             // Extract operators early to avoid comparison issues
             $documentArray = $document->getArrayCopy();
@@ -9232,7 +9260,55 @@ class Database
     }
 
     /**
+     * Remove attributes the collection schema does not declare.
+     *
+     * Used ahead of change detection on update/upsert so a dropped key is not
+     * counted as a write. Encode also calls this after iterating attributes.
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @param array<string, true>|null $known Attribute ids already collected (e.g. during encode)
+     *
+     * @return Document
+     */
+    protected function removeUnknownAttributes(Document $collection, Document $document, ?array $known = null): Document
+    {
+        if (!$this->dropUnknownAttributes || !$this->adapter->getSupportForAttributes()) {
+            return $document;
+        }
+
+        if ($known === null) {
+            $known = [];
+            foreach ($collection->getAttribute('attributes', []) as $attribute) {
+                $known[$attribute['$id'] ?? ''] = true;
+            }
+        }
+
+        $dropped = [];
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with($key, '$') || isset($known[$key])) {
+                continue;
+            }
+
+            $dropped[] = $key;
+            $document->removeAttribute($key);
+        }
+
+        if (!empty($dropped)) {
+            Console::warning(
+                'Dropped unknown attributes "' . \implode('", "', $dropped) . '" from collection "' . $collection->getId() . '"'
+                . ($this->adapter->getTenant() === null ? '' : ' on tenant ' . $this->adapter->getTenant())
+            );
+        }
+
+        return $document;
+    }
+
+    /**
      * Encode Document
+     *
+     * When dropUnknownAttributes is enabled, attributes missing from the
+     * collection schema are removed here while the known set is collected.
      *
      * @param Document $collection
      * @param Document $document
@@ -9249,8 +9325,10 @@ class Database
             $attributes[] = $attribute;
         }
 
+        $known = [];
         foreach ($attributes as $attribute) {
             $key = $attribute['$id'] ?? '';
+            $known[$key] = true;
             $array = $attribute['array'] ?? false;
             $default = $attribute['default'] ?? null;
             $filters = $attribute['filters'] ?? [];
@@ -9303,7 +9381,7 @@ class Database
             $document->setAttribute($key, $value);
         }
 
-        return $document;
+        return $this->removeUnknownAttributes($collection, $document, $known);
     }
 
     /**

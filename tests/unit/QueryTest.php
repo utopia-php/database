@@ -399,7 +399,7 @@ class QueryTest extends TestCase
     {
         // Some clients serialize the children of a logical query as JSON strings
         // rather than nested objects. Parsing must handle that without a TypeError.
-        $json = \json_encode([
+        $json = (string) \json_encode([
             'method' => Query::TYPE_OR,
             'values' => [
                 Query::equal('actors', ['Brad Pitt'])->toString(),
@@ -422,7 +422,7 @@ class QueryTest extends TestCase
         // A nested value that is neither an array nor a string is a clean
         // QueryException, never an uncaught TypeError.
         try {
-            Query::parse(\json_encode(['method' => Query::TYPE_OR, 'values' => [123]]));
+            Query::parse((string) \json_encode(['method' => Query::TYPE_OR, 'values' => [123]]));
             $this->fail('Failed to throw exception');
         } catch (QueryException $e) {
             $this->assertEquals('Invalid nested query. Must be an array or string, got integer', $e->getMessage());

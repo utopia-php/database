@@ -61,7 +61,7 @@ class EntityManager
      * @param  class-string<T>  $className
      * @return T|null
      */
-    public function find(string $className, string $id): ?object
+    public function find(string $className, string $id, bool $withTrashed = false): ?object
     {
         $metadata = $this->metadataFactory->getMetadata($className);
 
@@ -74,6 +74,17 @@ class EntityManager
         $document = $this->db->getDocument($metadata->collection, $id);
 
         if ($document->isEmpty()) {
+            return null;
+        }
+
+        // findMany() hides soft-deleted rows unless asked for them. Looking one up
+        // by id has to hide them too, or the same record is absent from a listing
+        // and present from a direct fetch.
+        if (
+            ! $withTrashed
+            && $metadata->softDeleteColumn !== null
+            && $document->getAttribute($metadata->softDeleteColumn) !== null
+        ) {
             return null;
         }
 

@@ -42,9 +42,9 @@ trait Entities
      * @param  class-string<T>  $className
      * @return T|null
      */
-    public function findEntity(string $className, string $id): ?object
+    public function findEntity(string $className, string $id, bool $withTrashed = false): ?object
     {
-        return $this->getEntityManager()->find($className, $id);
+        return $this->getEntityManager()->find($className, $id, $withTrashed);
     }
 
     /**

@@ -20,20 +20,11 @@ class Having extends Base
     }
 
     /**
-     * Validate that the value is a valid having query with at least one condition.
-     *
-     * @param mixed $value The query to validate
-     * @return bool
+     * Validate a having query has at least one condition, each a Query.
      */
-    public function isValid($value): bool
+    protected function isValidQuery(Query $query): bool
     {
-        if (! $value instanceof Query) {
-            $this->message = 'Value must be a Query';
-
-            return false;
-        }
-
-        $conditions = $value->getValues();
+        $conditions = $query->getValues();
         if (empty($conditions)) {
             $this->message = 'Having requires at least one condition';
 

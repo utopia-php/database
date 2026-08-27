@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Query;
 use Utopia\Validator;
 
 /**
@@ -61,6 +62,34 @@ abstract class Base extends Validator
     public function getType(): string
     {
         return self::TYPE_OBJECT;
+    }
+
+    /**
+     * Rejects anything that is not a Query, then defers to the subclass rule.
+     *
+     * Subclasses that validate a Query further override isValidQuery(), not
+     * this, so the not-a-Query message stays the same for every method that
+     * uses it.
+     *
+     * @param  mixed  $value
+     */
+    public function isValid($value): bool
+    {
+        if (! $value instanceof Query) {
+            $this->message = 'Value must be a Query';
+
+            return false;
+        }
+
+        return $this->isValidQuery($value);
+    }
+
+    /**
+     * Validate a Query beyond its type. A method with no further rule inherits this.
+     */
+    protected function isValidQuery(Query $query): bool
+    {
+        return true;
     }
 
     /**

@@ -63,10 +63,12 @@ class Queries extends Validator
             return false;
         }
 
-        // Clear any aliases left over from a previous pass before collecting
-        // this call's set. Order validators persist across requests in pooled
-        // / long-lived processes; letting aliases accumulate leaks state and
-        // lets an unrelated query order by a stale alias.
+        // One pass over the validators: clear aliases left over from a previous
+        // call, and note whether a filter validator is registered. Order
+        // validators persist across requests in pooled / long-lived processes,
+        // so letting aliases accumulate leaks state and lets an unrelated query
+        // order by a stale alias.
+        $hasFilterValidator = false;
         foreach ($this->validators as $validator) {
             if ($validator instanceof Order) {
                 $validator->resetAggregationAliases();
@@ -78,73 +80,65 @@ class Queries extends Validator
             ) {
                 $validator->resetJoinAliases();
             }
+            if ($validator->getMethodType() === Base::METHOD_TYPE_FILTER) {
+                $hasFilterValidator = true;
+            }
         }
 
-        // Parse raw query strings once. Both the alias pre-pass and the main
-        // dispatch loop need Query objects, so doing this here avoids parsing
-        // every string twice.
+        // One pass over the input: parse each raw string, and collect the
+        // aliases the order, select and filter validators have to know about
+        // before dispatch starts. A method can report as both aggregate and
+        // join, so both are tested independently rather than as a chain.
         /** @var list<Query> $parsedQueries */
         $parsedQueries = [];
-        foreach ($value as $q) {
-            if ($q instanceof Query) {
-                $parsedQueries[] = $q;
-
-                continue;
-            }
-            try {
-                $parsedQueries[] = Query::parse($q);
-            } catch (Throwable $e) {
-                $this->message = 'Invalid query: '.$e->getMessage();
-
-                return false;
-            }
-        }
-
         /** @var array<string> $aggregationAliases */
         $aggregationAliases = [];
-        foreach ($parsedQueries as $q) {
-            if ($q->getMethod()->isAggregate()) {
+        $joinAliases = [];
+        foreach ($value as $q) {
+            if (! $q instanceof Query) {
+                try {
+                    $q = Query::parse($q);
+                } catch (Throwable $e) {
+                    $this->message = 'Invalid query: '.$e->getMessage();
+
+                    return false;
+                }
+            }
+
+            $parsedQueries[] = $q;
+
+            $method = $q->getMethod();
+
+            if ($method->isAggregate()) {
                 $alias = $q->getValue('');
                 if (\is_string($alias) && $alias !== '') {
                     $aggregationAliases[] = $alias;
                 }
             }
-        }
-        if (! empty($aggregationAliases)) {
-            foreach ($this->validators as $validator) {
-                if ($validator instanceof Order) {
-                    $validator->addAggregationAliases($aggregationAliases);
+
+            if ($method->isJoin()) {
+                $alias = $q->getJoinAlias();
+                if ($alias !== '') {
+                    $joinAliases[] = $alias;
                 }
             }
         }
 
-        $joinAliases = [];
-        foreach ($parsedQueries as $query) {
-            if (! $query->getMethod()->isJoin()) {
-                continue;
-            }
-            $alias = $query->getJoinAlias();
-            if ($alias !== '') {
-                $joinAliases[] = $alias;
-            }
-        }
-        if (! empty($joinAliases)) {
+        if ($aggregationAliases !== [] || $joinAliases !== []) {
             foreach ($this->validators as $validator) {
+                if ($aggregationAliases !== [] && $validator instanceof Order) {
+                    $validator->addAggregationAliases($aggregationAliases);
+                }
                 if (
-                    $validator instanceof Select
-                    || $validator instanceof Filter
-                    || $validator instanceof Order
+                    $joinAliases !== []
+                    && (
+                        $validator instanceof Select
+                        || $validator instanceof Filter
+                        || $validator instanceof Order
+                    )
                 ) {
                     $validator->allowJoinAliases($joinAliases);
                 }
-            }
-        }
-
-        $hasFilterValidator = false;
-        foreach ($this->validators as $validator) {
-            if ($validator->getMethodType() === Base::METHOD_TYPE_FILTER) {
-                $hasFilterValidator = true;
-                break;
             }
         }
 

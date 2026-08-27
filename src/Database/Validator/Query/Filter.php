@@ -181,9 +181,17 @@ class Filter extends Base
             return false;
         }
 
-        foreach ($values as $value) {
-            $validator = null;
+        // The validator depends only on the column's declared type, which does
+        // not change between values, so build it once instead of once per
+        // value. Object containment, spatial and vector checks read the value
+        // itself and stay in the loop below.
+        //
+        // Guarded on a non-empty value list because the unknown-type refusal
+        // used to sit inside the loop, so a query with no values never reached
+        // it. Hoisting it unguarded would start rejecting those.
+        $validator = null;
 
+        if ($values !== []) {
             switch ($attributeType) {
                 case ColumnType::Id:
                     $validator = new Sequence($this->idAttributeType, $attribute === Document::SEQUENCE);
@@ -246,11 +254,31 @@ class Filter extends Base
                     // For dotted attributes on objects, validate as string (path queries)
                     if ($isDottedOnObject) {
                         $validator = new Text(0, 0);
+                    }
+                    break;
+
+                case ColumnType::Point:
+                case ColumnType::Linestring:
+                case ColumnType::Polygon:
+                case ColumnType::Vector:
+                    break;
+
+                default:
+                    $this->message = 'Unknown Data type';
+
+                    return false;
+            }
+        }
+
+        foreach ($values as $value) {
+            switch ($attributeType) {
+                case ColumnType::Object:
+                    if ($isDottedOnObject) {
                         break;
                     }
 
                     // object containment queries on the base object attribute
-                    elseif (\in_array($method, [Method::Equal, Method::NotEqual, Method::Contains, Method::ContainsAny, Method::ContainsAll, Method::NotContains], true)
+                    if (\in_array($method, [Method::Equal, Method::NotEqual, Method::Contains, Method::ContainsAny, Method::ContainsAll, Method::NotContains], true)
                         && ! $this->isValidObjectQueryValues($value)) {
                         $this->message = 'Invalid object query structure for attribute "'.$attribute.'"';
 
@@ -258,6 +286,7 @@ class Filter extends Base
                     }
 
                     continue 2;
+
                 case ColumnType::Point:
                 case ColumnType::Linestring:
                 case ColumnType::Polygon:
@@ -293,10 +322,6 @@ class Filter extends Base
                     }
 
                     continue 2;
-                default:
-                    $this->message = 'Unknown Data type';
-
-                    return false;
             }
 
             if ($validator !== null && ! $validator->isValid($value)) {

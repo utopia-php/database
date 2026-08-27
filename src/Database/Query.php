@@ -37,6 +37,18 @@ class Query extends BaseQuery
     public const TYPE_ELEM_MATCH = 'elemMatch';
 
     /**
+     * Ceiling on the nodes shape() will walk.
+     *
+     * A query tree that reaches this is not one anybody wrote by hand: either a
+     * child points back at an ancestor, which makes the walk unbounded, or the
+     * same child object is shared often enough that the preorder walk visits it
+     * exponentially. The walk deliberately does not deduplicate -- a node
+     * reachable by two paths has to be listed under both, or the reversed pass
+     * would shape a parent before its child -- so the count is what bounds it.
+     */
+    public const int SHAPE_MAX_NODES = 10000;
+
+    /**
      * @param  array<mixed>  $values
      */
     public function __construct(Method|string $method, string $attribute = '', array $values = [])
@@ -159,6 +171,8 @@ class Query extends BaseQuery
      * always resolved before the node itself.
      *
      * @return string
+     *
+     * @throws QueryException if the tree exceeds self::SHAPE_MAX_NODES
      */
     public function shape(): string
     {
@@ -169,6 +183,10 @@ class Query extends BaseQuery
             /** @var self $node */
             $node = \array_pop($stack);
             $nodes[] = $node;
+
+            if (\count($nodes) > self::SHAPE_MAX_NODES) {
+                throw new QueryException('Query is too deeply nested to fingerprint: exceeded '.self::SHAPE_MAX_NODES.' nodes, which means a cycle or a child shared across too many parents');
+            }
 
             if (!\in_array($node->method, self::LOGICAL_TYPES, true)) {
                 continue;

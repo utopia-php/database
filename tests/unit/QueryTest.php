@@ -583,4 +583,32 @@ class QueryTest extends TestCase
             $deep->shape(),
         );
     }
+
+    public function testShapeKeepsASharedChildUnderEveryParent(): void
+    {
+        // The same Query object under two parents is a DAG, not a cycle, and it
+        // has to be shaped under both. This is why the walk cannot simply skip
+        // a node it has already seen: dropping the second occurrence would
+        // leave the reversed pass shaping a parent before its child.
+        $shared = Query::equal('a', ['x']);
+        $tree = Query::and([$shared, Query::or([$shared, Query::greaterThan('b', 1)])]);
+
+        $this->assertSame('and:(equal:a|or:(equal:a|greaterThan:b))', $tree->shape());
+    }
+
+    public function testShapeRefusesATreeThatWouldExplodeTheWalk(): void
+    {
+        // Each level reuses the level below it twice, so the preorder walk sees
+        // 2^depth nodes from a structure built with 40 public calls. Before the
+        // cap this exhausted memory; a cycle behaves the same way, unbounded.
+        $node = Query::equal('a', ['x']);
+        for ($i = 0; $i < 40; $i++) {
+            $node = Query::and([$node, $node]);
+        }
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('Query is too deeply nested to fingerprint');
+
+        $node->shape();
+    }
 }

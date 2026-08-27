@@ -20,20 +20,11 @@ class GroupBy extends Base
     }
 
     /**
-     * Validate that the value is a valid groupBy query with at least one attribute.
-     *
-     * @param mixed $value The query to validate
-     * @return bool
+     * Validate a groupBy query has at least one non-empty attribute.
      */
-    public function isValid($value): bool
+    protected function isValidQuery(Query $query): bool
     {
-        if (! $value instanceof Query) {
-            $this->message = 'Value must be a Query';
-
-            return false;
-        }
-
-        $columns = $value->getValues();
+        $columns = $query->getValues();
         if (empty($columns)) {
             $this->message = 'GroupBy requires at least one attribute';
 

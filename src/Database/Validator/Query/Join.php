@@ -21,37 +21,28 @@ class Join extends Base
     }
 
     /**
-     * Validate that the value is a valid join query with a table name.
-     *
-     * @param mixed $value The query to validate
-     * @return bool
+     * Validate a join query names a table, and that any ON conditions are well formed.
      */
-    public function isValid($value): bool
+    protected function isValidQuery(Query $query): bool
     {
-        if (! $value instanceof Query) {
-            $this->message = 'Value must be a Query';
-
-            return false;
-        }
-
-        if ($value->getMethod() === Method::NaturalJoin) {
+        if ($query->getMethod() === Method::NaturalJoin) {
             $this->message = 'Natural joins are not supported';
 
             return false;
         }
 
-        $table = $value->getAttribute();
+        $table = $query->getAttribute();
         if (empty($table)) {
             $this->message = 'Join requires a table name';
 
             return false;
         }
 
-        if (! $value->isNestedJoin()) {
+        if (! $query->isNestedJoin()) {
             return true;
         }
 
-        $onQueries = $value->getJoinOnQueries();
+        $onQueries = $query->getJoinOnQueries();
         if ($onQueries === []) {
             $this->message = 'Join ON requires at least one condition';
 

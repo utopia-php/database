@@ -41,6 +41,7 @@ class Database
     use Traits\Collections;
     use Traits\Databases;
     use Traits\Documents;
+    use Traits\Entities;
     use Traits\Indexes;
     use Traits\Relationships;
     use Traits\Transactions;

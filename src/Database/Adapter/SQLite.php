@@ -1269,7 +1269,10 @@ class SQLite extends MariaDB
         $attributes['_uid'] = $document->getId();
 
         if ($this->sharedTables) {
-            $attributes['_tenant'] = $this->tenant;
+            // The document's own tenant, not the adapter's: writing the
+            // selected tenant here moves a row (a shared collection's
+            // null-tenant _metadata row) onto whoever happened to be selected.
+            $attributes['_tenant'] = $document->getTenant();
         }
 
         $name = $this->filter($collection);
@@ -1289,7 +1292,7 @@ class SQLite extends MariaDB
             $stmtRemovePermissions = $this->getPDO()->prepare($sql);
             $stmtRemovePermissions->bindValue(':_uid', $id);
             if ($this->sharedTables) {
-                $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
+                $stmtRemovePermissions->bindValue(':_tenant', $document->getTenant());
             }
 
             $values = [];
@@ -1314,7 +1317,7 @@ class SQLite extends MariaDB
                 $stmtAddPermissions = $this->getPDO()->prepare($sql);
                 $stmtAddPermissions->bindValue(":_uid", $newUid);
                 if ($this->sharedTables) {
-                    $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+                    $stmtAddPermissions->bindValue(":_tenant", $document->getTenant());
                 }
 
                 foreach ($binds as $key => $permission) {

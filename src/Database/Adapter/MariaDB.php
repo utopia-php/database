@@ -1001,7 +1001,11 @@ class MariaDB extends SQL
                 $stmtRemovePermissions = $this->getPDO()->prepare($sql);
                 $stmtRemovePermissions->bindValue(':_uid', $id);
                 if ($this->sharedTables) {
-                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
+                    // The document's own tenant, not the adapter's: a row whose
+                    // tenant differs from the selected one (a shared collection's
+                    // null-tenant _metadata row) would otherwise keep its old
+                    // permissions and gain a second, wrongly-tenanted copy.
+                    $stmtRemovePermissions->bindValue(':_tenant', $document->getTenant());
                 }
 
                 $values = [];
@@ -1026,7 +1030,7 @@ class MariaDB extends SQL
                     $stmtAddPermissions = $this->getPDO()->prepare($sql);
                     $stmtAddPermissions->bindValue(":_uid", $newUid);
                     if ($this->sharedTables) {
-                        $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+                        $stmtAddPermissions->bindValue(":_tenant", $document->getTenant());
                     }
 
                     foreach ($binds as $key => $permission) {

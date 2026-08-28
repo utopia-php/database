@@ -1001,7 +1001,7 @@ class MariaDB extends SQL
                 $stmtRemovePermissions = $this->getPDO()->prepare($sql);
                 $stmtRemovePermissions->bindValue(':_uid', $id);
                 if ($this->sharedTables) {
-                    $stmtRemovePermissions->bindValue(':_tenant', $this->tenant);
+                    $stmtRemovePermissions->bindValue(':_tenant', $document->getTenant());
                 }
 
                 $values = [];
@@ -1026,7 +1026,7 @@ class MariaDB extends SQL
                     $stmtAddPermissions = $this->getPDO()->prepare($sql);
                     $stmtAddPermissions->bindValue(":_uid", $newUid);
                     if ($this->sharedTables) {
-                        $stmtAddPermissions->bindValue(":_tenant", $this->tenant);
+                        $stmtAddPermissions->bindValue(":_tenant", $document->getTenant());
                     }
 
                     foreach ($binds as $key => $permission) {

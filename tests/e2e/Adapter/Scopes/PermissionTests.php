@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -10,9 +11,55 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 
 trait PermissionTests
 {
+    public function testUpdatingASharedDefinitionKeepsItsPermissionRowsTenantless(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        // Only the SQL adapters keep permissions in a side table that carries
+        // its own tenant column; Mongo stores them on the document itself.
+        if (!$database->getSharedTables() || !$database->getAdapter() instanceof SQL) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $tenant = $database->getTenant();
+        $collection = 'sharedDefinitionPerms';
+
+        try {
+            // A shared pool's system collections are created once with no
+            // tenant, so every tenant on the pool reads the one definition.
+            $database->setTenant(null);
+            $database->createCollection($collection, [], [], [Permission::read(Role::any())], false);
+
+            // A per-project pass rewrites that definition while it holds one
+            // project's tenant. The rows it writes belong to the document, not
+            // to whoever happened to be selected.
+            $database->setTenant(989);
+            $database->updateDocument(Database::METADATA, $collection, new Document([
+                '$id' => $collection,
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            ]));
+
+            // Permission filtering reads the permission rows, so tenanting them
+            // to 989 hides the shared definition from every other tenant.
+            $database->setTenant(990);
+            $found = $database->find(Database::METADATA, [Query::equal('$id', [$collection])]);
+
+            $this->assertCount(
+                1,
+                $found,
+                'A shared definition updated under one tenant must stay visible to the rest of the pool.',
+            );
+        } finally {
+            $database->setTenant($tenant);
+        }
+    }
+
     public function testUnsetPermissions(): void
     {
         /** @var Database $database */

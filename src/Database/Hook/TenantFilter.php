@@ -36,7 +36,18 @@ class TenantFilter implements Filter, JoinFilter
 
         $name = $this->collection !== '' ? $this->collection : $table;
 
-        if (! empty($this->metadataCollection) && $name === $this->metadataCollection) {
+        // A metadata row may be tenantless -- a shared pool creates its system
+        // collections once, with no tenant, so every tenant on the pool reads
+        // the one definition. Its permission rows carry the document's tenant,
+        // so they are tenantless too, and the side table has to be recognised
+        // as metadata or a write holding a project's tenant filters them out:
+        // the rows are matched for neither read nor delete, and revoking a
+        // permission on a shared definition silently does nothing.
+        $isMetadata = ! empty($this->metadataCollection)
+            && ($name === $this->metadataCollection
+                || $name === Storage::permissionsTable($this->metadataCollection));
+
+        if ($isMetadata) {
             $condition = new Condition("({$prefix}".Storage::TENANT." IN (?) OR {$prefix}".Storage::TENANT." IS NULL)", [$this->tenant]);
         } else {
             $condition = new Condition("{$prefix}".Storage::TENANT." IN (?)", [$this->tenant]);

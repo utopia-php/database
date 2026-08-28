@@ -1269,9 +1269,6 @@ class SQLite extends MariaDB
         $attributes['_uid'] = $document->getId();
 
         if ($this->sharedTables) {
-            // The document's own tenant, not the adapter's: writing the
-            // selected tenant here moves a row (a shared collection's
-            // null-tenant _metadata row) onto whoever happened to be selected.
             $attributes['_tenant'] = $document->getTenant();
         }
 

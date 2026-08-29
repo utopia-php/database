@@ -258,6 +258,9 @@ class Database
     /** @var array<int, array<string, string>> Pending query-cache tombstones by coroutine id. */
     protected array $queryCacheMutations = [];
 
+    /** @var array<int, array<string, string>> Pending document-cache tombstones by coroutine id. */
+    protected array $documentCacheMutations = [];
+
     protected ?NativeDateTime $timestamp = null;
 
     protected ?Relationships $relationshipHook = null;

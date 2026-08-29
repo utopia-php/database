@@ -300,6 +300,16 @@ class Mirror extends Database
     }
 
     /**
+     * Keep the source database's cache invalidation scope open until its outer
+     * adapter transaction commits.
+     */
+    #[\Override]
+    public function withTransaction(callable $callback): mixed
+    {
+        return $this->source->withTransaction($callback);
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function exists(?string $database = null, ?string $collection = null): bool

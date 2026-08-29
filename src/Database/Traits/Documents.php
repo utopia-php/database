@@ -6,6 +6,7 @@ use DateTime as PhpDateTime;
 use Exception;
 use Generator;
 use InvalidArgumentException;
+use RuntimeException;
 use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
@@ -54,6 +55,8 @@ use Utopia\Query\Schema\IndexType;
  */
 trait Documents
 {
+    private const string DOCUMENT_CACHE_BLOCKED_PREFIX = 'blocked:';
+
     private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
     {
         if (Attribute::isIntegerType($attribute->type)) {
@@ -2381,8 +2384,16 @@ trait Documents
     private function getDocumentCacheEpoch(string $collectionKey): ?string
     {
         $epochKey = $collectionKey.'#epoch';
+        $startedKey = $collectionKey.'#started';
+        $finishedKey = $collectionKey.'#finished';
 
         try {
+            $started = $this->cache->getGeneration($startedKey);
+            $finished = $this->cache->getGeneration($finishedKey);
+            if ($started !== $finished) {
+                return null;
+            }
+
             $epoch = $this->cache->load($epochKey, self::TTL);
             if ($epoch === false || $epoch === null) {
                 $epoch = \bin2hex(\random_bytes(16));
@@ -2391,7 +2402,25 @@ trait Documents
                 }
             }
 
-            return \is_string($epoch) && $epoch !== '' ? $epoch : null;
+            if (
+                ! \is_string($epoch)
+                || $epoch === ''
+                || \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX)
+            ) {
+                return null;
+            }
+
+            $nextStarted = $this->cache->getGeneration($startedKey);
+            $nextFinished = $this->cache->getGeneration($finishedKey);
+            if (
+                $started !== $nextStarted
+                || $finished !== $nextFinished
+                || $nextStarted !== $nextFinished
+            ) {
+                return null;
+            }
+
+            return $epoch;
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to load document cache epoch: '.$error->getMessage());
 
@@ -2401,11 +2430,123 @@ trait Documents
 
     private function advanceDocumentCacheEpoch(string $collectionKey): bool
     {
-        $epochKey = $collectionKey.'#epoch';
-        $this->cache->purge($epochKey);
-        $this->cache->save($epochKey, \bin2hex(\random_bytes(16)));
+        $context = $this->getEventContext();
+        if (isset($this->documentCacheMutations[$context][$collectionKey])) {
+            return true;
+        }
+
+        $token = \bin2hex(\random_bytes(16));
+        if (! $this->blockDocumentCacheEpoch($collectionKey, $token)) {
+            return true;
+        }
+
+        if (isset($this->documentCacheMutations[$context])) {
+            $this->documentCacheMutations[$context][$collectionKey] = $token;
+
+            return true;
+        }
+
+        $this->activateDocumentInvalidation([$collectionKey => $token]);
 
         return true;
+    }
+
+    private function blockDocumentCacheEpoch(string $collectionKey, string $token): bool
+    {
+        $epochKey = $collectionKey.'#epoch';
+        $ownerKey = $collectionKey.'#owner:'.$token;
+        if ($this->cache->save($ownerKey, $token) === false) {
+            $epoch = $this->cache->load($epochKey, self::TTL);
+            if ($epoch === false || $epoch === null) {
+                return false;
+            }
+
+            throw new RuntimeException("Failed to register document cache owner '{$ownerKey}'");
+        }
+
+        $startedKey = $collectionKey.'#started';
+        $this->cache->purge($startedKey);
+
+        $existing = $this->cache->load($epochKey, self::TTL);
+        if ($existing !== false && $existing !== null) {
+            $this->cache->purge($epochKey);
+        }
+        if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token) === false) {
+            throw new RuntimeException("Failed to block document cache epoch '{$epochKey}'");
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  array<string, string>  $tokens
+     */
+    protected function activateDocumentInvalidation(array $tokens): void
+    {
+        $failure = null;
+        foreach ($tokens as $collectionKey => $token) {
+            try {
+                $this->activateDocumentCacheEpoch($collectionKey, $token);
+            } catch (Throwable $error) {
+                $failure ??= $error;
+            }
+        }
+
+        if ($failure !== null) {
+            throw $failure;
+        }
+    }
+
+    private function activateDocumentCacheEpoch(string $collectionKey, string $token): void
+    {
+        $ownerKey = $collectionKey.'#owner:'.$token;
+        $owner = $this->cache->load($ownerKey, self::TTL);
+        if ($owner !== false && $owner !== null && $owner !== $token) {
+            throw new RuntimeException("Invalid document cache owner '{$ownerKey}'");
+        }
+        $owned = $owner === $token;
+        if ($owned && ! $this->cache->purge($ownerKey)) {
+            $owner = $this->cache->load($ownerKey, self::TTL);
+            if ($owner !== false && $owner !== null) {
+                throw new RuntimeException("Failed to release document cache owner '{$ownerKey}'");
+            }
+            $owned = false;
+        }
+
+        $startedKey = $collectionKey.'#started';
+        $finishedKey = $collectionKey.'#finished';
+        $started = $this->cache->getGeneration($startedKey);
+        $finished = $this->cache->getGeneration($finishedKey);
+        $epochKey = $collectionKey.'#epoch';
+        $epoch = $this->cache->load($epochKey, self::TTL);
+        $blocked = self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token;
+
+        if ($started === $finished) {
+            if (
+                \is_string($epoch)
+                && \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX)
+                && $epoch !== $blocked
+            ) {
+                return;
+            }
+        } elseif (! $owned && $epoch !== $blocked) {
+            // This token was cleared by a cache flush while another writer's
+            // barrier survived. Leave that writer's barrier fail-closed.
+            return;
+        }
+
+        if ($this->cache->save($epochKey, \bin2hex(\random_bytes(16))) === false) {
+            throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
+        }
+
+        if ($started === $finished) {
+            return;
+        }
+
+        $this->cache->purge($finishedKey);
+        if ($this->cache->getGeneration($finishedKey) === $finished) {
+            throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
+        }
     }
 
     /**

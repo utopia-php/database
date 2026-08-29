@@ -444,6 +444,142 @@ trait GeneralTests
         $database->deleteCollection('transactionAtomicity');
     }
 
+    public function testDocumentCacheEpochStaysBlockedUntilOuterTransactionCommit(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+
+        $collection = 'txDocumentCacheCommit';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'user',
+                'name' => 'original',
+            ]));
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+            [$collectionKey] = $database->getCacheKeys($collection, 'user');
+            $epochKey = $collectionKey.'#epoch';
+
+            $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+                $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+                $epoch = $database->getCache()->load($epochKey, Database::TTL);
+                $this->assertIsString($epoch);
+                $this->assertStringStartsWith('blocked:', $epoch);
+            });
+
+            $epoch = $database->getCache()->load($epochKey, Database::TTL);
+            $this->assertIsString($epoch);
+            $this->assertStringNotContainsString('blocked:', $epoch);
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testDocumentCacheEpochIsReleasedAfterOuterTransactionRollback(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+
+        $collection = 'txDocumentCacheRollback';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'user',
+                'name' => 'original',
+            ]));
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+            [$collectionKey] = $database->getCacheKeys($collection, 'user');
+            $epochKey = $collectionKey.'#epoch';
+
+            try {
+                $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+                    $database->updateDocument($collection, 'user', new Document(['name' => 'rolled-back']));
+                    $epoch = $database->getCache()->load($epochKey, Database::TTL);
+                    $this->assertIsString($epoch);
+                    $this->assertStringStartsWith('blocked:', $epoch);
+
+                    throw new ConflictException('rollback');
+                });
+            } catch (ConflictException) {
+            }
+
+            $epoch = $database->getCache()->load($epochKey, Database::TTL);
+            $this->assertIsString($epoch);
+            $this->assertStringNotContainsString('blocked:', $epoch);
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testNestedTransactionKeepsDocumentCacheEpochBlockedUntilOuterCommit(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+        if (! $database->getAdapter()->supports(Capability::NestedTransactions)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'txNestedDocumentCache';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'user',
+                'name' => 'original',
+            ]));
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+            [$collectionKey] = $database->getCacheKeys($collection, 'user');
+            $epochKey = $collectionKey.'#epoch';
+
+            $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+                $database->withTransaction(function () use ($database, $collection): void {
+                    $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+                });
+
+                $epoch = $database->getCache()->load($epochKey, Database::TTL);
+                $this->assertIsString($epoch);
+                $this->assertStringStartsWith('blocked:', $epoch);
+            });
+
+            $epoch = $database->getCache()->load($epochKey, Database::TTL);
+            $this->assertIsString($epoch);
+            $this->assertStringNotContainsString('blocked:', $epoch);
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     /**
      * Test that withTransaction correctly resets inTransaction state
      * when a known exception (DuplicateException) is thrown after successful rollback.

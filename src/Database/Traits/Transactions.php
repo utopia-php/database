@@ -77,16 +77,26 @@ trait Transactions
         $outer = ! isset($this->queryCacheMutations[$context]);
         if ($outer) {
             $this->queryCacheMutations[$context] = [];
+            $this->documentCacheMutations[$context] = [];
         }
 
         try {
             $result = $callback();
         } catch (Throwable $error) {
             if ($outer) {
-                $tokens = $this->queryCacheMutations[$context];
-                unset($this->queryCacheMutations[$context]);
+                $queryTokens = $this->queryCacheMutations[$context];
+                $documentTokens = $this->documentCacheMutations[$context];
+                unset(
+                    $this->queryCacheMutations[$context],
+                    $this->documentCacheMutations[$context],
+                );
                 try {
-                    $this->activateInvalidation($tokens);
+                    $this->activateDocumentInvalidation($documentTokens);
+                } catch (Throwable) {
+                    // A failed restore leaves the shared tombstone fail-closed.
+                }
+                try {
+                    $this->activateInvalidation($queryTokens);
                 } catch (Throwable) {
                     // A failed restore leaves the shared tombstone fail-closed.
                 }
@@ -96,9 +106,28 @@ trait Transactions
         }
 
         if ($outer) {
-            $tokens = $this->queryCacheMutations[$context];
-            unset($this->queryCacheMutations[$context]);
-            $this->activateInvalidation($tokens);
+            $queryTokens = $this->queryCacheMutations[$context];
+            $documentTokens = $this->documentCacheMutations[$context];
+            unset(
+                $this->queryCacheMutations[$context],
+                $this->documentCacheMutations[$context],
+            );
+
+            $failure = null;
+            try {
+                $this->activateDocumentInvalidation($documentTokens);
+            } catch (Throwable $error) {
+                $failure = $error;
+            }
+            try {
+                $this->activateInvalidation($queryTokens);
+            } catch (Throwable $error) {
+                $failure ??= $error;
+            }
+
+            if ($failure !== null) {
+                throw $failure;
+            }
         }
 
         return $result;

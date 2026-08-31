@@ -646,6 +646,14 @@ trait DocumentTests
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
+
+            // The insert does not return the sequence for the rows it wrote, so it is looked
+            // up afterwards. $onNext is the only way these documents reach the caller.
+            $this->assertNotEmpty($document->getSequence());
+            $this->assertEquals(
+                $database->getDocument($collection, $document->getId())->getSequence(),
+                $document->getSequence()
+            );
         }
 
         $documents = $database->find($collection, [
@@ -1848,6 +1856,85 @@ trait DocumentTests
         }
 
         $database->setPreserveSequence(false);
+        $database->deleteCollection($collectionName);
+    }
+
+    /**
+     * upsertDocuments() carries the sequence of every row it already read across to the
+     * written document, so the follow-up getSequences() lookup only covers the rows that
+     * were genuinely new. That leaves the batch it receives interleaved -- some documents
+     * carry a sequence, some do not -- and the tenant placeholders it binds must line up
+     * with the ones its SQL declares regardless of where the gaps fall.
+     */
+    public function testUpsertSequencesOnMixedBatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionName = 'upsert_mixed_sequences';
+
+        $database->createCollection($collectionName, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+
+        if ($database->getAdapter()->getSupportForAttributes()) {
+            $database->createAttribute($collectionName, 'name', Database::VAR_STRING, 128, true);
+        }
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        $existingSequences = [];
+        foreach (['existing1', 'existing2'] as $id) {
+            $created = $database->createDocument($collectionName, new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'name' => $id,
+            ]));
+
+            $this->assertNotEmpty($created->getSequence());
+            $existingSequences[$id] = $created->getSequence();
+        }
+
+        // Existing and new rows interleaved, so the new ones sit at odd indexes in the batch.
+        $upserted = [];
+        $database->upsertDocuments(
+            $collectionName,
+            [
+                new Document(['$id' => 'existing1', '$permissions' => $permissions, 'name' => 'existing1 updated']),
+                new Document(['$id' => 'new1', '$permissions' => $permissions, 'name' => 'new1']),
+                new Document(['$id' => 'existing2', '$permissions' => $permissions, 'name' => 'existing2 updated']),
+                new Document(['$id' => 'new2', '$permissions' => $permissions, 'name' => 'new2']),
+            ],
+            onNext: function (Document $document) use (&$upserted) {
+                $upserted[$document->getId()] = $document->getSequence();
+            }
+        );
+
+        $this->assertCount(4, $upserted);
+
+        foreach (['existing1', 'existing2', 'new1', 'new2'] as $id) {
+            $this->assertNotEmpty($upserted[$id], "No sequence returned for {$id}");
+            $this->assertEquals(
+                $database->getDocument($collectionName, $id)->getSequence(),
+                $upserted[$id],
+                "Wrong sequence returned for {$id}"
+            );
+        }
+
+        // An upsert must not move a row that was already there.
+        $this->assertEquals($existingSequences['existing1'], $upserted['existing1']);
+        $this->assertEquals($existingSequences['existing2'], $upserted['existing2']);
+
         $database->deleteCollection($collectionName);
     }
 

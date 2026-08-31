@@ -5866,6 +5866,10 @@ class Database
 
         $time = DateTime::now();
         $modified = 0;
+        $hasRelationships = !empty(\array_filter(
+            $collection->getAttribute('attributes', []),
+            fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
+        ));
 
         foreach ($documents as $document) {
             $createdAt = $document->getCreatedAt();
@@ -5922,7 +5926,11 @@ class Database
                 ? $this->adapter->skipDuplicates($insert)
                 : $insert();
 
-            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            // A SELECT per batch, read only by relationship population and by whatever the
+            // caller does with the documents $onNext hands it. Skip it when neither applies.
+            if ($onNext !== null || $hasRelationships) {
+                $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            }
 
             if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships) {
                 $batch = $this->silent(fn () => $this->populateDocumentsRelationships($batch, $collection, $this->relationshipFetchDepth));
@@ -7366,6 +7374,10 @@ class Database
         $created = 0;
         $updated = 0;
         $seenIds = [];
+        $hasRelationships = !empty(\array_filter(
+            $collectionAttributes,
+            fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP
+        ));
 
         // Batch-fetch existing documents in one query instead of N individual getDocument() calls.
         // tenantPerDocument: group ids by tenant and run one find() per tenant under withTenant,
@@ -7611,7 +7623,21 @@ class Database
                 $chunk
             )));
 
-            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            // Every row that already existed was read into $existingDocs above, so its
+            // sequence is already in hand and does not need fetching a second time.
+            foreach ($batch as $index => $doc) {
+                if (empty($doc->getSequence()) && !empty($chunk[$index]->getOld()->getSequence())) {
+                    $doc->setAttribute('$sequence', $chunk[$index]->getOld()->getSequence());
+                }
+            }
+
+            // Nothing leaves this method except through $onNext -- the return value is a
+            // count -- so a caller that passes none never sees these documents, and the work
+            // that finishes them has no reader. Bulk writers such as the usage/stats workers
+            // upsert several batches a second and read nothing back.
+            if ($onNext !== null || $hasRelationships) {
+                $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            }
 
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
@@ -7635,7 +7661,11 @@ class Database
                 }
             }
 
-            if ($hasOperators) {
+            // Refetching only exists to hand computed operator values back to the caller, and
+            // $onNext is the only way anything leaves this method -- the return value is a
+            // count. $hasOperators still has to reflect the batch, because the decode below
+            // keys off it.
+            if ($hasOperators && $onNext !== null) {
                 $batch = $this->refetchDocuments($collection, $batch);
             }
 

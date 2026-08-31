@@ -5,8 +5,11 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use PDOException;
 use PHPUnit\Framework\Attributes\Depends;
+use Tests\E2E\Adapter\Support\InterleavingDatabase;
 use Tests\E2E\Adapter\Support\MutationRecorder;
 use Throwable;
+use Utopia\Cache\Adapter\None as NoneCacheAdapter;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
@@ -2612,6 +2615,84 @@ trait DocumentTests
             expectedVersion: 3,
         ));
         $this->assertTrue($database->getDocument($collection, $created->getId())->isEmpty());
+    }
+
+    public function testGuardedUpdateConflictsWhenDocumentDisappearsAfterRead(): void
+    {
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $database = new InterleavingDatabase(
+            $database->getAdapter(),
+            new Cache(new NoneCacheAdapter()),
+        );
+        $database->setAuthorization($authorization);
+
+        $collection = 'casGoneUpdate';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'state', size: 32, required: true),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $created = $database->createDocument($collection, new Document([
+            Document::ID => 'migration',
+            'state' => 'pending',
+        ]));
+        $this->assertSame($created->getVersion(), $database->getDocument($collection, $created->getId())->getVersion());
+
+        $database->interleave(fn () => $authorization->skip(
+            fn () => $database->getAdapter()->deleteDocument($collection, $created->getId())
+        ));
+
+        try {
+            $database->updateDocument(
+                $collection,
+                $created->getId(),
+                new Document(['state' => 'claimed']),
+                expectedVersion: $created->getVersion(),
+            );
+            $this->fail('A guarded update must conflict when the document disappears after its pre-read.');
+        } catch (ConflictException) {
+            $this->assertTrue($database->getDocument($collection, $created->getId())->isEmpty());
+        }
+    }
+
+    public function testGuardedDeleteConflictsWhenDocumentDisappearsAfterRead(): void
+    {
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $database = new InterleavingDatabase(
+            $database->getAdapter(),
+            new Cache(new NoneCacheAdapter()),
+        );
+        $database->setAuthorization($authorization);
+
+        $collection = 'casGoneDelete';
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+        $created = $database->createDocument($collection, new Document([
+            Document::ID => 'migration',
+        ]));
+        $this->assertSame($created->getVersion(), $database->getDocument($collection, $created->getId())->getVersion());
+
+        $database->interleave(fn () => $authorization->skip(
+            fn () => $database->getAdapter()->deleteDocument($collection, $created->getId())
+        ));
+
+        try {
+            $database->deleteDocument(
+                $collection,
+                $created->getId(),
+                expectedVersion: $created->getVersion(),
+            );
+            $this->fail('A guarded delete must conflict when the document disappears after its pre-read.');
+        } catch (ConflictException) {
+            $this->assertTrue($database->getDocument($collection, $created->getId())->isEmpty());
+        }
     }
 
     public function testUpdateDocuments(): void

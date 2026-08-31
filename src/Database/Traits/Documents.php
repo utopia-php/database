@@ -920,6 +920,9 @@ trait Documents
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
+                if ($expectedVersion !== null) {
+                    throw new ConflictException('Document version does not match the expected version');
+                }
                 return new Document();
             }
             if ($expectedVersion !== null && $old->getVersion() !== $expectedVersion) {
@@ -2196,6 +2199,9 @@ trait Documents
             ));
 
             if ($document->isEmpty()) {
+                if ($expectedVersion !== null) {
+                    throw new ConflictException('Document version does not match the expected version');
+                }
                 return false;
             }
             if ($expectedVersion !== null && $document->getVersion() !== $expectedVersion) {

@@ -1623,6 +1623,10 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
+            if ($value === null) {
+                continue;
+            }
+
             /** @var array<int|string, mixed> $value */
             foreach ($value as $index => $node) {
                 if ($node !== null) {

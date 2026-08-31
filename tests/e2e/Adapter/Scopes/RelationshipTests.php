@@ -2742,9 +2742,9 @@ trait RelationshipTests
         ]);
         $this->assertCount(3, $products);
 
-        // Query::contains()
+        // Query::containsString()
         $products = $database->find('productsQt', [
-            Query::contains('vendor.company', ['Corp']),
+            Query::containsString('vendor.company', ['Corp']),
         ]);
         $this->assertCount(1, $products);
         $this->assertEquals('product1', $products[0]->getId());

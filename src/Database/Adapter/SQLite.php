@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Exception;
+use Override;
 use PDO;
 use PDOException;
 use PDOStatement;
@@ -115,6 +116,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         parent::__construct($pdo);
 
+        $this->registerUserFunctions();
+    }
+
+    #[Override]
+    public function reconnect(): void
+    {
+        parent::reconnect();
+
+        $this->pcreRegistered = false;
+        $this->capabilitySet = null;
         $this->registerUserFunctions();
     }
 
@@ -272,11 +283,18 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         try {
             $pdo = $this->getPDO();
+            $registered = false;
+
             if ($pdo instanceof DatabasePDO) {
-                $pdo->__call('sqliteCreateFunction', ['REGEXP', $pcre, 2]);
-            } elseif (\method_exists($pdo, 'sqliteCreateFunction')) {
-                $pdo->sqliteCreateFunction('REGEXP', $pcre, 2);
+                $registered = $pdo->__call('createFunction', ['REGEXP', $pcre, 2]);
+            } elseif (\method_exists($pdo, 'createFunction')) {
+                $registered = $pdo->createFunction('REGEXP', $pcre, 2);
             }
+
+            if ($registered !== true) {
+                return;
+            }
+
             $this->pcreRegistered = true;
             // Capability::PCRE is conditional on UDF registration — invalidate cache.
             $this->capabilitySet = null;

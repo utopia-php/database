@@ -1367,7 +1367,11 @@ class Mirror extends Database
      */
     public function addHook(\Utopia\Query\Hook $hook): static
     {
-        parent::addHook($hook);
+        if ($hook instanceof Lifecycle) {
+            $this->addLifecycleHook($hook);
+        } else {
+            parent::addHook($hook);
+        }
 
         if ($hook instanceof Relationships) {
             $this->source->addHook(new Relationships($this->source));

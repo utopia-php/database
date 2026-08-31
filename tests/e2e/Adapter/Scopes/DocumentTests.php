@@ -7768,7 +7768,7 @@ trait DocumentTests
 
         try {
             $database->findOne($this->getDocumentsCollection(), [
-                Query::contains('string', []),
+                Query::containsString('string', []),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {

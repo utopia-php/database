@@ -1754,9 +1754,9 @@ trait SchemalessTests
         $this->assertCount(1, $usWithCoords);
         $this->assertEquals('u1', $usWithCoords[0]->getId());
 
-        // contains on object attribute using nested structure: parent.key and [key => [key => 'value']]
+        // containsAny on object attribute using nested structure: parent.key and [key => [key => 'value']]
         $matchedByNestedContains = $database->find($col, [
-            Query::contains('profile', [[
+            Query::containsAny('profile', [[
                 'location' => [
                     'city' => 'London',
                 ],

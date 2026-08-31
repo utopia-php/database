@@ -267,8 +267,6 @@ final class PostgresQueryBehaviorTest extends TestCase
 
     private function pdo(): \PDO
     {
-        return $this->getMockBuilder(\PDO::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        return self::createStub(\PDO::class);
     }
 }

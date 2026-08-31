@@ -112,7 +112,7 @@ class QueriesTest extends TestCase
         // Object attribute query: disallowed complex multi-key nested structure
         $this->assertTrue(
             $validator->isValid([
-                Query::contains('meta', [
+                Query::containsAny('meta', [
                     [
                         'role' => [
                             'name' => ['test1', 'test2'],

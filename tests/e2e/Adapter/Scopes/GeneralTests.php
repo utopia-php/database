@@ -370,7 +370,7 @@ trait GeneralTests
 
         $this->assertCount(1, $database->find($collection));
 
-        $brokenRedis = $this->createMock(\Redis::class);
+        $brokenRedis = $this->createStub(\Redis::class);
         $brokenRedis->method('get')->willThrowException(new \RedisException('gone'));
         $brokenRedis->method('set')->willThrowException(new \RedisException('gone'));
         $brokenRedis->method('del')->willThrowException(new \RedisException('gone'));

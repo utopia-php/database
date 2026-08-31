@@ -108,7 +108,7 @@ final class PDOStatementTest extends TestCase
 
     public function testForwardsCallsAndPropertiesToUnderlyingStatement(): void
     {
-        $pdo = $this->pdoMock(inTransaction: false);
+        $pdo = self::createStub(PDO::class);
 
         $statement = $this->statementMock();
         $statement->expects($this->once())
@@ -123,8 +123,8 @@ final class PDOStatementTest extends TestCase
 
     public function testIsIterableAndDelegatesIterationToTheStatement(): void
     {
-        $pdo = $this->pdoMock(inTransaction: false);
-        $statement = $this->statementMock();
+        $pdo = self::createStub(PDO::class);
+        $statement = self::createStub(\PDOStatement::class);
 
         $wrapper = new PDOStatement($pdo, $statement, 'SELECT 1');
 

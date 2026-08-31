@@ -118,8 +118,8 @@ class QueryTest extends TestCase
         $this->assertEquals(true, $validator->isValid([Query::notEqual('title', 'Iron Man')]));
         $this->assertEquals(true, $validator->isValid([Query::lessThan('price', 6.50)]));
         $this->assertEquals(true, $validator->isValid([Query::lessThanEqual('price', 6)]));
-        $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1', 'action2'])]));
-        $this->assertEquals(true, $validator->isValid([Query::contains('tags', ['action1'])]));
+        $this->assertEquals(true, $validator->isValid([Query::containsAny('tags', ['action1', 'action2'])]));
+        $this->assertEquals(true, $validator->isValid([Query::containsAny('tags', ['action1'])]));
         $this->assertEquals(true, $validator->isValid([Query::cursorAfter(new Document(['$id' => 'docId']))]));
         $this->assertEquals(true, $validator->isValid([Query::cursorBefore(new Document(['$id' => 'docId']))]));
         $this->assertEquals(true, $validator->isValid([Query::orderAsc('title')]));

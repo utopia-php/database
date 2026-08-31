@@ -122,9 +122,9 @@ trait ObjectAttributeTests
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
 
-        // Test 4: Query::contains for array element
+        // Test 4: Query::containsAny for array element
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['skills' => 'react']]),
+            Query::containsAny('meta', [['skills' => 'react']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
@@ -195,9 +195,9 @@ trait ObjectAttributeTests
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
 
-        // Test 10: Query with multiple conditions using contains
+        // Test 10: Query with multiple conditions using containsAny
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['skills' => 'typescript']]),
+            Query::containsAny('meta', [['skills' => 'typescript']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc1', $results[0]->getId());
@@ -382,7 +382,7 @@ trait ObjectAttributeTests
         $this->assertCount(1, $results);
         $this->assertEquals('doc6', $results[0]->getId());
 
-        // Test 21: Test contains with multiple array elements
+        // Test 21: Test containsAny with multiple array elements
         $doc7 = $database->createDocument($collectionId, new Document([
             '$id' => 'doc7',
             '$permissions' => [Permission::read(Role::any())],
@@ -391,12 +391,12 @@ trait ObjectAttributeTests
             ],
         ]));
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['tags' => 'rust']]),
+            Query::containsAny('meta', [['tags' => 'rust']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc7', $results[0]->getId());
 
-        // Test 22: Test contains with numeric array element
+        // Test 22: Test containsAny with numeric array element
         $doc8 = $database->createDocument($collectionId, new Document([
             '$id' => 'doc8',
             '$permissions' => [Permission::read(Role::any())],
@@ -405,14 +405,14 @@ trait ObjectAttributeTests
             ],
         ]));
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['scores' => 95]]),
+            Query::containsAny('meta', [['scores' => 95]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc8', $results[0]->getId());
 
-        // Test 23: Negative test - contains query that shouldn't match
+        // Test 23: Negative test - containsAny query that shouldn't match
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['tags' => 'kotlin']]),
+            Query::containsAny('meta', [['tags' => 'kotlin']]),
         ]);
         $this->assertCount(0, $results);
 
@@ -551,9 +551,9 @@ trait ObjectAttributeTests
         $this->assertIsArray($matrix);
         $this->assertEquals([1, 2, 3], $matrix[0]);
 
-        // Test 32: Contains query with nested array
+        // Test 32: ContainsAny query with nested array
         $results = $database->find($collectionId, [
-            Query::contains('meta', [['matrix' => [[4, 5, 6]]]]),
+            Query::containsAny('meta', [['matrix' => [[4, 5, 6]]]]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('doc12', $results[0]->getId());
@@ -1794,9 +1794,9 @@ trait ObjectAttributeTests
         $this->assertCount(1, $results);
         $this->assertEquals('text1', $results[0]->getId());
 
-        // contains on nested path
+        // containsString on nested path
         $results = $database->find($collectionId, [
-            Query::contains('profile.user.info.country', ['United']),
+            Query::containsString('profile.user.info.country', ['United']),
         ]);
         $this->assertGreaterThanOrEqual(2, count($results));
 

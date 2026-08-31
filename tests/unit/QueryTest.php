@@ -219,7 +219,7 @@ class QueryTest extends TestCase
         $this->assertEquals('Brad Pitt', $query->getValues()[0]);
         $this->assertEquals('Johnny Depp', $query->getValues()[1]);
 
-        $query = Query::parse(Query::contains('writers', ['Tim O\'Reilly'])->toString());
+        $query = Query::parse(Query::containsString('writers', ['Tim O\'Reilly'])->toString());
         $this->assertEquals(Method::Contains, $query->getMethod());
         $this->assertEquals('writers', $query->getAttribute());
         $this->assertEquals('Tim O\'Reilly', $query->getValues()[0]);

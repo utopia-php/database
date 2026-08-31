@@ -5,6 +5,7 @@ namespace Utopia\Database;
 use Exception;
 use InvalidArgumentException;
 use PDO as PhpPDO;
+use Pdo\Sqlite as PdoSqlite;
 use PDOStatement as PhpPDOStatement;
 use Throwable;
 use Utopia\Console;
@@ -45,12 +46,7 @@ class PDO
     ) {
         $this->config[PhpPDO::ATTR_ERRMODE] ??= PhpPDO::ERRMODE_EXCEPTION;
 
-        $this->pdo = new PhpPDO(
-            $this->dsn,
-            $this->username,
-            $this->password,
-            $this->config
-        );
+        $this->pdo = $this->connect();
     }
 
     /**
@@ -131,7 +127,21 @@ class PDO
      */
     public function reconnect(): void
     {
-        $this->pdo = new PhpPDO(
+        $this->pdo = $this->connect();
+    }
+
+    private function connect(): PhpPDO
+    {
+        if (\str_starts_with($this->dsn, 'sqlite:')) {
+            return PdoSqlite::connect(
+                $this->dsn,
+                $this->username,
+                $this->password,
+                $this->config
+            );
+        }
+
+        return new PhpPDO(
             $this->dsn,
             $this->username,
             $this->password,

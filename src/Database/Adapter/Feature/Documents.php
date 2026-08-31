@@ -49,9 +49,10 @@ interface Documents
      * @param string $id The document identifier.
      * @param Document $document The document with updated data.
      * @param bool $skipPermissions Whether to skip permission checks.
+     * @param int|null $expectedVersion Required current document version, or null to update unconditionally.
      * @return Document The updated document.
      */
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document;
 
     /**
      * Update multiple documents matching the given criteria.
@@ -68,9 +69,10 @@ interface Documents
      *
      * @param string $collection The collection identifier.
      * @param string $id The document identifier.
+     * @param int|null $expectedVersion Required current document version, or null to delete unconditionally.
      * @return bool True on success.
      */
-    public function deleteDocument(string $collection, string $id): bool;
+    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool;
 
     /**
      * Delete multiple documents from a collection.

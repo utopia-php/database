@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -60,6 +61,41 @@ class Redis extends Adapter implements
     private const int SCAN_BATCH_SIZE = 500;
 
     private const int JSON_DECODE_DEPTH = 512;
+
+    private const string UPDATE_VERSION_SCRIPT = <<<'LUA'
+local current = redis.call('GET', KEYS[1])
+if not current then
+    return 0
+end
+local document = cjson.decode(current)
+if tonumber(document['$version']) ~= tonumber(ARGV[1]) then
+    return 0
+end
+if KEYS[1] ~= KEYS[2] and redis.call('EXISTS', KEYS[2]) == 1 then
+    return -1
+end
+redis.call('SET', KEYS[2], ARGV[2])
+if KEYS[1] ~= KEYS[2] then
+    redis.call('DEL', KEYS[1])
+    redis.call('SREM', KEYS[3], ARGV[3])
+end
+redis.call('SADD', KEYS[3], ARGV[4])
+return 1
+LUA;
+
+    private const string DELETE_VERSION_SCRIPT = <<<'LUA'
+local current = redis.call('GET', KEYS[1])
+if not current then
+    return 0
+end
+local document = cjson.decode(current)
+if tonumber(document['$version']) ~= tonumber(ARGV[1]) then
+    return 0
+end
+redis.call('DEL', KEYS[1])
+redis.call('SREM', KEYS[2], ARGV[2])
+return 1
+LUA;
 
     private RedisClient $client;
 
@@ -844,7 +880,7 @@ class Redis extends Adapter implements
         return $created;
     }
 
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
     {
         $col = $this->filter($collection->getId());
         $oldKey = $this->docKey($col, $id);
@@ -858,13 +894,19 @@ class Redis extends Adapter implements
             }
         }
 
-        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant): Document {
+        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $skipPermissions, $oldKey, $idxKey, $useNullTenant, $expectedVersion): Document {
             $existingPayload = $redis->get($oldKey);
             if (! \is_string($existingPayload) || $existingPayload === '') {
+                if ($expectedVersion !== null) {
+                    throw new ConflictException('Document version does not match the expected version');
+                }
                 throw new NotFoundException('Document not found');
             }
 
             $existing = $this->decode($existingPayload);
+            if ($expectedVersion !== null && $existing->getVersion() !== $expectedVersion) {
+                throw new ConflictException('Document version does not match the expected version');
+            }
             if ($col !== Database::METADATA) {
                 $existing = $this->surfaceRelationshipAttributes($col, $existing);
             }
@@ -885,12 +927,30 @@ class Redis extends Adapter implements
 
             $payload = $this->encode($mergedDocument);
 
-            if ($newId !== $id) {
-                $redis->del($oldKey);
-                $redis->sRem($effectiveIdxKey, \strtolower($id));
+            if ($expectedVersion === null) {
+                if ($newId !== $id) {
+                    $redis->del($oldKey);
+                    $redis->sRem($effectiveIdxKey, \strtolower($id));
+                }
+                $redis->set($newKey, $payload);
+                $redis->sAdd($effectiveIdxKey, \strtolower($newId));
+            } else {
+                $result = $redis->eval(self::UPDATE_VERSION_SCRIPT, [
+                    $oldKey,
+                    $newKey,
+                    $effectiveIdxKey,
+                    (string) $expectedVersion,
+                    $payload,
+                    \strtolower($id),
+                    \strtolower($newId),
+                ], 3);
+                if ($result === -1) {
+                    throw new DuplicateException('Document already exists');
+                }
+                if ($result !== 1) {
+                    throw new ConflictException('Document version does not match the expected version');
+                }
             }
-            $redis->set($newKey, $payload);
-            $redis->sAdd($effectiveIdxKey, \strtolower($newId));
 
             $this->journal('updateDoc', [
                 'collection' => $col,
@@ -1171,16 +1231,45 @@ class Redis extends Adapter implements
         return $documents;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
     {
         $collection = $this->filter($collection);
         $docKey = $this->docKey($collection, $id);
         $idxKey = $this->idxKey($collection);
 
-        return $this->tx(function (RedisClient $redis) use ($collection, $id, $docKey, $idxKey): bool {
+        return $this->tx(function (RedisClient $redis) use ($collection, $id, $docKey, $idxKey, $expectedVersion): bool {
             $payload = $redis->get($docKey);
             if (! \is_string($payload) || $payload === '') {
+                if ($expectedVersion !== null) {
+                    throw new ConflictException('Document version does not match the expected version');
+                }
                 return false;
+            }
+
+            if ($expectedVersion === null) {
+                $this->journal('deleteDoc', [
+                    'collection' => $collection,
+                    'id' => $id,
+                    'payload' => $payload,
+                    'docKey' => $docKey,
+                    'idxKey' => $idxKey,
+                ]);
+
+                $this->clearPermissions($collection, $id);
+                $redis->del($docKey);
+                $redis->sRem($idxKey, \strtolower($id));
+
+                return true;
+            }
+
+            $result = $redis->eval(self::DELETE_VERSION_SCRIPT, [
+                $docKey,
+                $idxKey,
+                (string) $expectedVersion,
+                \strtolower($id),
+            ], 2);
+            if ($result !== 1) {
+                throw new ConflictException('Document version does not match the expected version');
             }
 
             $this->journal('deleteDoc', [
@@ -1190,10 +1279,7 @@ class Redis extends Adapter implements
                 'docKey' => $docKey,
                 'idxKey' => $idxKey,
             ]);
-
             $this->clearPermissions($collection, $id);
-            $redis->del($docKey);
-            $redis->sRem($idxKey, \strtolower($id));
 
             return true;
         });

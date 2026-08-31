@@ -18,6 +18,7 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -151,6 +152,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
+            Capability::AtomicTransactions,
             Capability::Schemas,
             Capability::BoundaryInclusive,
             Capability::Caching,
@@ -1209,7 +1211,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return true;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
     {
         try {
             $this->syncWriteHooks();
@@ -1217,7 +1219,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $name = $this->filter($collection);
 
             $builder = $this->newBuilder($name);
-            $builder->filter([BaseQuery::equal(Storage::UID, [$id])]);
+            $filters = [BaseQuery::equal(Storage::UID, [$id])];
+            if ($expectedVersion !== null) {
+                $filters[] = BaseQuery::equal(Storage::VERSION, [$expectedVersion]);
+            }
+            $builder->filter($filters);
             $result = $builder->delete();
             $stmt = $this->executeResult($result, Event::DocumentDelete);
 
@@ -1227,8 +1233,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             $deleted = $stmt->rowCount();
 
+            if ($expectedVersion !== null && $deleted === 0) {
+                throw new ConflictException('Document version does not match the expected version');
+            }
+
             $ctx = $this->buildWriteContext($name);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $ctx));
+        } catch (ConflictException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }

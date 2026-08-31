@@ -859,9 +859,9 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function updateDocument(string $collection, string $id, Document $document): Document
+    public function updateDocument(string $collection, string $id, Document $document, ?int $expectedVersion = null): Document
     {
-        $document = $this->source->updateDocument($collection, $id, $document);
+        $document = $this->source->updateDocument($collection, $id, $document, $expectedVersion);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
@@ -1059,9 +1059,9 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
     {
-        $result = $this->source->deleteDocument($collection, $id);
+        $result = $this->source->deleteDocument($collection, $id, $expectedVersion);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)

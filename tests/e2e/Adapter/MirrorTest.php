@@ -140,6 +140,47 @@ class MirrorTest extends Base
         $this->assertEquals(self::$destination, $destination);
     }
 
+    public function testVersionConflictDoesNotReplicateToDestination(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'versionConflictMirror';
+
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $database->createAttribute($collection, Attribute::string(key: 'state', size: 32, required: true));
+        $created = $database->createDocument($collection, new Document([
+            Document::ID => 'migration',
+            'state' => 'pending',
+        ]));
+
+        $source = $database->getSource();
+        $source->updateDocument(
+            $collection,
+            $created->getId(),
+            new Document(['state' => 'claimed']),
+            expectedVersion: 1,
+        );
+
+        try {
+            $database->updateDocument(
+                $collection,
+                $created->getId(),
+                new Document(['state' => 'stale']),
+                expectedVersion: 1,
+            );
+            $this->fail('A source conflict must stop before destination replication.');
+        } catch (Conflict) {
+            $destination = $database->getDestination();
+            $this->assertInstanceOf(Database::class, $destination);
+            $destinationDocument = $destination->getDocument($collection, $created->getId());
+            $this->assertSame('pending', $destinationDocument->getAttribute('state'));
+            $this->assertSame(1, $destinationDocument->getVersion());
+        }
+    }
+
     /**
      * @throws Limit
      * @throws Duplicate

@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use PDOException;
 use PHPUnit\Framework\Attributes\Depends;
+use Tests\E2E\Adapter\Support\MutationRecorder;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\SQL;
@@ -2524,6 +2525,93 @@ trait DocumentTests
         // Re-create the fixture document so subsequent tests can use it
         $recreated = $this->getDatabase()->createDocument($this->getDocumentsCollection(), $document);
         self::$documentsFixtureDoc = $recreated;
+    }
+
+    public function testDocumentVersionCompareAndSet(): void
+    {
+        $database = $this->getDatabase();
+        $collection = __FUNCTION__;
+
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+        $database->createAttribute($collection, Attribute::string(key: 'state', size: 32, required: true));
+
+        $created = $database->createDocument($collection, new Document([
+            Document::ID => 'migration',
+            'state' => 'pending',
+        ]));
+        $this->assertSame(1, $created->getVersion());
+
+        $claimed = $database->updateDocument(
+            $collection,
+            $created->getId(),
+            new Document(['state' => 'claimed']),
+            expectedVersion: 1,
+        );
+        $this->assertSame('claimed', $claimed->getAttribute('state'));
+        $this->assertSame(2, $claimed->getVersion());
+
+        $recorder = new MutationRecorder();
+        $database->addHook($recorder);
+        $recorder->armed = true;
+
+        try {
+            $database->updateDocument(
+                $collection,
+                $created->getId(),
+                new Document(['state' => 'stale']),
+                expectedVersion: 1,
+            );
+            $this->fail('A stale update must fail its version comparison.');
+        } catch (ConflictException) {
+            $afterConflict = $database->getDocument($collection, $created->getId());
+            $this->assertSame('claimed', $afterConflict->getAttribute('state'));
+            $this->assertSame(2, $afterConflict->getVersion());
+            $this->assertSame(0, $recorder->decorations);
+            $this->assertSame(0, $recorder->events);
+        }
+        $recorder->armed = false;
+
+        $unchanged = $database->updateDocument(
+            $collection,
+            $created->getId(),
+            new Document(['state' => 'claimed']),
+            expectedVersion: 2,
+        );
+        $this->assertSame('claimed', $unchanged->getAttribute('state'));
+        $this->assertSame(2, $unchanged->getVersion());
+
+        $updated = $database->updateDocument(
+            $collection,
+            $created->getId(),
+            new Document(['state' => 'running']),
+        );
+        $this->assertSame('running', $updated->getAttribute('state'));
+        $this->assertSame(3, $updated->getVersion());
+
+        try {
+            $recorder->armed = true;
+            $database->deleteDocument($collection, $created->getId(), expectedVersion: 2);
+            $this->fail('A stale delete must fail its version comparison.');
+        } catch (ConflictException) {
+            $afterDeleteConflict = $database->getDocument($collection, $created->getId());
+            $this->assertSame('running', $afterDeleteConflict->getAttribute('state'));
+            $this->assertSame(3, $afterDeleteConflict->getVersion());
+            $this->assertSame(0, $recorder->decorations);
+            $this->assertSame(0, $recorder->events);
+        }
+        $recorder->armed = false;
+
+        $this->assertTrue($database->deleteDocument(
+            $collection,
+            $created->getId(),
+            expectedVersion: 3,
+        ));
+        $this->assertTrue($database->getDocument($collection, $created->getId())->isEmpty());
     }
 
     public function testUpdateDocuments(): void

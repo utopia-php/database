@@ -9,6 +9,7 @@ use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -121,6 +122,7 @@ class Memory extends Adapter implements Feature\Relationships
     public function capabilities(): array
     {
         return array_merge(parent::capabilities(), [
+            Capability::AtomicTransactions,
             Capability::Schemas,
             Capability::Fulltext,
             Capability::Casting,
@@ -1310,7 +1312,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $created;
     }
 
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
@@ -1319,9 +1321,15 @@ class Memory extends Adapter implements Feature\Relationships
 
         $located = $this->locateDocument($key, $collection->getId(), $id);
         if ($located === null) {
+            if ($expectedVersion !== null) {
+                throw new ConflictException('Document version does not match the expected version');
+            }
             throw new NotFoundException('Document not found');
         }
         [$oldKey, $existing] = $located;
+        if ($expectedVersion !== null && ($existing[Storage::VERSION] ?? null) !== $expectedVersion) {
+            throw new ConflictException('Document version does not match the expected version');
+        }
 
         // Resolve any Operator-typed attributes against the existing row before
         // computing the new payload so unique-index checks see the post-update
@@ -1620,7 +1628,7 @@ class Memory extends Adapter implements Feature\Relationships
         return $documents;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
     {
         $key = $this->key($collection);
         if (! isset($this->data[$key])) {
@@ -1632,10 +1640,16 @@ class Memory extends Adapter implements Feature\Relationships
 
         $docKey = $this->documentKey($id);
         if (! isset($this->data[$key]['documents'][$docKey])) {
+            if ($expectedVersion !== null) {
+                throw new ConflictException('Document version does not match the expected version');
+            }
             return false;
         }
 
         $existing = $this->data[$key]['documents'][$docKey];
+        if ($expectedVersion !== null && ($existing[Storage::VERSION] ?? null) !== $expectedVersion) {
+            throw new ConflictException('Document version does not match the expected version');
+        }
         $oldSignatures = $this->rowUniqueSignatures($key, $existing);
 
         unset($this->data[$key]['documents'][$docKey]);
@@ -2036,6 +2050,9 @@ class Memory extends Adapter implements Feature\Relationships
         $row[Storage::CREATED_AT] = $document->getCreatedAt();
         $row[Storage::UPDATED_AT] = $document->getUpdatedAt();
         $row[Storage::PERMISSIONS] = $document->getPermissions();
+        if ($document->getVersion() !== null) {
+            $row[Storage::VERSION] = $document->getVersion();
+        }
         if ($this->sharedTables) {
             // Mirror MariaDB: the row's `_tenant` follows the document's own
             // tenant — that matters in tenantPerDocument mode where the
@@ -2089,6 +2106,9 @@ class Memory extends Adapter implements Feature\Relationships
                     break;
                 case Storage::PERMISSIONS:
                     $document[Document::PERMISSIONS] = $value ?? [];
+                    break;
+                case Storage::VERSION:
+                    $document[Document::VERSION] = $value;
                     break;
                 default:
                     if ($allowed !== null && ! isset($allowed[$key])) {

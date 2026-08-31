@@ -11,6 +11,7 @@ namespace Utopia\Database;
 enum Capability
 {
     case AlterLock;
+    case AtomicTransactions;
     case AttributeResizing;
     case BatchCreateAttributes;
     case BatchOperations;

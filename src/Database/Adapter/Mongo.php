@@ -1510,7 +1510,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @throws DuplicateException
      * @throws DatabaseException
      */
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
@@ -1518,6 +1518,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $record = $this->replaceChars('$', '_', $record);
 
         $filters = [Storage::UID => $id];
+        if ($expectedVersion !== null) {
+            $filters[Storage::VERSION] = $expectedVersion;
+        }
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection->getId());
@@ -1529,12 +1532,16 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             $pipeline = $this->buildOperatorPipeline($record);
             if ($pipeline !== null) {
-                $this->updateWithPipeline($name, $filters, $pipeline, $options);
+                $updated = $this->updateWithPipeline($name, $filters, $pipeline, $options);
             } else {
                 $updateQuery = [
                     '$set' => $record,
                 ];
-                $this->client->update($name, $filters, $updateQuery, $options);
+                $updated = $this->client->update($name, $filters, $updateQuery, $options);
+            }
+
+            if ($expectedVersion !== null && $updated === 0) {
+                throw new ConflictException('Document version does not match the expected version');
             }
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -2037,17 +2044,24 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @throws Exception
      */
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $filters = [Storage::UID => $id];
+        if ($expectedVersion !== null) {
+            $filters[Storage::VERSION] = $expectedVersion;
+        }
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
 
         $options = $this->getTransactionOptions();
         $result = $this->client->delete($name, $filters, 1, [], $options);
+
+        if ($expectedVersion !== null && $result === 0) {
+            throw new ConflictException('Document version does not match the expected version');
+        }
 
         return (bool) $result;
     }

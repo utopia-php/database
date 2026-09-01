@@ -40,6 +40,11 @@ class Pool extends Adapter
     protected ?Adapter $pinnedAdapter = null;
 
     /**
+     * Whether borrowed adapters should require attributes to be defined in metadata.
+     */
+    protected ?bool $supportForAttributes = null;
+
+    /**
      * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
@@ -139,6 +144,10 @@ class Pool extends Adapter
         $adapter->setTenant($this->getTenant());
         $adapter->setTenantPerDocument($this->getTenantPerDocument());
         $adapter->setAuthorization($this->authorization);
+
+        if ($this->supportForAttributes !== null) {
+            $adapter->setSupportForAttributes($this->supportForAttributes);
+        }
 
         $this->syncTimeouts($adapter);
         $adapter->resetDebug();
@@ -1093,6 +1102,8 @@ class Pool extends Adapter
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $this->supportForAttributes = $support;
+
         return $result;
     }
 

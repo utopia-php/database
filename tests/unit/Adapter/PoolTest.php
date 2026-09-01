@@ -10,7 +10,9 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -139,6 +141,36 @@ final class PoolTest extends TestCase
         $pool = $this->createPool(new Memory());
 
         $this->assertTrue($pool->ping());
+    }
+
+    public function testDefinedAttributesSupportPropagatesAcrossBorrowedAdapters(): void
+    {
+        $first = new class () extends Mongo {
+            public function __construct()
+            {
+            }
+        };
+        $second = new class () extends Mongo {
+            public function __construct()
+            {
+            }
+        };
+        $adapters = [$first, $second];
+
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static function (callable $callback) use (&$adapters): mixed {
+                return $callback(\array_shift($adapters));
+            },
+        );
+
+        $pool = new Pool($connections);
+        $pool->setAuthorization(new Authorization());
+        $pool->setSupportForAttributes(false);
+
+        $this->assertFalse($pool->supports(Capability::DefinedAttributes));
+        $this->assertFalse($second->supports(Capability::DefinedAttributes));
     }
 
     /**

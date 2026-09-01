@@ -128,6 +128,19 @@ class IndexModelTest extends TestCase
         $this->assertSame(1, $index->ttl);
     }
 
+    public function testFromDocumentNormalizesLegacyOrderCase(): void
+    {
+        $index = Index::fromDocument(new Document([
+            '$id' => 'idx_legacy',
+            'type' => 'key',
+            'attributes' => ['createdAt', 'name'],
+            'orders' => ['asc', 'desc'],
+        ]));
+
+        $this->assertSame([Order::Asc, Order::Desc], $index->orders);
+        $this->assertSame(['ASC', 'DESC'], $index->toDocument()->getAttribute('orders'));
+    }
+
     public function testFromDocumentUsesKeyOverId(): void
     {
         $doc = new Document([

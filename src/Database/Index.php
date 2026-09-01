@@ -573,7 +573,7 @@ class Index extends Document
             }
 
             if (\is_string($order)) {
-                $decoded[] = Order::from($order);
+                $decoded[] = Order::from(\strtoupper($order));
                 continue;
             }
 

@@ -479,6 +479,47 @@ class QueryCacheTest extends TestCase
         }
     }
 
+    public function testCacheFlushDuringActivationDoesNotFailInvalidation(): void
+    {
+        $adapter = new OwnershipCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache->blockCollection('users', 'owner');
+        $adapter->flushDuringActivation();
+
+        $queryCache->activateCollection('users', 'owner');
+
+        $this->assertTrue($queryCache->isEnabled('users'));
+    }
+
+    public function testCacheFlushBeforeActivationDoesNotFailInvalidation(): void
+    {
+        $adapter = new OwnershipCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache->blockCollection('users', 'owner');
+        $this->assertTrue($adapter->flush());
+
+        $queryCache->activateCollection('users', 'owner');
+
+        $this->assertTrue($queryCache->isEnabled('users'));
+    }
+
+    public function testActivationPurgeFailureStillPropagates(): void
+    {
+        $adapter = new OwnershipCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache->blockCollection('users', 'owner');
+        $adapter->failDuringActivation();
+
+        try {
+            $queryCache->activateCollection('users', 'owner');
+            $this->fail('Query cache activation purge failure was not propagated');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('finish query cache invalidation', $error->getMessage());
+        }
+
+        $this->assertFalse($queryCache->isEnabled('users'));
+    }
+
     public function testInvalidationPropagatesPurgeFailure(): void
     {
         $cache = new InvalidationCache();
@@ -570,6 +611,10 @@ final class OwnershipCache implements CacheAdapter, Leasable
 
     private ?Closure $activation = null;
 
+    private bool $flushDuringActivation = false;
+
+    private bool $failDuringActivation = false;
+
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
         $saved = $this->store[$key] ?? null;
@@ -632,6 +677,15 @@ final class OwnershipCache implements CacheAdapter, Leasable
 
     public function purge(string $key, string $hash = ''): bool
     {
+        if ($this->flushDuringActivation && \str_ends_with($key, '#finished')) {
+            $this->flushDuringActivation = false;
+
+            return $this->flush();
+        }
+        if ($this->failDuringActivation && \str_ends_with($key, '#finished')) {
+            return false;
+        }
+
         $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
         unset($this->store[$key]);
 
@@ -669,5 +723,15 @@ final class OwnershipCache implements CacheAdapter, Leasable
     public function pauseNextActivation(Closure $activation): void
     {
         $this->activation = $activation;
+    }
+
+    public function flushDuringActivation(): void
+    {
+        $this->flushDuringActivation = true;
+    }
+
+    public function failDuringActivation(): void
+    {
+        $this->failDuringActivation = true;
     }
 }

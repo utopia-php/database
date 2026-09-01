@@ -6,6 +6,7 @@ use Closure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
+use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -194,6 +195,45 @@ final class DocumentCacheEpochTest extends TestCase
         }
     }
 
+    public function testCacheFlushDuringActivationDoesNotFailTheCommittedMutation(): void
+    {
+        $cache = new FlushDuringActivationMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+
+        $this->assertTrue($cache->flush());
+        $cache->flushDuringActivation();
+        $updated = $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+
+        $this->assertSame('updated', $updated->getAttribute('name'));
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testActivationPurgeFailureStillPropagates(): void
+    {
+        $cache = new FlushDuringActivationMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertTrue($cache->flush());
+        $cache->failDuringActivation();
+
+        try {
+            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->fail('Document cache activation purge failure was not propagated');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('finish document cache invalidation', $error->getMessage());
+        }
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
     /**
      * @return array{Database, FailPurgeMemory}
      */
@@ -354,5 +394,66 @@ final class FailDocumentEpochMemory extends MemoryCache
         }
 
         return parent::save($key, $data, $hash);
+    }
+}
+
+final class FlushDuringActivationMemory extends MemoryCache implements Leasable
+{
+    /** @var array<string, int> */
+    private array $generations = [];
+
+    private bool $flushDuringActivation = false;
+
+    private bool $failDuringActivation = false;
+
+    public function flushDuringActivation(): void
+    {
+        $this->flushDuringActivation = true;
+    }
+
+    public function failDuringActivation(): void
+    {
+        $this->failDuringActivation = true;
+    }
+
+    public function getGeneration(string $key): string
+    {
+        return (string) ($this->generations[$key] ?? 0);
+    }
+
+    #[\Override]
+    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
+    {
+        if ($this->getGeneration($key) !== $generation) {
+            return false;
+        }
+
+        return $this->save($key, $data, $hash);
+    }
+
+    #[\Override]
+    public function purge(string $key, string $hash = ''): bool
+    {
+        if ($this->flushDuringActivation && \str_ends_with($key, '#finished')) {
+            $this->flushDuringActivation = false;
+
+            return $this->flush();
+        }
+        if ($this->failDuringActivation && \str_ends_with($key, '#finished')) {
+            return false;
+        }
+
+        $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
+        parent::purge($key, $hash);
+
+        return true;
+    }
+
+    #[\Override]
+    public function flush(): bool
+    {
+        $this->generations = [];
+
+        return parent::flush();
     }
 }

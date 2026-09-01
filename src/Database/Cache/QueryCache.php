@@ -226,28 +226,60 @@ class QueryCache
     {
         $cacheKey = $this->getCollectionKey($collection);
         $ownerKey = $this->getOwnerKey($cacheKey, $token);
-        if ($this->cache->load($ownerKey, $this->getRegion($collection)->ttl) !== $token) {
+        $owner = $this->cache->load($ownerKey, $this->getRegion($collection)->ttl);
+        if ($owner !== false && $owner !== null && $owner !== $token) {
             throw new RuntimeException("Invalid query cache owner for collection '{$collection}'");
         }
-        if (! $this->cache->purge($ownerKey)) {
-            throw new RuntimeException("Failed to release query cache owner for collection '{$collection}'");
+        $owned = $owner === $token;
+        if ($owned && ! $this->cache->purge($ownerKey)) {
+            $owner = $this->cache->load($ownerKey, $this->getRegion($collection)->ttl);
+            if ($owner !== false && $owner !== null) {
+                throw new RuntimeException("Failed to release query cache owner for collection '{$collection}'");
+            }
+            $owned = false;
         }
 
         $startedKey = $this->getStartedKey($cacheKey);
         $finishedKey = $this->getFinishedKey($cacheKey);
-        if ($this->cache->getGeneration($startedKey) === $this->cache->getGeneration($finishedKey)) {
+        $started = $this->cache->getGeneration($startedKey);
+        $finished = $this->cache->getGeneration($finishedKey);
+        $epochKey = $this->getEpochKey($cacheKey);
+        $current = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
+        $blocked = self::BLOCKED_PREFIX.$token;
+
+        if ($started === $finished) {
+            if (
+                \is_string($current)
+                && \str_starts_with($current, self::BLOCKED_PREFIX)
+                && $current !== $blocked
+            ) {
+                return;
+            }
+            if ($owned) {
+                return;
+            }
+        } elseif (! $owned && $current !== $blocked) {
             return;
         }
 
-        $epochKey = $this->getEpochKey($cacheKey);
         $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
         if ($this->cache->save($epochKey, $epoch) === false) {
             throw new RuntimeException("Failed to activate query cache for collection '{$collection}'");
         }
 
-        $finished = $this->cache->getGeneration($finishedKey);
+        if ($started === $finished) {
+            return;
+        }
+
         $this->cache->purge($finishedKey);
         if ($this->cache->getGeneration($finishedKey) === $finished) {
+            $nextStarted = $this->cache->getGeneration($startedKey);
+            $nextFinished = $this->cache->getGeneration($finishedKey);
+            $nextEpoch = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
+            if ($nextStarted === $nextFinished || $nextEpoch !== $epoch) {
+                return;
+            }
+
             throw new RuntimeException("Failed to finish query cache invalidation for collection '{$collection}'");
         }
     }

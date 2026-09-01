@@ -2620,7 +2620,8 @@ trait Documents
             return;
         }
 
-        if ($this->cache->save($epochKey, \bin2hex(\random_bytes(16))) === false) {
+        $active = \bin2hex(\random_bytes(16));
+        if ($this->cache->save($epochKey, $active) === false) {
             throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
         }
 
@@ -2630,6 +2631,13 @@ trait Documents
 
         $this->cache->purge($finishedKey);
         if ($this->cache->getGeneration($finishedKey) === $finished) {
+            $nextStarted = $this->cache->getGeneration($startedKey);
+            $nextFinished = $this->cache->getGeneration($finishedKey);
+            $nextEpoch = $this->cache->load($epochKey, self::TTL);
+            if ($nextStarted === $nextFinished || $nextEpoch !== $active) {
+                return;
+            }
+
             throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
         }
     }

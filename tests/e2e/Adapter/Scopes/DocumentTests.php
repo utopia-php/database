@@ -672,6 +672,14 @@ trait DocumentTests
             $this->assertEquals(5, $document->getAttribute('integer'));
             $this->assertIsInt($document->getAttribute('bigint'));
             $this->assertEquals(9223372036854775807, $document->getAttribute('bigint'));
+
+            // The insert does not return the sequence for the rows it wrote, so it is looked
+            // up afterwards. $onNext is the only way these documents reach the caller.
+            $this->assertNotEmpty($document->getSequence());
+            $this->assertEquals(
+                $database->getDocument($collection, $document->getId())->getSequence(),
+                $document->getSequence()
+            );
         }
 
         $documents = $database->find($collection, [
@@ -1048,6 +1056,76 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (DatabaseException $e) {
         }
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testUpsertSequencesOnMixedBatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'upsert_mixed_sequences';
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $database->createAttribute($collection, Attribute::string(key: 'name', size: 128, required: true));
+        }
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+        $existingSequences = [];
+
+        foreach (['existing1', 'existing2'] as $id) {
+            $created = $database->createDocument($collection, new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'name' => $id,
+            ]));
+
+            $this->assertNotEmpty($created->getSequence());
+            $existingSequences[$id] = $created->getSequence();
+        }
+
+        $upserted = [];
+        $database->upsertDocuments(
+            $collection,
+            [
+                new Document(['$id' => 'existing1', '$permissions' => $permissions, 'name' => 'existing1 updated']),
+                new Document(['$id' => 'new1', '$permissions' => $permissions, 'name' => 'new1']),
+                new Document(['$id' => 'existing2', '$permissions' => $permissions, 'name' => 'existing2 updated']),
+                new Document(['$id' => 'new2', '$permissions' => $permissions, 'name' => 'new2']),
+            ],
+            onNext: function (Document $document) use (&$upserted): void {
+                $upserted[$document->getId()] = $document->getSequence();
+            },
+        );
+
+        $this->assertCount(4, $upserted);
+
+        foreach (['existing1', 'existing2', 'new1', 'new2'] as $id) {
+            $this->assertNotEmpty($upserted[$id], "No sequence returned for {$id}");
+            $this->assertSame(
+                $database->getDocument($collection, $id)->getSequence(),
+                $upserted[$id],
+                "Wrong sequence returned for {$id}",
+            );
+        }
+
+        $this->assertSame($existingSequences['existing1'], $upserted['existing1']);
+        $this->assertSame($existingSequences['existing2'], $upserted['existing2']);
 
         $database->deleteCollection($collection);
     }

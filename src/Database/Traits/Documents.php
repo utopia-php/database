@@ -756,6 +756,10 @@ trait Documents
 
         $time = DateTime::now();
         $modified = 0;
+        $hasRelationships = ! empty(\array_filter(
+            $collection->attributes,
+            static fn (Attribute $attribute): bool => $attribute->type === ColumnType::Relationship,
+        ));
 
         // Hoisted: validator only depends on the collection + adapter properties,
         // both stable for this call. Allocating once and reusing across all
@@ -837,7 +841,9 @@ trait Documents
                 ? $this->adapter->skipDuplicates($insert)
                 : $insert();
 
-            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            if ($onNext !== null || $hasRelationships) {
+                $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            }
 
             $hook = $this->relationshipHook;
             if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
@@ -1593,6 +1599,10 @@ trait Documents
         $updated = 0;
         $operatorIds = [];
         $seenIds = [];
+        $hasRelationships = ! empty(\array_filter(
+            $collection->attributes,
+            static fn (Attribute $attribute): bool => $attribute->type === ColumnType::Relationship,
+        ));
         foreach ($documents as $key => $document) {
             if ($this->getSharedTables() && $this->getTenantPerDocument()) {
                 /** @var Document $old */
@@ -1850,7 +1860,15 @@ trait Documents
                 }
             );
 
-            $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            foreach ($batch as $index => $document) {
+                if (empty($document->getSequence()) && ! empty($chunk[$index]->getOld()->getSequence())) {
+                    $document->setAttribute(Document::SEQUENCE, $chunk[$index]->getOld()->getSequence());
+                }
+            }
+
+            if ($onNext !== null || $hasRelationships) {
+                $batch = $this->adapter->getSequences($collection->getId(), $batch);
+            }
 
             foreach ($chunk as $change) {
                 if ($change->getOld()->isEmpty()) {
@@ -1865,7 +1883,7 @@ trait Documents
                 $batch = $this->silent(fn () => $hook->populateDocuments($batch, $collection, $hook->getFetchDepth()));
             }
 
-            if ($hasOperators) {
+            if ($hasOperators && $onNext !== null) {
                 $batch = $this->refetchDocuments($collection, $batch);
             }
 

@@ -267,21 +267,35 @@ trait GeneralTests
 
             $this->assertEquals(true, $doc->isEmpty());
 
-            // Upsert new documents with different tenants
+            // Upsert new documents with different tenants. The sequence lookup binds one
+            // placeholder per distinct tenant, so a cross-tenant batch has to keep each
+            // tenant's value at the position its placeholder was named for -- collected here
+            // because $onNext is the only way these documents reach the caller.
             $doc4Id = ID::unique();
             $doc5Id = ID::unique();
+            $sequences = [];
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->upsertDocuments(__FUNCTION__, [new Document([
-                    '$id' => $doc4Id,
-                    '$tenant' => 4,
-                    'name' => 'Superman4',
-                ]), new Document([
-                    '$id' => $doc5Id,
-                    '$tenant' => 5,
-                    'name' => 'Superman5',
-                ])]);
+                ->upsertDocuments(
+                    __FUNCTION__,
+                    [new Document([
+                        '$id' => $doc4Id,
+                        '$tenant' => 4,
+                        'name' => 'Superman4',
+                    ]), new Document([
+                        '$id' => $doc5Id,
+                        '$tenant' => 5,
+                        'name' => 'Superman5',
+                    ])],
+                    onNext: function (Document $document) use (&$sequences) {
+                        $sequences[$document->getId()] = $document->getSequence();
+                    }
+                );
+
+            $this->assertCount(2, $sequences);
+            $this->assertNotEmpty($sequences[$doc4Id]);
+            $this->assertNotEmpty($sequences[$doc5Id]);
 
             // Set to tenant 4 and read
             $doc = $database
@@ -291,6 +305,7 @@ trait GeneralTests
 
             $this->assertEquals('Superman4', $doc['name']);
             $this->assertEquals(4, $doc->getTenant());
+            $this->assertEquals($doc->getSequence(), $sequences[$doc4Id]);
 
             // Set to tenant 5 and read
             $doc = $database
@@ -300,6 +315,7 @@ trait GeneralTests
 
             $this->assertEquals('Superman5', $doc['name']);
             $this->assertEquals(5, $doc->getTenant());
+            $this->assertEquals($doc->getSequence(), $sequences[$doc5Id]);
 
             // Update names via upsert
             $database

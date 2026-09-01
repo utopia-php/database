@@ -1142,10 +1142,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     public function getSequences(string $collection, array $documents): array
     {
         $documentIds = [];
+        $tenants = [];
 
         foreach ($documents as $document) {
             if (empty($document->getSequence())) {
                 $documentIds[] = $document->getId();
+
+                if ($this->sharedTables && $this->tenantPerDocument) {
+                    $tenant = $document->getTenant();
+                    if (! \in_array($tenant, $tenants, true)) {
+                        $tenants[] = $tenant;
+                    }
+                }
             }
         }
 
@@ -1155,7 +1163,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $builder = $this->newBuilder($collection);
         $builder->select([Storage::UID, Storage::SEQUENCE]);
-        $builder->filter([BaseQuery::equal(Storage::UID, $documentIds)]);
+        $queries = [BaseQuery::equal(Storage::UID, $documentIds)];
+        if (! empty($tenants)) {
+            $queries[] = BaseQuery::equal(Storage::TENANT, $tenants);
+        }
+        $builder->filter($queries);
 
         $result = $builder->build();
         $stmt = $this->executeResult($result, Event::DocumentRead);

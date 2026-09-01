@@ -862,6 +862,7 @@ abstract class SQL extends Adapter
         $documentIds = [];
         $keys = [];
         $binds = [];
+        $tenants = [];
 
         foreach ($documents as $i => $document) {
             if (empty($document->getSequence())) {
@@ -873,7 +874,13 @@ abstract class SQL extends Adapter
                 $keys[] = $key;
 
                 if ($this->sharedTables) {
-                    $binds[':_tenant_'.$i] = $document->getTenant();
+                    $tenant = $document->getTenant();
+
+                    // One placeholder per distinct tenant
+                    if (!\in_array($tenant, $tenants, true)) {
+                        $binds[':_tenant_'.\count($tenants)] = $tenant;
+                        $tenants[] = $tenant;
+                    }
                 }
             }
         }
@@ -888,7 +895,7 @@ abstract class SQL extends Adapter
             SELECT _uid, _id
             FROM {$this->getSQLTable($collection)}
             WHERE {$this->quote('_uid')} IN ({$placeholders})
-            {$this->getTenantQuery($collection, tenantCount: \count($documentIds))}
+            {$this->getTenantQuery($collection, tenantCount: \count($tenants))}
             ";
 
         $stmt = $this->getPDO()->prepare($sql);

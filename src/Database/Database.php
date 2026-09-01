@@ -1612,8 +1612,8 @@ class Database
                 continue;
             }
 
-            // Assign default only if no value provided
-            if (! $exists) {
+            // Assign default when no value is provided or the value is explicitly null
+            if ($value === null && $default !== null) {
                 // Skip applying defaults during updates to avoid resetting unspecified attributes
                 if (! $applyDefaults) {
                     continue;

@@ -5375,6 +5375,7 @@ trait DocumentTests
         $this->assertEquals(true, $database->createAttribute('defaults', Attribute::datetime(key: 'datetime', default: '2000-06-12T14:12:55.000+00:00', filters: ['datetime'])));
 
         $document = $database->createDocument('defaults', new Document([
+            'string' => null,
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::create(Role::any()),

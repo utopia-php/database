@@ -2,15 +2,21 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Hook\Relationships;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
+use Utopia\Query\Schema\ColumnType;
 
+#[AllowMockObjectsWithoutExpectations]
 class CacheKeyTest extends TestCase
 {
     /**
@@ -19,7 +25,12 @@ class CacheKeyTest extends TestCase
     private function createDatabase(array $instanceFilters = [], string $database = 'test'): Database
     {
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(false);
+        $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
+            return match ($capability) {
+                Capability::Hostname => false,
+                default => false,
+            };
+        });
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
         $adapter->method('getDatabase')->willReturn($database);
@@ -138,7 +149,9 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheKeyUsesQueryCacheShape(): void
     {
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('supports')->willReturnCallback(
+            fn (Capability $capability): bool => $capability === Capability::Hostname
+        );
         $adapter->method('getHostname')->willReturn('mysql-console');
         $adapter->method('getNamespace')->willReturn('_39');
         $adapter->method('getTenant')->willReturn(null);
@@ -154,7 +167,9 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheKeyCanOverrideNamespaceSegment(): void
     {
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('supports')->willReturnCallback(
+            fn (Capability $capability): bool => $capability === Capability::Hostname
+        );
         $adapter->method('getHostname')->willReturn('mysql-console');
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('getTenant')->willReturn(null);
@@ -173,8 +188,8 @@ class CacheKeyTest extends TestCase
         $collection = new Document([
             '$id' => 'wafRules',
             'attributes' => [
-                new Document(['$id' => 'projectId', 'type' => Database::VAR_STRING]),
-                new Document(['$id' => 'enabled', 'type' => Database::VAR_BOOLEAN]),
+                new Document(['$id' => 'projectId', 'type' => ColumnType::String->value]),
+                new Document(['$id' => 'enabled', 'type' => ColumnType::Boolean->value]),
             ],
             'indexes' => [
                 new Document(['$id' => 'project_enabled', 'attributes' => ['projectId', 'enabled']]),
@@ -187,12 +202,13 @@ class CacheKeyTest extends TestCase
         ];
 
         $schemaHash = \md5(
-            (\json_encode($collection->getAttribute('attributes', [])) ?: '')
-            . (\json_encode($collection->getAttribute('indexes', [])) ?: '')
+            (\json_encode($collection->getArray('attributes')) ?: '')
+            . (\json_encode($collection->getArray('indexes')) ?: '')
             . (\json_encode($collection->getAttribute('$permissions', [])) ?: '')
             . (\json_encode($collection->getAttribute('documentSecurity', false)) ?: '')
         );
         $field = $db->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($field);
 
         $this->assertStringStartsWith("{$schemaHash}:", $field);
         $this->assertStringEndsWith(':documents', $field);
@@ -205,24 +221,27 @@ class CacheKeyTest extends TestCase
 
         $field = $db->getQueryCacheField(
             new Document([
-                'attributes' => [new Document(['$id' => 'name', 'type' => Database::VAR_STRING])],
+                'attributes' => [new Document(['$id' => 'name', 'type' => ColumnType::String->value])],
                 'indexes' => [],
             ]),
             [Query::limit(10)],
         );
+        $this->assertNotNull($field);
 
         $this->assertNotSame(
             $field,
             $db->getQueryCacheField(
                 new Document([
-                    'attributes' => [new Document(['$id' => 'status', 'type' => Database::VAR_STRING])],
+                    'attributes' => [new Document(['$id' => 'status', 'type' => ColumnType::String->value])],
                     'indexes' => [],
                 ]),
                 [Query::limit(10)],
             ),
         );
         $this->assertNotSame($field, $db->getQueryCacheField(null, [Query::limit(20)]));
-        $this->assertStringEndsWith(':total', $db->getQueryCacheField(null, [Query::limit(10)], 'total'));
+        $total = $db->getQueryCacheField(null, [Query::limit(10)], 'total');
+        $this->assertNotNull($total);
+        $this->assertStringEndsWith(':total', $total);
     }
 
     public function testQueryCacheFieldChangesWithActiveAuthorizationContext(): void
@@ -248,7 +267,7 @@ class CacheKeyTest extends TestCase
     {
         $db = $this->createDatabase();
 
-        $this->assertNull($db->getQueryCacheField(forPermission: Database::PERMISSION_UPDATE));
+        $this->assertNull($db->getQueryCacheField(forPermission: PermissionType::Update));
     }
 
     public function testQueryCacheFieldIncludesCursorDocumentPayload(): void
@@ -276,6 +295,7 @@ class CacheKeyTest extends TestCase
     public function testQueryCacheFieldIncludesAmbientState(): void
     {
         $db = $this->createDatabase();
+        $db->addHook(new Relationships($db));
 
         $field = $db->getQueryCacheField(null, [Query::limit(10)]);
 
@@ -306,7 +326,12 @@ class CacheKeyTest extends TestCase
         $hostname = 'database_db_nyc3_self_hosted_0_0';
 
         $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(true);
+        $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
+            return match ($capability) {
+                Capability::Hostname => true,
+                default => false,
+            };
+        });
         $adapter->method('getHostname')->willReturn($hostname);
         $adapter->method('getTenant')->willReturn(999);
         $adapter->method('getSharedTables')->willReturn(true);

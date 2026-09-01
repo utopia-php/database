@@ -7,6 +7,8 @@ use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -29,8 +31,8 @@ class WithCacheLeaseTest extends TestCase
             ->setNamespace('with_cache_' . \uniqid());
 
         $this->database->create();
-        $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $this->database->createCollection(new Collection(id: 'projects'));
+        $this->database->createAttribute('projects', Attribute::string(key: 'name'));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [
@@ -52,17 +54,24 @@ class WithCacheLeaseTest extends TestCase
         // concurrent writer purges the query key after the read started but
         // before the result is cached. Without a lease the stale list below
         // would land in the cache after the purge.
-        $result = $this->database->withCache($this->key, function () use ($hash, $document) {
-            $this->cacheAdapter->purge($this->key, $hash);
+        $result = $this->database->withCache($this->key, function () use ($document) {
+            $this->database->purgeCachedQueries('projects');
 
             return [$document];
         }, $hash);
 
+        /** @var mixed $result */
+        $this->assertIsArray($result);
         $this->assertCount(1, $result);
-        $this->assertFalse(
-            $this->cacheAdapter->load($this->key, Database::TTL, $hash),
-            'A list read whose query key was purged mid-flight must not be re-cached.'
-        );
+        $callbackCalls = 0;
+        $fresh = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
+            $callbackCalls++;
+
+            return [];
+        }, $hash);
+        /** @var mixed $fresh */
+        $this->assertSame([], $fresh);
+        $this->assertSame(1, $callbackCalls);
     }
 
     public function testListWriteLandsWhenNoConcurrentPurge(): void
@@ -73,11 +82,19 @@ class WithCacheLeaseTest extends TestCase
 
         $result = $this->database->withCache($this->key, fn () => [$document], $hash);
 
+        /** @var mixed $result */
+        $this->assertIsArray($result);
         $this->assertCount(1, $result);
-        $this->assertNotFalse(
-            $this->cacheAdapter->load($this->key, Database::TTL, $hash),
-            'A list read with no concurrent purge must populate the cache.'
-        );
+        $callbackCalls = 0;
+        $cached = $this->database->withCache($this->key, function () use (&$callbackCalls): array {
+            $callbackCalls++;
+
+            return [];
+        }, $hash);
+        /** @var mixed $cached */
+        $this->assertIsArray($cached);
+        $this->assertCount(1, $cached);
+        $this->assertSame(0, $callbackCalls);
     }
 }
 
@@ -86,7 +103,7 @@ class LeasableMemoryCache implements Adapter, Leasable
     private const string GENERATION_FIELD = '__utopia_gen__';
 
     /**
-     * @var array<string, array<string, mixed>>
+     * @var array<string, array<string, array{time: int, data: array<int|string, mixed>|string}>>
      */
     private array $store = [];
 
@@ -126,7 +143,9 @@ class LeasableMemoryCache implements Adapter, Leasable
 
     public function getGeneration(string $key): string
     {
-        return $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
+        $generation = $this->store[$key][self::GENERATION_FIELD]['data'] ?? '0';
+
+        return \is_string($generation) ? $generation : '0';
     }
 
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array

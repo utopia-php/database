@@ -2,10 +2,15 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 
+/**
+ * Validates select query methods ensuring referenced attributes exist in the schema and are not duplicated.
+ */
 class Select extends Base
 {
     /**
@@ -14,27 +19,19 @@ class Select extends Base
     protected array $schema = [];
 
     /**
-     * List of internal attributes
-     *
-     * @var array<string>
+     * @var array<string, true>
      */
-    protected const INTERNAL_ATTRIBUTES = [
-        '$id',
-        '$sequence',
-        '$createdAt',
-        '$updatedAt',
-        '$permissions',
-        '$collection',
-    ];
+    protected array $joinAliases = [];
 
     /**
-     * @param array<Document> $attributes
-     * @param bool $supportForAttributes
+     * @param  array<Document>  $attributes
      */
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
+            /** @var string $attrKey */
+            $attrKey = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
+            $this->schema[$attrKey] = $attribute->getArrayCopy();
         }
     }
 
@@ -45,54 +42,67 @@ class Select extends Base
      *
      * Otherwise, returns false
      *
-     * @param Query $value
-     * @return bool
+     * @param  mixed  $value
      */
     public function isValid($value): bool
     {
-        if (!$value instanceof Query) {
+        if (! $value instanceof Query) {
             return false;
         }
 
-        if ($value->getMethod() !== Query::TYPE_SELECT) {
+        if ($value->getMethod() !== Method::Select) {
             return false;
         }
 
         $internalKeys = \array_map(
-            fn ($attr) => $attr['$id'],
-            Database::INTERNAL_ATTRIBUTES
+            fn (Attribute $attr): string => $attr->key,
+            Database::internalAttributes()
         );
 
         if (\count($value->getValues()) === 0) {
             $this->message = 'No attributes selected';
+
             return false;
         }
 
         // Before the duplicate check: array_unique() stringifies every array element
         // to "Array", so two nested values collapse into one and report a misleading
         // duplicate instead of the type error that is actually there.
+        $attributes = [];
         foreach ($value->getValues() as $attribute) {
             if (!\is_string($attribute)) {
                 $this->message = 'Attribute selection must be a string, got ' . \get_debug_type($attribute);
                 return false;
             }
+            $attributes[] = $attribute;
         }
 
-        if (\count($value->getValues()) !== \count(\array_unique($value->getValues()))) {
+        if (\count($attributes) !== \count(\array_unique($attributes))) {
             $this->message = 'Duplicate attributes selected';
+
             return false;
 
         }
-        foreach ($value->getValues() as $attribute) {
-            if (\str_contains($attribute, '.')) {
-                //special symbols with `dots`
+        foreach ($value->getValues() as $attributeValue) {
+            /** @var string $attribute */
+            $attribute = $attributeValue;
+            $dot = \strpos($attribute, '.');
+            if ($dot !== false) {
+                // special symbols with `dots`
                 if (isset($this->schema[$attribute])) {
+                    continue;
+                }
+
+                $alias = \substr($attribute, 0, $dot);
+                $column = \substr($attribute, $dot + 1);
+
+                if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
                     continue;
                 }
 
                 // For relationships, just validate the top level.
                 // Will validate each nested level during the recursive calls.
-                $attribute = \explode('.', $attribute)[0];
+                $attribute = $alias;
             }
 
             // Skip internal attributes
@@ -100,14 +110,43 @@ class Select extends Base
                 continue;
             }
 
-            if ($this->supportForAttributes && !isset($this->schema[$attribute]) && $attribute !== '*') {
-                $this->message = 'Attribute not found in schema: ' . $attribute;
+            if ($this->supportForAttributes && ! isset($this->schema[$attribute]) && $attribute !== '*') {
+                $this->message = 'Attribute not found in schema: '.$attribute;
+
                 return false;
             }
         }
+
         return true;
     }
 
+    /**
+     * @param array<string> $aliases
+     */
+    public function allowJoinAliases(array $aliases): void
+    {
+        foreach ($aliases as $alias) {
+            if ($alias !== '') {
+                $this->joinAliases[$alias] = true;
+            }
+        }
+    }
+
+    public function resetJoinAliases(): void
+    {
+        $this->joinAliases = [];
+    }
+
+    private function isAllowedJoinColumn(string $column): bool
+    {
+        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
+    }
+
+    /**
+     * Get the method type this validator handles.
+     *
+     * @return string
+     */
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_SELECT;

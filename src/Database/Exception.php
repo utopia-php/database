@@ -2,10 +2,19 @@
 
 namespace Utopia\Database;
 
+use Exception as PhpException;
 use Throwable;
 
-class Exception extends \Exception
+/**
+ * Base exception class for all database-related errors.
+ */
+class Exception extends PhpException
 {
+    /**
+     * @param string $message The exception message
+     * @param int|string $code The exception code (strings are cast to int)
+     * @param Throwable|null $previous The previous throwable for chaining
+     */
     public function __construct(string $message, int|string $code = 0, ?Throwable $previous = null)
     {
         if (\is_string($code)) {

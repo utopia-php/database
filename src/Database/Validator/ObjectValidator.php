@@ -4,6 +4,9 @@ namespace Utopia\Database\Validator;
 
 use Utopia\Validator;
 
+/**
+ * Validates that a value is a valid object (associative array or valid JSON string).
+ */
 class ObjectValidator extends Validator
 {
     /**
@@ -16,23 +19,24 @@ class ObjectValidator extends Validator
 
     /**
      * Is Valid
-     *
-     * @param mixed $value
      */
     public function isValid(mixed $value): bool
     {
         if (is_string($value)) {
-            // Check if it's valid JSON
-            json_decode($value);
-            return json_last_error() === JSON_ERROR_NONE;
+            $decoded = json_decode($value);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return false;
+            }
+
+            $value = $decoded;
         }
 
         if ($value instanceof \stdClass) {
             return true;
         }
 
-        // Allow empty or associative arrays (non-list)
-        return empty($value) || (is_array($value) && !array_is_list($value));
+        return is_array($value) && (count($value) === 0 || ! array_is_list($value));
     }
 
     /**

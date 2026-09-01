@@ -2,13 +2,30 @@
 
 namespace Utopia\Database\Adapter;
 
+use DateTime;
+use Throwable;
 use Utopia\Database\Adapter;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Change;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Hook\Transform;
+use Utopia\Database\Index;
+use Utopia\Database\PermissionType;
+use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
+use Utopia\Query\CursorDirection;
 
+/**
+ * Connection pool adapter that delegates database operations to pooled adapter instances.
+ *
+ * Pool is a proxy: optional Feature methods are forwarded to the borrowed adapter.
+ * Feature support is reported by hasFeature(), not instanceof.
+ */
 class Pool extends Adapter
 {
     /**
@@ -23,23 +40,12 @@ class Pool extends Adapter
     protected ?Adapter $pinnedAdapter = null;
 
     /**
-     * The timeout each event is under, held here rather than on a connection.
-     *
-     * A timeout is adapter state, not a statement: every concrete adapter
-     * records it and applies it to the SQL it builds afterwards, and none of
-     * them contacts the server to set it. Delegating the call therefore opened
-     * a connection for the sole purpose of writing a number onto whichever one
-     * answered, which the pool took back moments later - so the timeout bound
-     * one connection and none of its siblings, and merely building a handle
-     * failed outright while the backing was unreachable, reporting a database
-     * as down to a caller that had not yet issued a query.
-     *
-     * @var array<string, int>
+     * Whether borrowed adapters should require attributes to be defined in metadata.
      */
-    private array $timeouts = [];
+    protected ?bool $supportForAttributes = null;
 
     /**
-     * @param UtopiaPool<covariant Adapter> $pool The pool to use for connections. Must contain instances of Adapter.
+     * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
     {
@@ -51,47 +57,113 @@ class Pool extends Adapter
      *
      * Required because __call() can't be used to implement abstract methods.
      *
-     * @param string $method
-     * @param array<mixed> $args
-     * @return mixed
+     * @param  array<mixed>  $args
+     *
      * @throws DatabaseException
      */
     public function delegate(string $method, array $args): mixed
     {
+        return $this->borrowAndInvoke($method, $args);
+    }
+
+    /**
+     * @param  class-string  $feature
+     * @param  array<mixed>  $args
+     */
+    protected function delegateFeature(string $feature, string $method, array $args): mixed
+    {
+        return $this->borrowAndInvoke($method, $args, $feature);
+    }
+
+    /**
+     * @param  array<mixed>  $args
+     * @param  class-string|null  $feature
+     */
+    protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
+    {
         if ($this->pinnedAdapter !== null) {
-            if ($this->skipDuplicates) {
-                return $this->pinnedAdapter->skipDuplicates(
-                    fn () => $this->pinnedAdapter->{$method}(...$args)
-                );
-            }
-            return $this->pinnedAdapter->{$method}(...$args);
+            $adapter = $this->pinnedAdapter;
+            $this->syncBorrowedAdapter($adapter);
+
+            return $this->invokeDelegated($adapter, $method, $args, $feature);
         }
 
-        return $this->pool->use(function (Adapter $adapter) use ($method, $args) {
-            // Run setters in case config changed since this connection was last used
-            $adapter->setDatabase($this->getDatabase());
-            $adapter->setNamespace($this->getNamespace());
-            $adapter->setSharedTables($this->getSharedTables());
-            $adapter->setTenant($this->getTenant());
-            $adapter->setAuthorization($this->authorization);
+        return $this->pool->use(function (Adapter $adapter) use ($method, $args, $feature) {
+            $this->syncBorrowedAdapter($adapter);
 
-            $this->syncTimeouts($adapter);
-            $adapter->resetDebug();
-            foreach ($this->getDebug() as $key => $value) {
-                $adapter->setDebug($key, $value);
-            }
-            $adapter->resetMetadata();
-            foreach ($this->getMetadata() as $key => $value) {
-                $adapter->setMetadata($key, $value);
-            }
-
-            if ($this->skipDuplicates) {
-                return $adapter->skipDuplicates(
-                    fn () => $adapter->{$method}(...$args)
-                );
-            }
-            return $adapter->{$method}(...$args);
+            return $this->invokeDelegated($adapter, $method, $args, $feature);
         });
+    }
+
+    /**
+     * @param  array<mixed>  $args
+     * @param  class-string|null  $feature
+     */
+    protected function invokeDelegated(Adapter $adapter, string $method, array $args, ?string $feature = null): mixed
+    {
+        if ($feature !== null && ! $adapter instanceof $feature) {
+            throw new DatabaseException($this->unsupportedFeatureMessage($feature));
+        }
+
+        if ($this->skipDuplicates) {
+            return $adapter->skipDuplicates(
+                fn () => $adapter->{$method}(...$args)
+            );
+        }
+
+        return $adapter->{$method}(...$args);
+    }
+
+    /**
+     * @param  class-string  $feature
+     */
+    protected function unsupportedFeatureMessage(string $feature): string
+    {
+        return match ($feature) {
+            Feature\Upserts::class => 'Adapter does not support upserts',
+            Feature\RawQuery::class => 'Adapter does not support raw queries',
+            Feature\QueryBuilder::class => 'Adapter does not support query builder',
+            Feature\SchemaAttributes::class => 'Adapter does not support schema attributes',
+            Feature\SchemaIndexes::class => 'Adapter does not support schema indexes',
+            Feature\ColumnTypes::class => 'Adapter does not support column types',
+            Feature\Spatial::class => 'Adapter does not support spatial',
+            Feature\InternalCasting::class => 'Adapter does not support internal casting',
+            Feature\UTCCasting::class => 'Adapter does not support UTC casting',
+            Feature\ConnectionId::class => 'Adapter does not support connection id',
+            Feature\Relationships::class => 'Adapter does not support relationships',
+            Feature\Timeouts::class => 'Adapter does not support timeouts',
+            default => 'Adapter does not support '.$feature,
+        };
+    }
+
+    protected function syncBorrowedAdapter(Adapter $adapter): void
+    {
+        $adapter->setDatabase($this->getDatabase());
+        $adapter->setNamespace($this->getNamespace());
+        $adapter->setSharedTables($this->getSharedTables());
+        $adapter->setTenant($this->getTenant());
+        $adapter->setTenantPerDocument($this->getTenantPerDocument());
+        $adapter->setAuthorization($this->authorization);
+
+        if ($this->supportForAttributes !== null) {
+            $adapter->setSupportForAttributes($this->supportForAttributes);
+        }
+
+        $this->syncTimeouts($adapter);
+        $adapter->resetDebug();
+        foreach ($this->getDebug() as $key => $value) {
+            $adapter->setDebug($key, $value);
+        }
+        $adapter->resetMetadata();
+        foreach ($this->getMetadata() as $key => $value) {
+            $adapter->setMetadata($key, $value);
+        }
+        $adapter->setProfiler($this->profiler);
+        $adapter->resetTransforms();
+        foreach ($this->queryTransforms as $tName => $tTransform) {
+            $adapter->addTransform($tName, $tTransform);
+        }
+        $this->syncWriteHooks($adapter);
     }
 
     public function getDriver(): mixed
@@ -99,72 +171,125 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function before(string $event, string $name = '', ?callable $callback = null): static
+    /**
+     * Check if a specific capability is supported by the pooled adapter.
+     *
+     * @param Capability $feature The capability to check
+     * @return bool
+     */
+    public function supports(Capability $feature): bool
     {
-        $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * Get all capabilities supported by the pooled adapter.
+     *
+     * @return array<Capability>
+     */
+    public function capabilities(): array
+    {
+        /** @var array<Capability> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    /**
+     * @param  class-string  $feature
+     */
+    public function hasFeature(string $feature): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate('hasFeature', [$feature]);
+
+        return $result;
+    }
+
+    /**
+     * Register a named query transform hook on the pooled adapter.
+     *
+     * @param string $name The transform name
+     * @param Transform $transform The transform instance
+     * @return static
+     */
+    public function addTransform(string $name, Transform $transform): static
+    {
+        $this->queryTransforms[$name] = $transform;
 
         return $this;
     }
 
-    protected function trigger(string $event, mixed $query): mixed
+    /**
+     * Remove a named query transform hook from the pooled adapter.
+     *
+     * @param string $name The transform name to remove
+     * @return static
+     */
+    public function removeTransform(string $name): static
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        unset($this->queryTransforms[$name]);
+
+        return $this;
     }
 
     /**
-     * Zero is the value a caller's own default carries when it wants no
-     * timeout, so it clears the event rather than being refused. A connection
-     * is only ever asked for a timeout it can hold.
+     * Set the maximum execution time for queries on the pooled adapter.
+     *
+     * @param int $milliseconds Timeout in milliseconds
+     * @param Event $event The event scope for the timeout
+     * @return void
      */
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
+        // Zero is what a caller's own default carries when it wants no timeout,
+        // so it clears the event rather than pinning every statement to 0.
         if ($milliseconds <= 0) {
             $this->clearTimeout($event);
 
             return;
         }
 
-        $this->timeouts[$event] = $milliseconds;
-        $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
-
-        $this->syncPin();
+        $this->setTimeoutState($milliseconds, $event);
+        $this->syncPinnedTimeouts();
     }
 
-    /**
-     * Clearing one event leaves the others alone. The concrete adapters keep a
-     * single timeout scalar that Postgres and Mongo apply to every statement,
-     * so a clear forwarded verbatim would drop the timeout the caller still
-     * has configured for everything else.
-     */
-    public function clearTimeout(string $event): void
+    public function clearTimeout(Event $event = Event::All): void
     {
-        unset($this->timeouts[$event]);
-        $this->timeout = $this->timeouts[Database::EVENT_ALL] ?? 0;
-
-        $this->syncPin();
+        $this->clearTimeoutState($event);
+        $this->syncPinnedTimeouts();
     }
 
     /**
-     * The pool's own map is what a checkout replays, so a clear has to empty
-     * it. Inheriting the base implementation cleared almost nothing: it walks
-     * the events it finds in `$transformations`, and this adapter delegates
-     * `before()`, so its own array never holds more than `EVENT_ALL` however
-     * many events a caller has set a timeout for.
-     */
-    public function clearTimeouts(): void
-    {
-        $this->timeouts = [];
-        $this->timeout = 0;
-
-        $this->syncPin();
-    }
-
-    /**
-     * The connection this caller's open transaction is pinned to, if any.
+     * A timeout is adapter state, not a statement: every concrete adapter records
+     * it and applies it to the SQL it builds afterwards, and none of them contacts
+     * the server to set it. Delegating the call therefore checked a connection out
+     * for the sole purpose of writing a number onto whichever one answered, so the
+     * timeout bound that connection and none of its siblings — and merely building
+     * a handle failed outright while the backing was unreachable, reporting a
+     * database as down to a caller that had not yet issued a query.
      *
-     * A seam: a subclass that keys the pin by coroutine rather than by object
-     * overrides this, and the timeout setters reach the right connection
-     * without knowing how the pin is held.
+     * The state is replayed onto each connection as it is borrowed
+     * ({@see self::syncTimeouts()}), so the only connection that needs telling now
+     * is one already pinned: a transaction does not check out again before its
+     * commit, and the rest of its body must not run under the timeout the caller
+     * just replaced.
+     */
+    private function syncPinnedTimeouts(): void
+    {
+        $pinned = $this->pin();
+
+        if ($pinned !== null) {
+            $this->syncTimeouts($pinned);
+        }
+    }
+
+    /**
+     * Which connection this handle currently has pinned, if any. Read through a
+     * seam rather than off the property, because a handle that pins per
+     * coroutine keeps its pins somewhere else and would otherwise never be
+     * asked.
      */
     protected function pin(): ?Adapter
     {
@@ -172,75 +297,57 @@ class Pool extends Adapter
     }
 
     /**
-     * A timeout changed inside a transaction has to reach the connection
-     * running it. Every statement left in that transaction goes to the pinned
-     * connection, and it will not be checked out again before the commit, so
-     * waiting for the next checkout would leave the rest of the body running
-     * under the timeout the caller just replaced.
+     * Start a database transaction via the pooled adapter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException
      */
-    private function syncPin(): void
+    public function startTransaction(): bool
     {
-        $pinned = $this->pin();
-
-        if ($pinned === null) {
-            return;
-        }
-
-        $this->syncTimeouts($pinned);
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     /**
-     * Put a connection into the timeout state this pool holds, as it is checked
-     * out. The connection outlives the handle that configured it and is handed
-     * on to handles that want a different timeout or none at all, so it is
-     * reset first: a handle carrying no timeout must not inherit one, and a
-     * handle carrying its own must not be left with an event the last holder
-     * set.
+     * Commit the current database transaction via the pooled adapter.
      *
-     * The global timeout is applied last, which decides what an engine with no
-     * per-event timeout does with one. MariaDB and MySQL hang a hook on the
-     * event and are unaffected; Postgres and Mongo take `$event` and discard
-     * it, so every call lands on the one scalar they bound every statement by
-     * and the last one wins. Applying the global last means a per-event
-     * refinement those two cannot express is ignored there. The other order
-     * would let a 5s read deadline silently bound every write on the handle,
-     * which is the failure worth avoiding.
+     * @return bool
+     *
+     * @throws DatabaseException
      */
-    protected function syncTimeouts(Adapter $adapter): void
-    {
-        $adapter->clearTimeouts();
-
-        foreach ($this->timeouts as $event => $milliseconds) {
-            if ($event === Database::EVENT_ALL) {
-                continue;
-            }
-
-            $adapter->setTimeout($milliseconds, $event);
-        }
-
-        if (isset($this->timeouts[Database::EVENT_ALL])) {
-            $adapter->setTimeout($this->timeouts[Database::EVENT_ALL]);
-        }
-    }
-
-    public function startTransaction(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
     public function commitTransaction(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * Roll back the current database transaction via the pooled adapter.
+     *
+     * @return bool
+     *
+     * @throws DatabaseException
+     */
     public function rollbackTransaction(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    public function inTransaction(): bool
+    {
+        return $this->pinnedAdapter?->inTransaction() ?? parent::inTransaction();
     }
 
     public function getHostname(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     /**
@@ -249,9 +356,11 @@ class Pool extends Adapter
      * from running on different connections.
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
-     * @throws \Throwable
+     *
+     * @throws Throwable
      */
     public function withTransaction(callable $callback): mixed
     {
@@ -262,21 +371,7 @@ class Pool extends Adapter
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($callback) {
-            $adapter->setDatabase($this->getDatabase());
-            $adapter->setNamespace($this->getNamespace());
-            $adapter->setSharedTables($this->getSharedTables());
-            $adapter->setTenant($this->getTenant());
-            $adapter->setAuthorization($this->authorization);
-
-            $this->syncTimeouts($adapter);
-            $adapter->resetDebug();
-            foreach ($this->getDebug() as $key => $value) {
-                $adapter->setDebug($key, $value);
-            }
-            $adapter->resetMetadata();
-            foreach ($this->getMetadata() as $key => $value) {
-                $adapter->setMetadata($key, $value);
-            }
+            $this->syncBorrowedAdapter($adapter);
 
             $this->pinnedAdapter = $adapter;
             try {
@@ -294,412 +389,560 @@ class Pool extends Adapter
 
     protected function quote(string $string): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    protected function syncTimeouts(Adapter $adapter): void
+    {
+        if (! ($adapter instanceof Feature\Timeouts)) {
+            // Setting a timeout no longer checks a connection out, so this is the
+            // first moment the adapter's capabilities are known. Staying silent
+            // here would drop a bound the caller asked for and run the statement
+            // unbounded; the refusal belongs where the timeout would be applied,
+            // not where a handle is merely being built.
+            if ($this->timeouts !== []) {
+                throw new DatabaseException($this->unsupportedFeatureMessage(Feature\Timeouts::class));
+            }
+
+            return;
+        }
+
+        if (empty($this->timeouts)) {
+            $adapter->clearTimeout();
+
+            return;
+        }
+
+        if (count($this->timeouts) === 1 && isset($this->timeouts[Event::All->value])) {
+            $adapter->setTimeout($this->timeouts[Event::All->value]);
+
+            return;
+        }
+
+        // The concrete adapters keep one timeout scalar, which Postgres writes
+        // into SET statement_timeout and Mongo into maxTimeMS for every
+        // statement, so the last value applied is the one every statement runs
+        // under. Apply the per-event entries first and the global one last, or a
+        // per-event timeout set after the global one bounds everything.
+        $adapter->clearTimeout();
+        foreach ($this->timeouts as $event => $milliseconds) {
+            if ($event === Event::All->value) {
+                continue;
+            }
+
+            $adapter->setTimeout($milliseconds, Event::from($event));
+        }
+
+        if (isset($this->timeouts[Event::All->value])) {
+            $adapter->setTimeout($this->timeouts[Event::All->value]);
+        }
+    }
+
+    private function syncWriteHooks(Adapter $adapter): void
+    {
+        $current = $adapter->getWriteHooks();
+        if ($current === $this->writeHooks) {
+            return;
+        }
+
+        foreach ($current as $childHook) {
+            $adapter->removeWriteHook($childHook::class);
+        }
+
+        foreach ($this->writeHooks as $hook) {
+            $adapter->addWriteHook($hook);
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
     public function ping(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function reconnect(): void
     {
         $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function create(string $name): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function exists(string $database, ?string $collection = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function list(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function delete(string $name): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteCollection(string $id): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function analyzeCollection(string $collection): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function createAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function createAttribute(string $collection, Attribute $attribute): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createAttributes(string $collection, array $attributes): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function updateAttribute(string $collection, string $id, string $type, int $size, bool $signed = true, bool $array = false, ?string $newKey = null, bool $required = false): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function createRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay = false, string $id = '', string $twoWayKey = ''): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function createRelationship(Relationship $relationship): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function updateRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function deleteRelationship(string $collection, string $relatedCollection, string $type, bool $twoWay, string $key, string $twoWayKey, string $side): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function deleteRelationship(Relationship $relationship): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegateFeature(Feature\Relationships::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function createIndex(string $collection, string $id, string $type, array $attributes, array $lengths, array $orders, array $indexAttributeTypes = [], array $collation = [], int $ttl = 1): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteIndex(string $collection, string $id): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createDocument(Document $collection, Document $document): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function createDocuments(Document $collection, array $documents): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+    /**
+     * {@inheritDoc}
+     */
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * @param  array<Change>  $changes
+     * @return array<Document>
+     */
     public function upsertDocuments(Document $collection, string $attribute, array $changes): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegateFeature(Feature\Upserts::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    /**
+     * {@inheritDoc}
+     */
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var float|int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSizeOfCollection(string $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForString(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForInt(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForBigInt(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForUnsignedBigInt(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForAttributes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getLimitForIndexes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getMaxIndexLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getMaxVarcharLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getMaxUIDLength(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getMinDateTime(): \DateTime
+    /**
+     * {@inheritDoc}
+     */
+    public function getMinDateTime(): DateTime
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var DateTime $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForSchemas(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForAttributes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForSchemaAttributes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForIndex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForIndexArray(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForCastIndexArray(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForUniqueIndex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForFulltextIndex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForFulltextWildcardIndex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForPCRERegex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForPOSIXRegex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForTrigramIndex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForCasting(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForQueryContains(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForTimeouts(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForRelationships(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForUpdateLock(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForBatchOperations(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForAttributeResizing(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForOperators(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForGetConnectionId(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForUpserts(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForUpsertOnUniqueIndex(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForVectors(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForCacheSkipOnFailure(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForCaching(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForReconnection(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForHostname(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForBatchCreateAttributes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForSpatialAttributes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForSpatialIndexNull(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfAttributes(Document $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfIndexes(Document $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfDefaultAttributes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getCountOfDefaultIndexes(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getDocumentSizeLimit(): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getAttributeWidth(Document $collection): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getKeywords(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<string> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     protected function getAttributeProjection(array $selections, string $prefix): mixed
@@ -707,184 +950,226 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int $value, string $updatedAt, float|int|null $min = null, float|int|null $max = null): bool
+    /**
+     * {@inheritDoc}
+     */
+    public function increaseDocumentAttribute(string $collection, string $id, string $attribute, float|int|string $value, string $updatedAt, float|int|string|null $min = null, float|int|string|null $max = null): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getConnectionId(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegateFeature(Feature\ConnectionId::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getInternalIndexesKeys(): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<string> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * @return array<Document>
+     */
     public function getSchemaAttributes(string $collection): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegateFeature(Feature\SchemaAttributes::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForSchemaIndexes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * @return array<Document>
+     */
     public function getSchemaIndexes(string $collection): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegateFeature(Feature\SchemaIndexes::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
     protected function execute(mixed $stmt): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getIdAttributeType(): string
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var string $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function getSequences(string $collection, array $documents): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForBoundaryInclusiveContains(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForSpatialIndexOrder(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForDistanceBetweenMultiDimensionGeometryInMeters(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForSpatialAxisOrder(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForOptionalSpatialAttributeWithExistingRows(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForMultipleFulltextIndexes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForIdenticalIndexes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForOrderRandom(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * @return array<float>
+     */
     public function decodePoint(string $wkb): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<float> $result */
+        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * @return array<array<float>>
+     */
     public function decodeLinestring(string $wkb): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<array<float>> $result */
+        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * @return array<array<array<float>>>
+     */
     public function decodePolygon(string $wkb): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<array<array<float>>> $result */
+        $result = $this->delegateFeature(Feature\Spatial::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForObject(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForObjectIndexes(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * {@inheritDoc}
+     */
     public function castingBefore(Document $collection, Document $document): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function castingAfter(Document $collection, Document $document): Document
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var Document $result */
+        $result = $this->delegateFeature(Feature\InternalCasting::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForInternalCasting(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
-    public function getSupportForUTCCasting(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * {@inheritDoc}
+     */
     public function setUTCDatetime(string $value): mixed
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return $this->delegateFeature(Feature\UTCCasting::class, __FUNCTION__, \func_get_args());
     }
 
+    /**
+     * {@inheritDoc}
+     */
     public function setSupportForAttributes(bool $support): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        $this->supportForAttributes = $support;
+
+        return $result;
     }
 
-    public function getSupportForIntegerBooleans(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * Set the authorization instance used for permission checks.
+     *
+     * @param Authorization $authorization The authorization instance
+     * @return self
+     */
     public function setAuthorization(Authorization $authorization): self
     {
         $this->authorization = $authorization;
+
         return $this;
     }
 
-    public function getSupportForAlterLocks(): bool
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
-    }
-
+    /**
+     * {@inheritDoc}
+     */
     public function getSupportNonUtfCharacters(): bool
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForTTLIndexes(): bool
+    /**
+     * @param  array<mixed>  $bindings
+     * @return array<Document>
+     */
+    public function rawQuery(string $query, array $bindings = []): array
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var array<Document> $result */
+        $result = $this->delegateFeature(Feature\RawQuery::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForTransactionRetries(): bool
+    /**
+     * @param  array<mixed>  $bindings
+     */
+    public function rawMutation(string $query, array $bindings = []): int
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var int $result */
+        $result = $this->delegateFeature(Feature\RawQuery::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
 
-    public function getSupportForNestedTransactions(): bool
+    public function getBuilder(string $collection): \Utopia\Query\Builder
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        /** @var \Utopia\Query\Builder $result */
+        $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());
+        return $result;
     }
+
+    public function getSchema(): \Utopia\Query\Schema
+    {
+        /** @var \Utopia\Query\Schema $result */
+        $result = $this->delegateFeature(Feature\QueryBuilder::class, __FUNCTION__, \func_get_args());
+        return $result;
+    }
+
+    public function getColumnType(string $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
+    {
+        /** @var string $result */
+        $result = $this->delegateFeature(Feature\ColumnTypes::class, __FUNCTION__, \func_get_args());
+        return $result;
+    }
+
 }

@@ -3,9 +3,10 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
-use Utopia\Database\Database;
+use Utopia\Database\Event;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Adapter\Stack;
 use Utopia\Pools\Pool as UtopiaPool;
@@ -45,14 +46,14 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
-        $adapter->getSupportForTimeouts();
+        $adapter->getDriver();
 
-        $this->assertSame([Database::EVENT_ALL => 300000], $connection->timeouts);
+        $this->assertSame([Event::All->value => 300000], $connection->timeouts);
 
         $connection->timeouts = [];
-        $adapter->getSupportForTimeouts();
+        $adapter->getDriver();
 
-        $this->assertSame([Database::EVENT_ALL => 300000], $connection->timeouts);
+        $this->assertSame([Event::All->value => 300000], $connection->timeouts);
     }
 
     public function testClearedTimeoutIsClearedOnEveryCheckout(): void
@@ -62,9 +63,9 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
-        $adapter->getSupportForTimeouts();
-        $adapter->clearTimeout(Database::EVENT_ALL);
-        $adapter->getSupportForTimeouts();
+        $adapter->getDriver();
+        $adapter->clearTimeout(Event::All);
+        $adapter->getDriver();
 
         $this->assertSame([], $connection->timeouts);
         $this->assertSame(0, $connection->getTimeout());
@@ -78,12 +79,12 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
-        $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
-        $adapter->getSupportForTimeouts();
+        $adapter->setTimeout(5000, Event::DocumentRead);
+        $adapter->getDriver();
 
         $this->assertSame([
-            Database::EVENT_DOCUMENT_READ => 5000,
-            Database::EVENT_ALL => 300000,
+            Event::DocumentRead->value => 5000,
+            Event::All->value => 300000,
         ], $connection->timeouts, 'The global timeout is applied last so the connection ends on the scalar the pool reports');
         $this->assertSame(300000, $connection->getTimeout());
     }
@@ -101,11 +102,11 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
-        $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
-        $adapter->clearTimeout(Database::EVENT_DOCUMENT_READ);
-        $adapter->getSupportForTimeouts();
+        $adapter->setTimeout(5000, Event::DocumentRead);
+        $adapter->clearTimeout(Event::DocumentRead);
+        $adapter->getDriver();
 
-        $this->assertSame([Database::EVENT_ALL => 300000], $connection->timeouts);
+        $this->assertSame([Event::All->value => 300000], $connection->timeouts);
         $this->assertSame(300000, $connection->getTimeout(), 'Postgres and Mongo bound every statement by this scalar, so clearing one event must not zero it');
         $this->assertSame(300000, $adapter->getTimeout());
     }
@@ -124,11 +125,11 @@ class PoolTimeoutTest extends TestCase
         $bounded = new Pool($pool);
         $bounded->setAuthorization(new Authorization());
         $bounded->setTimeout(5000);
-        $bounded->getSupportForTimeouts();
+        $bounded->getDriver();
 
         $unbounded = new Pool($pool);
         $unbounded->setAuthorization(new Authorization());
-        $unbounded->getSupportForTimeouts();
+        $unbounded->getDriver();
 
         $this->assertSame([], $connection->timeouts, 'A handle that asked for no timeout must not run under the last holder\'s');
         $this->assertSame(0, $connection->getTimeout());
@@ -148,9 +149,9 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(300000);
-        $adapter->setTimeout(5000, Database::EVENT_DOCUMENT_READ);
-        $adapter->clearTimeouts();
-        $adapter->getSupportForTimeouts();
+        $adapter->setTimeout(5000, Event::DocumentRead);
+        $adapter->clearTimeout(Event::All);
+        $adapter->getDriver();
 
         $this->assertSame([], $connection->timeouts, 'A timeout the caller cleared must not come back on the next checkout');
         $this->assertSame(0, $adapter->getTimeout());
@@ -175,13 +176,13 @@ class PoolTimeoutTest extends TestCase
             $adapter->setTimeout(300000);
             $insideBody['raised'] = $connection->timeouts;
 
-            $adapter->clearTimeout(Database::EVENT_ALL);
+            $adapter->clearTimeout(Event::All);
             $insideBody['cleared'] = $connection->timeouts;
 
             return 'row-written';
         });
 
-        $this->assertSame([Database::EVENT_ALL => 300000], $insideBody['raised'], 'The rest of the body runs on this connection, so the new timeout must reach it before the commit');
+        $this->assertSame([Event::All->value => 300000], $insideBody['raised'], 'The rest of the body runs on this connection, so the new timeout must reach it before the commit');
         $this->assertSame([], $insideBody['cleared']);
     }
 
@@ -197,7 +198,7 @@ class PoolTimeoutTest extends TestCase
 
         $adapter->setAuthorization(new Authorization());
         $adapter->setTimeout(0);
-        $adapter->getSupportForTimeouts();
+        $adapter->getDriver();
 
         $this->assertSame([], $connection->timeouts);
         $this->assertSame(0, $adapter->getTimeout());
@@ -208,23 +209,28 @@ class PoolTimeoutTest extends TestCase
  * Stands in for a connection: records what the pooled adapter applied to it,
  * the way a concrete adapter records a timeout for the statements it builds.
  */
-class TimeoutRecordingMemory extends Memory
+class TimeoutRecordingMemory extends Memory implements Feature\Timeouts
 {
     /**
      * @var array<string, int>
      */
     public array $timeouts = [];
 
-    public function setTimeout(int $milliseconds, string $event = Database::EVENT_ALL): void
+    public function setTimeout(int $milliseconds, Event $event = Event::All): void
     {
-        $this->timeouts[$event] = $milliseconds;
+        $this->timeouts[$event->value] = $milliseconds;
         $this->timeout = $milliseconds;
     }
 
-    public function clearTimeout(string $event): void
+    public function clearTimeout(Event $event = Event::All): void
     {
-        unset($this->timeouts[$event]);
+        if ($event === Event::All) {
+            $this->timeouts = [];
+            $this->timeout = 0;
 
-        parent::clearTimeout($event);
+            return;
+        }
+
+        unset($this->timeouts[$event->value]);
     }
 }

@@ -149,12 +149,13 @@ class Document extends ArrayObject
     public function getPermissionsByType(string $type): array
     {
         $typePermissions = [];
+        $prefix = $type . '("';
 
         foreach ($this->getPermissions() as $permission) {
-            if (!\str_starts_with($permission, $type)) {
+            if (!\str_starts_with($permission, $prefix) || !\str_ends_with($permission, '")')) {
                 continue;
             }
-            $typePermissions[] = \str_replace([$type . '(', ')', '"', ' '], '', $permission);
+            $typePermissions[] = \substr($permission, \strlen($prefix), -2);
         }
 
         return \array_unique($typePermissions);

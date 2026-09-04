@@ -96,12 +96,14 @@ class Permissions extends Roles
                 return false;
             }
 
-            $role = $permission->getRole();
-            $identifier = $permission->getIdentifier();
-            $dimension = $permission->getDimension();
-
-            if (!$this->isValidRole($role, $identifier, $dimension)) {
-                return false;
+            foreach ($permission->getRoles() as $role) {
+                if (!$this->isValidRole(
+                    $role->getRole(),
+                    $role->getIdentifier(),
+                    $role->getDimension()
+                )) {
+                    return false;
+                }
             }
         }
         return true;

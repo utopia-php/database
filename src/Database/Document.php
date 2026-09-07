@@ -133,7 +133,7 @@ class Document extends ArrayObject
      * Callers that build documents from relationship-resolved trees or
      * arbitrary user input must continue to use the regular constructor.
      *
-     * @param  array<string, mixed>  $row
+     * @param  array<int|string, mixed>  $row
      *
      * @throws DatabaseException
      */

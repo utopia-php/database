@@ -47,9 +47,8 @@ final class SQLiteForUpdateDocumentTest extends TestCase
         ]));
 
         $locked = $database->getDocument('migrations', $active->getId(), forUpdate: true);
-        foreach (\array_keys($locked->getArrayCopy()) as $key) {
-            $this->assertIsString($key, 'PDO column indexes must not appear on a locked document');
-        }
+        $this->assertArrayNotHasKey(0, $locked->getArrayCopy());
+        $this->assertNull($locked->getAttribute('0'));
 
         $database->setPreserveDates(true);
         $newer = $database->updateDocument('migrations', $active->getId(), new Document([

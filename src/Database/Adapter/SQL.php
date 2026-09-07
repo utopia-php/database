@@ -4497,7 +4497,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * @param array<string, mixed> $row
+     * @param array<int|string, mixed> $row
      */
     private function remapRow(array &$row): void
     {

@@ -3,6 +3,7 @@
 namespace Utopia\Database;
 
 use ArrayObject;
+use ReflectionReference;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
 
@@ -45,6 +46,7 @@ class Document extends ArrayObject
                 continue;
             }
 
+            $converted = false;
             foreach ($value as $childKey => $child) {
                 // An array value is either a list of nested sub-documents or a list of
                 // plain items (dates, numbers, strings): wrap the former, leave the latter.
@@ -52,10 +54,13 @@ class Document extends ArrayObject
                 // value (e.g. a UTCDateTime), which would otherwise fatal.
                 if (\is_array($child) && (isset($child['$id']) || isset($child['$collection']))) {
                     $value[$childKey] = new self($child);
+                    $converted = true;
                 }
             }
 
-            $input[$key] = $value;
+            if ($converted) {
+                $input[$key] = $value;
+            }
         }
 
         parent::__construct($input);
@@ -430,7 +435,7 @@ class Document extends ArrayObject
 
         $output = [];
 
-        foreach ($array as $key => &$value) {
+        foreach ($array as $key => $value) {
             if (!empty($allow) && !\in_array($key, $allow)) { // Export only allow fields
                 continue;
             }
@@ -442,17 +447,18 @@ class Document extends ArrayObject
             if ($value instanceof self) {
                 $output[$key] = $value->getArrayCopy($allow, $disallow);
             } elseif (\is_array($value)) {
-                foreach ($value as $childKey => &$child) {
-                    if ($child instanceof self) {
-                        $output[$key][$childKey] = $child->getArrayCopy($allow, $disallow);
-                    } else {
-                        $output[$key][$childKey] = $child;
+                foreach ($value as $childKey => $child) {
+                    // Keep scalar arrays shared, but detach references and nested documents.
+                    if ($child instanceof self || ReflectionReference::fromArrayElement($value, $childKey) !== null) {
+                        $value = \array_map(
+                            fn ($item) => $item instanceof self ? $item->getArrayCopy($allow, $disallow) : $item,
+                            $value
+                        );
+                        break;
                     }
                 }
 
-                if (empty($value)) {
-                    $output[$key] = $value;
-                }
+                $output[$key] = $value;
             } else {
                 $output[$key] = $value;
             }
@@ -467,7 +473,13 @@ class Document extends ArrayObject
             if ($value instanceof self) {
                 $this[$key] = clone $value;
             } elseif (\is_array($value)) {
-                $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
+                foreach ($value as $childKey => $child) {
+                    // Keep scalar arrays shared, but detach references and nested documents.
+                    if ($child instanceof self || ReflectionReference::fromArrayElement($value, $childKey) !== null) {
+                        $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
+                        break;
+                    }
+                }
             }
         }
     }

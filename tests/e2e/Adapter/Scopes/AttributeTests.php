@@ -4,6 +4,8 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;
+use Utopia\Cache\Adapter\None as NoneCache;
+use Utopia\Cache\Cache;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -29,6 +31,19 @@ trait AttributeTests
     private function createRandomString(int $length = 10): string
     {
         return \substr(\bin2hex(\random_bytes(\max(1, \intval(($length + 1) / 2)))), 0, $length);
+    }
+
+    /**
+     * Attribute keys as the collection's metadata row lists them.
+     *
+     * @return array<string>
+     */
+    private function metadataAttributeKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            fn (Document $attribute) => $attribute->getAttribute('key', $attribute->getId()),
+            $database->getCollection($collection)->getAttribute('attributes', [])
+        );
     }
 
     /**
@@ -2607,5 +2622,64 @@ trait AttributeTests
 
         $updatedDoc = $database->getDocument('stringTypes', 'doc1');
         $this->assertEquals('Updated varchar value', $updatedDoc->getAttribute('varchar_field'));
+    }
+
+    /**
+     * A peer process adds an attribute while this process still holds the
+     * collection as it was before that write — the copy it would otherwise
+     * write back whole. The peer's attribute has to survive in the metadata
+     * list, not only as a column in the physical schema.
+     */
+    public function testCreateAttributeConcurrentlyKeepsPeerAttribute(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'concurrentAttribute';
+
+        // A peer process: same database, its own cache, so its writes do not
+        // purge the copy this process is about to read.
+        $peer = (new Database($database->getAdapter(), new Cache(new NoneCache())))
+            ->setAuthorization(self::$authorization);
+
+        $database->createCollection($collection, [
+            new Document([
+                '$id' => ID::custom('first'),
+                'type' => Database::VAR_STRING,
+                'size' => 32,
+                'required' => false,
+            ]),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]);
+
+        // Read it once, so this process's copy predates the peer's write.
+        $before = $this->metadataAttributeKeys($database, $collection);
+        $this->assertContains('first', $before);
+
+        $this->assertTrue($peer->createAttribute($collection, 'peer', Database::VAR_STRING, 32, false));
+        $this->assertTrue($database->createAttribute($collection, 'mine', Database::VAR_STRING, 32, false));
+
+        $this->assertEqualsCanonicalizing(
+            [...$before, 'peer', 'mine'],
+            $this->metadataAttributeKeys($peer, $collection),
+            'Peer attribute is missing from the collection metadata'
+        );
+
+        // The list has to match the schema, so a write naming every attribute
+        // must keep every value: an attribute absent from metadata is dropped.
+        $document = $database->createDocument($collection, new Document([
+            '$id' => ID::custom('row'),
+            '$permissions' => [Permission::read(Role::any())],
+            'first' => 'a',
+            'peer' => 'b',
+            'mine' => 'c',
+        ]));
+
+        $this->assertSame('b', $document->getAttribute('peer'));
+        $this->assertSame('c', $document->getAttribute('mine'));
+
+        $this->assertTrue($database->deleteCollection($collection));
     }
 }

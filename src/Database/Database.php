@@ -2357,13 +2357,12 @@ class Database
             }
         }
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
-
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->cleanupAttribute($collection->getId(), $id),
             shouldRollback: $created,
-            operationDescription: "attribute creation '{$id}'"
+            operationDescription: "attribute creation '{$id}'",
+            apply: fn (Document $metadata) => $this->appendMetadataAttribute($metadata, $attribute)
         );
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -2560,16 +2559,17 @@ class Database
             }
         }
 
-        foreach ($attributeDocuments as $attributeDocument) {
-            $collection->setAttribute('attributes', $attributeDocument, Document::SET_TYPE_APPEND);
-        }
-
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->cleanupAttributes($collection->getId(), $attributeDocuments),
             shouldRollback: $created,
             operationDescription: 'attributes creation',
-            rollbackReturnsErrors: true
+            rollbackReturnsErrors: true,
+            apply: function (Document $metadata) use ($attributeDocuments) {
+                foreach ($attributeDocuments as $attributeDocument) {
+                    $this->appendMetadataAttribute($metadata, $attributeDocument);
+                }
+            }
         );
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -4787,13 +4787,12 @@ class Database
             }
         }
 
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
-
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->cleanupIndex($collection->getId(), $id),
             shouldRollback: $created,
-            operationDescription: "index creation '{$id}'"
+            operationDescription: "index creation '{$id}'",
+            apply: fn (Document $metadata) => $this->appendMetadataIndex($metadata, $index)
         );
 
         $this->trigger(self::EVENT_INDEX_CREATE, $index);
@@ -10922,6 +10921,7 @@ class Database
      * @param string $operationDescription Description of the operation for error messages
      * @param bool $rollbackReturnsErrors Whether rollback operation returns error array (true) or throws (false)
      * @param bool $silentRollback Whether rollback errors should be silently caught (true) or thrown (false)
+     * @param callable(Document): void|null $apply Applies the change to a fresh, locked copy of the metadata row
      * @return void
      * @throws DatabaseException If metadata persistence fails after all retries
      */
@@ -10931,12 +10931,15 @@ class Database
         bool $shouldRollback,
         string $operationDescription = 'operation',
         bool $rollbackReturnsErrors = false,
-        bool $silentRollback = false
+        bool $silentRollback = false,
+        ?callable $apply = null
     ): void {
         try {
             if ($collection->getId() !== self::METADATA) {
                 $this->withRetries(
-                    fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
+                    fn () => $apply === null
+                        ? $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
+                        : $this->rebaseMetadata($collection->getId(), $apply)
                 );
             }
         } catch (\Throwable $e) {
@@ -10976,6 +10979,93 @@ class Database
                 previous: $e
             );
         }
+    }
+
+    /**
+     * Apply a change to a collection's metadata row inside the transaction that
+     * locks it, rather than writing back a copy read earlier.
+     *
+     * The caller's copy is read before the schema change and can come from
+     * cache, so writing it whole drops any entry another writer added in
+     * between — leaving a column whose metadata never mentions it. Re-reading
+     * under `FOR UPDATE` here serializes the change against every other writer
+     * of the row, in this process or another, with no distributed lock. It
+     * cannot wrap the schema change too: MySQL implicitly commits at DDL, which
+     * would release the lock mid-call.
+     *
+     * On an adapter reporting no update-lock support (Redis, Memory, Mongo) the
+     * read emits no lock and the transaction gives no cross-process isolation,
+     * so this narrows the window to the read-write pair rather than closing it.
+     * That is still strictly better than writing back a copy taken before the
+     * schema change: the read cannot be served from cache. Serializing those
+     * adapters would need an advisory lock, which this class does not own.
+     *
+     * $apply must be idempotent — withTransaction() and withRetries() can both
+     * run it again on a fresh copy.
+     *
+     * @param callable(Document): void $apply
+     * @throws DatabaseException
+     */
+    private function rebaseMetadata(string $collectionId, callable $apply): void
+    {
+        $this->withTransaction(function () use ($collectionId, $apply) {
+            $collection = $this->authorization->skip(fn () => $this->silent(
+                fn () => $this->getDocument(self::METADATA, $collectionId, forUpdate: true)
+            ));
+
+            if ($collection->isEmpty()) {
+                throw new NotFoundException('Collection not found');
+            }
+
+            $apply($collection);
+
+            $this->silent(fn () => $this->updateDocument(self::METADATA, $collectionId, $collection));
+        });
+    }
+
+    /**
+     * Append an attribute to a collection's metadata list, leaving the list
+     * alone when it already holds the key (keys are case-insensitive).
+     *
+     * Converging rather than throwing keeps createAttribute()'s existing policy
+     * for a key another writer got to first — it already suppresses the
+     * adapter's DuplicateException for a column that exists in the schema only
+     * — and keeps the entry describing that column instead of replacing it with
+     * this caller's spec.
+     */
+    private function appendMetadataAttribute(Document $collection, Document $attribute): void
+    {
+        $key = \strtolower($attribute->getAttribute('key', $attribute->getId()));
+
+        /** @var array<Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+
+        foreach ($attributes as $existing) {
+            if (\strtolower($existing->getAttribute('key', $existing->getId())) === $key) {
+                return;
+            }
+        }
+
+        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+    }
+
+    /**
+     * Append an index to a collection's metadata list, leaving the list alone
+     * when it already holds the ID (IDs are case-insensitive). Converges for
+     * the same reason as appendMetadataAttribute().
+     */
+    private function appendMetadataIndex(Document $collection, Document $index): void
+    {
+        /** @var array<Document> $indexes */
+        $indexes = $collection->getAttribute('indexes', []);
+
+        foreach ($indexes as $existing) {
+            if (\strtolower($existing->getId()) === \strtolower($index->getId())) {
+                return;
+            }
+        }
+
+        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
     }
 
     /**

@@ -657,7 +657,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $stmt->bindValue(':'.Storage::UID, $id, PDO::PARAM_STR);
                 $this->execute($stmt);
                 /** @var array<string, mixed>|false $row */
-                $row = $stmt->fetch();
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
             } catch (PDOException $e) {
                 $exception = $e;
             } finally {
@@ -4436,7 +4436,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $stmt = $this->executeResult($result, $event);
             $this->execute($stmt);
             /** @var array<int, array<string, mixed>> $results */
-            $results = $stmt->fetchAll();
+            $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
         } catch (PDOException $e) {
             $exception = $e;
         } finally {
@@ -4521,6 +4521,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         ];
 
         foreach (\array_keys($row) as $key) {
+            if (\is_int($key)) {
+                unset($row[$key]);
+                continue;
+            }
             if (\str_starts_with($key, self::FOJ_ORDER_ALIAS_PREFIX)) {
                 unset($row[$key]);
 

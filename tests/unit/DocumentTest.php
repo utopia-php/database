@@ -103,6 +103,22 @@ class DocumentTest extends TestCase
         $this->assertSame('unmatched', $document->getAttribute('name'));
     }
 
+    public function testFromRowDropsPdoColumnIndexes(): void
+    {
+        $document = Document::fromRow([
+            0 => 1,
+            1 => 'migration',
+            Document::ID => 'migration',
+            'state' => 'pending',
+            Document::SEQUENCE => '1',
+        ]);
+
+        $this->assertSame(['$id', 'state', '$sequence'], \array_keys($document->getArrayCopy()));
+        $this->assertSame('migration', $document->getId());
+        $this->assertSame('pending', $document->getAttribute('state'));
+        $this->assertNull($document->getAttribute('0'));
+    }
+
     public function test_id_and_collection_accessors(): void
     {
         $document = new Document([

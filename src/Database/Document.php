@@ -139,6 +139,12 @@ class Document extends ArrayObject
      */
     public static function fromRow(array $row): self
     {
+        foreach (\array_keys($row) as $key) {
+            if (\is_int($key)) {
+                unset($row[$key]);
+            }
+        }
+
         if (array_key_exists(self::ID, $row)) {
             if ($row[self::ID] === null) {
                 $row[self::ID] = '';

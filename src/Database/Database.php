@@ -2357,8 +2357,6 @@ class Database
             }
         }
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
-
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->cleanupAttribute($collection->getId(), $id),
@@ -2559,10 +2557,6 @@ class Database
                     }
                 }
             }
-        }
-
-        foreach ($attributeDocuments as $attributeDocument) {
-            $collection->setAttribute('attributes', $attributeDocument, Document::SET_TYPE_APPEND);
         }
 
         $this->updateMetadata(
@@ -4792,8 +4786,6 @@ class Database
                 // partial failure. Skip creation and proceed to metadata update.
             }
         }
-
-        $collection->setAttribute('indexes', $index, Document::SET_TYPE_APPEND);
 
         $this->updateMetadata(
             collection: $collection,

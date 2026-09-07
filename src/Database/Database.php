@@ -10993,6 +10993,13 @@ class Database
      * cannot wrap the schema change too: MySQL implicitly commits at DDL, which
      * would release the lock mid-call.
      *
+     * On an adapter reporting no update-lock support (Redis, Memory, Mongo) the
+     * read emits no lock and the transaction gives no cross-process isolation,
+     * so this narrows the window to the read-write pair rather than closing it.
+     * That is still strictly better than writing back a copy taken before the
+     * schema change: the read cannot be served from cache. Serializing those
+     * adapters would need an advisory lock, which this class does not own.
+     *
      * $apply must be idempotent — withTransaction() and withRetries() can both
      * run it again on a fresh copy.
      *

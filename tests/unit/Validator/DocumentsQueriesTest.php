@@ -133,6 +133,8 @@ class DocumentsQueriesTest extends TestCase
             Query::notEqual('id', '1000000'),
             Query::equal('description', ['Best movie ever']),
             Query::equal('description', ['']),
+            Query::contains('$permissions', ['read("any")']),
+            Query::notContains('$permissions', ['update("any")']),
             Query::equal('is_bool', [false]),
             Query::lessThanEqual('price', 6.50),
             Query::lessThan('price', 6.50),
@@ -187,6 +189,9 @@ class DocumentsQueriesTest extends TestCase
         $this->assertEquals(false, $validator->isValid($queries));
         $this->assertEquals('Invalid query: Equal queries require at least one value.', $validator->getDescription());
 
+        $queries = [Query::equal('$permissions', ['read("any")'])];
+        $this->assertEquals(false, $validator->isValid($queries));
+        $this->assertEquals('Invalid query: Cannot query equal on attribute "$permissions" because it is an array.', $validator->getDescription());
 
     }
 }

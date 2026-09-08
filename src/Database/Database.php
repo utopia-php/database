@@ -8554,7 +8554,7 @@ class Database
             return true;
         }
 
-        [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
+        [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id, includeHash: false);
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
@@ -9928,9 +9928,10 @@ class Database
      * @param string $collectionId
      * @param string|null $documentId
      * @param array<string> $selects
+     * @param bool $includeHash Whether to compute the selection/filter variant hash. Purges invalidate every variant.
      * @return array{0: string, 1: string, 2: string}
      */
-    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = [], bool $includeHash = true): array
     {
         if ($this->adapter->getSupportForHostname()) {
             $hostname = $this->adapter->getHostname();
@@ -9957,6 +9958,10 @@ class Database
 
         if ($documentId) {
             $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
+
+            if (!$includeHash) {
+                return [$collectionKey, $documentKey, ''];
+            }
 
             $sortedSelects = $selects;
             \sort($sortedSelects);

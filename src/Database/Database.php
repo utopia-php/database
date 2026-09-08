@@ -8554,7 +8554,7 @@ class Database
             return true;
         }
 
-        [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id, includeHash: false);
+        [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $id);
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
@@ -9927,11 +9927,9 @@ class Database
     /**
      * @param string $collectionId
      * @param string|null $documentId
-     * @param array<string> $selects
-     * @param bool $includeHash Whether to compute the selection/filter variant hash. Purges invalidate every variant.
-     * @return array{0: string, 1: string, 2: string}
+     * @return array{0: string, 1: string}
      */
-    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = [], bool $includeHash = true): array
+    public function getCacheBaseKeys(string $collectionId, ?string $documentId = null): array
     {
         if ($this->adapter->getSupportForHostname()) {
             $hostname = $this->adapter->getHostname();
@@ -9956,13 +9954,20 @@ class Database
             $collectionId
         );
 
+        return [$collectionKey, $documentId ? "{$collectionKey}:{$documentId}" : ''];
+    }
+
+    /**
+     * @param string $collectionId
+     * @param string|null $documentId
+     * @param array<string> $selects
+     * @return array{0: string, 1: string, 2: string}
+     */
+    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    {
+        [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $documentId);
+
         if ($documentId) {
-            $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
-
-            if (!$includeHash) {
-                return [$collectionKey, $documentKey, ''];
-            }
-
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
@@ -9976,7 +9981,7 @@ class Database
 
         return [
             $collectionKey,
-            $documentKey ?? '',
+            $documentKey,
             $documentHashKey ?? ''
         ];
     }

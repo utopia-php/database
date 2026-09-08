@@ -33,7 +33,7 @@ class CacheKeyTest extends TestCase
         return $hashKey;
     }
 
-    public function testHashCanBeSkippedWithoutChangingScopedKeys(): void
+    public function testBaseKeysMatchScopedVariantKeys(): void
     {
         $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSupportForHostname')->willReturn(true);
@@ -47,9 +47,9 @@ class CacheKeyTest extends TestCase
 
         foreach ([['col', 'doc'], [Database::METADATA, 'col'], [Database::METADATA, 'global']] as [$collection, $document]) {
             $full = $db->getCacheKeys($collection, $document, ['name']);
-            $withoutHash = $db->getCacheKeys($collection, $document, ['name'], includeHash: false);
+            $withoutHash = $db->getCacheBaseKeys($collection, $document);
 
-            $this->assertSame([$full[0], $full[1], ''], $withoutHash);
+            $this->assertSame([$full[0], $full[1]], $withoutHash);
             $this->assertNotSame('', $full[2]);
         }
     }

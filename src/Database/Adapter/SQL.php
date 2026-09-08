@@ -15,6 +15,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -629,7 +630,7 @@ abstract class SQL extends Adapter
                 }
 
                 $sql = "
-                    SELECT _type, _permission
+                    SELECT _type, _permission, _column
                     FROM {$this->getSQLTable($name . '_perms')}
                     WHERE _document = :_uid
                     {$this->getTenantQuery($collection)}
@@ -654,14 +655,24 @@ abstract class SQL extends Adapter
                 }
 
                 $permissions = \array_reduce($permissions, function (array $carry, array $item) {
-                    $carry[$item['_type']][] = $item['_permission'];
+                    $carry[$item['_type']][] = $item['_permission'] . "\0" . ($item['_column'] ?? '');
                     return $carry;
                 }, $initial);
+
+                // Desired state in the same role\0column shape, so a permission that
+                // only changes column still shows up as a removal plus an addition.
+                $desired = [];
+                foreach (Database::PERMISSIONS as $type) {
+                    $desired[$type] = \array_map(
+                        fn (array $permission) => $permission['role'] . "\0" . $permission['column'],
+                        $updates->getPermissionsByTypeWithColumns($type)
+                    );
+                }
 
                 // Get removed Permissions
                 $removals = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $diff = array_diff($permissions[$type], $updates->getPermissionsByType($type));
+                    $diff = array_diff($permissions[$type], $desired[$type]);
                     if (!empty($diff)) {
                         $removals[$type] = $diff;
                     }
@@ -674,18 +685,25 @@ abstract class SQL extends Adapter
                         $removeBindKeys[] = ':_uid_' . $index;
                         $removeBindValues[$bindKey] = $document->getId();
 
+                        $pairs = [];
+                        foreach (\array_keys($permissionsToRemove) as $i) {
+                            [$role, $column] = \explode("\0", $permissionsToRemove[$i], 2);
+
+                            $roleBind = 'remove_' . $type . '_' . $index . '_' . $i;
+                            $columnBind = 'removecol_' . $type . '_' . $index . '_' . $i;
+                            $removeBindKeys[] = ':' . $roleBind;
+                            $removeBindKeys[] = ':' . $columnBind;
+                            $removeBindValues[$roleBind] = $role;
+                            $removeBindValues[$columnBind] = $column;
+
+                            $pairs[] = "(_permission = :{$roleBind} AND _column = :{$columnBind})";
+                        }
+
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
                             {$this->getTenantQuery($collection)}
                             AND _type = '{$type}'
-                            AND _permission IN (" . \implode(', ', \array_map(function (string $i) use ($permissionsToRemove, $index, $type, &$removeBindKeys, &$removeBindValues) {
-                            $bindKey = 'remove_' . $type . '_' . $index . '_' . $i;
-                            $removeBindKeys[] = ':' . $bindKey;
-                            $removeBindValues[$bindKey] = $permissionsToRemove[$i];
-
-                            return ':' . $bindKey;
-                        }, \array_keys($permissionsToRemove))) .
-                            ")
+                            AND (" . \implode(' OR ', $pairs) . ")
                         )";
                     }
                 }
@@ -693,7 +711,7 @@ abstract class SQL extends Adapter
                 // Get added Permissions
                 $additions = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $diff = \array_diff($updates->getPermissionsByType($type), $permissions[$type]);
+                    $diff = \array_diff($desired[$type], $permissions[$type]);
                     if (!empty($diff)) {
                         $additions[$type] = $diff;
                     }
@@ -703,13 +721,18 @@ abstract class SQL extends Adapter
                 if (!empty($additions)) {
                     foreach ($additions as $type => $permissionsToAdd) {
                         foreach ($permissionsToAdd as $i => $permission) {
+                            [$role, $column] = \explode("\0", $permission, 2);
+
                             $bindKey = '_uid_' . $index;
                             $addBindValues[$bindKey] = $document->getId();
 
                             $bindKey = 'add_' . $type . '_' . $index . '_' . $i;
-                            $addBindValues[$bindKey] = $permission;
+                            $addBindValues[$bindKey] = $role;
 
-                            $addQuery .= "(:_uid_{$index}, '{$type}', :{$bindKey}";
+                            $columnBindKey = 'addcol_' . $type . '_' . $index . '_' . $i;
+                            $addBindValues[$columnBindKey] = $column;
+
+                            $addQuery .= "(:_uid_{$index}, '{$type}', :{$bindKey}, :{$columnBindKey}";
 
                             if ($this->sharedTables) {
                                 $addQuery .= ", :_tenant)";
@@ -749,7 +772,7 @@ abstract class SQL extends Adapter
 
             if (!empty($addQuery)) {
                 $sqlAddPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column
                 ";
 
                 if ($this->sharedTables) {
@@ -1987,6 +2010,187 @@ abstract class SQL extends Adapter
         )";
     }
 
+    public function getSupportForColumnPermissions(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Repoint column-scoped permissions at a renamed column.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string $new
+     * @return array<string> ids of documents whose $permissions changed
+     * @throws DatabaseException
+     */
+    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    {
+        return $this->repointColumnPermissions($collection, $old, $new);
+    }
+
+    /**
+     * Drop every permission scoped to a column that no longer exists.
+     *
+     * Required, not hygiene: because permissions name the column by key, leaving
+     * rows behind means re-creating a column under the same name inherits the old
+     * column's grants.
+     *
+     * @param Document $collection
+     * @param string $column
+     * @return array<string> ids of documents whose $permissions changed
+     * @throws DatabaseException
+     */
+    public function deleteColumnPermissions(Document $collection, string $column): array
+    {
+        return $this->repointColumnPermissions($collection, $column, null);
+    }
+
+    /**
+     * Move or drop the permissions scoped to one column.
+     *
+     * The column key lives in two places: _perms._column, which backs permission
+     * queries, and the _permissions JSON on the collection table, which is what
+     * callers read back as $permissions. Both have to change together.
+     *
+     * The _perms lookup runs first and is empty whenever nobody scoped a permission
+     * to this column, in which case there is nothing else to do. When it is not
+     * empty it yields a bounded set of document ids, so the JSON rewrite stays
+     * targeted instead of scanning the whole collection.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string|null $new new column key, or null to drop the permissions
+     * @return array<string> ids of documents whose $permissions changed
+     * @throws DatabaseException
+     */
+    private function repointColumnPermissions(Document $collection, string $old, ?string $new): array
+    {
+        $name = $this->filter($collection->getId());
+        $tenantQuery = $this->getTenantQuery($collection->getId());
+
+        $stmt = $this->getPDO()->prepare("
+            SELECT DISTINCT _document
+            FROM {$this->getSQLTable($name . '_perms')}
+            WHERE _column = :_column
+            {$tenantQuery}
+        ");
+        $stmt->bindValue(':_column', $old);
+        if ($this->sharedTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
+        $this->execute($stmt);
+
+        $documents = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+        $stmt->closeCursor();
+
+        if (empty($documents)) {
+            return [];
+        }
+
+        if (\is_null($new)) {
+            $stmt = $this->getPDO()->prepare("
+                DELETE FROM {$this->getSQLTable($name . '_perms')}
+                WHERE _column = :_old
+                {$tenantQuery}
+            ");
+        } else {
+            $stmt = $this->getPDO()->prepare("
+                UPDATE {$this->getSQLTable($name . '_perms')}
+                SET _column = :_new
+                WHERE _column = :_old
+                {$tenantQuery}
+            ");
+            $stmt->bindValue(':_new', $new);
+        }
+
+        $stmt->bindValue(':_old', $old);
+        if ($this->sharedTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
+        $this->execute($stmt);
+
+        $placeholders = \implode(', ', \array_map(
+            fn ($index) => ":_uid_{$index}",
+            \array_keys($documents)
+        ));
+
+        $select = $this->getPDO()->prepare("
+            SELECT _uid, _permissions
+            FROM {$this->getSQLTable($name)}
+            WHERE _uid IN ({$placeholders})
+            {$tenantQuery}
+        ");
+        foreach ($documents as $index => $id) {
+            $select->bindValue(":_uid_{$index}", $id);
+        }
+        if ($this->sharedTables) {
+            $select->bindValue(':_tenant', $this->tenant);
+        }
+        $this->execute($select);
+
+        $rows = $select->fetchAll();
+        $select->closeCursor();
+
+        $update = $this->getPDO()->prepare("
+            UPDATE {$this->getSQLTable($name)}
+            SET _permissions = :_permissions
+            WHERE _uid = :_uid
+            {$tenantQuery}
+        ");
+
+        $updated = [];
+
+        foreach ($rows as $row) {
+            $permissions = \json_decode($row['_permissions'] ?? '[]', true);
+
+            if (!\is_array($permissions)) {
+                continue;
+            }
+
+            $rewritten = [];
+            $changed = false;
+
+            foreach ($permissions as $permission) {
+                $parsed = Permission::parse($permission);
+
+                if ($parsed->getColumn() !== $old) {
+                    $rewritten[] = $permission;
+                    continue;
+                }
+
+                $changed = true;
+
+                if (\is_null($new)) {
+                    continue;
+                }
+
+                $rewritten[] = (new Permission(
+                    $parsed->getPermission(),
+                    $parsed->getRole(),
+                    $parsed->getIdentifier(),
+                    $parsed->getDimension(),
+                    $new
+                ))->toString();
+            }
+
+            if (!$changed) {
+                continue;
+            }
+
+            $update->bindValue(':_permissions', \json_encode($rewritten));
+            $update->bindValue(':_uid', $row['_uid']);
+            if ($this->sharedTables) {
+                $update->bindValue(':_tenant', $this->tenant);
+            }
+            $this->execute($update);
+
+            $updated[] = $row['_uid'];
+        }
+
+        return $updated;
+    }
+
     /**
      * Get SQL table
      *
@@ -2512,11 +2716,12 @@ abstract class SQL extends Adapter
                 $batchKeys[] = '(' . \implode(', ', $bindKeys) . ')';
 
                 foreach (Database::PERMISSIONS as $type) {
-                    foreach ($document->getPermissionsByType($type) as $permission) {
+                    foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                         $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
-                        $permission = \str_replace('"', '', $permission);
-                        $permission = "('{$type}', '{$permission}', :_uid_{$index} {$tenantBind})";
-                        $permissions[] = $permission;
+                        $role = \str_replace('"', '', $permission['role']);
+                        $columnBind = ":_column_{$type}_{$index}_{$i}";
+                        $bindValuesPermissions[$columnBind] = $permission['column'];
+                        $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid_{$index} {$tenantBind})";
                         $bindValuesPermissions[":_uid_{$index}"] = $document->getId();
                         if ($this->sharedTables) {
                             $bindValuesPermissions[":_tenant_{$index}"] = $document->getTenant();
@@ -2544,7 +2749,7 @@ abstract class SQL extends Adapter
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$tenantColumn})
                     VALUES {$permissions}
                     {$this->getInsertPermissionsSuffix()}
                 ";
@@ -2836,35 +3041,51 @@ abstract class SQL extends Adapter
                 $old = $change->getOld();
                 $document = $change->getNew();
 
+                // Permissions are compared as role\0column, so a permission that only
+                // changes which column it is scoped to still registers as a change.
+                $flatten = fn (Document $doc, string $type): array => \array_map(
+                    fn (array $permission) => $permission['role'] . "\0" . $permission['column'],
+                    $doc->getPermissionsByTypeWithColumns($type)
+                );
+
                 $current = [];
+                $desired = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    $current[$type] = $old->getPermissionsByType($type);
+                    $current[$type] = $flatten($old, $type);
+                    $desired[$type] = $flatten($document, $type);
                 }
 
                 foreach (Database::PERMISSIONS as $type) {
-                    $toRemove = \array_diff($current[$type], $document->getPermissionsByType($type));
+                    $toRemove = \array_diff($current[$type], $desired[$type]);
                     if (!empty($toRemove)) {
+                        $pairs = [];
+                        foreach (\array_keys($toRemove) as $i) {
+                            [$role, $column] = \explode("\0", $toRemove[$i], 2);
+                            $pairs[] = "(_permission = :remove_{$type}_{$index}_{$i} AND _column = :removecol_{$type}_{$index}_{$i})";
+                            $removeBindValues[":remove_{$type}_{$index}_{$i}"] = $role;
+                            $removeBindValues[":removecol_{$type}_{$index}_{$i}"] = $column;
+                        }
+
                         $removeQueries[] = "(
                             _document = :_uid_{$index}
                             " . ($this->sharedTables ? " AND _tenant = :_tenant_{$index}" : '') . "
                             AND _type = '{$type}'
-                            AND _permission IN (" . \implode(',', \array_map(fn ($i) => ":remove_{$type}_{$index}_{$i}", \array_keys($toRemove))) . ")
+                            AND (" . \implode(' OR ', $pairs) . ")
                         )";
                         $removeBindValues[":_uid_{$index}"] = $document->getId();
                         if ($this->sharedTables) {
                             $removeBindValues[":_tenant_{$index}"] = $document->getTenant();
                         }
-                        foreach ($toRemove as $i => $perm) {
-                            $removeBindValues[":remove_{$type}_{$index}_{$i}"] = $perm;
-                        }
                     }
                 }
 
                 foreach (Database::PERMISSIONS as $type) {
-                    $toAdd = \array_diff($document->getPermissionsByType($type), $current[$type]);
+                    $toAdd = \array_diff($desired[$type], $current[$type]);
 
                     foreach ($toAdd as $i => $permission) {
-                        $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
+                        [$role, $column] = \explode("\0", $permission, 2);
+
+                        $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}, :addcol_{$type}_{$index}_{$i}";
 
                         if ($this->sharedTables) {
                             $addQuery .= ", :_tenant_{$index}";
@@ -2873,7 +3094,8 @@ abstract class SQL extends Adapter
                         $addQuery .= ")";
                         $addQueries[] = $addQuery;
                         $addBindValues[":_uid_{$index}"] = $document->getId();
-                        $addBindValues[":add_{$type}_{$index}_{$i}"] = $permission;
+                        $addBindValues[":add_{$type}_{$index}_{$i}"] = $role;
+                        $addBindValues[":addcol_{$type}_{$index}_{$i}"] = $column;
 
                         if ($this->sharedTables) {
                             $addBindValues[":_tenant_{$index}"] = $document->getTenant();
@@ -2892,7 +3114,7 @@ abstract class SQL extends Adapter
             }
 
             if (!empty($addQueries)) {
-                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission";
+                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column";
                 if ($this->sharedTables) {
                     $sqlAddPermissions .= ", _tenant";
                 }

@@ -2086,6 +2086,30 @@ class Memory extends Adapter
         return [];
     }
 
+    public function getSupportForColumnPermissions(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Column-level permissions are not supported by this adapter, so a rename
+     * can never have column-scoped permissions to repoint.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string $new
+     * @return array<string>
+     */
+    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    {
+        return [];
+    }
+
+    public function deleteColumnPermissions(Document $collection, string $column): array
+    {
+        return [];
+    }
+
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return '';

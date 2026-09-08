@@ -3,7 +3,6 @@
 namespace Utopia\Database;
 
 use ArrayObject;
-use ReflectionReference;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
 
@@ -447,16 +446,10 @@ class Document extends ArrayObject
             if ($value instanceof self) {
                 $output[$key] = $value->getArrayCopy($allow, $disallow);
             } elseif (\is_array($value)) {
-                foreach ($value as $childKey => $child) {
-                    // Keep scalar arrays shared, but detach references and nested documents.
-                    if ($child instanceof self || ReflectionReference::fromArrayElement($value, $childKey) !== null) {
-                        $value = \array_map(
-                            fn ($item) => $item instanceof self ? $item->getArrayCopy($allow, $disallow) : $item,
-                            $value
-                        );
-                        break;
-                    }
-                }
+                $value = \array_map(
+                    fn ($item) => $item instanceof self ? $item->getArrayCopy($allow, $disallow) : $item,
+                    $value
+                );
 
                 $output[$key] = $value;
             } else {
@@ -473,13 +466,7 @@ class Document extends ArrayObject
             if ($value instanceof self) {
                 $this[$key] = clone $value;
             } elseif (\is_array($value)) {
-                foreach ($value as $childKey => $child) {
-                    // Keep scalar arrays shared, but detach references and nested documents.
-                    if ($child instanceof self || ReflectionReference::fromArrayElement($value, $childKey) !== null) {
-                        $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
-                        break;
-                    }
-                }
+                $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
             }
         }
     }

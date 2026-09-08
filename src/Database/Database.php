@@ -9315,7 +9315,11 @@ class Database
         }
 
         $dropped = [];
-        foreach (\array_keys($document->getArrayCopy()) as $key) {
+        $documentKeys = [];
+        foreach ($document as $key => $value) {
+            $documentKeys[] = $key;
+        }
+        foreach ($documentKeys as $key) {
             if (\str_starts_with($key, '$') || isset($known[$key])) {
                 continue;
             }
@@ -9396,12 +9400,14 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as $index => $node) {
-                if ($node !== null) {
-                    foreach ($filters as $filter) {
-                        $node = $this->encodeAttribute($filter, $node, $document);
+            if (!empty($filters)) {
+                foreach ($value as $index => $node) {
+                    if ($node !== null) {
+                        foreach ($filters as $filter) {
+                            $node = $this->encodeAttribute($filter, $node, $document);
+                        }
+                        $value[$index] = $node;
                     }
-                    $value[$index] = $node;
                 }
             }
 
@@ -9499,9 +9505,10 @@ class Database
                 || \in_array($key, $selections)
                 || \in_array('*', $selections);
 
-            if ($selected || $hasRelationshipSelections) {
+            if (!empty($filters) && ($selected || $hasRelationshipSelections)) {
+                $filters = \array_reverse($filters);
                 foreach ($value as $index => $node) {
-                    foreach (\array_reverse($filters) as $filter) {
+                    foreach ($filters as $filter) {
                         $node = $this->decodeAttribute($filter, $node, $document, $key);
                     }
                     $value[$index] = $node;
@@ -9573,33 +9580,35 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as $index => $node) {
-                switch ($type) {
-                    case self::VAR_ID:
-                        // Disabled until Appwrite migrates to use real int ID's for MySQL
-                        //$type = $this->adapter->getIdAttributeType();
-                        //\settype($node, $type);
-                        $node = (string)$node;
-                        break;
-                    case self::VAR_BOOLEAN:
-                        $node = (bool)$node;
-                        break;
-                    case self::VAR_INTEGER:
-                        $node = (int)$node;
-                        break;
-                    case self::VAR_BIGINT:
-                        if (\is_string($node) && BigIntValidator::fitsPhpInt($node, $signed)) {
+            if (\in_array($type, [self::VAR_ID, self::VAR_BOOLEAN, self::VAR_INTEGER, self::VAR_BIGINT, self::VAR_FLOAT], true)) {
+                foreach ($value as $index => $node) {
+                    switch ($type) {
+                        case self::VAR_ID:
+                            // Disabled until Appwrite migrates to use real int ID's for MySQL
+                            //$type = $this->adapter->getIdAttributeType();
+                            //\settype($node, $type);
+                            $node = (string)$node;
+                            break;
+                        case self::VAR_BOOLEAN:
+                            $node = (bool)$node;
+                            break;
+                        case self::VAR_INTEGER:
                             $node = (int)$node;
-                        }
-                        break;
-                    case self::VAR_FLOAT:
-                        $node = (float)$node;
-                        break;
-                    default:
-                        break;
-                }
+                            break;
+                        case self::VAR_BIGINT:
+                            if (\is_string($node) && BigIntValidator::fitsPhpInt($node, $signed)) {
+                                $node = (int)$node;
+                            }
+                            break;
+                        case self::VAR_FLOAT:
+                            $node = (float)$node;
+                            break;
+                        default:
+                            break;
+                    }
 
-                $value[$index] = $node;
+                    $value[$index] = $node;
+                }
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);

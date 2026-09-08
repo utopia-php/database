@@ -195,15 +195,17 @@ class MariaDB extends SQL
         // NULLs as distinct in a UNIQUE index, so a nullable _column would let
         // duplicate permission rows slip past _index1.
         //
-        // Sized to MAX_UID_DEFAULT_LENGTH, not 255: these tables are utf8mb4 and
-        // _index1 already costs ~2097 of InnoDB's 3072-byte key limit, so a
-        // VARCHAR(255) member would overflow it and the index would fail to build.
+        // _index1 indexes it by prefix, not in full: these tables are utf8mb4 and the
+        // other four members already cost ~2098 of InnoDB's 3072-byte key limit, so a
+        // full VARCHAR(255) member would take it to ~3120 and the index would fail to
+        // build. MAX_UID_DEFAULT_LENGTH is the longest a column key may be, so the
+        // prefix is full uniqueness for every value that can actually be stored.
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
                 _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
-                _column VARCHAR(" . Database::MAX_UID_DEFAULT_LENGTH . ") CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT '',
+                _column VARCHAR(255) NOT NULL DEFAULT '',
                 _document VARCHAR(255) NOT NULL,
                 PRIMARY KEY (_id),
         ";
@@ -211,12 +213,12 @@ class MariaDB extends SQL
         if ($this->sharedTables) {
             $permissions .= "
                 _tenant INT(11) UNSIGNED DEFAULT NULL,
-                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission, _column),
+                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission, _column(" . Database::MAX_UID_DEFAULT_LENGTH . ")),
                 INDEX _permission (_tenant, _permission, _type)
             ";
         } else {
             $permissions .= "
-                UNIQUE INDEX _index1 (_document, _type, _permission, _column),
+                UNIQUE INDEX _index1 (_document, _type, _permission, _column(" . Database::MAX_UID_DEFAULT_LENGTH . ")),
                 INDEX _permission (_permission, _type)
             ";
         }

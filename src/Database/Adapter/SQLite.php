@@ -421,7 +421,7 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
-				`_column` VARCHAR(" . Database::MAX_UID_DEFAULT_LENGTH . ") NOT NULL DEFAULT '',
+				`_column` VARCHAR(255) NOT NULL DEFAULT '',
 				`_document` VARCHAR(255) NOT NULL
 			)
 		";

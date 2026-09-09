@@ -12,66 +12,30 @@ use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
 final class FeatureContractTest extends TestCase
 {
-    public function testMemoryDoesNotAdvertiseOptionalEngineMethods(): void
-    {
-        $adapter = $this->instance(new Memory());
-
-        foreach ([
-            'rawQuery',
-            'rawMutation',
-            'getBuilder',
-            'getSchema',
-            'decodePoint',
-            'getColumnType',
-            'getSchemaAttributes',
-            'castingBefore',
-            'setUTCDatetime',
-            'setTimeout',
-            'upsertDocuments',
-            'getConnectionId',
-        ] as $method) {
-            $this->assertSame(false, \method_exists($adapter, $method), $method);
-        }
-
-        foreach (['createRelationship'] as $method) {
-            $this->assertSame(true, \method_exists($adapter, $method), $method);
-        }
-
-        $this->assertSame(true, $adapter instanceof Feature\Relationships);
-        $this->assertSame(false, $adapter instanceof Feature\Upserts);
-    }
-
-    public function testMemoryHasFeatureReportsRelationshipsButNotSpatial(): void
-    {
-        $adapter = $this->instance(new Memory());
-
-        $this->assertSame(false, $adapter->hasFeature(Feature\Spatial::class));
-        $this->assertSame(true, $adapter->hasFeature(Feature\Relationships::class));
-    }
-
     public function testMemoryPoolHasFeatureDelegatesToInnerAdapter(): void
     {
-        $adapter = new Memory();
-
-        /** @var UtopiaPool<Adapter>&Stub $connections */
-        $connections = self::createStub(UtopiaPool::class);
-        $connections->method('use')->willReturnCallback(
-            static fn (callable $callback): mixed => $callback($adapter),
-        );
-
-        $pool = new Pool($connections);
-        $pool->setAuthorization(new Authorization());
+        $pool = $this->pool(new Memory());
 
         $this->assertSame(false, $pool->hasFeature(Feature\Spatial::class));
+        $this->assertSame(false, $pool->hasFeature(Feature\Upserts::class));
         $this->assertSame(true, $pool->hasFeature(Feature\Relationships::class));
     }
 
-    public function testPoolDoesNotImplementOptionalFeatureInterfaces(): void
+    /**
+     * Pool carries every optional Feature method so it can forward whichever
+     * adapter the pool hands out, but it must not implement the interfaces:
+     * a caller type-checking the facade would be told the pooled engine
+     * supports something it does not. Support is answered by hasFeature(),
+     * and a call the inner adapter cannot serve is refused at the facade.
+     */
+    public function testPoolRefusesAFeatureTheInnerAdapterLacks(): void
     {
         $implements = $this->interfaces(Pool::class);
 
@@ -92,50 +56,21 @@ final class FeatureContractTest extends TestCase
             $this->assertArrayNotHasKey($feature, $implements, $feature);
         }
 
-        foreach ([
-            'decodePoint',
-            'upsertDocuments',
-            'setTimeout',
-            'getConnectionId',
-            'rawQuery',
-            'getBuilder',
-            'getColumnType',
-            'castingBefore',
-            'setUTCDatetime',
-            'getSchemaAttributes',
-            'createRelationship',
-        ] as $method) {
-            $this->assertSame(true, \method_exists(Pool::class, $method), $method);
-        }
+        $pool = $this->pool(new Memory());
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Adapter does not support upserts');
+        $pool->upsertDocuments(new Document(['$id' => 'any']), '', []);
     }
 
     public function testRedisAdvertisesUpsertsConnectionIdAndRelationships(): void
     {
-        $class = Redis::class;
-
-        foreach ([
-            'rawQuery',
-            'rawMutation',
-            'getBuilder',
-            'getSchema',
-            'decodePoint',
-            'getColumnType',
-            'getSchemaAttributes',
-            'castingBefore',
-            'setUTCDatetime',
-            'setTimeout',
-        ] as $method) {
-            $this->assertSame(false, \method_exists($class, $method), $method);
-        }
-
-        foreach (['upsertDocuments', 'getConnectionId'] as $method) {
-            $this->assertSame(true, \method_exists($class, $method), $method);
-        }
-
-        $implements = $this->interfaces($class);
+        $implements = $this->interfaces(Redis::class);
         $this->assertArrayHasKey(Feature\Upserts::class, $implements);
         $this->assertArrayHasKey(Feature\ConnectionId::class, $implements);
         $this->assertArrayHasKey(Feature\Relationships::class, $implements);
+        $this->assertArrayNotHasKey(Feature\Spatial::class, $implements);
+        $this->assertArrayNotHasKey(Feature\RawQuery::class, $implements);
     }
 
     public function testSQLiteImplementsSqlFeaturesButNotSpatialTimeoutsOrConnectionId(): void
@@ -183,8 +118,17 @@ final class FeatureContractTest extends TestCase
         return $implements === false ? [] : $implements;
     }
 
-    private function instance(Adapter $adapter): Adapter
+    private function pool(Adapter $adapter): Pool
     {
-        return $adapter;
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($adapter),
+        );
+
+        $pool = new Pool($connections);
+        $pool->setAuthorization(new Authorization());
+
+        return $pool;
     }
 }

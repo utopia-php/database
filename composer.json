@@ -2,12 +2,20 @@
     "name": "utopia-php/database",
     "description": "A simple library to manage application persistence using multiple database adapters",
     "type": "library",
-    "keywords": ["php","framework", "upf", "utopia", "database"],
+    "keywords": [
+        "php",
+        "framework",
+        "upf",
+        "utopia",
+        "database"
+    ],
     "license": "MIT",
     "minimum-stability": "dev",
     "prefer-stable": true,
     "autoload": {
-        "psr-4": {"Utopia\\Database\\": "src/Database"}
+        "psr-4": {
+            "Utopia\\Database\\": "src/Database"
+        }
     },
     "autoload-dev": {
         "psr-4": {
@@ -30,7 +38,10 @@
         ],
         "lint": "php -d memory_limit=2G ./vendor/bin/pint --test",
         "format": "php -d memory_limit=2G ./vendor/bin/pint",
-        "check": "./vendor/bin/phpstan analyse --memory-limit 2G",
+        "check": [
+            "./vendor/bin/phpstan analyse --memory-limit 2G",
+            "./vendor/bin/phpstan analyse -c phpstan-bin.neon --memory-limit 2G"
+        ],
         "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
     },
     "require": {
@@ -62,7 +73,6 @@
         "ext-redis": "Needed to support Redis Cache Adapter",
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
-
     },
     "repositories": [
         {

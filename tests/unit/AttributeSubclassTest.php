@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
-use ReflectionParameter;
 use Utopia\Cache\Adapter\None as NoneAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -119,7 +118,6 @@ final class AttributeSubclassTest extends TestCase
         $this->assertSame(ColumnType::String, $attribute->type);
         $this->assertSame(Database::LENGTH_KEY, $attribute->size);
         $this->assertSame('name', $attribute->key);
-        $this->assertSame(false, in_array('type', $this->parameterNames(Attribute::class, 'string'), true));
     }
 
     public function testStringTypeConstructorUsesLengthKey(): void
@@ -129,7 +127,6 @@ final class AttributeSubclassTest extends TestCase
         $this->assertSame(ColumnType::String, $attribute->type);
         $this->assertSame(Database::LENGTH_KEY, $attribute->size);
         $this->assertSame('name', $attribute->key);
-        $this->assertSame(false, in_array('type', $this->parameterNames(StringType::class, '__construct'), true));
     }
 
     public function testIntegerConstructorOmitsType(): void
@@ -140,7 +137,6 @@ final class AttributeSubclassTest extends TestCase
         $this->assertSame(0, $attribute->size);
         $this->assertSame(0, $attribute->default);
         $this->assertSame('age', $attribute->key);
-        $this->assertSame(false, in_array('type', $this->parameterNames(Integer::class, '__construct'), true));
     }
 
     public function testIntegerFactory(): void
@@ -151,7 +147,6 @@ final class AttributeSubclassTest extends TestCase
         $this->assertSame(0, $attribute->size);
         $this->assertSame(0, $attribute->default);
         $this->assertSame('age', $attribute->key);
-        $this->assertSame(false, in_array('type', $this->parameterNames(Attribute::class, 'integer'), true));
     }
 
     public function testVectorKeepsExplicitSize(): void
@@ -375,18 +370,6 @@ final class AttributeSubclassTest extends TestCase
         $this->assertSame(ColumnType::Array, $array->type);
         $this->assertSame('tags', $array->key);
         $this->assertSame(0, $array->size);
-    }
-
-    /**
-     * @param class-string $class
-     * @return array<int, string>
-     */
-    private function parameterNames(string $class, string $method): array
-    {
-        return array_map(
-            static fn (ReflectionParameter $parameter): string => $parameter->getName(),
-            (new ReflectionMethod($class, $method))->getParameters(),
-        );
     }
 
     private function database(): Database

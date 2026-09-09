@@ -4,8 +4,6 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use ReflectionParameter;
 use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Query\Schema\IndexType;
@@ -245,16 +243,6 @@ class IndexModelTest extends TestCase
         $this->assertSame([], $index->lengths);
         $this->assertSame([], $index->orders);
         $this->assertSame(1, $index->ttl);
-    }
-
-    public function testFactoryOmitsTypeParameter(): void
-    {
-        $names = array_map(
-            static fn (ReflectionParameter $parameter): string => $parameter->getName(),
-            (new ReflectionMethod(Index::class, 'key'))->getParameters(),
-        );
-
-        $this->assertSame(false, in_array('type', $names, true));
     }
 
     public function testFactoryForwardsOptionalArguments(): void

@@ -94,7 +94,7 @@ class MySQL extends MariaDB
 
         $exception = null;
         try {
-            return $stmt->execute();
+            return $this->executeAndProfile($stmt);
         } catch (Throwable $error) {
             $exception = $error;
             throw $error;

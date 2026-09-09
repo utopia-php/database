@@ -3277,20 +3277,34 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
-        if ($this->profiler !== null && $this->profiler->isEnabled()) {
-            $start = \microtime(true);
-            $result = $stmt->execute();
-            $durationMs = (\microtime(true) - $start) * 1000;
-            $this->profiler->log(
-                $stmt->queryString ?? '',
-                [],
-                $durationMs,
-            );
+        return $this->executeAndProfile($stmt);
+    }
 
-            return $result;
+    /**
+     * Run a prepared statement and hand it to the profiler when one is attached.
+     *
+     * Subclasses that wrap execute() with engine-specific timeout handling call
+     * this instead of $stmt->execute(), so the statement is still counted. They
+     * cannot reach it through parent::execute() — MySQL extends MariaDB, whose
+     * execute() applies MariaDB's own timeout statement.
+     *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     */
+    protected function executeAndProfile(mixed $stmt): bool
+    {
+        if ($this->profiler === null || ! $this->profiler->isEnabled()) {
+            return $stmt->execute();
         }
 
-        return $stmt->execute();
+        $start = \microtime(true);
+        $result = $stmt->execute();
+        $this->profiler->log(
+            $stmt->queryString ?? '',
+            [],
+            (\microtime(true) - $start) * 1000,
+        );
+
+        return $result;
     }
 
     /**

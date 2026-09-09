@@ -1195,7 +1195,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $timeout = $event === null ? $this->getTimeout() : $this->getTimeout($event);
 
         if ($timeout === 0) {
-            return $stmt->execute();
+            return $this->executeAndProfile($stmt);
         }
 
         $sql = $this->inTransaction === 0
@@ -1206,7 +1206,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $exception = null;
         try {
-            return $stmt->execute();
+            return $this->executeAndProfile($stmt);
         } catch (Throwable $error) {
             $exception = $error;
             throw $error;

@@ -308,7 +308,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
-        return $stmt->execute();
+        return $this->executeAndProfile($stmt);
     }
 
     /**

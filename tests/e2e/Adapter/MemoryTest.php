@@ -27,9 +27,9 @@ use Utopia\Database\Query;
  *
  * The test methods declared directly on this class are Memory-specific
  * regressions for behaviour that is not exercised — or not exercised in the
- * same way — by the inherited scopes (transaction nesting semantics, raw
- * adapter store layout after attribute operations, tenancy on the in-process
- * map, etc.).
+ * same way — by the inherited scopes (transaction nesting semantics, the
+ * cascades an attribute rename or drop leaves behind, tenancy on the
+ * in-process map, etc.).
  */
 class MemoryTest extends Base
 {
@@ -316,77 +316,125 @@ class MemoryTest extends Base
     }
 
     /**
-     * Regression: updateAttribute applies metadata after a rename — the new
-     * key carries the new size, the old key is gone.
+     * Regression: updateAttribute given a new key renames the attribute, so
+     * the stored values answer to the new key and no longer to the old one.
      */
-    public function testUpdateAttributeAppliesMetadataAfterRename(): void
+    public function testUpdateAttributeMovesStoredValuesToTheNewKey(): void
     {
         $adapter = new Memory();
         $adapter->setNamespace('rename_' . \uniqid());
         $adapter->createCollection('renames', [], []);
         $adapter->createAttribute('renames', Attribute::string(key: 'old', size: 64));
 
+        $collection = new Document(['$id' => 'renames']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'row',
+            '$permissions' => [],
+            'old' => 'value',
+        ]));
+
         $adapter->updateAttribute('renames', Attribute::string(key: 'old', size: 256), 'fresh');
 
-        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_renames';
-
-        $this->assertIsArray($store);
-        $this->assertIsArray($store[$key]);
-        $this->assertIsArray($store[$key]['attributes']);
-        $this->assertArrayHasKey('fresh', $store[$key]['attributes']);
-        $this->assertArrayNotHasKey('old', $store[$key]['attributes']);
-        $this->assertIsArray($store[$key]['attributes']['fresh']);
-        $this->assertEquals(256, $store[$key]['attributes']['fresh']['size']);
+        $renamed = $adapter->getDocument($collection, 'row');
+        $this->assertSame('value', $renamed->getAttribute('fresh'));
+        $this->assertNull($renamed->getAttribute('old'));
     }
 
     /**
-     * Regression: renameAttribute cascades the rename into any indexes that
-     * referenced the old name.
+     * Regression: renameAttribute carries the values, the indexes and the
+     * attribute's own registration onto the new name. An index left pointing
+     * at the old key reads null out of every row, and a null component drops
+     * the row out of the unique signature — the index silently stops
+     * rejecting duplicates. A registration left on the old key makes the new
+     * key undeletable: deleteAttribute is a no-op for a key the adapter never
+     * registered, so the stored field survives the drop.
      */
-    public function testRenameAttributeUpdatesIndexReferences(): void
+    public function testRenameAttributeCarriesValuesIndexesAndRegistration(): void
     {
         $adapter = new Memory();
         $adapter->setNamespace('idxrn_' . \uniqid());
         $adapter->createCollection('indexed', [], []);
         $adapter->createAttribute('indexed', Attribute::string(key: 'name', size: 64));
-        $adapter->createIndex('indexed', Index::key(key: 'idx_name', attributes: ['name']));
+        $adapter->createIndex('indexed', Index::unique(key: 'unique_name', attributes: ['name']));
+
+        $collection = new Document(['$id' => 'indexed']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'first',
+            '$permissions' => [],
+            'name' => 'taken',
+        ]));
 
         $adapter->renameAttribute('indexed', 'name', 'title');
 
-        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_indexed';
+        $stored = $adapter->getDocument($collection, 'first');
+        $this->assertSame('taken', $stored->getAttribute('title'));
+        $this->assertNull($stored->getAttribute('name'));
 
-        $this->assertIsArray($store);
-        $this->assertIsArray($store[$key]);
-        $this->assertIsArray($store[$key]['indexes']);
-        $this->assertIsArray($store[$key]['indexes']['idx_name']);
-        $this->assertEquals(['title'], $store[$key]['indexes']['idx_name']['attributes']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'free',
+            '$permissions' => [],
+            'title' => 'available',
+        ]));
+
+        $threw = false;
+        try {
+            $adapter->createDocument($collection, new Document([
+                '$id' => 'second',
+                '$permissions' => [],
+                'title' => 'taken',
+            ]));
+        } catch (DuplicateException) {
+            $threw = true;
+        }
+
+        $this->assertTrue($threw, 'the unique index should still reject a duplicate under the new name');
+
+        $adapter->deleteAttribute('indexed', 'title');
+
+        $this->assertNull($adapter->getDocument($collection, 'first')->getAttribute('title'));
     }
 
     /**
-     * Regression: deleteAttribute strips the attribute from any composite
-     * index that referenced it.
+     * Regression: deleteAttribute strips the dropped key out of the composite
+     * indexes that referenced it, so a two-column unique index narrows to the
+     * column that is left. An index still naming the dropped key reads null
+     * for it and stops rejecting duplicates altogether.
      */
-    public function testDeleteAttributeRemovesFromIndex(): void
+    public function testDeleteAttributeNarrowsCompositeUniqueIndex(): void
     {
         $adapter = new Memory();
         $adapter->setNamespace('idxdrop_' . \uniqid());
         $adapter->createCollection('drops', [], []);
         $adapter->createAttribute('drops', Attribute::string(key: 'a', size: 64));
         $adapter->createAttribute('drops', Attribute::string(key: 'b', size: 64));
-        $adapter->createIndex('drops', Index::key(key: 'idx_ab', attributes: ['a', 'b']));
+        $adapter->createIndex('drops', Index::unique(key: 'unique_ab', attributes: ['a', 'b']));
+
+        $collection = new Document(['$id' => 'drops']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'existing',
+            '$permissions' => [],
+            'a' => 'one',
+            'b' => 'kept',
+        ]));
 
         $adapter->deleteAttribute('drops', 'a');
 
-        $store = (new \ReflectionClass($adapter))->getProperty('data')->getValue($adapter);
-        $key = $adapter->getDatabase() . '.' . $adapter->getNamespace() . '_drops';
+        $stored = $adapter->getDocument($collection, 'existing');
+        $this->assertNull($stored->getAttribute('a'));
+        $this->assertSame('kept', $stored->getAttribute('b'));
 
-        $this->assertIsArray($store);
-        $this->assertIsArray($store[$key]);
-        $this->assertIsArray($store[$key]['indexes']);
-        $this->assertIsArray($store[$key]['indexes']['idx_ab']);
-        $this->assertEquals(['b'], $store[$key]['indexes']['idx_ab']['attributes']);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'first',
+            '$permissions' => [],
+            'b' => 'shared',
+        ]));
+
+        $this->expectException(DuplicateException::class);
+        $adapter->createDocument($collection, new Document([
+            '$id' => 'second',
+            '$permissions' => [],
+            'b' => 'shared',
+        ]));
     }
 
     /**
@@ -478,8 +526,10 @@ class MemoryTest extends Base
     }
 
     /**
-     * Regression: bulk delete clears the in-memory permissions index for the
-     * affected collection.
+     * Regression: bulk delete clears the permission entries of the rows it
+     * removed. Entries left behind keep granting access under the deleted
+     * document's id, so re-using that id inherits the grant it never asked
+     * for.
      */
     public function testBulkDeleteRemovesPermissions(): void
     {
@@ -500,14 +550,19 @@ class MemoryTest extends Base
             ]));
         }
 
+        $this->assertCount(3, $database->find('cleanup'));
+
         $database->deleteDocuments('cleanup');
 
-        $adapter = $database->getAdapter();
-        $permissions = (new \ReflectionClass($adapter))->getProperty('permissions')->getValue($adapter);
-        $key = $database->getDatabase() . '.' . $database->getNamespace() . '_cleanup';
+        $this->assertCount(0, $database->find('cleanup'));
 
-        $this->assertIsArray($permissions);
-        $this->assertEmpty($permissions[$key] ?? []);
+        $database->createDocument('cleanup', new Document([
+            '$id' => 'c0',
+            '$permissions' => [Permission::delete(Role::any())],
+            'name' => 'restricted',
+        ]));
+
+        $this->assertCount(0, $database->find('cleanup'));
     }
 
     /**

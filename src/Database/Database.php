@@ -895,6 +895,11 @@ class Database
      * With Tenant
      *
      * Execute a callback with a specific tenant
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
      */
     public function withTenant(int|string|null $tenant, callable $callback): mixed
     {

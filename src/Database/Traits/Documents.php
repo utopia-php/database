@@ -1926,25 +1926,32 @@ trait Documents
     {
         $perTenant = $this->getSharedTables() && $this->getTenantPerDocument();
 
-        $idsByTenant = [];
+        $batches = [];
         foreach ($documents as $document) {
             if ($document->getId() === '') {
                 continue;
             }
 
-            $idsByTenant[$perTenant ? $document->getTenant() : ''][] = $document->getId();
+            $tenant = $perTenant ? $document->getTenant() : null;
+            $key = $tenant === null ? '' : (string) $tenant;
+
+            if (! isset($batches[$key])) {
+                $batches[$key] = ['tenant' => $tenant, 'ids' => []];
+            }
+
+            $batches[$key]['ids'][] = $document->getId();
         }
 
         $existing = [];
-        foreach ($idsByTenant as $tenant => $ids) {
-            foreach (\array_chunk(\array_values(\array_unique($ids)), \max(1, $this->maxQueryValues)) as $chunk) {
+        foreach ($batches as $batch) {
+            foreach (\array_chunk(\array_values(\array_unique($batch['ids'])), \max(1, $this->maxQueryValues)) as $chunk) {
                 $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->find($collection, [
                     Query::equal(Document::ID, $chunk),
                     Query::limit($this->maxQueryValues),
                 ])));
 
                 $found = $perTenant
-                    ? $this->withTenant($tenant, $read)
+                    ? $this->withTenant($batch['tenant'], $read)
                     : $read();
 
                 foreach ($found as $document) {

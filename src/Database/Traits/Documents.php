@@ -1603,20 +1603,10 @@ trait Documents
             $collection->attributes,
             static fn (Attribute $attribute): bool => $attribute->type === ColumnType::Relationship,
         ));
+        $existing = $this->findDocumentsToUpsert($collection->getId(), $documents);
+
         foreach ($documents as $key => $document) {
-            if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-                /** @var Document $old */
-                $old = $this->authorization->skip(fn () => $this->withTenant($document->getTenant(), fn () => $this->silent(fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId(),
-                ))));
-            } else {
-                /** @var Document $old */
-                $old = $this->authorization->skip(fn () => $this->silent(fn () => $this->getDocument(
-                    $collection->getId(),
-                    $document->getId(),
-                )));
-            }
+            $old = $existing[$this->upsertKey($document)] ?? new Document();
 
             $document = $this->removeUnknownAttributes($collection, $document);
 
@@ -1919,6 +1909,63 @@ trait Documents
         ]));
 
         return $created + $updated;
+    }
+
+    /**
+     * Load the stored documents an upsert batch will be compared against, in one
+     * read per tenant instead of one per document. A batch of N documents costs a
+     * bounded number of round trips; getDocument() per document cost 2N, which
+     * doubled the stats-resources sweep and is what this replaces.
+     *
+     * @param  array<Document>  $documents
+     * @return array<string, Document>
+     *
+     * @throws Throwable
+     */
+    private function findDocumentsToUpsert(string $collection, array $documents): array
+    {
+        $perTenant = $this->getSharedTables() && $this->getTenantPerDocument();
+
+        $idsByTenant = [];
+        foreach ($documents as $document) {
+            if ($document->getId() === '') {
+                continue;
+            }
+
+            $idsByTenant[$perTenant ? $document->getTenant() : ''][] = $document->getId();
+        }
+
+        $existing = [];
+        foreach ($idsByTenant as $tenant => $ids) {
+            foreach (\array_chunk(\array_values(\array_unique($ids)), \max(1, $this->maxQueryValues)) as $chunk) {
+                $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->find($collection, [
+                    Query::equal(Document::ID, $chunk),
+                    Query::limit($this->maxQueryValues),
+                ])));
+
+                $found = $perTenant
+                    ? $this->withTenant($tenant, $read)
+                    : $read();
+
+                foreach ($found as $document) {
+                    $existing[$this->upsertKey($document)] = $document;
+                }
+            }
+        }
+
+        return $existing;
+    }
+
+    /**
+     * Identity of a document within one upsert batch. Two tenants may hold the
+     * same document id, so the tenant is part of the key whenever a batch can
+     * span tenants.
+     */
+    private function upsertKey(Document $document): string
+    {
+        return $this->getSharedTables() && $this->getTenantPerDocument()
+            ? $document->getTenant().':'.$document->getId()
+            : $document->getId();
     }
 
     /**

@@ -7,6 +7,7 @@ use PDOException;
 use PHPUnit\Framework\Attributes\Depends;
 use Tests\E2E\Adapter\Support\InterleavingDatabase;
 use Tests\E2E\Adapter\Support\MutationRecorder;
+use Tests\E2E\Adapter\Support\ReadCountingDatabase;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
@@ -5160,6 +5161,67 @@ trait DocumentTests
         // No changes, should return 0
         $count = $this->getDatabase()->upsertDocuments(__FUNCTION__, [$document]);
         $this->assertEquals(0, $count);
+    }
+
+    public function testUpsertDocumentsReadsStoredRowsInOneBatch(): void
+    {
+        $shared = $this->getDatabase();
+
+        if (! $shared->getAdapter()->hasFeature(Feature\Upserts::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        // A cache-free handle on the same adapter: the stats workers upsert rows
+        // no request has read, so every stored row is a real read for them.
+        $database = new ReadCountingDatabase($shared->getAdapter(), new Cache(new NoneCacheAdapter()));
+        $database->setAuthorization($shared->getAuthorization());
+
+        $collection = 'upsert_batch_read';
+        $database->createCollection(new Collection(id: $collection));
+        $database->createAttribute($collection, Attribute::integer(key: 'value', required: true));
+
+        $documents = [];
+        for ($index = 0; $index < 20; $index++) {
+            $documents[] = new Document([
+                '$id' => 'document'.$index,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'value' => $index,
+            ]);
+        }
+
+        $this->assertEquals(count($documents), $database->upsertDocuments($collection, $documents));
+
+        foreach ($documents as $index => $document) {
+            $document->setAttribute('value', $index + 100);
+        }
+
+        $database->resetReadCounts();
+        $updated = $database->upsertDocuments($collection, $documents);
+
+        $this->assertEquals(count($documents), $updated);
+        $this->assertGreaterThan(
+            0,
+            $database->documentReads + $database->collectionReads,
+            'The upsert read nothing at all, so the bound below would hold vacuously',
+        );
+        $this->assertLessThan(
+            count($documents),
+            $database->documentReads + $database->collectionReads,
+            \sprintf(
+                'Upserting %d documents issued %d reads: the stored rows are being read one document at a time.',
+                count($documents),
+                $database->documentReads + $database->collectionReads,
+            ),
+        );
+
+        foreach ($documents as $index => $document) {
+            $this->assertEquals($index + 100, $database->getDocument($collection, $document->getId())->getAttribute('value'));
+        }
     }
 
     public function testUpsertDuplicateIds(): void

@@ -2773,6 +2773,54 @@ trait DocumentTests
         }
     }
 
+    public function testUpdateDocumentIgnoresCallerSuppliedSequence(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'updateDocumentSequenceTargeting';
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'name', size: 128, required: true)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+
+        $bystander = $database->createDocument($collection, new Document([
+            Document::ID => 'bystander',
+            'name' => 'untouched',
+        ]));
+        $target = $database->createDocument($collection, new Document([
+            Document::ID => 'target',
+            'name' => 'before',
+        ]));
+
+        $this->assertNotEmpty($bystander->getSequence());
+        $this->assertNotSame($bystander->getSequence(), $target->getSequence());
+
+        $updated = $database->updateDocument($collection, 'target', new Document([
+            Document::SEQUENCE => $bystander->getSequence(),
+            'name' => 'after',
+        ]));
+
+        $reloadedBystander = $database->getDocument($collection, 'bystander');
+        $this->assertSame('untouched', $reloadedBystander->getAttribute('name'));
+        $this->assertSame($bystander->getVersion(), $reloadedBystander->getVersion());
+        $this->assertSame($bystander->getSequence(), $reloadedBystander->getSequence());
+
+        $reloadedTarget = $database->getDocument($collection, 'target');
+        $this->assertSame('after', $reloadedTarget->getAttribute('name'));
+        $this->assertSame($target->getSequence(), $reloadedTarget->getSequence());
+
+        $this->assertSame('after', $updated->getAttribute('name'));
+        $this->assertSame($target->getSequence(), $updated->getSequence());
+    }
+
     public function testUpdateDocuments(): void
     {
         /** @var Database $database */

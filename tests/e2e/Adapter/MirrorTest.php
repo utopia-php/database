@@ -338,6 +338,54 @@ class MirrorTest extends Base
         );
     }
 
+    public function testUpdateMirroredDocumentIgnoresSourceSequence(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'mirrorSequenceTargeting';
+
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+
+        $destination = $database->getDestination();
+        $this->assertNotNull($destination);
+
+        // The destination holds a row the mirror never wrote, so its sequence counter runs
+        // ahead of the source's and the two sides disagree about every subsequent $sequence.
+        $bystander = $destination->createDocument($collection, new Document([
+            Document::ID => 'bystander',
+            'name' => 'untouched',
+            '$permissions' => [],
+        ]));
+
+        $onSource = $database->getSource()->createDocument($collection, new Document([
+            Document::ID => 'shared',
+            'name' => 'before',
+            '$permissions' => [],
+        ]));
+        $onDestination = $destination->createDocument($collection, new Document([
+            Document::ID => 'shared',
+            'name' => 'before',
+            '$permissions' => [],
+        ]));
+
+        $this->assertSame($bystander->getSequence(), $onSource->getSequence());
+        $this->assertNotSame($onSource->getSequence(), $onDestination->getSequence());
+
+        $database->updateDocument($collection, 'shared', new Document(['name' => 'after']));
+
+        $this->assertSame('untouched', $destination->getDocument($collection, 'bystander')->getAttribute('name'));
+        $this->assertSame('after', $destination->getDocument($collection, 'shared')->getAttribute('name'));
+        $this->assertSame(
+            'after',
+            $database->getSource()->getDocument($collection, 'shared')->getAttribute('name')
+        );
+    }
+
     public function test_delete_mirrored_document(): void
     {
         $database = $this->getDatabase();

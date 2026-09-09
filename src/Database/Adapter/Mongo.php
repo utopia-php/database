@@ -208,9 +208,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $this->readHooks = [];
 
-        if ($this->sharedTables && $this->tenant !== null) {
+        if ($this->sharedTables) {
             $this->readHooks[] = new MongoTenantFilter(
-                $this->tenant,
                 $this->sharedTables,
                 fn (string $collection, array $tenants = []) => $this->getTenantFilters($collection, $tenants),
             );

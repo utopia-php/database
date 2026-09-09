@@ -147,13 +147,7 @@ trait GeneralTests
         $tenant = $database->getTenant();
 
         if (! $database->getAdapter()->supports(Capability::Schemas)) {
-            $this->expectNotToPerformAssertions();
-
-            return;
-        }
-
-        if (getenv('ENABLE_TENANT_PER_DOCUMENT_TEST') !== '1') {
-            $this->markTestSkipped('tenantPerDocument requires collection-level tenant bypass (not yet implemented)');
+            $this->markTestSkipped('Tenant per document needs a schema to hold the shared table');
         }
 
         $tenantPerDocDb = 'sharedTablesTenantPerDocument_'.static::getTestToken();
@@ -169,194 +163,287 @@ trait GeneralTests
             ->setTenant(null)
             ->create();
 
-        // Create collection
-        $database->createCollection(new Collection(id: __FUNCTION__, permissions: [
-            Permission::create(Role::any()),
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-        ], documentSecurity: false));
+        try {
+            // Create collection
+            $database->createCollection(new Collection(id: __FUNCTION__, permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ], documentSecurity: false));
 
-        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
-        $database->createIndex(__FUNCTION__, Index::key(key: 'nameIndex', attributes: ['name']));
+            $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
+            $database->createIndex(__FUNCTION__, Index::key(key: 'nameIndex', attributes: ['name']));
 
-        $doc1Id = ID::unique();
+            $doc1Id = ID::unique();
 
-        // Create doc for tenant 1
-        $database
-            ->setTenant(null)
-            ->setTenantPerDocument(true)
-            ->createDocument(__FUNCTION__, new Document([
-                '$id' => $doc1Id,
-                '$tenant' => 1,
-                'name' => 'Spiderman',
-            ]));
-
-        // Set to tenant 1 and read
-        $doc = $database
-            ->setTenantPerDocument(false)
-            ->setTenant(1)
-            ->getDocument(__FUNCTION__, $doc1Id);
-
-        $this->assertEquals('Spiderman', $doc['name']);
-
-        $doc2Id = ID::unique();
-
-        // Create doc for tenant 2
-        $database
-            ->setTenant(null)
-            ->setTenantPerDocument(true)
-            ->createDocument(__FUNCTION__, new Document([
-                '$id' => $doc2Id,
-                '$tenant' => 2,
-                'name' => 'Batman',
-            ]));
-
-        // Set to tenant 2 and read
-        $doc = $database
-            ->setTenantPerDocument(false)
-            ->setTenant(2)
-            ->getDocument(__FUNCTION__, $doc2Id);
-
-        $this->assertEquals('Batman', $doc['name']);
-        $this->assertEquals(2, $doc->getTenant());
-
-        // Ensure no read cross-tenant
-        $docs = $database
-            ->setTenantPerDocument(false)
-            ->setTenant(1)
-            ->find(__FUNCTION__);
-
-        $this->assertEquals(1, \count($docs));
-        $this->assertEquals($doc1Id, $docs[0]->getId());
-
-        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
-            // Test upsert with tenant per doc
-            $doc3Id = ID::unique();
+            // Create doc for tenant 1
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->upsertDocuments(__FUNCTION__, [new Document([
-                    '$id' => $doc3Id,
-                    '$tenant' => 3,
-                    'name' => 'Superman3',
-                ])]);
+                ->createDocument(__FUNCTION__, new Document([
+                    '$id' => $doc1Id,
+                    '$tenant' => 1,
+                    'name' => 'Spiderman',
+                ]));
 
-            // Set to tenant 3 and read
+            // Set to tenant 1 and read
             $doc = $database
                 ->setTenantPerDocument(false)
-                ->setTenant(3)
-                ->getDocument(__FUNCTION__, $doc3Id);
+                ->setTenant(1)
+                ->getDocument(__FUNCTION__, $doc1Id);
 
-            $this->assertEquals('Superman3', $doc['name']);
-            $this->assertEquals(3, $doc->getTenant());
-            $this->assertEquals($doc3Id, $doc->getId());
+            $this->assertEquals('Spiderman', $doc['name']);
+            $doc1CreatedAt = $doc->getCreatedAt();
 
-            // Test no read from other tenants
+            $doc2Id = ID::unique();
+
+            // Create doc for tenant 2
+            $database
+                ->setTenant(null)
+                ->setTenantPerDocument(true)
+                ->createDocument(__FUNCTION__, new Document([
+                    '$id' => $doc2Id,
+                    '$tenant' => 2,
+                    'name' => 'Batman',
+                ]));
+
+            // Set to tenant 2 and read
+            $doc = $database
+                ->setTenantPerDocument(false)
+                ->setTenant(2)
+                ->getDocument(__FUNCTION__, $doc2Id);
+
+            $this->assertEquals('Batman', $doc['name']);
+            $this->assertEquals(2, $doc->getTenant());
+
+            // Ensure no read cross-tenant
             $docs = $database
                 ->setTenantPerDocument(false)
                 ->setTenant(1)
                 ->find(__FUNCTION__);
 
             $this->assertEquals(1, \count($docs));
+            $this->assertEquals($doc1Id, $docs[0]->getId());
 
-            // Ensure no cross-tenant read from upsert
-            $doc = $database
-                ->setTenant(1)
-                ->setTenantPerDocument(false)
-                ->getDocument(__FUNCTION__, $doc3Id);
+            // Selecting no tenant has to scope a read to no tenant rather than to every
+            // tenant: this collection's own metadata row is tenantless, so nothing above
+            // the document read is left to keep one tenant out of another's rows.
+            $database->setTenant(null)->setTenantPerDocument(true);
 
-            $this->assertEquals(true, $doc->isEmpty());
+            $this->assertCount(0, $database->find(__FUNCTION__));
+            $this->assertSame(0, $database->count(__FUNCTION__));
+            $this->assertTrue($database->getDocument(__FUNCTION__, $doc1Id)->isEmpty());
 
-            // Upsert new documents with different tenants. The sequence lookup binds one
-            // placeholder per distinct tenant, so a cross-tenant batch has to keep each
-            // tenant's value at the position its placeholder was named for -- collected here
-            // because $onNext is the only way these documents reach the caller.
-            $doc4Id = ID::unique();
-            $doc5Id = ID::unique();
-            $sequences = [];
-            $database
-                ->setTenant(null)
-                ->setTenantPerDocument(true)
-                ->upsertDocuments(
-                    __FUNCTION__,
-                    [new Document([
+            if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+                // An upsert has to recognise a row that createDocument() wrote, not shadow it
+                // with a second one: a duplicate restarts $version, moves $createdAt, and is
+                // checked against create permission rather than update permission.
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(__FUNCTION__, [new Document([
+                        '$id' => $doc1Id,
+                        '$tenant' => 1,
+                        'name' => 'Spiderman revised',
+                    ])]);
+
+                $documents = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(1)
+                    ->find(__FUNCTION__);
+
+                $this->assertCount(1, $documents);
+                $this->assertSame('Spiderman revised', $documents[0]->getAttribute('name'));
+                $this->assertSame(2, $documents[0]->getVersion());
+                $this->assertSame($doc1CreatedAt, $documents[0]->getCreatedAt());
+
+                // Test upsert with tenant per doc
+                $doc3Id = ID::unique();
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(__FUNCTION__, [new Document([
+                        '$id' => $doc3Id,
+                        '$tenant' => 3,
+                        'name' => 'Superman3',
+                    ])]);
+
+                // Set to tenant 3 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(3)
+                    ->getDocument(__FUNCTION__, $doc3Id);
+
+                $this->assertEquals('Superman3', $doc['name']);
+                $this->assertEquals(3, $doc->getTenant());
+                $this->assertEquals($doc3Id, $doc->getId());
+
+                // Test no read from other tenants
+                $docs = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(1)
+                    ->find(__FUNCTION__);
+
+                $this->assertEquals(1, \count($docs));
+
+                // Ensure no cross-tenant read from upsert
+                $doc = $database
+                    ->setTenant(1)
+                    ->setTenantPerDocument(false)
+                    ->getDocument(__FUNCTION__, $doc3Id);
+
+                $this->assertEquals(true, $doc->isEmpty());
+
+                // Upsert new documents with different tenants. The sequence lookup binds one
+                // placeholder per distinct tenant, so a cross-tenant batch has to keep each
+                // tenant's value at the position its placeholder was named for -- collected here
+                // because $onNext is the only way these documents reach the caller.
+                $doc4Id = ID::unique();
+                $doc5Id = ID::unique();
+                $sequences = [];
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(
+                        __FUNCTION__,
+                        [new Document([
+                            '$id' => $doc4Id,
+                            '$tenant' => 4,
+                            'name' => 'Superman4',
+                        ]), new Document([
+                            '$id' => $doc5Id,
+                            '$tenant' => 5,
+                            'name' => 'Superman5',
+                        ])],
+                        onNext: function (Document $document) use (&$sequences) {
+                            $sequences[$document->getId()] = $document->getSequence();
+                        }
+                    );
+
+                $this->assertCount(2, $sequences);
+                $this->assertNotEmpty($sequences[$doc4Id]);
+                $this->assertNotEmpty($sequences[$doc5Id]);
+
+                // Set to tenant 4 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(4)
+                    ->getDocument(__FUNCTION__, $doc4Id);
+
+                $this->assertEquals('Superman4', $doc['name']);
+                $this->assertEquals(4, $doc->getTenant());
+                $this->assertEquals($doc->getSequence(), $sequences[$doc4Id]);
+
+                // Set to tenant 5 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(5)
+                    ->getDocument(__FUNCTION__, $doc5Id);
+
+                $this->assertEquals('Superman5', $doc['name']);
+                $this->assertEquals(5, $doc->getTenant());
+                $this->assertEquals($doc->getSequence(), $sequences[$doc5Id]);
+
+                // Update names via upsert
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(__FUNCTION__, [new Document([
                         '$id' => $doc4Id,
                         '$tenant' => 4,
-                        'name' => 'Superman4',
+                        'name' => 'Superman4 updated',
                     ]), new Document([
                         '$id' => $doc5Id,
                         '$tenant' => 5,
-                        'name' => 'Superman5',
-                    ])],
-                    onNext: function (Document $document) use (&$sequences) {
-                        $sequences[$document->getId()] = $document->getSequence();
-                    }
-                );
+                        'name' => 'Superman5 updated',
+                    ])]);
 
-            $this->assertCount(2, $sequences);
-            $this->assertNotEmpty($sequences[$doc4Id]);
-            $this->assertNotEmpty($sequences[$doc5Id]);
+                // Set to tenant 4 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(4)
+                    ->getDocument(__FUNCTION__, $doc4Id);
 
-            // Set to tenant 4 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(4)
-                ->getDocument(__FUNCTION__, $doc4Id);
+                $this->assertEquals('Superman4 updated', $doc['name']);
+                $this->assertEquals(4, $doc->getTenant());
 
-            $this->assertEquals('Superman4', $doc['name']);
-            $this->assertEquals(4, $doc->getTenant());
-            $this->assertEquals($doc->getSequence(), $sequences[$doc4Id]);
+                // Set to tenant 5 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(5)
+                    ->getDocument(__FUNCTION__, $doc5Id);
 
-            // Set to tenant 5 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(5)
-                ->getDocument(__FUNCTION__, $doc5Id);
-
-            $this->assertEquals('Superman5', $doc['name']);
-            $this->assertEquals(5, $doc->getTenant());
-            $this->assertEquals($doc->getSequence(), $sequences[$doc5Id]);
-
-            // Update names via upsert
+                $this->assertEquals('Superman5 updated', $doc['name']);
+                $this->assertEquals(5, $doc->getTenant());
+            }
+        } finally {
             $database
-                ->setTenant(null)
-                ->setTenantPerDocument(true)
-                ->upsertDocuments(__FUNCTION__, [new Document([
-                    '$id' => $doc4Id,
-                    '$tenant' => 4,
-                    'name' => 'Superman4 updated',
-                ]), new Document([
-                    '$id' => $doc5Id,
-                    '$tenant' => 5,
-                    'name' => 'Superman5 updated',
-                ])]);
+                ->setSharedTables($sharedTables)
+                ->setTenantPerDocument($tenantPerDocument)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
+        }
+    }
 
-            // Set to tenant 4 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(4)
-                ->getDocument(__FUNCTION__, $doc4Id);
+    public function testSharedTablesReadsScopeToTheSelectedTenant(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
 
-            $this->assertEquals('Superman4 updated', $doc['name']);
-            $this->assertEquals(4, $doc->getTenant());
-
-            // Set to tenant 5 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(5)
-                ->getDocument(__FUNCTION__, $doc5Id);
-
-            $this->assertEquals('Superman5 updated', $doc['name']);
-            $this->assertEquals(5, $doc->getTenant());
+        if (! $database->getSharedTables()) {
+            $this->markTestSkipped('Reads are only tenant scoped when tables are shared');
         }
 
-        // Reset instance
-        $database
-            ->setSharedTables($sharedTables)
-            ->setTenantPerDocument($tenantPerDocument)
-            ->setTenant($tenant)
-            ->setNamespace($namespace)
-            ->setDatabase($schema);
+        $tenant = $database->getTenant();
+        $tenantPerDocument = $database->getTenantPerDocument();
+        $collection = 'sharedTablesTenantScopedReads';
+
+        try {
+            // A collection whose own metadata row is tenantless, the way a shared pool
+            // holds one definition for every tenant on it. The collection lookup then has
+            // no tenant to refuse on, so the document read is the only thing keeping one
+            // tenant out of another's rows.
+            $database->setTenant(null)->setTenantPerDocument(true);
+
+            $database->createCollection(new Collection(
+                id: $collection,
+                attributes: [Attribute::string(key: 'name', size: 128, required: true)],
+                permissions: [
+                    Permission::create(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                documentSecurity: false,
+            ));
+
+            $database->createDocument($collection, new Document([
+                Document::ID => 'one',
+                Document::TENANT => 1,
+                'name' => 'tenant one',
+            ]));
+            $database->createDocument($collection, new Document([
+                Document::ID => 'two',
+                Document::TENANT => 2,
+                'name' => 'tenant two',
+            ]));
+
+            $database->setTenantPerDocument(false)->setTenant(1);
+
+            $this->assertSame(
+                ['one'],
+                \array_map(fn (Document $document) => $document->getId(), $database->find($collection))
+            );
+            $this->assertSame(1, $database->count($collection));
+            $this->assertTrue($database->getDocument($collection, 'two')->isEmpty());
+
+            $database->setTenant(null)->setTenantPerDocument(true);
+
+            $this->assertCount(0, $database->find($collection));
+            $this->assertSame(0, $database->count($collection));
+            $this->assertTrue($database->getDocument($collection, 'one')->isEmpty());
+        } finally {
+            $database->setTenant($tenant)->setTenantPerDocument($tenantPerDocument);
+        }
     }
 
     public function testCacheFallbackOnFailure(): void

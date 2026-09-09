@@ -13,16 +13,16 @@ use Utopia\Database\Storage;
 class Tenancy extends Interceptor
 {
     /**
-     * @param int|string $tenant The current tenant identifier
+     * @param int|string|null $tenant The ambient tenant identifier, or null when each document carries its own
      * @param string $column The column name used to store the tenant value
      */
     public function __construct(
-        private int|string $tenant,
+        private int|string|null $tenant,
         private string $column = Storage::TENANT,
     ) {
     }
 
-    public function getTenant(): int|string
+    public function getTenant(): int|string|null
     {
         return $this->tenant;
     }

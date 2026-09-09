@@ -16,18 +16,36 @@ use Utopia\Query\Hook\Join\Placement;
 class TenantFilter implements Filter, JoinFilter
 {
     /**
-     * @param int|string $tenant The current tenant identifier
+     * @var list<int|string|null>
+     */
+    private array $tenants;
+
+    /**
+     * @param int|string|null|list<int|string|null> $tenant The selected tenant, a list of them for a
+     *                                                     query that spans tenants, or null when none
+     *                                                     is selected: a shared table then matches no
+     *                                                     tenant's rows rather than every tenant's
      * @param string $metadataCollection The metadata collection name; metadata tables allow NULL tenants
      * @param string $collection The actual collection/table name being queried (not the alias)
      * @param string $allowNullColumn When set, unmatched outer-join rows keep a NULL tenant
      */
     public function __construct(
-        private int|string $tenant,
+        int|string|null|array $tenant,
         private string $metadataCollection = '',
         private string $collection = '',
         private string $allowNullColumn = '',
         private string $quoteChar = '`',
     ) {
+        if (! \is_array($tenant)) {
+            $tenant = [$tenant];
+        }
+
+        $this->tenants = $tenant === [] ? [null] : $tenant;
+    }
+
+    private function placeholders(): string
+    {
+        return \implode(', ', \array_fill(0, \count($this->tenants), '?'));
     }
 
     public function filter(string $table): Condition
@@ -47,10 +65,12 @@ class TenantFilter implements Filter, JoinFilter
             && ($name === $this->metadataCollection
                 || $name === Storage::permissionsTable($this->metadataCollection));
 
+        $placeholders = $this->placeholders();
+
         if ($isMetadata) {
-            $condition = new Condition("({$prefix}".Storage::TENANT." IN (?) OR {$prefix}".Storage::TENANT." IS NULL)", [$this->tenant]);
+            $condition = new Condition("({$prefix}".Storage::TENANT." IN ({$placeholders}) OR {$prefix}".Storage::TENANT." IS NULL)", $this->tenants);
         } else {
-            $condition = new Condition("{$prefix}".Storage::TENANT." IN (?)", [$this->tenant]);
+            $condition = new Condition("{$prefix}".Storage::TENANT." IN ({$placeholders})", $this->tenants);
         }
 
         if ($this->allowNullColumn === '') {
@@ -62,7 +82,7 @@ class TenantFilter implements Filter, JoinFilter
 
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
-        $condition = new Condition("{$table}.".Storage::TENANT." IN (?)", [$this->tenant]);
+        $condition = new Condition("{$table}.".Storage::TENANT." IN ({$this->placeholders()})", $this->tenants);
 
         if ($joinType === JoinType::FullOuter) {
             $condition = AllowNullColumn::wrap(

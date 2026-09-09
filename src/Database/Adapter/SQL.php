@@ -641,7 +641,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if (
             empty($selections)
             && ! $forUpdate
-            && ! ($this->sharedTables && $this->tenant !== null)
+            && ! $this->sharedTables
             && ! $this->queriesHaveJoins($queries)
         ) {
             $tableExpr = $this->getSQLTable($name);
@@ -1161,13 +1161,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $documents;
         }
 
-        $builder = $this->newBuilder($collection);
+        $builder = $this->newBuilder($collection, tenants: $tenants);
         $builder->select([Storage::UID, Storage::SEQUENCE]);
-        $queries = [BaseQuery::equal(Storage::UID, $documentIds)];
-        if (! empty($tenants)) {
-            $queries[] = BaseQuery::equal(Storage::TENANT, $tenants);
-        }
-        $builder->filter($queries);
+        $builder->filter([BaseQuery::equal(Storage::UID, $documentIds)]);
 
         $result = $builder->build();
         $stmt = $this->executeResult($result, Event::DocumentRead);
@@ -1290,7 +1286,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             empty($queries)
             && empty($cursor)
             && ! $this->authorization->getStatus()
-            && ! ($this->sharedTables && $this->tenant !== null)
+            && ! $this->sharedTables
             && (count($orderAttributes) === 1)
             && ($orderAttributes[0] === Document::SEQUENCE)
             && (empty($orderTypes) || ($orderTypes[0] ?? OrderDirection::Asc) === OrderDirection::Asc)
@@ -1703,7 +1699,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             empty($otherQueries)
             && $max === null
             && ! $this->authorization->getStatus()
-            && ! ($this->sharedTables && $this->tenant !== null)
+            && ! $this->sharedTables
         ) {
             $sql = "SELECT COUNT(1) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
 
@@ -1790,7 +1786,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             empty($otherQueries)
             && $max === null
             && ! $this->authorization->getStatus()
-            && ! ($this->sharedTables && $this->tenant !== null)
+            && ! $this->sharedTables
         ) {
             $sql = "SELECT SUM({$this->quote($attribute)}) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
 
@@ -3130,11 +3126,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Create and configure a new query builder for a given table.
      *
-     * Automatically applies tenant filtering when shared tables are enabled.
+     * Applies tenant filtering whenever shared tables are enabled, so that a query made
+     * with no tenant selected matches no tenant's rows rather than every tenant's.
+     *
+     * @param  list<int|string|null>  $tenants  Tenants this query spans, for the reads that cross
+     *                                          tenants deliberately; defaults to the selected tenant
      *
      * @throws DatabaseException
      */
-    protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false): SQLBuilder
+    protected function newBuilder(string $table, string $alias = '', bool $allowNullTenant = false, array $tenants = []): SQLBuilder
     {
         $builder = $this->createBuilder()->from($this->getSQLTableRaw($table), $alias);
 
@@ -3142,13 +3142,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         // instance across builders to avoid allocating it on every read.
         $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
         $builder->addHook($this->attributeMap);
-        if ($this->sharedTables && $this->tenant !== null) {
+        if ($this->sharedTables) {
             $allowNullColumn = '';
             if ($allowNullTenant) {
                 $allowNullColumn = ($alias !== '' ? $alias : $table).'.'.Storage::TENANT;
             }
             $builder->addHook(new TenantFilter(
-                $this->tenant,
+                $tenants === [] ? $this->tenant : $tenants,
                 Database::METADATA,
                 $table,
                 $allowNullColumn,
@@ -3205,7 +3205,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             permDocumentColumn: Storage::PERM_DOCUMENT,
             permRoleColumn: Storage::PERM_PERMISSION,
             permTypeColumn: Storage::PERM_TYPE,
-            subqueryFilter: ($this->sharedTables && $this->tenant !== null) ? new TenantFilter($this->tenant) : null,
+            subqueryFilter: $this->sharedTables ? new TenantFilter($this->tenant) : null,
             quoteChar: $this->getIdentifierQuoteChar(),
         );
     }
@@ -3213,13 +3213,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Synchronize write hooks with current adapter configuration.
      *
-     * Ensures Permission is always registered and Tenant is registered
-     * when shared tables with a tenant are active.
+     * Ensures Permission is always registered and Tenancy is registered
+     * whenever shared tables are active. The hook takes each row's tenant from
+     * the document being written and falls back to the ambient tenant, so it is
+     * needed in per-document mode, where there is no ambient tenant at all.
      */
     protected function syncWriteHooks(): void
     {
         $this->removeWriteHook(Tenancy::class);
-        if ($this->sharedTables && $this->tenant !== null) {
+        if ($this->sharedTables) {
             $this->addWriteHook(new Tenancy($this->tenant));
         }
     }

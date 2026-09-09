@@ -7,7 +7,6 @@ use PDOException;
 use PHPUnit\Framework\Attributes\Depends;
 use Tests\E2E\Adapter\Support\InterleavingDatabase;
 use Tests\E2E\Adapter\Support\MutationRecorder;
-use Tests\E2E\Adapter\Support\ReadCountingDatabase;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
@@ -5166,16 +5165,25 @@ trait DocumentTests
     public function testUpsertDocumentsReadsStoredRowsInOneBatch(): void
     {
         $shared = $this->getDatabase();
+        $adapter = $shared->getAdapter();
 
-        if (! $shared->getAdapter()->hasFeature(Feature\Upserts::class)) {
+        if (! $adapter->hasFeature(Feature\Upserts::class)) {
             $this->expectNotToPerformAssertions();
 
             return;
         }
 
+        if (! $adapter->hasFeature(Feature\RawQuery::class)) {
+            // The statements an adapter issues are only counted in the SQL base,
+            // so there is no boundary to measure here. The batching itself lives
+            // in Database::upsertDocumentsWithIncrease, which every adapter runs,
+            // so the SQL lanes cover the regression for all of them.
+            $this->markTestSkipped($adapter::class.' issues no countable statements.');
+        }
+
         // A cache-free handle on the same adapter: the stats workers upsert rows
         // no request has read, so every stored row is a real read for them.
-        $database = new ReadCountingDatabase($shared->getAdapter(), new Cache(new NoneCacheAdapter()));
+        $database = new Database($adapter, new Cache(new NoneCacheAdapter()));
         $database->setAuthorization($shared->getAuthorization());
 
         $collection = 'upsert_batch_read';
@@ -5200,22 +5208,38 @@ trait DocumentTests
             $document->setAttribute('value', $index + 100);
         }
 
-        $database->resetReadCounts();
-        $updated = $database->upsertDocuments($collection, $documents);
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
 
-        $this->assertEquals(count($documents), $updated);
+        try {
+            $profiler->reset();
+            $updated = $database->upsertDocuments($collection, $documents);
+        } finally {
+            $database->disableProfiling();
+        }
+
+        $table = $database->getNamespace().'_'.$collection;
+        $reads = 0;
+        foreach ($profiler->getLogs() as $log) {
+            if (\str_starts_with(\ltrim($log->query), 'SELECT') && \str_contains($log->query, $table)) {
+                $reads++;
+            }
+        }
+
+        $this->assertSame(count($documents), $updated);
         $this->assertGreaterThan(
             0,
-            $database->documentReads + $database->collectionReads,
-            'The upsert read nothing at all, so the bound below would hold vacuously',
+            $reads,
+            'The upsert issued no read against '.$table.' at all, so the bound below would hold vacuously',
         );
         $this->assertLessThan(
             count($documents),
-            $database->documentReads + $database->collectionReads,
+            $reads,
             \sprintf(
-                'Upserting %d documents issued %d reads: the stored rows are being read one document at a time.',
+                'Upserting %d documents issued %d reads against %s: the stored rows are being read one document at a time.',
                 count($documents),
-                $database->documentReads + $database->collectionReads,
+                $reads,
+                $table,
             ),
         );
 

@@ -9457,8 +9457,11 @@ class Database
             }
         }
 
+        $internalKeys = [];
+
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
+            $internalKeys[$attribute['$id']] = true;
         }
 
         $hasRelationshipSelections = false;
@@ -9480,7 +9483,11 @@ class Database
                 continue;
             }
 
-            if (\is_null($value)) {
+            // filter() strips the leading "$" off an internal key, leaving a name a user
+            // attribute is allowed to have ("$collection" -> "collection"). An internal value
+            // never reaches the document under that name, so the alias lookup below has
+            // nothing of its own to find and can only steal the user's attribute.
+            if (\is_null($value) && !isset($internalKeys[$key])) {
                 $filteredKey = $this->adapter->filter($key);
                 $value = $document->getAttribute($filteredKey);
 

@@ -483,4 +483,111 @@ class DocumentTest extends TestCase
         $this->assertNull($empty->getSequence());
         $this->assertNotSame('', $empty->getSequence());
     }
+
+    public function testConstructionPreservesScalarArraysAndConvertsOnlyDocuments(): void
+    {
+        $object = new \stdClass();
+        $input = [
+            'empty' => [],
+            'values' => [7 => 'text', 'null' => null, 'bool' => false, 'object' => $object],
+            'child' => ['$id' => 'child', 'name' => 'nested'],
+            'children' => ['first' => ['$id' => 'first'], 9 => 'plain'],
+        ];
+        $document = new Document($input);
+
+        $child = $document->getAttribute('child');
+        $children = $document->getArray('children');
+
+        $this->assertSame([], $document->getAttribute('empty'));
+        $this->assertSame($input['values'], $document->getAttribute('values'));
+        $this->assertInstanceOf(Document::class, $child);
+        $this->assertSame('child', $child->getId());
+        $this->assertInstanceOf(Document::class, $children['first']);
+        $this->assertSame('first', $children['first']->getId());
+        $this->assertSame('plain', $children[9]);
+        $this->assertSame($input['children']['first'], $children['first']->getArrayCopy());
+    }
+
+    public function testArrayCopyPreservesKeysAndFiltersNestedDocuments(): void
+    {
+        $document = new Document([
+            'name' => 'parent',
+            'secret' => 'hidden',
+            'values' => [7 => 'seven', 'null' => null, 'empty' => []],
+            'children' => ['child' => new Document(['name' => 'nested', 'secret' => 'hidden'])],
+        ]);
+        $copy = $document->getArrayCopy(['name', 'secret', 'values', 'children'], ['secret']);
+
+        $this->assertSame([
+            'name' => 'parent',
+            'values' => [7 => 'seven', 'null' => null, 'empty' => []],
+            'children' => ['child' => ['name' => 'nested']],
+        ], $copy);
+        $copy['values'][7] = 'changed';
+        $copy['children']['child']['name'] = 'changed';
+
+        $nested = $document->getArray('children')['child'];
+
+        $this->assertSame('seven', $document->getArray('values')[7]);
+        $this->assertInstanceOf(Document::class, $nested);
+        $this->assertSame('nested', $nested->getAttribute('name'));
+    }
+
+    public function testClonePreservesScalarKeysAndIsolatesNestedDocuments(): void
+    {
+        $object = new \stdClass();
+        $original = new Document([
+            'empty' => [],
+            'values' => [7 => 'seven', 'object' => $object],
+            'children' => ['child' => new Document(['name' => 'nested']), 9 => 'plain'],
+        ]);
+        $copy = clone $original;
+        $this->assertIsArray($copy['values']);
+        $copy['values'][7] = 'changed';
+
+        $copiedChild = $copy->getArray('children')['child'];
+        $this->assertInstanceOf(Document::class, $copiedChild);
+        $copiedChild->setAttribute('name', 'changed');
+
+        $originalChild = $original->getArray('children')['child'];
+
+        $this->assertSame([], $copy->getAttribute('empty'));
+        $this->assertSame([7, 'object'], array_keys($copy->getArray('values')));
+        $this->assertSame($object, $copy->getArray('values')['object']);
+        $this->assertSame('seven', $original->getArray('values')[7]);
+        $this->assertInstanceOf(Document::class, $originalChild);
+        $this->assertSame('nested', $originalChild->getAttribute('name'));
+        $this->assertSame('plain', $copy->getArray('children')[9]);
+    }
+
+    public function testArrayCopyAndCloneDetachReferencedArrayElements(): void
+    {
+        $scalar = 'before';
+        $nested = ['value' => 'before'];
+        $document = new Document(['values' => ['first' => &$scalar, 7 => &$nested, 'last' => false]]);
+        $export = $document->getArrayCopy();
+        $clone = clone $document;
+        $scalar = 'after';
+        $nested['value'] = 'after';
+
+        $expected = ['first' => 'before', 7 => ['value' => 'before'], 'last' => false];
+        $this->assertSame($expected, $export['values']);
+        $this->assertSame($expected, $clone->getAttribute('values'));
+        $this->assertSame('after', $document->getArray('values')['first']);
+    }
+
+    public function testScalarArrayExportAvoidsReferenceAllocationOverhead(): void
+    {
+        $document = new Document(['values' => range(1, 100_000)]);
+        memory_reset_peak_usage();
+        $before = memory_get_usage();
+        $copy = $document->getArrayCopy();
+        $allocated = memory_get_peak_usage() - $before;
+
+        $this->assertIsArray($copy['values']);
+        $this->assertCount(100_000, $copy['values']);
+        $this->assertLessThan(3 * 1024 * 1024, $allocated, 'Export should copy the array without wrapping every element in a reference');
+        $copy['values'][0] = 0;
+        $this->assertSame(1, $document->getArray('values')[0]);
+    }
 }

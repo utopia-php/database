@@ -2461,7 +2461,7 @@ trait Documents
             return true;
         }
 
-        [$collectionKey] = $this->getCacheKeys($collectionId, $id);
+        [$collectionKey] = $this->getCacheBaseKeys($collectionId, $id);
 
         return $this->advanceDocumentCacheEpoch($collectionKey);
     }

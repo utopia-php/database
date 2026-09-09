@@ -14,7 +14,7 @@ use Utopia\Query\Method;
 class Select extends Base
 {
     /**
-     * @var array<int|string, mixed>
+     * @var array<int|string, true>
      */
     protected array $schema = [];
 
@@ -31,7 +31,7 @@ class Select extends Base
         foreach ($attributes as $attribute) {
             /** @var string $attrKey */
             $attrKey = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
-            $this->schema[$attrKey] = $attribute->getArrayCopy();
+            $this->schema[$attrKey] = true;
         }
     }
 

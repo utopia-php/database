@@ -2358,8 +2358,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return '{}';
         }
 
-        foreach ($value as &$item) {
-            $item = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
+        foreach ($value as $index => $item) {
+            $value[$index] = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
         }
 
         return '{'.implode(',', $value).'}';

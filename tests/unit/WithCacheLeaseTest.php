@@ -13,10 +13,13 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 
 class WithCacheLeaseTest extends TestCase
 {
     private LeasableMemoryCache $cacheAdapter;
+
+    private DatabaseMemory $adapter;
 
     private Database $database;
 
@@ -25,7 +28,8 @@ class WithCacheLeaseTest extends TestCase
     protected function setUp(): void
     {
         $this->cacheAdapter = new LeasableMemoryCache();
-        $this->database = new Database(new DatabaseMemory(), new Cache($this->cacheAdapter));
+        $this->adapter = new DatabaseMemory();
+        $this->database = new Database($this->adapter, new Cache($this->cacheAdapter));
         $this->database
             ->setDatabase('utopiaTests')
             ->setNamespace('with_cache_' . \uniqid());
@@ -42,6 +46,52 @@ class WithCacheLeaseTest extends TestCase
         ]));
 
         $this->key = $this->database->getQueryCacheKey('projects');
+    }
+
+    /**
+     * Write to the row through the adapter, bypassing Database and therefore the
+     * cache purge, so the cache is left holding the previous copy.
+     */
+    private function staleCache(string $attribute, string $value): void
+    {
+        $collection = $this->database->getCollection('projects');
+        $document = $this->adapter->getDocument($collection, 'project');
+        $document->setAttribute($attribute, $value);
+        $this->adapter->updateDocument($collection, 'project', $document, true);
+    }
+
+    public function testDocumentPurgeRemovesAllVariantsAndRejectsStaleWrites(): void
+    {
+        $plain = fn (): mixed => $this->database->getDocument('projects', 'project')->getAttribute('name');
+        $projected = fn (): mixed => $this->database
+            ->getDocument('projects', 'project', [Query::select(['name'])])
+            ->getAttribute('name');
+
+        $this->assertSame('fresh', $plain());
+        $this->assertSame('fresh', $projected());
+
+        [$collectionKey, , $plainHash] = $this->database->getCacheKeys('projects', 'project');
+        $epoch = $this->cacheAdapter->load($collectionKey . '#epoch', Database::TTL);
+        $this->assertIsString($epoch);
+
+        // The key, payload and lease a reader that started before the purge writes back under.
+        $staleKey = $plainHash . '#' . $epoch;
+        $lease = $this->cacheAdapter->getGeneration($staleKey);
+        $stalePayload = $this->cacheAdapter->load($staleKey, Database::TTL);
+        $this->assertIsArray($stalePayload);
+
+        $this->staleCache('name', 'changed');
+
+        // Both variants still answer 'fresh' from cache, so the purge has something to invalidate.
+        $this->assertSame('fresh', $plain());
+        $this->assertSame('fresh', $projected());
+
+        $this->assertTrue($this->database->purgeCachedDocument('projects', 'project'));
+
+        $this->cacheAdapter->saveWithLease($staleKey, $stalePayload, $staleKey, $lease);
+
+        $this->assertSame('changed', $plain());
+        $this->assertSame('changed', $projected());
     }
 
     public function testStaleListWriteAfterConcurrentPurgeIsRejected(): void

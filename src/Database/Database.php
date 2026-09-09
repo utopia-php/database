@@ -1628,12 +1628,14 @@ class Database
             }
 
             /** @var array<int|string, mixed> $value */
-            foreach ($value as $index => $node) {
-                if ($node !== null) {
-                    foreach ($filters as $filter) {
-                        $node = $this->encodeAttribute($filter, $node, $document);
+            if (! empty($filters)) {
+                foreach ($value as $index => $node) {
+                    if ($node !== null) {
+                        foreach ($filters as $filter) {
+                            $node = $this->encodeAttribute($filter, $node, $document);
+                        }
+                        $value[$index] = $node;
                     }
-                    $value[$index] = $node;
                 }
             }
 
@@ -1676,13 +1678,18 @@ class Database
         }
 
         $dropped = [];
-        foreach (\array_keys($document->getArrayCopy()) as $key) {
-            if (\str_starts_with((string) $key, '$') || isset($known[$key])) {
+        $documentKeys = [];
+        foreach ($document as $key => $value) {
+            $documentKeys[] = (string) $key;
+        }
+
+        foreach ($documentKeys as $key) {
+            if (\str_starts_with($key, '$') || isset($known[$key])) {
                 continue;
             }
 
             $dropped[] = $key;
-            $document->removeAttribute((string) $key);
+            $document->removeAttribute($key);
         }
 
         if (! empty($dropped)) {
@@ -1741,8 +1748,13 @@ class Database
             }
         }
 
+        $internalKeys = [];
+
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
+            /** @var string $internalKey */
+            $internalKey = $attribute[Document::ID] ?? '';
+            $internalKeys[$internalKey] = true;
         }
 
         $hasSelections = ! empty($selections);
@@ -1773,7 +1785,11 @@ class Database
             $filters = $attribute['filters'] ?? [];
             $value = $document->getAttribute($key);
 
-            if (\is_null($value)) {
+            // filter() strips the leading "$" off an internal key, leaving a name a user
+            // attribute is allowed to have ("$collection" -> "collection"). An internal value
+            // never reaches the document under that name, so the alias lookup below has
+            // nothing of its own to find and can only steal the user's attribute.
+            if (\is_null($value) && ! isset($internalKeys[$key])) {
                 $filteredKey = $this->adapter->filter($key);
                 $value = $document->getAttribute($filteredKey);
 
@@ -2342,10 +2358,9 @@ class Database
     }
 
     /**
-     * @param  array<string>  $selects
-     * @return array{0: string, 1: string, 2: string}
+     * @return array{0: string, 1: string}
      */
-    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    public function getCacheBaseKeys(string $collectionId, ?string $documentId = null): array
     {
         if ($this->adapter->supports(Capability::Hostname)) {
             $hostname = $this->adapter->getHostname();
@@ -2371,9 +2386,18 @@ class Database
             $collectionId
         );
 
-        if ($documentId) {
-            $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
+        return [$collectionKey, $documentId ? "{$collectionKey}:{$documentId}" : ''];
+    }
 
+    /**
+     * @param  array<string>  $selects
+     * @return array{0: string, 1: string, 2: string}
+     */
+    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    {
+        [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $documentId);
+
+        if ($documentId) {
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
@@ -2411,7 +2435,7 @@ class Database
 
         return [
             $collectionKey,
-            $documentKey ?? '',
+            $documentKey,
             $documentHashKey ?? '',
         ];
     }

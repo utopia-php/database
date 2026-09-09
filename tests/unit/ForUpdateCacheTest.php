@@ -55,6 +55,17 @@ class ForUpdateCacheTest extends TestCase
         $this->adapter->updateDocument($collection, 'project', $document, true);
     }
 
+    public function testPurgeMakesTheNextReadReturnFreshData(): void
+    {
+        $this->assertSame('stale', $this->database->getDocument('projects', 'project')->getAttribute('name'));
+        $this->staleCache('name', 'fresh');
+        $this->assertSame('stale', $this->database->getDocument('projects', 'project')->getAttribute('name'));
+
+        $this->database->purgeCachedDocument('projects', 'project');
+
+        $this->assertSame('fresh', $this->database->getDocument('projects', 'project')->getAttribute('name'));
+    }
+
     public function testForUpdateReadBypassesStaleCache(): void
     {
         $cached = $this->database->getDocument('projects', 'project');

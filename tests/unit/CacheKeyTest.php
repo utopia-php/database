@@ -44,6 +44,29 @@ class CacheKeyTest extends TestCase
         return $hashKey;
     }
 
+    public function testBaseKeysMatchScopedVariantKeys(): void
+    {
+        $adapter = $this->createMock(Adapter::class);
+        $adapter->method('supports')->willReturnCallback(
+            fn (Capability $capability): bool => $capability === Capability::Hostname
+        );
+        $adapter->method('getHostname')->willReturn('mysql-project');
+        $adapter->method('getNamespace')->willReturn('project');
+        $adapter->method('getTenant')->willReturn(42);
+        $adapter->method('getSharedTables')->willReturn(true);
+
+        $db = new Database($adapter, new Cache(new None()));
+        $db->setGlobalCollections(['global']);
+
+        foreach ([['col', 'doc'], [Database::METADATA, 'col'], [Database::METADATA, 'global']] as [$collection, $document]) {
+            $full = $db->getCacheKeys($collection, $document, ['name']);
+            $withoutHash = $db->getCacheBaseKeys($collection, $document);
+
+            $this->assertSame([$full[0], $full[1]], $withoutHash);
+            $this->assertNotSame('', $full[2]);
+        }
+    }
+
     public function testSameConfigProducesSameCacheKey(): void
     {
         $db1 = $this->createDatabase();

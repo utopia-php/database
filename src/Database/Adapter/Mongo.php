@@ -3048,7 +3048,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             /** @var array<mixed> $value */
-            foreach ($value as &$node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case ColumnType::Datetime:
                         if (! ($node instanceof UTCDateTime)) {
@@ -3069,8 +3069,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     default:
                         break;
                 }
+                $value[$index] = $node;
             }
-            unset($node);
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
         $rawIndexesAttr = $collection->getAttribute('indexes');
@@ -3159,7 +3159,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
 
             /** @var array<mixed> $value */
-            foreach ($value as &$node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case ColumnType::BigInteger:
                     case ColumnType::BigSerial:
@@ -3193,8 +3193,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     default:
                         break;
                 }
+                $value[$index] = $node;
             }
-            unset($node);
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 

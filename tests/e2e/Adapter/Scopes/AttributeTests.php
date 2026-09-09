@@ -1875,18 +1875,64 @@ trait AttributeTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(new Collection(id: 'datetime_auto_filter'));
+        $collection = 'datetime_auto_filter';
 
-        $this->expectException(Exception::class);
-        $database->createAttribute('datetime_auto', Attribute::datetime(key: 'date_auto', filters: ['json']));
-        $collection = $database->getCollection('datetime_auto_filter');
-        $attribute = $collection->attributes[0];
-        $this->assertEquals([ColumnType::Datetime->value, 'json'], $attribute['filters']);
-        $database->updateAttribute('datetime_auto', 'date_auto', ColumnType::Datetime->value, 0, false, filters: []);
-        $collection = $database->getCollection('datetime_auto_filter');
-        $attribute = $collection->attributes[0];
-        $this->assertEquals([ColumnType::Datetime->value, 'json'], $attribute['filters']);
-        $database->deleteCollection('datetime_auto_filter');
+        // The same attribute through both public creation paths: createCollection() takes it
+        // inline, createAttribute() adds it to a collection that already exists. Both have to
+        // attach the datetime filter, or the same value written through one of them is stored
+        // and returned differently from the other.
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::datetime(key: 'inline')],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+
+        $offset = '2024-01-02T03:04:05.000+05:00';
+        $database->createDocument($collection, new Document([
+            Document::ID => 'offset',
+            'inline' => $offset,
+        ]));
+        $database->createDocument($collection, new Document([
+            Document::ID => 'utc',
+            'inline' => '2024-01-01 22:04:05.000',
+        ]));
+
+        // The filter normalises the offset on the way in and restores one on the way out, so
+        // the two spellings of the same instant come back as one string, carrying its zone.
+        // createCollection() runs no validator over its attributes, so a missing filter here
+        // costs the normalisation silently rather than refusing the write.
+        $this->assertSame(
+            '2024-01-01T22:04:05.000+00:00',
+            $database->getDocument($collection, 'offset')->getAttribute('inline')
+        );
+        $this->assertSame(
+            $database->getDocument($collection, 'offset')->getAttribute('inline'),
+            $database->getDocument($collection, 'utc')->getAttribute('inline')
+        );
+
+        $database->createAttribute($collection, Attribute::datetime(key: 'added'));
+
+        $database->createDocument($collection, new Document([
+            Document::ID => 'both',
+            'inline' => $offset,
+            'added' => $offset,
+        ]));
+
+        $both = $database->getDocument($collection, 'both');
+        $this->assertSame($both->getAttribute('inline'), $both->getAttribute('added'));
+
+        $attributes = $database->getCollection($collection)->attributes;
+        $this->assertCount(2, $attributes);
+
+        foreach ($attributes as $attribute) {
+            $this->assertSame([ColumnType::Datetime->value], $attribute['filters']);
+        }
+
+        $database->deleteCollection($collection);
     }
 
     public function testCreateAttributesBigIntIgnoresSizeMetadata(): void

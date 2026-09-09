@@ -7,6 +7,7 @@ use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
@@ -65,7 +66,7 @@ trait Attributes
             throw new NotFoundException('Collection not found');
         }
 
-        if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Vector, ColumnType::Object], true)) {
+        if (in_array($type, Database::ATTRIBUTE_FILTER_TYPES, true)) {
             $filters[] = $type->value;
             $filters = array_unique($filters);
             $attribute->filters = $filters;

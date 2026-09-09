@@ -54,7 +54,7 @@ trait Collections
         $metadata = $collection->metadata;
 
         foreach ($attributes as $attribute) {
-            if (in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Vector, ColumnType::Object], true)) {
+            if (in_array($attribute->type, Database::ATTRIBUTE_FILTER_TYPES, true)) {
                 $existingFilters = $attribute->filters;
                 $attribute->filters = array_values(
                     array_unique(array_merge($existingFilters, [$attribute->type->value]))

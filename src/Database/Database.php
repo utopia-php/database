@@ -92,6 +92,22 @@ class Database
     public const DELETE_BATCH_SIZE = 1_000;
 
     /**
+     * Attribute types whose stored value is produced by a filter of the same name. Both public
+     * creation paths add it, so an attribute made through createCollection() encodes and decodes
+     * the same way as the identical one made through createAttribute().
+     *
+     * @var list<ColumnType>
+     */
+    public const array ATTRIBUTE_FILTER_TYPES = [
+        ColumnType::Point,
+        ColumnType::Linestring,
+        ColumnType::Polygon,
+        ColumnType::Vector,
+        ColumnType::Object,
+        ColumnType::Datetime,
+    ];
+
+    /**
      * List of Internal attributes
      *
      * @var array<array<string, mixed>>

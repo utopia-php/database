@@ -348,9 +348,13 @@ trait Documents
             $selections
         );
 
+        // Collection definitions are cacheable because every schema mutation
+        // persists the definition through updateMetadata(), which writes the
+        // row via the METADATA collection's own document path and therefore
+        // advances the METADATA cache epoch. Any new schema mutator must keep
+        // writing through that path, or its readers will serve a stale schema.
         $cacheable = ! $forUpdate
             && ! $this->adapter->inTransaction()
-            && $collection->getId() !== self::METADATA
             && empty($joins);
         $physicalKey = '';
         if ($cacheable) {

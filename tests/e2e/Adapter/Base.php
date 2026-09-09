@@ -11,6 +11,7 @@ use Tests\E2E\Adapter\Scopes\GeneralTests;
 use Tests\E2E\Adapter\Scopes\IndexTests;
 use Tests\E2E\Adapter\Scopes\JoinComboTests;
 use Tests\E2E\Adapter\Scopes\JoinTests;
+use Tests\E2E\Adapter\Scopes\MetadataCacheTests;
 use Tests\E2E\Adapter\Scopes\ObjectAttributeTests;
 use Tests\E2E\Adapter\Scopes\OperatorTests;
 use Tests\E2E\Adapter\Scopes\PermissionTests;
@@ -35,6 +36,7 @@ abstract class Base extends TestCase
     use IndexTests;
     use JoinComboTests;
     use JoinTests;
+    use MetadataCacheTests;
     use ObjectAttributeTests;
     use OperatorTests;
     use PermissionTests;

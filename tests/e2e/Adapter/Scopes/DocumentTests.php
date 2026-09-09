@@ -845,10 +845,10 @@ trait DocumentTests
 
         $collectionId = 'cacheEmptyCollection';
 
-        // Metadata point caching is disabled, so a missing collection must not
-        // leave a negative marker behind.
+        // A missing collection is negative-cached like any other document, so
+        // the marker below is what createCollection() has to invalidate.
         $this->assertTrue($database->getCollection($collectionId)->isEmpty());
-        $this->assertFalse($this->loadDocumentPointCache($database, Database::METADATA, $collectionId));
+        $this->assertNotFalse($this->loadDocumentPointCache($database, Database::METADATA, $collectionId));
 
         // createCollection() writes the metadata row via createDocument(METADATA),
         // which must purge that marker — otherwise the collection would keep

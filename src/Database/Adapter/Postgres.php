@@ -256,6 +256,7 @@ class Postgres extends SQL
                 _tenant INTEGER DEFAULT NULL,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
+                _column VARCHAR(255) NOT NULL DEFAULT '',
                 _document VARCHAR(255) NOT NULL
             );
         ";
@@ -265,7 +266,7 @@ class Postgres extends SQL
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
             ";
@@ -274,7 +275,7 @@ class Postgres extends SQL
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";
@@ -1046,11 +1047,14 @@ class Postgres extends SQL
         }
 
         $permissions = [];
+        $permissionBinds = [];
         foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
+            foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
+                $role = \str_replace('"', '', $permission['role']);
                 $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', :_uid {$sqlTenant})";
+                $columnBind = ":_column_{$type}_{$i}";
+                $permissionBinds[$columnBind] = $permission['column'];
+                $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$sqlTenant})";
             }
         }
 
@@ -1060,7 +1064,7 @@ class Postgres extends SQL
             $sqlTenant = $this->sharedTables ? ', _tenant' : '';
 
             $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$sqlTenant})
 				VALUES {$permissions}
 			";
 
@@ -1069,6 +1073,9 @@ class Postgres extends SQL
             $stmtPermissions->bindValue(':_uid', $document->getId());
             if ($sqlTenant) {
                 $stmtPermissions->bindValue(':_tenant', $document->getTenant());
+            }
+            foreach ($permissionBinds as $key => $value) {
+                $stmtPermissions->bindValue($key, $value);
             }
         }
 
@@ -1133,10 +1140,11 @@ class Postgres extends SQL
             $values = [];
             $binds = [];
             foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
-                    $binds[":_add_{$type}_{$i}"] = $permission;
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$sqlTenant})";
+                    $binds[":_add_{$type}_{$i}"] = $permission['role'];
+                    $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
                 }
             }
 
@@ -1144,7 +1152,7 @@ class Postgres extends SQL
                 $sqlTenant = $this->sharedTables ? ', _tenant' : '';
 
                 $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column {$sqlTenant})
 				VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -2090,6 +2098,11 @@ class Postgres extends SQL
      *
      * @return bool
      */
+    public function getSupportForColumnPermissions(): bool
+    {
+        return true;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return false;

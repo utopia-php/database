@@ -4,10 +4,14 @@ namespace Utopia\Database\Helpers;
 
 class Role
 {
+    /**
+     * @param array<Role> $roles
+     */
     public function __construct(
         private string $role,
         private string $identifier = '',
         private string $dimension = '',
+        private array $roles = [],
     ) {
     }
 
@@ -18,6 +22,13 @@ class Role
      */
     public function toString(): string
     {
+        if (!empty($this->roles)) {
+            return 'allOf(' . \implode(',', \array_map(
+                fn (Role $role) => $role->toString(),
+                $this->roles
+            )) . ')';
+        }
+
         $str = $this->role;
         if ($this->identifier) {
             $str .= ':' . $this->identifier;
@@ -53,6 +64,14 @@ class Role
     }
 
     /**
+     * @return array<Role>
+     */
+    public function getRoles(): array
+    {
+        return empty($this->roles) ? [$this] : $this->roles;
+    }
+
+    /**
      * Parse a role string into a Role object
      *
      * @param string $role
@@ -61,6 +80,19 @@ class Role
      */
     public static function parse(string $role): self
     {
+        if (\str_starts_with($role, 'allOf(')) {
+            if (!\str_ends_with($role, ')')) {
+                throw new \Exception('Invalid allOf role format');
+            }
+
+            $roles = \explode(',', \substr($role, 6, -1));
+
+            return self::allOf(\array_map(
+                fn (string $role) => self::parse($role),
+                $roles
+            ));
+        }
+
         $roleParts = \explode(':', $role);
         $hasIdentifier = \count($roleParts) > 1;
         $hasDimension = \str_contains($role, '/');
@@ -174,5 +206,35 @@ class Role
     public static function member(string $identifier): self
     {
         return new self('member', $identifier);
+    }
+
+    /**
+     * Require both roles to grant access.
+     *
+     * @param array<Role> $roles
+     */
+    public static function allOf(array $roles): self
+    {
+        if (\count($roles) !== 2) {
+            throw new \InvalidArgumentException('allOf requires exactly two roles');
+        }
+
+        foreach ($roles as $role) {
+            if (!$role instanceof self) {
+                throw new \InvalidArgumentException('allOf only accepts Role instances');
+            }
+
+            if (\count($role->getRoles()) !== 1) {
+                throw new \InvalidArgumentException('Nested allOf roles are not supported');
+            }
+        }
+
+        \usort($roles, fn (Role $a, Role $b) => $a->toString() <=> $b->toString());
+
+        if ($roles[0]->toString() === $roles[1]->toString()) {
+            throw new \InvalidArgumentException('allOf requires two distinct roles');
+        }
+
+        return new self('allOf', roles: $roles);
     }
 }

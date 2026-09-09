@@ -137,4 +137,19 @@ class RoleTest extends TestCase
         $role = Role::team(ID::custom('123'), '456');
         $this->assertEquals('team:123/456', $role->toString());
     }
+
+    public function testAllOf(): void
+    {
+        $role = Role::allOf([
+            Role::team('team-id', 'admin'),
+            Role::member('membership-id'),
+        ]);
+
+        $this->assertEquals('allOf(member:membership-id,team:team-id/admin)', $role->toString());
+        $this->assertEquals($role->toString(), Role::parse($role->toString())->toString());
+        $this->assertCount(2, $role->getRoles());
+
+        $this->expectException(\InvalidArgumentException::class);
+        Role::allOf([Role::any()]);
+    }
 }

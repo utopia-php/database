@@ -305,6 +305,21 @@ class PermissionsTest extends TestCase
         $this->assertEquals('You can only provide up to 100 permissions.', $object->getDescription());
     }
 
+    public function testCompositePermissions(): void
+    {
+        $validator = new Permissions();
+
+        $this->assertTrue($validator->isValid([
+            Permission::read(Role::allOf([
+                Role::member('membership-id'),
+                Role::team('team-id', 'admin'),
+            ])),
+        ]));
+        $this->assertFalse($validator->isValid([
+            'read("allOf(member:membership-id,team:invalid&team/admin)")',
+        ]));
+    }
+
     /*
      *  Test for checking duplicate methods input. The getPermissions should return an a list array
       */

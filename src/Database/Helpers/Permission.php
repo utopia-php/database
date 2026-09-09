@@ -23,11 +23,13 @@ class Permission
 
     public function __construct(
         private string $permission,
-        string $role,
+        string|Role $role,
         string $identifier = '',
         string $dimension = '',
     ) {
-        $this->role = new Role($role, $identifier, $dimension);
+        $this->role = $role instanceof Role
+            ? $role
+            : new Role($role, $identifier, $dimension);
     }
 
     /**
@@ -74,6 +76,14 @@ class Permission
     }
 
     /**
+     * @return array<Role>
+     */
+    public function getRoles(): array
+    {
+        return $this->role->getRoles();
+    }
+
+    /**
      * Parse a permission string into a Permission object
      *
      * @param string $permission
@@ -82,62 +92,19 @@ class Permission
      */
     public static function parse(string $permission): self
     {
-        $permissionParts = \explode('("', $permission);
-
-        if (\count($permissionParts) !== 2) {
+        $separator = \strpos($permission, '("');
+        if ($separator === false || !\str_ends_with($permission, '")')) {
             throw new DatabaseException('Invalid permission string format: "' . $permission . '".');
         }
 
-        $permission = $permissionParts[0];
+        $role = \substr($permission, $separator + 2, -2);
+        $permission = \substr($permission, 0, $separator);
 
         if (!\in_array($permission, array_merge(Database::PERMISSIONS, [Database::PERMISSION_WRITE]))) {
             throw new DatabaseException('Invalid permission type: "' . $permission . '".');
         }
-        $fullRole = \str_replace('")', '', $permissionParts[1]);
-        $roleParts = \explode(':', $fullRole);
-        $role = $roleParts[0];
 
-        $hasIdentifier = \count($roleParts) > 1;
-        $hasDimension = \str_contains($fullRole, '/');
-
-        if (!$hasIdentifier && !$hasDimension) {
-            return new self($permission, $role);
-        }
-
-        if ($hasIdentifier && !$hasDimension) {
-            $identifier = $roleParts[1];
-            return new self($permission, $role, $identifier);
-        }
-
-        if (!$hasIdentifier) {
-            $dimensionParts = \explode('/', $fullRole);
-            if (\count($dimensionParts) !== 2) {
-                throw new DatabaseException('Only one dimension can be provided');
-            }
-
-            $role = $dimensionParts[0];
-            $dimension = $dimensionParts[1];
-
-            if (empty($dimension)) {
-                throw new DatabaseException('Dimension must not be empty');
-            }
-            return new self($permission, $role, '', $dimension);
-        }
-
-        // Has both identifier and dimension
-        $dimensionParts = \explode('/', $roleParts[1]);
-        if (\count($dimensionParts) !== 2) {
-            throw new DatabaseException('Only one dimension can be provided');
-        }
-
-        $identifier = $dimensionParts[0];
-        $dimension = $dimensionParts[1];
-
-        if (empty($dimension)) {
-            throw new DatabaseException('Dimension must not be empty');
-        }
-
-        return new self($permission, $role, $identifier, $dimension);
+        return new self($permission, Role::parse($role));
     }
 
     /**
@@ -167,9 +134,7 @@ class Permission
                     }
                     $mutated[] = (new self(
                         $subType,
-                        $permission->getRole(),
-                        $permission->getIdentifier(),
-                        $permission->getDimension()
+                        $permission->role
                     ))->toString();
                 }
             }
@@ -187,9 +152,7 @@ class Permission
     {
         $permission = new self(
             'read',
-            $role->getRole(),
-            $role->getIdentifier(),
-            $role->getDimension()
+            $role
         );
         return $permission->toString();
     }
@@ -204,9 +167,7 @@ class Permission
     {
         $permission = new self(
             'create',
-            $role->getRole(),
-            $role->getIdentifier(),
-            $role->getDimension()
+            $role
         );
         return $permission->toString();
     }
@@ -221,9 +182,7 @@ class Permission
     {
         $permission = new self(
             'update',
-            $role->getRole(),
-            $role->getIdentifier(),
-            $role->getDimension()
+            $role
         );
         return $permission->toString();
     }
@@ -238,9 +197,7 @@ class Permission
     {
         $permission = new self(
             'delete',
-            $role->getRole(),
-            $role->getIdentifier(),
-            $role->getDimension()
+            $role
         );
         return $permission->toString();
     }
@@ -255,9 +212,7 @@ class Permission
     {
         $permission = new self(
             'write',
-            $role->getRole(),
-            $role->getIdentifier(),
-            $role->getDimension()
+            $role
         );
         return $permission->toString();
     }

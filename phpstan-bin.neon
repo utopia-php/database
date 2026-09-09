@@ -10,9 +10,13 @@ parameters:
         - bin/cli.php
     scanFiles:
         - stubs/Swoole/Database/DetectsLostConnections.stub.php
+        - stubs/Swoole/Database/PDOConfig.stub.php
+        - stubs/Swoole/Database/PDOPool.stub.php
         - stubs/Swoole/Database/PDOProxy.stub.php
         - stubs/Swoole/Database/PDOStatementProxy.stub.php
     stubFiles:
         - stubs/Swoole/Database/DetectsLostConnections.stub.php
+        - stubs/Swoole/Database/PDOConfig.stub.php
+        - stubs/Swoole/Database/PDOPool.stub.php
         - stubs/Swoole/Database/PDOProxy.stub.php
         - stubs/Swoole/Database/PDOStatementProxy.stub.php

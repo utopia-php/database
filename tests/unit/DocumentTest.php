@@ -576,6 +576,18 @@ class DocumentTest extends TestCase
         $this->assertSame('after', $document->getArray('values')['first']);
     }
 
+    /**
+     * getArrayCopy() must not wrap a scalar array's elements in references.
+     *
+     * That is a pure allocation property, and deliberately measured as one.
+     * PHP unwraps a reference whose refcount is 1 when the array is copied,
+     * so an export whose elements were wrapped is indistinguishable from a
+     * clean one through every userland probe: write-through in either
+     * direction, ReflectionReference::fromArrayElement(), var_dump() and
+     * serialize() all report the wrapped array as unwrapped. The detachment
+     * assertions in this file therefore do not cover it, and there is no
+     * behavioural assertion that would.
+     */
     public function testScalarArrayExportAvoidsReferenceAllocationOverhead(): void
     {
         $values = range(1, 100_000);

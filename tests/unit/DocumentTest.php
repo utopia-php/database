@@ -578,15 +578,36 @@ class DocumentTest extends TestCase
 
     public function testScalarArrayExportAvoidsReferenceAllocationOverhead(): void
     {
-        $document = new Document(['values' => range(1, 100_000)]);
+        $values = range(1, 100_000);
+        $document = new Document(['values' => $values]);
+
+        // What one honest copy of this array costs on this build, measured in
+        // the same process, so the bound below is a multiple of the allocator
+        // in front of it rather than a byte count tuned to one platform.
         memory_reset_peak_usage();
-        $before = memory_get_usage();
+        $mark = memory_get_usage();
+        $plain = $values;
+        $plain[0] = 0;
+        $plainCost = memory_get_peak_usage() - $mark;
+        unset($plain);
+
+        memory_reset_peak_usage();
+        $mark = memory_get_usage();
         $copy = $document->getArrayCopy();
-        $allocated = memory_get_peak_usage() - $before;
+        $exportCost = memory_get_peak_usage() - $mark;
 
         $this->assertIsArray($copy['values']);
         $this->assertCount(100_000, $copy['values']);
-        $this->assertLessThan(3 * 1024 * 1024, $allocated, 'Export should copy the array without wrapping every element in a reference');
+        $this->assertGreaterThan(0, $plainCost, 'The allocator reported no cost for a plain copy, so the ratio below is meaningless');
+        $this->assertLessThan(
+            2 * $plainCost,
+            $exportCost,
+            \sprintf(
+                'Export allocated %d bytes where a plain copy of the same array costs %d: elements are being wrapped in references.',
+                $exportCost,
+                $plainCost,
+            ),
+        );
         $copy['values'][0] = 0;
         $this->assertSame(1, $document->getArray('values')[0]);
     }

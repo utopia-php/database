@@ -3,10 +3,9 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
-use ReflectionMethod;
-use Utopia\Database\Adapter\Mongo;
-use Utopia\Database\Database;
+use Utopia\Database\Hook\Mongo\PermissionFilter;
+use Utopia\Database\PermissionType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
 class MongoPermissionStringsTest extends TestCase
@@ -15,17 +14,17 @@ class MongoPermissionStringsTest extends TestCase
     {
         $this->assertSame(
             ['read("user:alice.")'],
-            $this->permissionStrings(['user:alice.'], Database::PERMISSION_READ)
+            $this->permissionStrings(['user:alice.'], PermissionType::Read)
         );
     }
 
     public function testMassReadDotPaddingStaysExact(): void
     {
-        $role = 'user:a' . \str_repeat('.', 19);
+        $role = 'user:a'.\str_repeat('.', 19);
 
         $this->assertSame(
-            ['read("' . $role . '")'],
-            $this->permissionStrings([$role], Database::PERMISSION_READ)
+            ['read("'.$role.'")'],
+            $this->permissionStrings([$role], PermissionType::Read)
         );
     }
 
@@ -33,7 +32,7 @@ class MongoPermissionStringsTest extends TestCase
     {
         $this->assertSame(
             ['update("user:alice")'],
-            $this->permissionStrings(['user:alice'], Database::PERMISSION_UPDATE)
+            $this->permissionStrings(['user:alice'], PermissionType::Update)
         );
     }
 
@@ -41,19 +40,18 @@ class MongoPermissionStringsTest extends TestCase
     {
         $this->assertSame(
             ['read("user:alice")', 'read("users")'],
-            $this->permissionStrings(['user:alice', 'users'], Database::PERMISSION_READ)
+            $this->permissionStrings(['user:alice', 'users'], PermissionType::Read)
         );
     }
 
     public function testEmptyRolesProduceEmptyList(): void
     {
-        $this->assertSame([], $this->permissionStrings([], Database::PERMISSION_READ));
+        $this->assertSame([], $this->permissionStrings([], PermissionType::Read));
     }
 
     public function testValuesAreStringsNotRegex(): void
     {
-        foreach ($this->permissionStrings(['user:alice.'], Database::PERMISSION_READ) as $value) {
-            $this->assertIsString($value);
+        foreach ($this->permissionStrings(['user:alice.'], PermissionType::Read) as $value) {
             $this->assertStringStartsWith('read("', $value);
             $this->assertStringEndsWith('")', $value);
         }
@@ -63,7 +61,7 @@ class MongoPermissionStringsTest extends TestCase
      * @param list<string> $roles
      * @return list<string>
      */
-    private function permissionStrings(array $roles, string $type): array
+    private function permissionStrings(array $roles, PermissionType $type): array
     {
         $authorization = new Authorization();
         $authorization->enable();
@@ -72,14 +70,25 @@ class MongoPermissionStringsTest extends TestCase
             $authorization->addRole($role);
         }
 
-        $adapter = (new ReflectionClass(Mongo::class))->newInstanceWithoutConstructor();
-        $adapter->setAuthorization($authorization);
+        $filters = (new PermissionFilter($authorization))->applyFilters([], 'documents', $type->value);
+        $permissionFilter = $filters[Storage::PERMISSIONS] ?? null;
+        if (! \is_array($permissionFilter)) {
+            return [];
+        }
 
-        $method = new ReflectionMethod(Mongo::class, 'permissionStrings');
+        $values = $permissionFilter['$in'] ?? [];
+        if (! \is_array($values)) {
+            return [];
+        }
 
-        /** @var list<string> $values */
-        $values = $method->invoke($adapter, $type);
+        $strings = [];
+        foreach ($values as $value) {
+            if (! \is_string($value)) {
+                $this->fail('Permission $in values must be strings');
+            }
+            $strings[] = $value;
+        }
 
-        return $values;
+        return $strings;
     }
 }

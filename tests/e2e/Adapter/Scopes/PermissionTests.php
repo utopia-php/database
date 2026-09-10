@@ -3,7 +3,11 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -12,6 +16,9 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
+use Utopia\Query\Schema\ForeignKeyAction;
 
 trait PermissionTests
 {
@@ -22,8 +29,9 @@ trait PermissionTests
 
         // Only the SQL adapters keep permissions in a side table that carries
         // its own tenant column; Mongo stores them on the document itself.
-        if (!$database->getSharedTables() || !$database->getAdapter() instanceof SQL) {
+        if (! $database->getSharedTables() || ! $database->getAdapter() instanceof SQL) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -34,7 +42,11 @@ trait PermissionTests
             // A shared pool's system collections are created once with no
             // tenant, so every tenant on the pool reads the one definition.
             $database->setTenant(null);
-            $database->createCollection($collection, [], [], [Permission::read(Role::any())], false);
+            $database->createCollection(new Collection(
+                id: $collection,
+                permissions: [Permission::read(Role::any())],
+                documentSecurity: false,
+            ));
 
             // A per-project pass rewrites that definition while it holds one
             // project's tenant. The rows it writes belong to the document, not
@@ -60,19 +72,333 @@ trait PermissionTests
         }
     }
 
+    private static string $collSecurityCollection = '';
+
+    private static string $collSecurityParentCollection = '';
+
+    private static string $collSecurityOneToOneCollection = '';
+
+    private static string $collSecurityOneToManyCollection = '';
+
+    private static string $collUpdateCollection = '';
+
+    protected function getCollSecurityCollection(): string
+    {
+        if (self::$collSecurityCollection === '') {
+            self::$collSecurityCollection = 'collectionSecurity_' . uniqid();
+        }
+        return self::$collSecurityCollection;
+    }
+
+    protected function getCollSecurityParentCollection(): string
+    {
+        if (self::$collSecurityParentCollection === '') {
+            self::$collSecurityParentCollection = 'csParent_' . uniqid();
+        }
+        return self::$collSecurityParentCollection;
+    }
+
+    protected function getCollSecurityOneToOneCollection(): string
+    {
+        if (self::$collSecurityOneToOneCollection === '') {
+            self::$collSecurityOneToOneCollection = 'csO2O_' . uniqid();
+        }
+        return self::$collSecurityOneToOneCollection;
+    }
+
+    protected function getCollSecurityOneToManyCollection(): string
+    {
+        if (self::$collSecurityOneToManyCollection === '') {
+            self::$collSecurityOneToManyCollection = 'csO2M_' . uniqid();
+        }
+        return self::$collSecurityOneToManyCollection;
+    }
+
+    protected function getCollUpdateCollection(): string
+    {
+        if (self::$collUpdateCollection === '') {
+            self::$collUpdateCollection = 'collectionUpdate_' . uniqid();
+        }
+        return self::$collUpdateCollection;
+    }
+
+    private static bool $collPermFixtureInit = false;
+
+    /** @var array{collectionId: string, docId: string}|null */
+    private static ?array $collPermFixtureData = null;
+
+    private static bool $relPermFixtureInit = false;
+
+    /** @var array{collectionId: string, oneToOneId: string, oneToManyId: string, docId: string}|null */
+    private static ?array $relPermFixtureData = null;
+
+    private static bool $collUpdateFixtureInit = false;
+
+    /** @var array{collectionId: string}|null */
+    private static ?array $collUpdateFixtureData = null;
+
+    /**
+     * Create the $this->getCollSecurityCollection() collection with a document.
+     * Combines the setup from testCollectionPermissions + testCollectionPermissionsCreateWorks.
+     *
+     * @return array{collectionId: string, docId: string}
+     */
+    protected function initCollectionPermissionFixture(): array
+    {
+        if (self::$collPermFixtureInit && self::$collPermFixtureData !== null) {
+            /** @var Database $database */
+            $database = $this->getDatabase();
+            $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+            $doc = $database->getDocument(self::$collPermFixtureData['collectionId'], self::$collPermFixtureData['docId']);
+            if (!$doc->isEmpty()) {
+                return self::$collPermFixtureData;
+            }
+            self::$collPermFixtureInit = false;
+        }
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        try {
+            $database->deleteCollection($this->getCollSecurityCollection());
+        } catch (\Throwable) {
+        }
+
+        $collection = $database->createCollection(new Collection(id: $this->getCollSecurityCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ], documentSecurity: false));
+
+        $database->createAttribute($collection->getId(), Attribute::string(key: 'test'));
+
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+
+        $document = $database->createDocument($collection->getId(), new Document([
+            '$id' => \Utopia\Database\Helpers\ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::user('random')),
+                Permission::update(Role::user('random')),
+                Permission::delete(Role::user('random')),
+            ],
+            'test' => 'lorem',
+        ]));
+
+        self::$collPermFixtureInit = true;
+        self::$collPermFixtureData = [
+            'collectionId' => $collection->getId(),
+            'docId' => $document->getId(),
+        ];
+
+        return self::$collPermFixtureData;
+    }
+
+    /**
+     * Create the relationship permission test collections with a document.
+     * Combines testCollectionPermissionsRelationships + testCollectionPermissionsRelationshipsCreateWorks.
+     *
+     * @return array{collectionId: string, oneToOneId: string, oneToManyId: string, docId: string}
+     */
+    protected function initRelationshipPermissionFixture(): array
+    {
+        if (self::$relPermFixtureInit && self::$relPermFixtureData !== null) {
+            /** @var Database $database */
+            $database = $this->getDatabase();
+            $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+            $doc = $database->getDocument(self::$relPermFixtureData['collectionId'], self::$relPermFixtureData['docId']);
+            if (!$doc->isEmpty()) {
+                return self::$relPermFixtureData;
+            }
+            self::$relPermFixtureInit = false;
+        }
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        foreach ([$this->getCollSecurityParentCollection(), $this->getCollSecurityOneToOneCollection(), $this->getCollSecurityOneToManyCollection()] as $col) {
+            try {
+                $database->deleteCollection($col);
+            } catch (\Throwable) {
+            }
+        }
+
+        $collection = $database->createCollection(new Collection(id: $this->getCollSecurityParentCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ]));
+
+        $database->createAttribute($collection->getId(), Attribute::string(key: 'test'));
+
+        $collectionOneToOne = $database->createCollection(new Collection(id: $this->getCollSecurityOneToOneCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ]));
+
+        $database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test'));
+
+        $database->createRelationship(Relationship::oneToOne(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade));
+
+        $collectionOneToMany = $database->createCollection(new Collection(id: $this->getCollSecurityOneToManyCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ]));
+
+        $database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test'));
+
+        $database->createRelationship(Relationship::oneToMany(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade));
+
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+
+        $document = $database->createDocument($collection->getId(), new Document([
+            '$id' => \Utopia\Database\Helpers\ID::unique(),
+            '$permissions' => [
+                Permission::read(Role::user('random')),
+                Permission::update(Role::user('random')),
+                Permission::delete(Role::user('random')),
+            ],
+            'test' => 'lorem',
+            RelationType::OneToOne->value => [
+                '$id' => \Utopia\Database\Helpers\ID::unique(),
+                '$permissions' => [
+                    Permission::read(Role::user('random')),
+                    Permission::update(Role::user('random')),
+                    Permission::delete(Role::user('random')),
+                ],
+                'test' => 'lorem ipsum',
+            ],
+            RelationType::OneToMany->value => [
+                [
+                    '$id' => \Utopia\Database\Helpers\ID::unique(),
+                    '$permissions' => [
+                        Permission::read(Role::user('random')),
+                        Permission::update(Role::user('random')),
+                        Permission::delete(Role::user('random')),
+                    ],
+                    'test' => 'lorem ipsum',
+                ], [
+                    '$id' => \Utopia\Database\Helpers\ID::unique(),
+                    '$permissions' => [
+                        Permission::read(Role::user('torsten')),
+                        Permission::update(Role::user('random')),
+                        Permission::delete(Role::user('random')),
+                    ],
+                    'test' => 'dolor',
+                ],
+            ],
+        ]));
+
+        self::$relPermFixtureInit = true;
+        self::$relPermFixtureData = [
+            'collectionId' => $collection->getId(),
+            'oneToOneId' => $collectionOneToOne->getId(),
+            'oneToManyId' => $collectionOneToMany->getId(),
+            'docId' => $document->getId(),
+        ];
+
+        return self::$relPermFixtureData;
+    }
+
+    /**
+     * Create the $this->getCollUpdateCollection() collection.
+     * Replicates the setup from testCollectionUpdate in CollectionTests.
+     *
+     * @return array{collectionId: string}
+     */
+    protected function initCollectionUpdateFixture(): array
+    {
+        if (self::$collUpdateFixtureInit && self::$collUpdateFixtureData !== null) {
+            return self::$collUpdateFixtureData;
+        }
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        try {
+            $database->deleteCollection($this->getCollUpdateCollection());
+        } catch (\Throwable) {
+        }
+
+        $collection = $database->createCollection(new Collection(id: $this->getCollUpdateCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ], documentSecurity: false));
+
+        $database->updateCollection($this->getCollUpdateCollection(), [], true);
+
+        self::$collUpdateFixtureInit = true;
+        self::$collUpdateFixtureData = [
+            'collectionId' => $collection->getId(),
+        ];
+
+        return self::$collUpdateFixtureData;
+    }
+
+    public function testCollectionPermissionsRelationships(): void
+    {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = $database->createCollection(new Collection(id: $this->getCollSecurityParentCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ]));
+
+        $this->assertSame($this->getCollSecurityParentCollection(), $collection->getId());
+
+        $this->assertTrue($database->createAttribute($collection->getId(), Attribute::string(key: 'test')));
+
+        $collectionOneToOne = $database->createCollection(new Collection(id: $this->getCollSecurityOneToOneCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ]));
+
+        $this->assertSame($this->getCollSecurityOneToOneCollection(), $collectionOneToOne->getId());
+
+        $this->assertTrue($database->createAttribute($collectionOneToOne->getId(), Attribute::string(key: 'test')));
+
+        $this->assertTrue($database->createRelationship(Relationship::oneToOne(collection: $collection->getId(), relatedCollection: $collectionOneToOne->getId(), key: RelationType::OneToOne->value, onDelete: ForeignKeyAction::Cascade)));
+
+        $collectionOneToMany = $database->createCollection(new Collection(id: $this->getCollSecurityOneToManyCollection(), permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ]));
+
+        $this->assertSame($this->getCollSecurityOneToManyCollection(), $collectionOneToMany->getId());
+
+        $this->assertTrue($database->createAttribute($collectionOneToMany->getId(), Attribute::string(key: 'test')));
+
+        $this->assertTrue($database->createRelationship(Relationship::oneToMany(collection: $collection->getId(), relatedCollection: $collectionOneToMany->getId(), key: RelationType::OneToMany->value, onDelete: ForeignKeyAction::Cascade)));
+    }
+
     public function testUnsetPermissions(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(__FUNCTION__);
-        $this->assertTrue($database->createAttribute(
-            collection: __FUNCTION__,
-            id: 'president',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
+        $database->createCollection(new Collection(id: __FUNCTION__));
+        $this->assertTrue($database->createAttribute(__FUNCTION__, Attribute::string(key: 'president')));
 
         $permissions = [
             Permission::read(Role::any()),
@@ -219,7 +545,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection(__FUNCTION__);
+        $database->createCollection(new Collection(id: __FUNCTION__));
 
         /**
          * Validate the decode function does not add $permissions null entry when no permissions are provided
@@ -248,15 +574,16 @@ trait PermissionTests
         }
     }
 
-    public function testReadPermissionsFailure(): Document
+    public function testReadPermissionsFailure(): void
     {
+        $this->initDocumentsFixture();
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
 
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->createDocument('documents', new Document([
+        $document = $database->createDocument($this->getDocumentsCollection(), new Document([
             '$permissions' => [
                 Permission::read(Role::user('1')),
                 Permission::create(Role::user('1')),
@@ -281,16 +608,16 @@ trait PermissionTests
         $this->assertEquals(true, $document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
-
-        return $document;
     }
 
-    public function testNoChangeUpdateDocumentWithoutPermission(): Document
+    public function testNoChangeUpdateDocumentWithoutPermission(): void
     {
+        $this->initDocumentsFixture();
+
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->createDocument('documents', new Document([
+        $document = $database->createDocument($this->getDocumentsCollection(), new Document([
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::any())
@@ -307,7 +634,7 @@ trait PermissionTests
         ]));
 
         $updatedDocument = $database->updateDocument(
-            'documents',
+            $this->getDocumentsCollection(),
             $document->getId(),
             $document
         );
@@ -316,7 +643,7 @@ trait PermissionTests
         // It should also not throw any authorization exception without any permission because of no change.
         $this->assertEquals($updatedDocument->getUpdatedAt(), $document->getUpdatedAt());
 
-        $document = $database->createDocument('documents', new Document([
+        $document = $database->createDocument($this->getDocumentsCollection(), new Document([
             '$id' => ID::unique(),
             '$permissions' => [],
             'string' => 'text📝',
@@ -333,15 +660,13 @@ trait PermissionTests
         // Should throw exception, because nothing was updated, but there was no read permission
         try {
             $database->updateDocument(
-                'documents',
+                $this->getDocumentsCollection(),
                 $document->getId(),
                 $document
             );
         } catch (Exception $e) {
             $this->assertInstanceOf(AuthorizationException::class, $e);
         }
-
-        return $document;
     }
 
     public function testUpdateDocumentsPermissions(): void
@@ -349,21 +674,16 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForBatchOperations()) {
+        if (!$database->getAdapter()->supports(Capability::BatchOperations)) {
             $this->expectNotToPerformAssertions();
             return;
         }
 
         $collection = 'testUpdateDocumentsPerms';
 
-        $database->createCollection($collection, attributes: [
-            new Document([
-                '$id' => ID::custom('string'),
-                'type' => Database::VAR_STRING,
-                'size' => 767,
-                'required' => true,
-            ])
-        ], permissions: [], documentSecurity: true);
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'string', size: 767, required: true)
+        ]));
 
         // Test we can bulk update permissions we have access to
         $this->getDatabase()->getAuthorization()->skip(function () use ($collection, $database) {
@@ -468,38 +788,27 @@ trait PermissionTests
         }
     }
 
-    public function testCollectionPermissions(): Document
+    public function testCollectionPermissions(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $collection = $database->createCollection('collectionSecurity', permissions: [
+        $collection = $database->createCollection(new Collection(id: $this->getCollSecurityCollection(), permissions: [
             Permission::create(Role::users()),
             Permission::read(Role::users()),
             Permission::update(Role::users()),
             Permission::delete(Role::users())
-        ], documentSecurity: false);
+        ], documentSecurity: false));
 
-        $this->assertInstanceOf(Document::class, $collection);
+        $this->assertSame($this->getCollSecurityCollection(), $collection->getId());
 
-        $this->assertTrue($database->createAttribute(
-            collection: $collection->getId(),
-            id: 'test',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
-
-        return $collection;
+        $this->assertTrue($database->createAttribute($collection->getId(), Attribute::string(key: 'test')));
     }
 
-    /**
-     * @param array<Document> $data
-     * @depends testCollectionPermissionsCreateWorks
-     */
-    public function testCollectionPermissionsCountThrowsException(array $data): void
+    public function testCollectionPermissionsCountThrowsException(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -508,21 +817,17 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         try {
-            $database->count($collection->getId());
+            $database->count($collectionId);
             $this->fail('Failed to throw exception');
         } catch (\Throwable $th) {
             $this->assertInstanceOf(AuthorizationException::class, $th);
         }
     }
 
-    /**
-     * @depends testCollectionPermissionsCreateWorks
-     * @param array<Document> $data
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsCountWorks(array $data): array
+    public function testCollectionPermissionsCountWorks(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -531,19 +836,15 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $count = $database->count(
-            $collection->getId()
+            $collectionId
         );
 
         $this->assertNotEmpty($count);
-
-        return $data;
     }
-
-    /**
-     * @depends testCollectionPermissions
-     */
-    public function testCollectionPermissionsCreateThrowsException(Document $collection): void
+    public function testCollectionPermissionsCreateThrowsException(): void
     {
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
         $this->expectException(AuthorizationException::class);
@@ -551,7 +852,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createDocument($collection->getId(), new Document([
+        $database->createDocument($collectionId, new Document([
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -562,19 +863,17 @@ trait PermissionTests
         ]));
     }
 
-    /**
-     * @depends testCollectionPermissions
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsCreateWorks(Document $collection): array
+    public function testCollectionPermissionsCreateWorks(): void
     {
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
 
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->createDocument($collection->getId(), new Document([
+        $document = $database->createDocument($collectionId, new Document([
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::user('random')),
@@ -583,18 +882,16 @@ trait PermissionTests
             ],
             'test' => 'lorem'
         ]));
-        $this->assertInstanceOf(Document::class, $document);
+        $this->assertSame('lorem', $document->getAttribute('test'));
 
-        return [$collection, $document];
+        $database->deleteDocument($collectionId, $document->getId());
     }
 
-    /**
-     * @param array<Document> $data
-     * @depends testCollectionPermissionsUpdateWorks
-     */
-    public function testCollectionPermissionsDeleteThrowsException(array $data): void
+    public function testCollectionPermissionsDeleteThrowsException(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -605,18 +902,16 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $database->deleteDocument(
-            $collection->getId(),
-            $document->getId()
+            $collectionId,
+            $docId
         );
     }
 
-    /**
-    * @param array<Document> $data
-    * @depends testCollectionPermissionsUpdateWorks
-    */
-    public function testCollectionPermissionsDeleteWorks(array $data): void
+    public function testCollectionPermissionsDeleteWorks(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -625,8 +920,8 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $this->assertTrue($database->deleteDocument(
-            $collection->getId(),
-            $document->getId()
+            $collectionId,
+            $docId
         ));
     }
 
@@ -636,18 +931,15 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $this->expectException(DatabaseException::class);
-        $database->createCollection('collectionSecurity', permissions: [
+        $database->createCollection(new Collection(id: $this->getCollSecurityCollection(), permissions: [
             'i dont work'
-        ]);
+        ]));
     }
 
-    /**
-     * @param array<Document> $data
-     * @depends testCollectionPermissionsCreateWorks
-     */
-    public function testCollectionPermissionsFindThrowsException(array $data): void
+    public function testCollectionPermissionsFindThrowsException(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -657,17 +949,13 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->find($collection->getId());
+        $database->find($collectionId);
     }
 
-    /**
-     * @depends testCollectionPermissionsCreateWorks
-     * @param array<Document> $data
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsFindWorks(array $data): array
+    public function testCollectionPermissionsFindWorks(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -675,28 +963,24 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $documents = $database->find($collection->getId());
+        $documents = $database->find($collectionId);
         $this->assertNotEmpty($documents);
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
 
         try {
-            $database->find($collection->getId());
+            $database->find($collectionId);
             $this->fail('Failed to throw exception');
         } catch (AuthorizationException) {
         }
-
-        return $data;
     }
 
-    /**
-     * @depends testCollectionPermissionsCreateWorks
-     * @param array<Document> $data
-     */
-    public function testCollectionPermissionsGetThrowsException(array $data): void
+    public function testCollectionPermissionsGetThrowsException(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -705,21 +989,17 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $document = $database->getDocument(
-            $collection->getId(),
-            $document->getId(),
+            $collectionId,
+            $docId,
         );
-        $this->assertInstanceOf(Document::class, $document);
         $this->assertTrue($document->isEmpty());
     }
 
-    /**
-     * @depends testCollectionPermissionsCreateWorks
-     * @param array<Document> $data
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsGetWorks(array $data): array
+    public function testCollectionPermissionsGetWorks(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -728,100 +1008,21 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $document = $database->getDocument(
-            $collection->getId(),
-            $document->getId()
+            $collectionId,
+            $docId
         );
-        $this->assertInstanceOf(Document::class, $document);
         $this->assertFalse($document->isEmpty());
-
-        return $data;
     }
 
-    /**
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsRelationships(): array
+    public function testCollectionPermissionsRelationshipsCountWorks(): void
     {
-        /** @var Database $database */
-        $database = $this->getDatabase();
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
 
-        $collection = $database->createCollection('collectionSecurity.Parent', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users())
-        ], documentSecurity: true);
-
-        $this->assertInstanceOf(Document::class, $collection);
-
-        $this->assertTrue($database->createAttribute(
-            collection: $collection->getId(),
-            id: 'test',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
-
-        $collectionOneToOne = $database->createCollection('collectionSecurity.OneToOne', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users())
-        ], documentSecurity: true);
-
-        $this->assertInstanceOf(Document::class, $collectionOneToOne);
-
-        $this->assertTrue($database->createAttribute(
-            collection: $collectionOneToOne->getId(),
-            id: 'test',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
-
-        $this->assertTrue($database->createRelationship(
-            collection: $collection->getId(),
-            relatedCollection: $collectionOneToOne->getId(),
-            type: Database::RELATION_ONE_TO_ONE,
-            id: Database::RELATION_ONE_TO_ONE,
-            onDelete: Database::RELATION_MUTATE_CASCADE
-        ));
-
-        $collectionOneToMany = $database->createCollection('collectionSecurity.OneToMany', permissions: [
-            Permission::create(Role::users()),
-            Permission::read(Role::users()),
-            Permission::update(Role::users()),
-            Permission::delete(Role::users())
-        ], documentSecurity: true);
-
-        $this->assertInstanceOf(Document::class, $collectionOneToMany);
-
-        $this->assertTrue($database->createAttribute(
-            collection: $collectionOneToMany->getId(),
-            id: 'test',
-            type: Database::VAR_STRING,
-            size: 255,
-            required: false
-        ));
-
-        $this->assertTrue($database->createRelationship(
-            collection: $collection->getId(),
-            relatedCollection: $collectionOneToMany->getId(),
-            type: Database::RELATION_ONE_TO_MANY,
-            id: Database::RELATION_ONE_TO_MANY,
-            onDelete: Database::RELATION_MUTATE_CASCADE
-        ));
-
-        return [$collection, $collectionOneToOne, $collectionOneToMany];
-    }
-
-    /**
-     * @depends testCollectionPermissionsRelationshipsCreateWorks
-     * @param array<Document> $data
-     */
-    public function testCollectionPermissionsRelationshipsCountWorks(array $data): void
-    {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -830,7 +1031,7 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $documents = $database->count(
-            $collection->getId()
+            $collectionId
         );
 
         $this->assertEquals(1, $documents);
@@ -839,7 +1040,7 @@ trait PermissionTests
         $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
 
         $documents = $database->count(
-            $collection->getId()
+            $collectionId
         );
 
         $this->assertEquals(1, $documents);
@@ -848,19 +1049,21 @@ trait PermissionTests
         $this->getDatabase()->getAuthorization()->addRole(Role::user('unknown')->toString());
 
         $documents = $database->count(
-            $collection->getId()
+            $collectionId
         );
 
         $this->assertEquals(0, $documents);
     }
 
-    /**
-     * @depends testCollectionPermissionsRelationships
-     * @param array<Document> $data
-     */
-    public function testCollectionPermissionsRelationshipsCreateThrowsException(array $data): void
+    public function testCollectionPermissionsRelationshipsCreateThrowsException(): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany] = $data;
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -869,7 +1072,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createDocument($collection->getId(), new Document([
+        $database->createDocument($collectionId, new Document([
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::any()),
@@ -879,13 +1082,16 @@ trait PermissionTests
         ]));
     }
 
-    /**
-    * @param array<Document> $data
-    * @depends testCollectionPermissionsRelationshipsUpdateWorks
-    */
-    public function testCollectionPermissionsRelationshipsDeleteThrowsException(array $data): void
+    public function testCollectionPermissionsRelationshipsDeleteThrowsException(): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -895,27 +1101,29 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->deleteDocument(
-            $collection->getId(),
-            $document->getId()
+        $database->deleteDocument(
+            $collectionId,
+            $docId
         );
     }
 
-    /**
-     * @depends testCollectionPermissionsRelationships
-     * @param array<Document> $data
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsRelationshipsCreateWorks(array $data): array
+    public function testCollectionPermissionsRelationshipsCreateWorks(): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany] = $data;
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
+
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
 
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $document = $database->createDocument($collection->getId(), new Document([
+        $document = $database->createDocument($collectionId, new Document([
             '$id' => ID::unique(),
             '$permissions' => [
                 Permission::read(Role::user('random')),
@@ -923,7 +1131,7 @@ trait PermissionTests
                 Permission::delete(Role::user('random'))
             ],
             'test' => 'lorem',
-            Database::RELATION_ONE_TO_ONE => [
+            RelationType::OneToOne->value => [
                 '$id' => ID::unique(),
                 '$permissions' => [
                     Permission::read(Role::user('random')),
@@ -932,7 +1140,7 @@ trait PermissionTests
                 ],
                 'test' => 'lorem ipsum'
             ],
-            Database::RELATION_ONE_TO_MANY => [
+            RelationType::OneToMany->value => [
                 [
                     '$id' => ID::unique(),
                     '$permissions' => [
@@ -952,18 +1160,21 @@ trait PermissionTests
                 ]
             ],
         ]));
-        $this->assertInstanceOf(Document::class, $document);
+        $this->assertFalse($document->isEmpty());
 
-        return [...$data, $document];
+        $database->deleteDocument($collectionId, $document->getId());
     }
 
-    /**
-     * @param array<Document> $data
-     * @depends testCollectionPermissionsRelationshipsUpdateWorks
-     */
-    public function testCollectionPermissionsRelationshipsDeleteWorks(array $data): void
+    public function testCollectionPermissionsRelationshipsDeleteWorks(): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -972,18 +1183,20 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $this->assertTrue($database->deleteDocument(
-            $collection->getId(),
-            $document->getId()
+            $collectionId,
+            $docId
         ));
     }
 
-    /**
-     * @depends testCollectionPermissionsRelationshipsCreateWorks
-     * @param array<Document> $data
-     */
-    public function testCollectionPermissionsRelationshipsFindWorks(array $data): void
+    public function testCollectionPermissionsRelationshipsFindWorks(): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -991,58 +1204,49 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
         $documents = $database->find(
-            $collection->getId()
+            $collectionId
         );
 
-        $this->assertIsArray($documents);
         $this->assertCount(1, $documents);
         $document = $documents[0];
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
-        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
-        $this->assertCount(2, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(2, $document->getDocuments(RelationType::OneToMany->value));
         $this->assertFalse($document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
 
         $documents = $database->find(
-            $collection->getId()
+            $collectionId
         );
 
-        $this->assertIsArray($documents);
         $this->assertCount(1, $documents);
         $document = $documents[0];
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
-        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
-        $this->assertCount(1, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(1, $document->getDocuments(RelationType::OneToMany->value));
         $this->assertFalse($document->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('unknown')->toString());
 
         $documents = $database->find(
-            $collection->getId()
+            $collectionId
         );
 
-        $this->assertIsArray($documents);
         $this->assertCount(0, $documents);
     }
 
-    /**
-     * @param array<Document> $data
-     * @depends testCollectionPermissionsRelationshipsCreateWorks
-     */
-    public function testCollectionPermissionsRelationshipsGetThrowsException(array $data): void
+    public function testCollectionPermissionsRelationshipsGetThrowsException(): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
@@ -1051,92 +1255,22 @@ trait PermissionTests
         $database = $this->getDatabase();
 
         $document = $database->getDocument(
-            $collection->getId(),
-            $document->getId(),
+            $collectionId,
+            $docId,
         );
-        $this->assertInstanceOf(Document::class, $document);
         $this->assertTrue($document->isEmpty());
     }
 
-    /**
-     * @depends testCollectionPermissionsRelationshipsCreateWorks
-     * @param array<Document> $data
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsRelationshipsGetWorks(array $data): array
+    public function testCollectionPermissionsRelationshipsGetWorks(): void
     {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
-
-        $this->getDatabase()->getAuthorization()->cleanRoles();
-        $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
-            return [];
+            return;
         }
 
-        $document = $database->getDocument(
-            $collection->getId(),
-            $document->getId()
-        );
-
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
-        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
-        $this->assertCount(2, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
-        $this->assertFalse($document->isEmpty());
-
-        $this->getDatabase()->getAuthorization()->cleanRoles();
-        $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
-
-        $document = $database->getDocument(
-            $collection->getId(),
-            $document->getId()
-        );
-
-        $this->assertInstanceOf(Document::class, $document);
-        $this->assertInstanceOf(Document::class, $document->getAttribute(Database::RELATION_ONE_TO_ONE));
-        $this->assertIsArray($document->getAttribute(Database::RELATION_ONE_TO_MANY));
-        $this->assertCount(1, $document->getAttribute(Database::RELATION_ONE_TO_MANY));
-        $this->assertFalse($document->isEmpty());
-
-        return $data;
-    }
-
-    /**
-     * @param array<Document> $data
-     * @depends testCollectionPermissionsRelationshipsCreateWorks
-     */
-    public function testCollectionPermissionsRelationshipsUpdateThrowsException(array $data): void
-    {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
-
-        $this->getDatabase()->getAuthorization()->cleanRoles();
-        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
-
-        $this->expectException(AuthorizationException::class);
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $document = $database->updateDocument(
-            $collection->getId(),
-            $document->getId(),
-            $document->setAttribute('test', $document->getAttribute('test').'new_value')
-        );
-    }
-
-    /**
-     * @depends testCollectionPermissionsRelationshipsCreateWorks
-     * @param array<Document> $data
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsRelationshipsUpdateWorks(array $data): array
-    {
-        [$collection, $collectionOneToOne, $collectionOneToMany, $document] = $data;
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -1144,58 +1278,125 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        $document = $database->getDocument(
+            $collectionId,
+            $docId
+        );
+
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(2, $document->getDocuments(RelationType::OneToMany->value));
+        $this->assertFalse($document->isEmpty());
+
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
+
+        $document = $database->getDocument(
+            $collectionId,
+            $docId
+        );
+
+        $this->assertFalse($document->getDocument(RelationType::OneToOne->value)->isEmpty());
+        $this->assertCount(1, $document->getDocuments(RelationType::OneToMany->value));
+        $this->assertFalse($document->isEmpty());
+    }
+
+    public function testCollectionPermissionsRelationshipsUpdateThrowsException(): void
+    {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+        $document = $database->getDocument($collectionId, $docId);
+
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
+
+        $test = $document->getAttribute('test');
+        $this->assertIsString($test);
+        $this->expectException(AuthorizationException::class);
         $database->updateDocument(
-            $collection->getId(),
-            $document->getId(),
+            $collectionId,
+            $docId,
+            $document->setAttribute('test', $test.'new_value')
+        );
+    }
+
+    public function testCollectionPermissionsRelationshipsUpdateWorks(): void
+    {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $data = $this->initRelationshipPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
+
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $document = $database->getDocument($collectionId, $docId);
+
+        $updated = $database->updateDocument(
+            $collectionId,
+            $docId,
             $document
         );
-
-        $this->assertTrue(true);
+        $this->assertFalse($updated->isEmpty());
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('random')->toString());
 
-        $database->updateDocument(
-            $collection->getId(),
-            $document->getId(),
+        $updated = $database->updateDocument(
+            $collectionId,
+            $docId,
             $document->setAttribute('test', 'ipsum')
         );
-
-        $this->assertTrue(true);
-
-        return $data;
+        $this->assertSame('ipsum', $updated->getAttribute('test'));
     }
 
-    /**
-     * @param array<Document> $data
-     * @depends testCollectionPermissionsCreateWorks
-     */
-    public function testCollectionPermissionsUpdateThrowsException(array $data): void
+    public function testCollectionPermissionsUpdateThrowsException(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
+
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $this->getDatabase()->getAuthorization()->cleanRoles();
+        $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
+        $document = $database->getDocument($collectionId, $docId);
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
         $this->expectException(AuthorizationException::class);
 
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $document = $database->updateDocument(
-            $collection->getId(),
-            $document->getId(),
-            $document->setAttribute('test', 'lorem')
+        $database->updateDocument(
+            $collectionId,
+            $docId,
+            $document->setAttribute('test', 'changed_value')
         );
     }
 
-    /**
-     * @depends testCollectionPermissionsCreateWorks
-     * @param array<Document> $data
-     * @return array<Document>
-     */
-    public function testCollectionPermissionsUpdateWorks(array $data): array
+    public function testCollectionPermissionsUpdateWorks(): void
     {
-        [$collection, $document] = $data;
+        $data = $this->initCollectionPermissionFixture();
+        $collectionId = $data['collectionId'];
+        $docId = $data['docId'];
 
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::users()->toString());
@@ -1203,26 +1404,25 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $this->assertInstanceOf(Document::class, $database->updateDocument(
-            $collection->getId(),
-            $document->getId(),
+        $document = $database->getDocument($collectionId, $docId);
+
+        $updated = $database->updateDocument(
+            $collectionId,
+            $docId,
             $document->setAttribute('test', 'ipsum')
-        ));
-
-        return $data;
+        );
+        $this->assertSame('ipsum', $updated->getAttribute('test'));
     }
-
-    /**
-     * @depends testCollectionUpdate
-     */
-    public function testCollectionUpdatePermissionsThrowException(Document $collection): void
+    public function testCollectionUpdatePermissionsThrowException(): void
     {
+        $data = $this->initCollectionUpdateFixture();
+        $collectionId = $data['collectionId'];
         $this->expectException(DatabaseException::class);
 
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->updateCollection($collection->getId(), permissions: [
+        $database->updateCollection($collectionId, permissions: [
             'i dont work'
         ], documentSecurity: false);
     }
@@ -1232,11 +1432,11 @@ trait PermissionTests
         $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
         $database = $this->getDatabase();
 
-        $database->createCollection('animals', permissions: [
+        $database->createCollection(new Collection(id: 'animals', permissions: [
             Permission::create(Role::any()),
-        ], documentSecurity: true);
+        ]));
 
-        $database->createAttribute('animals', 'type', Database::VAR_STRING, 128, true);
+        $database->createAttribute('animals', Attribute::string(key: 'type', size: 128, required: true));
 
         $dog = $database->createDocument('animals', new Document([
             '$id' => 'dog',
@@ -1306,7 +1506,7 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForRelationships()) {
+        if (!($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -1314,25 +1514,20 @@ trait PermissionTests
         $this->getDatabase()->getAuthorization()->cleanRoles();
         $this->getDatabase()->getAuthorization()->addRole(Role::user('a')->toString());
 
-        $database->createCollection('parentRelationTest', [], [], [
+        $database->createCollection(new Collection(id: 'parentRelationTest', permissions: [
             Permission::read(Role::user('a')),
             Permission::create(Role::user('a')),
             Permission::update(Role::user('a')),
             Permission::delete(Role::user('a'))
-        ]);
-        $database->createCollection('childRelationTest', [], [], [
+        ]));
+        $database->createCollection(new Collection(id: 'childRelationTest', permissions: [
             Permission::create(Role::user('a')),
             Permission::read(Role::user('a')),
-        ]);
-        $database->createAttribute('parentRelationTest', 'name', Database::VAR_STRING, 255, false);
-        $database->createAttribute('childRelationTest', 'name', Database::VAR_STRING, 255, false);
+        ]));
+        $database->createAttribute('parentRelationTest', Attribute::string(key: 'name'));
+        $database->createAttribute('childRelationTest', Attribute::string(key: 'name'));
 
-        $database->createRelationship(
-            collection: 'parentRelationTest',
-            relatedCollection: 'childRelationTest',
-            type: Database::RELATION_ONE_TO_MANY,
-            id: 'children'
-        );
+        $database->createRelationship(Relationship::oneToMany(collection: 'parentRelationTest', relatedCollection: 'childRelationTest', key: 'children'));
 
         // Create document with relationship with nested data
         $parent = $database->createDocument('parentRelationTest', new Document([
@@ -1345,7 +1540,9 @@ trait PermissionTests
                 ],
             ],
         ]));
-        $this->assertEquals('child1', $parent->getAttribute('children')[0]->getId());
+        $children = $parent->getDocuments('children');
+        $this->assertNotEmpty($children);
+        $this->assertEquals('child1', $children[0]->getId());
         $parent->setAttribute('children', [
             [
                 '$id' => 'child2',
@@ -1353,7 +1550,9 @@ trait PermissionTests
         ]);
         $updatedParent = $database->updateDocument('parentRelationTest', 'parent1', $parent);
 
-        $this->assertEquals('child2', $updatedParent->getAttribute('children')[0]->getId());
+        $updatedChildren = $updatedParent->getDocuments('children');
+        $this->assertNotEmpty($updatedChildren);
+        $this->assertEquals('child2', $updatedChildren[0]->getId());
 
         $database->deleteCollection('parentRelationTest');
         $database->deleteCollection('childRelationTest');
@@ -1364,12 +1563,12 @@ trait PermissionTests
         /** @var Database $database */
         $database = $this->getDatabase();
         $authorization = $database->getAuthorization();
-        $collection = 'perm_exact_' . uniqid();
+        $collection = 'perm_exact_'.uniqid();
 
-        $database->createCollection($collection, permissions: [
+        $database->createCollection(new Collection(id: $collection, permissions: [
             Permission::create(Role::any()),
-        ], documentSecurity: true);
-        $database->createAttribute($collection, 'amount', Database::VAR_INTEGER, 0, true);
+        ]));
+        $database->createAttribute($collection, Attribute::integer(key: 'amount', required: true));
 
         $authorization->skip(function () use ($database, $collection): void {
             $database->createDocument($collection, new Document([
@@ -1404,7 +1603,7 @@ trait PermissionTests
         $this->assertSame('literal', $database->getDocument($collection, 'literal')->getId());
 
         $authorization->cleanRoles();
-        $authorization->addRole(Role::user('a' . \str_repeat('.', 19))->toString());
+        $authorization->addRole(Role::user('a'.\str_repeat('.', 19))->toString());
 
         $this->assertSame([], $this->documentIds($database->find($collection)));
         $this->assertSame(0, $database->count($collection));
@@ -1433,5 +1632,4 @@ trait PermissionTests
             $documents,
         ));
     }
-
 }

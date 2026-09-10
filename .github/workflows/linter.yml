@@ -1,6 +1,6 @@
 name: "Linter"
 
-on: [ pull_request ]
+on: [ pull_request, workflow_dispatch ]
 jobs:
   lint:
     name: Linter
@@ -13,8 +13,10 @@ jobs:
           fetch-depth: 2
 
       - run: git checkout HEAD^2
+        if: github.event_name == 'pull_request'
 
       - name: Run Linter
         run: |
           docker run --rm -v $PWD:/app -w /app phpswoole/swoole:5.1.8-php8.3-alpine sh -c \
-          "composer install --profile --ignore-platform-reqs && composer lint"
+          "composer install --profile --ignore-platform-reqs && \
+           composer lint"

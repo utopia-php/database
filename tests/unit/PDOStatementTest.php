@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\PDO;
 use Utopia\Database\PDOStatement;
 
-class PDOStatementTest extends TestCase
+final class PDOStatementTest extends TestCase
 {
     /**
      * @return PDO&\PHPUnit\Framework\MockObject\MockObject
@@ -16,8 +16,7 @@ class PDOStatementTest extends TestCase
     {
         $pdo = $this->getMockBuilder(PDO::class)
             ->disableOriginalConstructor()
-            ->onlyMethods(['reconnect', 'prepareNative'])
-            ->addMethods(['inTransaction'])
+            ->onlyMethods(['inTransaction', 'prepareNative', 'reconnect'])
             ->getMock();
 
         $pdo->method('inTransaction')->willReturn($inTransaction);
@@ -109,7 +108,7 @@ class PDOStatementTest extends TestCase
 
     public function testForwardsCallsAndPropertiesToUnderlyingStatement(): void
     {
-        $pdo = $this->pdoMock(inTransaction: false);
+        $pdo = self::createStub(PDO::class);
 
         $statement = $this->statementMock();
         $statement->expects($this->once())
@@ -124,12 +123,11 @@ class PDOStatementTest extends TestCase
 
     public function testIsIterableAndDelegatesIterationToTheStatement(): void
     {
-        $pdo = $this->pdoMock(inTransaction: false);
-        $statement = $this->statementMock();
+        $pdo = self::createStub(PDO::class);
+        $statement = self::createStub(\PDOStatement::class);
 
         $wrapper = new PDOStatement($pdo, $statement, 'SELECT 1');
 
-        $this->assertInstanceOf(\IteratorAggregate::class, $wrapper);
         $this->assertSame($statement, $wrapper->getIterator());
     }
 
@@ -199,11 +197,11 @@ class PDOStatementTest extends TestCase
         $replay = [];
         $second = $this->statementMock();
         $second->method('bindValue')->willReturnCallback(function (int|string $p, mixed $v) use (&$replay): bool {
-            $replay[] = "value:{$v}";
+            $replay[] = ['value', $v];
             return true;
         });
         $second->method('bindParam')->willReturnCallback(function (int|string $p, mixed &$v) use (&$replay): bool {
-            $replay[] = "param:{$v}";
+            $replay[] = ['param', $v];
             return true;
         });
         $second->expects($this->once())->method('execute')->willReturn(true);
@@ -219,6 +217,6 @@ class PDOStatementTest extends TestCase
         $wrapper->bindParam(':id', $current);
 
         $this->assertTrue($wrapper->execute());
-        $this->assertSame(['value:old', 'param:new'], $replay, 'replay must preserve original bind order so the last binding wins');
+        $this->assertSame([['value', 'old'], ['param', 'new']], $replay, 'replay must preserve original bind order so the last binding wins');
     }
 }

@@ -6,9 +6,9 @@ concurrency:
 
 env:
   IMAGE: databases-dev
-  CACHE_KEY: databases-dev-${{ github.event.pull_request.head.sha }}
+  CACHE_KEY: databases-dev-${{ github.event.pull_request.head.sha || github.sha }}
 
-on: [pull_request]
+on: [pull_request, workflow_dispatch]
 
 jobs:
   setup:
@@ -25,6 +25,7 @@ jobs:
         uses: docker/build-push-action@1104d471370f9806843c095c1db02b5a90c5f8b6 # v3.3.1
         with:
           context: .
+          file: Dockerfile
           push: false
           tags: ${{ env.IMAGE }}
           load: true
@@ -60,34 +61,48 @@ jobs:
           docker compose up -d --wait
 
       - name: Run Unit Tests
-        run: docker compose exec tests vendor/bin/phpunit /usr/src/code/tests/unit
+        run: docker compose exec -e XDEBUG_MODE=off tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/unit
 
   adapter_test:
-    name: Adapter Tests
+    name: "Adapter Tests (${{ matrix.adapter }})"
     runs-on: ubuntu-latest
     needs: setup
     strategy:
       fail-fast: false
       matrix:
-        adapter:
-          [
-            MongoDB,
-            MariaDB,
-            MySQL,
-            Postgres,
-            SQLite,
-            Memory,
-            Mirror,
-            Pool,
-            Redis,
-            SharedTables/MongoDB,
-            SharedTables/MariaDB,
-            SharedTables/MySQL,
-            SharedTables/Postgres,
-            SharedTables/SQLite,
-            SharedTables/Redis,
-            Schemaless/MongoDB,
-          ]
+        include:
+          - adapter: MongoDB
+            profiles: "--profile mongo"
+          - adapter: MariaDB
+            profiles: "--profile mariadb"
+          - adapter: MySQL
+            profiles: "--profile mysql"
+          - adapter: Postgres
+            profiles: "--profile postgres"
+          - adapter: SQLite
+            profiles: ""
+          - adapter: Memory
+            profiles: ""
+          - adapter: Mirror
+            profiles: "--profile mariadb --profile mariadb-mirror --profile redis-mirror"
+          - adapter: Pool
+            profiles: "--profile mysql"
+          - adapter: Redis
+            profiles: ""
+          - adapter: SharedTables/MongoDB
+            profiles: "--profile mongo"
+          - adapter: SharedTables/MariaDB
+            profiles: "--profile mariadb"
+          - adapter: SharedTables/MySQL
+            profiles: "--profile mysql"
+          - adapter: SharedTables/Postgres
+            profiles: "--profile postgres"
+          - adapter: SharedTables/SQLite
+            profiles: ""
+          - adapter: SharedTables/Redis
+            profiles: ""
+          - adapter: Schemaless/MongoDB
+            profiles: "--profile mongo"
 
     steps:
       - name: checkout
@@ -103,7 +118,7 @@ jobs:
       - name: Load and Start Services
         run: |
           docker load --input /tmp/${{ env.IMAGE }}.tar
-          docker compose up -d --wait
+          docker compose ${{ matrix.profiles }} up -d --wait
 
       - name: Run Tests
-        run: docker compose exec -T tests vendor/bin/phpunit /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php --debug
+        run: docker compose exec -T -e XDEBUG_MODE=off tests vendor/bin/paratest --configuration phpunit.xml --functional --processes 4 /usr/src/code/tests/e2e/Adapter/${{matrix.adapter}}Test.php

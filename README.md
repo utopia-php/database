@@ -355,58 +355,23 @@ $database->getKeywords();
 ### Collection Methods
 
 ```php
-// Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions' 
+// Creates two new collection named '$namespace_$collectionName' with attribute names '_id', '_uid', '_createdAt', '_updatedAt', '_permissions'
 // The second collection is named '$namespace_$collectionName_perms' with attribute names '_id', '_type', '_permission', '_document'
-$database->createCollection(
-    id: 'users'
-);
+$database->createCollection(new Collection(
+    id: 'users',
+));
 
-// Create collection with attributes and indexes
-$attributes = [
-     new Document([
-         '$id' => ID::unique(),
-         '$permissions' => [
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-         ],
-         'name' => 'Jhon', 
-         'age'  =>  20
-     ]),
-     new Document([
-         '$id' => ID::unique(),
-         '$permissions' => [
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-         ],
-         'name' => 'Doe', 
-         'age'  =>  34
-     ]),
-]
-
-$indexes = [
-     new Document([
-            '$id' => ID::unique(),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['name'],
-            'lengths' => [256],
-            'orders' => ['ASC'],
-        ]),
-     new Document([
-            '$id' => ID::unique(),
-            'type' => Database::INDEX_KEY,
-            'attributes' => ['name', 'age'],
-            'lengths' => [128, 128],
-            'orders' => ['ASC'],
-        ])
-];
-
-$database->createCollection(
-    id: 'users', 
-    attributes: $attributes, 
-    indexes: $indexes
-);
+$database->createCollection(new Collection(
+    id: 'users',
+    attributes: [
+        Attribute::string(key: 'name', size: 256),
+        Attribute::integer(key: 'age'),
+    ],
+    indexes: [
+        Index::key(key: 'idx_name', attributes: ['name'], lengths: [256], orders: ['ASC']),
+        Index::key(key: 'idx_name_age', attributes: ['name', 'age'], lengths: [128, 128], orders: ['ASC']),
+    ],
+));
 
 // Update Collection Permissions
 $database->updateCollection(
@@ -633,22 +598,22 @@ $database->createRelationship(
 ); 
 
 // Relationship onDelete types
-Database::RELATION_MUTATE_CASCADE, 
-Database::RELATION_MUTATE_SET_NULL,
-Database::RELATION_MUTATE_RESTRICT,
+ForeignKeyAction::Cascade->value,
+ForeignKeyAction::SetNull->value,
+ForeignKeyAction::Restrict->value,
 
 // Update the relationship with the default reference attributes
 $database->updateRelationship(
     collection: 'movies', 
     id: 'users', 
-    onDelete: Database::RELATION_MUTATE_CASCADE
+    onDelete: ForeignKeyAction::Cascade->value
 ); 
 
 // Update the relationship with custom reference attributes
 $database->updateRelationship(
     collection: 'movies', 
     id: 'users', 
-    onDelete: Database::RELATION_MUTATE_CASCADE, 
+    onDelete: ForeignKeyAction::Cascade->value,
     newKey: 'movies_id', 
     newTwoWayKey: 'users_id', 
     twoWay: true
@@ -755,25 +720,25 @@ $database->decreaseDocumentAttribute(
 // Update the value of an attribute in a document
 
 // Set types
-Document::SET_TYPE_ASSIGN, // Assign the new value directly
-Document::SET_TYPE_APPEND, // Append the new value to end of the array
-Document::SET_TYPE_PREPEND // Prepend the new value to start of the array
+SetType::Assign, // Assign the new value directly
+SetType::Append, // Append the new value to end of the array
+SetType::Prepend // Prepend the new value to start of the array
 Note: Using append/prepend with an attribute which is not an array, it will be set to an array containing the new value.
 
 $document->setAttribute(key: 'name', 'Chris Smoove')
-         ->setAttribute(key: 'age', 33, Document::SET_TYPE_ASSIGN);
+         ->setAttribute(key: 'age', 33, SetType::Assign);
 
 $database->updateDocument(
-    collection: 'users', 
-    id: $document->getId(), 
+    collection: 'users',
+    id: $document->getId(),
     document: $document
-);         
+);
 
 // Update the permissions of a document
-$document->setAttribute('$permissions', Permission::read(Role::any()), Document::SET_TYPE_APPEND)
-         ->setAttribute('$permissions', Permission::create(Role::any()), Document::SET_TYPE_APPEND)
-         ->setAttribute('$permissions', Permission::update(Role::any()), Document::SET_TYPE_APPEND)
-         ->setAttribute('$permissions', Permission::delete(Role::any()), Document::SET_TYPE_APPEND)
+$document->setAttribute('$permissions', Permission::read(Role::any()), SetType::Append)
+         ->setAttribute('$permissions', Permission::create(Role::any()), SetType::Append)
+         ->setAttribute('$permissions', Permission::update(Role::any()), SetType::Append)
+         ->setAttribute('$permissions', Permission::delete(Role::any()), SetType::Append)
 
 $database->updateDocument(
     collection: 'users', 

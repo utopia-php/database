@@ -6,11 +6,14 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 
 class QueryCacheTest extends TestCase
 {
@@ -25,8 +28,14 @@ class QueryCacheTest extends TestCase
             ->setNamespace('list_cache_' . \uniqid());
 
         $database->create();
+        $database->getAuthorization()->addRole(Role::any()->toString());
 
         return $database;
+    }
+
+    private function withCache(Database $database, string $key, callable $callback): mixed
+    {
+        return $database->withCache($key, $callback);
     }
 
     /**
@@ -40,7 +49,7 @@ class QueryCacheTest extends TestCase
         ?string $namespace = null,
     ): array {
         foreach ($queries as $query) {
-            if ($query instanceof Query && $query->getMethod() === Query::TYPE_ORDER_RANDOM) {
+            if ($query->getMethod() === Method::OrderRandom) {
                 return $database->find($collection, $queries);
             }
         }
@@ -71,6 +80,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame(['value' => 'fresh'], $value);
         $this->assertSame(1, $callbackCalls);
 
@@ -82,6 +92,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame(['value' => 'fresh'], $value);
         $this->assertSame(1, $callbackCalls);
     }
@@ -101,6 +112,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame([], $value);
 
         $value = $database->withCache(
@@ -111,6 +123,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame([], $value);
         $this->assertSame(1, $callbackCalls);
     }
@@ -122,7 +135,8 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
             function () use (&$callbackCalls): mixed {
                 $callbackCalls++;
@@ -132,9 +146,10 @@ class QueryCacheTest extends TestCase
 
         $this->assertNull($value);
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
-            function () use (&$callbackCalls): string {
+            function () use (&$callbackCalls): mixed {
                 $callbackCalls++;
                 return 'miss';
             },
@@ -179,12 +194,15 @@ class QueryCacheTest extends TestCase
             'first-field',
         );
 
+        /** @var mixed $first */
+        /** @var mixed $second */
+        /** @var mixed $cachedFirst */
         $this->assertSame(['value' => 'first'], $first);
         $this->assertSame(['value' => 'second'], $second);
         $this->assertSame(['value' => 'first'], $cachedFirst);
         $this->assertSame(1, $firstCalls);
         $this->assertSame(1, $secondCalls);
-        $this->assertSame(['first-field', 'second-field'], $cache->list('key'));
+        $this->assertSame(3, $cache->getSize());
     }
 
     public function testWithCacheDoesNotCacheFalseValues(): void
@@ -194,9 +212,10 @@ class QueryCacheTest extends TestCase
 
         $callbackCalls = 0;
 
-        $value = $database->withCache(
+        $value = $this->withCache(
+            $database,
             'key',
-            function () use (&$callbackCalls): bool {
+            function () use (&$callbackCalls): mixed {
                 $callbackCalls++;
                 return false;
             },
@@ -213,6 +232,7 @@ class QueryCacheTest extends TestCase
             },
         );
 
+        /** @var mixed $value */
         $this->assertSame('fresh', $value);
         $this->assertSame(2, $callbackCalls);
     }
@@ -241,6 +261,8 @@ class QueryCacheTest extends TestCase
             hash: null,
         );
 
+        /** @var mixed $first */
+        /** @var mixed $second */
         $this->assertSame('first', $first);
         $this->assertSame('second', $second);
         $this->assertSame(2, $callbackCalls);
@@ -279,10 +301,10 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', permissions: [
+        $database->createCollection(new Collection(id: 'wafRules', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -315,10 +337,10 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', permissions: [
+        $database->createCollection(new Collection(id: 'wafRules', permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -355,9 +377,9 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', permissions: [
+        $database->createCollection(new Collection(id: 'wafRules', permissions: [
             Permission::read(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $callbackCalls = 0;
         $collection = $database->getCollection('wafRules');
@@ -381,6 +403,8 @@ class QueryCacheTest extends TestCase
             hash: $hash,
         );
 
+        /** @var mixed $first */
+        /** @var mixed $second */
         $this->assertSame(10, $first);
         $this->assertSame(10, $second);
         $this->assertSame(1, $callbackCalls);
@@ -390,20 +414,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
+            Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -443,20 +459,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
+            Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -489,20 +497,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new JsonHashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('metrics', [
-            new Document([
-                '$id' => 'value',
-                'type' => Database::VAR_FLOAT,
-                'size' => 0,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+        $database->createCollection(new Collection(id: 'metrics', attributes: [
+            Attribute::double(key: 'value'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('metrics', new Document([
             '$id' => 'metric-a',
@@ -526,26 +526,30 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache, [
             'wrapped' => [
-                'encode' => static fn (mixed $value): string => 'encoded:' . $value,
-                'decode' => static fn (mixed $value): string => \str_starts_with((string) $value, 'encoded:')
-                    ? \substr((string) $value, 8)
-                    : 'double:' . $value,
+                'encode' => static function (mixed $value): string {
+                    if (! \is_scalar($value) && $value !== null) {
+                        throw new \InvalidArgumentException('Filter input must be scalar or null');
+                    }
+
+                    return 'encoded:'.(string) $value;
+                },
+                'decode' => static function (mixed $value): string {
+                    if (! \is_string($value)) {
+                        throw new \InvalidArgumentException('Encoded filter input must be a string');
+                    }
+
+                    return \str_starts_with($value, 'encoded:')
+                        ? \substr($value, 8)
+                        : 'double:'.$value;
+                },
             ],
         ]);
-        $database->createCollection('secrets', [
-            new Document([
-                '$id' => 'secret',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => ['wrapped'],
-            ]),
+        $database->createCollection(new Collection(id: 'secrets', attributes: [
+            Attribute::string(key: 'secret', filters: ['wrapped']),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('secrets', new Document([
             '$id' => 'secret-a',
@@ -568,20 +572,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
+            Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -611,19 +607,11 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->getAuthorization()->skip(function () use ($database): void {
-            $database->createCollection('secureRules', [
-                new Document([
-                    '$id' => 'projectId',
-                    'type' => Database::VAR_STRING,
-                    'size' => 255,
-                    'required' => false,
-                    'signed' => true,
-                    'array' => false,
-                    'filters' => [],
-                ]),
+            $database->createCollection(new Collection(id: 'secureRules', attributes: [
+                Attribute::string(key: 'projectId'),
             ], permissions: [
                 Permission::create(Role::any()),
-            ], documentSecurity: true);
+            ]));
 
             $database->createDocument('secureRules', new Document([
                 '$id' => 'rule-a',
@@ -670,9 +658,9 @@ class QueryCacheTest extends TestCase
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
         $database->getAuthorization()->skip(function () use ($database): void {
-            $database->createCollection('secureRules', permissions: [
+            $database->createCollection(new Collection(id: 'secureRules', permissions: [
                 Permission::create(Role::any()),
-            ], documentSecurity: true);
+            ]));
         });
 
         $database->getAuthorization()->addRole(Role::user('user-1')->toString());
@@ -680,7 +668,8 @@ class QueryCacheTest extends TestCase
         $collection = $database->getCollection('secureRules');
         $key = $database->getQueryCacheKey($collection->getId(), '_39');
         $hash = $database->getQueryCacheField($collection);
-        $database->getCache()->save($key, [
+        $this->assertNotNull($hash);
+        $this->storeCacheValue($cache, $key, $hash, [
             'collection' => $collection->getId(),
             'type' => 'documents',
             'value' => [
@@ -691,7 +680,7 @@ class QueryCacheTest extends TestCase
                     ],
                 ],
             ],
-        ], $hash);
+        ]);
 
         $callbackCalls = 0;
         $documents = $database->withCache(
@@ -707,6 +696,7 @@ class QueryCacheTest extends TestCase
             hash: $hash,
         );
 
+        /** @var mixed $documents */
         $this->assertSame([], $documents);
         $this->assertSame(0, $callbackCalls);
     }
@@ -715,17 +705,21 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('parents', permissions: [
+        $database->createCollection(new Collection(id: 'parents', permissions: [
             Permission::read(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $queries = [
             Query::limit(25),
         ];
 
         $collection = $database->getCollection('parents');
-        $cache->save(
+        $hash = $database->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($hash);
+        $this->storeCacheValue(
+            $cache,
             $database->getQueryCacheKey($collection->getId(), '_39'),
+            $hash,
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
@@ -740,34 +734,26 @@ class QueryCacheTest extends TestCase
                     ],
                 ],
             ],
-            $database->getQueryCacheField($collection, $queries),
         );
 
         $parents = $this->findWithCache($database, 'parents', $queries, '_39');
 
         $this->assertCount(1, $parents);
-        $this->assertInstanceOf(Document::class, $parents[0]->getAttribute('child'));
-        $this->assertSame('child-a', $parents[0]->getAttribute('child')->getId());
+        $child = $parents[0]->getAttribute('child');
+        $this->assertInstanceOf(Document::class, $child);
+        $this->assertSame('child-a', $child->getId());
     }
 
     public function testQueryCacheRefreshesInvalidPayload(): void
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
+            Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -781,14 +767,17 @@ class QueryCacheTest extends TestCase
         ];
 
         $collection = $database->getCollection('wafRules');
-        $cache->save(
+        $hash = $database->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($hash);
+        $this->storeCacheValue(
+            $cache,
             $database->getQueryCacheKey($collection->getId(), '_39'),
+            $hash,
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
                 'value' => 'invalid',
             ],
-            $database->getQueryCacheField($collection, $queries),
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
@@ -801,20 +790,12 @@ class QueryCacheTest extends TestCase
     {
         $cache = new HashMemoryCache();
         $database = $this->createDatabase($cache);
-        $database->createCollection('wafRules', [
-            new Document([
-                '$id' => 'projectId',
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => false,
-                'signed' => true,
-                'array' => false,
-                'filters' => [],
-            ]),
+        $database->createCollection(new Collection(id: 'wafRules', attributes: [
+            Attribute::string(key: 'projectId'),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
-        ]);
+        ], documentSecurity: false));
 
         $database->createDocument('wafRules', new Document([
             '$id' => 'rule-a',
@@ -832,8 +813,12 @@ class QueryCacheTest extends TestCase
         ];
 
         $collection = $database->getCollection('wafRules');
-        $cache->save(
+        $hash = $database->getQueryCacheField($collection, $queries);
+        $this->assertNotNull($hash);
+        $this->storeCacheValue(
+            $cache,
             $database->getQueryCacheKey($collection->getId(), '_39'),
+            $hash,
             [
                 'collection' => $collection->getId(),
                 'type' => 'documents',
@@ -845,7 +830,6 @@ class QueryCacheTest extends TestCase
                     'invalid',
                 ],
             ],
-            $database->getQueryCacheField($collection, $queries),
         );
 
         $rules = $this->findWithCache($database, 'wafRules', $queries, '_39');
@@ -854,6 +838,14 @@ class QueryCacheTest extends TestCase
             static fn (Document $document): string => $document->getId(),
             $rules,
         ));
+    }
+
+    /** @param array<string, mixed> $value */
+    private function storeCacheValue(HashMemoryCache $cache, string $key, string $hash, array $value): void
+    {
+        $epoch = 'test-epoch';
+        $cache->save(\strtolower($key.'#epoch'), $epoch);
+        $cache->save(\strtolower($key.'#'.$epoch.':'.$hash), $value);
     }
 }
 

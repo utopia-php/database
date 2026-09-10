@@ -10236,6 +10236,38 @@ class Database
                 continue;
             }
 
+            if (
+                !\in_array($query->getMethod(), [
+                    Query::TYPE_SELECT,
+                    Query::TYPE_LIMIT,
+                    Query::TYPE_OFFSET,
+                    Query::TYPE_CURSOR_AFTER,
+                    Query::TYPE_CURSOR_BEFORE,
+                    Query::TYPE_ORDER_ASC,
+                    Query::TYPE_ORDER_DESC,
+                    Query::TYPE_ORDER_RANDOM,
+                ], true)
+                && \str_contains($query->getAttribute(), '.')
+            ) {
+                $nesting = \explode('.', $query->getAttribute());
+                $filteredKey = \array_shift($nesting);
+
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $filteredKey,
+                ))[0] ?? null;
+
+                if ($relationship) {
+                    $nestedSelections[$filteredKey][] = new Query(
+                        $query->getMethod(),
+                        \implode('.', $nesting),
+                        $query->getValues(),
+                    );
+                }
+
+                continue;
+            }
+
             if ($query->getMethod() !== Query::TYPE_SELECT) {
                 continue;
             }

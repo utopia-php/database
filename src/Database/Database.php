@@ -9879,6 +9879,12 @@ class Database
             $query->setOnArray($attribute->getAttribute('array', false));
             $query->setAttributeType($attribute->getAttribute('type'));
 
+            // Permissions use scalar JSON storage metadata, but permission
+            // queries operate on the individual values in the stored array.
+            if ($query->getAttribute() === '$permissions') {
+                $query->setOnArray(true);
+            }
+
             if ($attribute->getAttribute('type') == Database::VAR_DATETIME) {
                 $values = $query->getValues();
                 foreach ($values as $valueIndex => $value) {

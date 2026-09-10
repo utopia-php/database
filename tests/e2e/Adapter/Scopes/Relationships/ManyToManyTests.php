@@ -2400,4 +2400,186 @@ trait ManyToManyTests
         $database->deleteCollection('products');
         $database->deleteCollection('tags');
     }
+
+    private function createM2mNestedOrderFixture(Database $database): void
+    {
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection('m2mno_tracks', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('m2mno_tracks', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('m2mno_albums', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('m2mno_albums', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'm2mno_albums',
+            relatedCollection: 'm2mno_tracks',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'tracks',
+            twoWayKey: 'albums'
+        );
+
+        foreach (['m2mno_track_b' => 'Beta', 'm2mno_track_a' => 'Alpha', 'm2mno_track_c' => 'Gamma'] as $id => $name) {
+            $database->createDocument('m2mno_tracks', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'name' => $name,
+            ]));
+        }
+
+        $database->createDocument('m2mno_albums', new Document([
+            '$id' => 'm2mno_album1',
+            '$permissions' => $permissions,
+            'title' => 'Album One',
+            'tracks' => ['m2mno_track_b', 'm2mno_track_a', 'm2mno_track_c'],
+        ]));
+
+        $database->createDocument('m2mno_albums', new Document([
+            '$id' => 'm2mno_album2',
+            '$permissions' => $permissions,
+            'title' => 'Album Two',
+            'tracks' => ['m2mno_track_c', 'm2mno_track_a'],
+        ]));
+    }
+
+    private function deleteM2mNestedOrderFixture(Database $database): void
+    {
+        $database->deleteCollection('m2mno_albums');
+        $database->deleteCollection('m2mno_tracks');
+    }
+
+    /**
+     * @param mixed $documents
+     * @return array<string>
+     */
+    private function m2mNestedOrderIds(mixed $documents): array
+    {
+        $this->assertIsArray($documents);
+
+        return \array_map(fn (Document $document) => $document->getId(), $documents);
+    }
+
+    public function testM2mNestedOrderDescending(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createM2mNestedOrderFixture($database);
+
+        $albums = $database->find('m2mno_albums', [
+            Query::equal('$id', ['m2mno_album1']),
+            Query::nested('tracks', [Query::orderDesc('name')]),
+        ]);
+
+        $this->assertCount(1, $albums);
+        $this->assertSame(
+            ['m2mno_track_c', 'm2mno_track_b', 'm2mno_track_a'],
+            $this->m2mNestedOrderIds($albums[0]->getAttribute('tracks'))
+        );
+
+        $this->deleteM2mNestedOrderFixture($database);
+    }
+
+    public function testM2mNestedOrderAscending(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createM2mNestedOrderFixture($database);
+
+        $albums = $database->find('m2mno_albums', [
+            Query::equal('$id', ['m2mno_album1']),
+            Query::nested('tracks', [Query::orderAsc('name')]),
+        ]);
+
+        $this->assertCount(1, $albums);
+        $this->assertSame(
+            ['m2mno_track_a', 'm2mno_track_b', 'm2mno_track_c'],
+            $this->m2mNestedOrderIds($albums[0]->getAttribute('tracks'))
+        );
+
+        $this->deleteM2mNestedOrderFixture($database);
+    }
+
+    public function testM2mNestedOrderPerParentWithOverlap(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createM2mNestedOrderFixture($database);
+
+        $albums = $database->find('m2mno_albums', [
+            Query::nested('tracks', [Query::orderAsc('name')]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(2, $albums);
+        $this->assertSame(
+            ['m2mno_track_a', 'm2mno_track_b', 'm2mno_track_c'],
+            $this->m2mNestedOrderIds($albums[0]->getAttribute('tracks'))
+        );
+        $this->assertSame(
+            ['m2mno_track_a', 'm2mno_track_c'],
+            $this->m2mNestedOrderIds($albums[1]->getAttribute('tracks'))
+        );
+
+        $this->deleteM2mNestedOrderFixture($database);
+    }
+
+    public function testM2mNestedOrderJunctionOrderPreservedWithoutOrder(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createM2mNestedOrderFixture($database);
+
+        $albums = $database->find('m2mno_albums', [
+            Query::equal('$id', ['m2mno_album1']),
+        ]);
+
+        $this->assertCount(1, $albums);
+        $this->assertSame(
+            ['m2mno_track_b', 'm2mno_track_a', 'm2mno_track_c'],
+            $this->m2mNestedOrderIds($albums[0]->getAttribute('tracks'))
+        );
+
+        $albums = $database->find('m2mno_albums', [
+            Query::equal('$id', ['m2mno_album1']),
+            Query::nested('tracks', [Query::select(['name'])]),
+        ]);
+
+        $this->assertCount(1, $albums);
+        $this->assertSame(
+            ['m2mno_track_b', 'm2mno_track_a', 'm2mno_track_c'],
+            $this->m2mNestedOrderIds($albums[0]->getAttribute('tracks'))
+        );
+
+        $this->deleteM2mNestedOrderFixture($database);
+    }
 }

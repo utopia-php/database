@@ -5641,14 +5641,26 @@ class Database
                 $relatedById[$doc->getId()] = $doc;
             }
 
-            // Build final related arrays maintaining junction order
+            $ordered = Query::groupByType($queries)['orderTypes'] !== [];
+
             foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
                 $documentRelated = [];
-                foreach ($relatedDocIds as $relatedId) {
-                    if (isset($relatedById[$relatedId])) {
-                        $documentRelated[] = $relatedById[$relatedId];
+
+                if ($ordered) {
+                    $wanted = \array_flip($relatedDocIds);
+                    foreach ($foundRelated as $doc) {
+                        if (isset($wanted[$doc->getId()])) {
+                            $documentRelated[] = $doc;
+                        }
+                    }
+                } else {
+                    foreach ($relatedDocIds as $relatedId) {
+                        if (isset($relatedById[$relatedId])) {
+                            $documentRelated[] = $relatedById[$relatedId];
+                        }
                     }
                 }
+
                 $related[$documentId] = $documentRelated;
             }
         }

@@ -26,6 +26,95 @@ trait RelationshipTests
     use ManyToOneTests;
     use ManyToManyTests;
 
+    /**
+     * @return array<string, array{string, string, int}>
+     */
+    public static function relationshipQueryValueLimitProvider(): array
+    {
+        $cases = [];
+        foreach ([Database::RELATION_ONE_TO_ONE, Database::RELATION_ONE_TO_MANY, Database::RELATION_MANY_TO_ONE, Database::RELATION_MANY_TO_MANY] as $type) {
+            foreach (['parents', 'children'] as $collection) {
+                $cases[$type . ' ' . $collection] = [$type, $collection, 3];
+            }
+        }
+
+        // One parent can exceed the value limit when fetching its related documents.
+        $cases['manyToMany related documents'] = [Database::RELATION_MANY_TO_MANY, 'parents', 1];
+
+        return $cases;
+    }
+
+    /**
+     * @dataProvider relationshipQueryValueLimitProvider
+     */
+    public function testRelationshipQueryValueLimit(string $type, string $collection, int $limit): void
+    {
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection($parents, permissions: $permissions);
+        $database->createCollection($children, permissions: $permissions);
+        $database->createRelationship($parents, $children, $type, true, 'children', 'parents');
+
+        foreach (['child1', 'child2', 'child3'] as $id) {
+            $database->createDocument($children, new Document(['$id' => $id]));
+        }
+
+        for ($i = 1; $i <= 3; $i++) {
+            $related = match ($type) {
+                Database::RELATION_MANY_TO_MANY => ['child1', 'child2', 'child3'],
+                Database::RELATION_ONE_TO_MANY => ['child' . $i],
+                default => 'child' . $i,
+            };
+            $database->createDocument($parents, new Document([
+                '$id' => 'parent' . $i,
+                'children' => $related,
+            ]));
+        }
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(2);
+
+        try {
+            $documents = $database->find($collection === 'parents' ? $parents : $children, [Query::limit($limit)]);
+
+            $this->assertCount($limit, $documents);
+            foreach ($documents as $document) {
+                $related = $document->getAttribute($collection === 'parents' ? 'children' : 'parents');
+                $related = $related instanceof Document ? [$related] : $related;
+                $ids = \array_map(fn (Document $related) => $related->getId(), $related);
+                $prefix = $collection === 'parents' ? 'child' : 'parent';
+                $expected = $type === Database::RELATION_MANY_TO_MANY
+                    ? [$prefix . '1', $prefix . '2', $prefix . '3']
+                    : [$prefix . \substr($document->getId(), -1)];
+                $this->assertEqualsCanonicalizing($expected, $ids);
+            }
+
+            try {
+                $database->find($children, [Query::equal('$id', ['child1', 'child2', 'child3'])]);
+                $this->fail('Explicit queries must still respect the configured value limit.');
+            } catch (QueryException $exception) {
+                $this->assertSame('Invalid query: Query on attribute has greater than 2 values: $id', $exception->getMessage());
+            }
+        } finally {
+            $database->setMaxQueryValues($max);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
+    }
+
     public function testZoo(): void
     {
         /** @var Database $database */

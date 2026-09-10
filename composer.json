@@ -71,6 +71,7 @@
     },
     "suggest": {
         "ext-redis": "Needed to support Redis Cache Adapter",
+        "ext-swoole": "Needed to scope lifecycle hook silencing per coroutine and to detect lost connections",
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
     },

@@ -991,14 +991,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * Get the query to check for tenant when in shared tables mode
-     *
-     * @param  string  $collection  The collection being queried
-     * @param  string  $alias  The alias of the parent collection if in a subquery
-     */
-    abstract public function getTenantQuery(string $collection, string $alias = ''): string;
-
-    /**
      * Handle non utf characters supported?
      */
     public function getSupportNonUtfCharacters(): bool

@@ -1612,11 +1612,6 @@ LUA;
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        return '';
-    }
-
     public function setSupportForAttributes(bool $support): bool
     {
         $this->supportForAttributes = $support;

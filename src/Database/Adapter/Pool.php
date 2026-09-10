@@ -1000,16 +1000,6 @@ class Pool extends Adapter
         return $result;
     }
 
-    /**
-     * {@inheritDoc}
-     */
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        /** @var string $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
-    }
-
     protected function execute(mixed $stmt): bool
     {
         /** @var bool $result */

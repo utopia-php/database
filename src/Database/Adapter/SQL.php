@@ -5694,52 +5694,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Get the SQL tenant filter clause for shared-table queries.
-     *
-     * @param string $collection The collection name
-     * @param string $alias Optional table alias
-     * @param int $tenantCount Number of tenant values for IN clause
-     * @param string $condition The logical condition prefix (AND/WHERE)
-     * @return string
-     *
-     * @deprecated Use TenantFilter hook with the query builder instead.
-     */
-    public function getTenantQuery(
-        string $collection,
-        string $alias = '',
-        int $tenantCount = 0,
-        string $condition = 'AND'
-    ): string {
-        if (! $this->sharedTables) {
-            return '';
-        }
-
-        $dot = '';
-        if ($alias !== '') {
-            $dot = '.';
-            $alias = $this->quote($alias);
-        }
-
-        $bindings = [];
-        if ($tenantCount === 0) {
-            $bindings[] = ':'.Storage::TENANT;
-        } else {
-            for ($index = 0; $index < $tenantCount; $index++) {
-                $bindings[] = ':'.Storage::TENANT.'_'.$index;
-            }
-        }
-        $bindings = \implode(',', $bindings);
-
-        $tenant = Storage::TENANT;
-        $orIsNull = '';
-        if ($collection === Database::METADATA) {
-            $orIsNull = " OR {$alias}{$dot}{$tenant} IS NULL";
-        }
-
-        return "{$condition} ({$alias}{$dot}{$tenant} IN ({$bindings}) {$orIsNull})";
-    }
-
-    /**
      * Get the SQL projection given the selected attributes
      *
      * @param  array<string>  $selections

@@ -11,6 +11,8 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Document;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Write;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -182,6 +184,30 @@ class ReadWritePoolTest extends TestCase
 
         $result = $this->pool->delegate('ping', []);
         $this->assertTrue($result);
+    }
+
+    public function testReadReplicaReceivesWriteHooks(): void
+    {
+        // The permission side-table hook is a write hook, but Mongo decides whether to
+        // apply its read-side permission filter by asking the adapter whether that hook
+        // is present. A replica that never receives it answers no and reads unfiltered.
+        $hook = new Permissions();
+        $this->pool->addWriteHook($hook);
+
+        $received = [];
+        $this->readAdapter->method('getWriteHooks')->willReturnCallback(fn (): array => $received);
+        $this->readAdapter->method('addWriteHook')->willReturnCallback(
+            function (Write $hook) use (&$received): Adapter {
+                $received[] = $hook;
+
+                return $this->readAdapter;
+            }
+        );
+
+        $this->pool->setSticky(false);
+        $this->pool->find(new Document(['$id' => 'posts']), []);
+
+        $this->assertSame([$hook], $received, 'read replica did not receive the pool\'s write hooks');
     }
 
     public function testStickyDisabledRoutesReadNormally(): void

@@ -105,7 +105,7 @@ class ReadWritePool extends Pool
 
         if ($this->isReadOperation($method) && ! $this->isSticky()) {
             return $this->readPool->use(function (Adapter $adapter) use ($method, $args, $feature) {
-                $this->syncConfig($adapter);
+                $this->syncBorrowedAdapter($adapter);
 
                 return $this->invokeDelegated($adapter, $method, $args, $feature);
             });
@@ -132,33 +132,5 @@ class ReadWritePool extends Pool
         $elapsed = (\microtime(true) - $this->lastWriteTimestamp) * 1000;
 
         return $elapsed < $this->stickyDurationMs;
-    }
-
-    private function syncConfig(Adapter $adapter): void
-    {
-        $adapter->setDatabase($this->getDatabase());
-        $adapter->setNamespace($this->getNamespace());
-        $adapter->setSharedTables($this->getSharedTables());
-        $adapter->setTenant($this->getTenant());
-        $adapter->setTenantPerDocument($this->getTenantPerDocument());
-        $adapter->setAuthorization($this->authorization);
-
-        $this->syncTimeouts($adapter);
-
-        $adapter->resetDebug();
-        foreach ($this->getDebug() as $key => $value) {
-            $adapter->setDebug($key, $value);
-        }
-
-        $adapter->resetMetadata();
-        foreach ($this->getMetadata() as $key => $value) {
-            $adapter->setMetadata($key, $value);
-        }
-
-        $adapter->setProfiler($this->profiler);
-        $adapter->resetTransforms();
-        foreach ($this->queryTransforms as $tName => $tTransform) {
-            $adapter->addTransform($tName, $tTransform);
-        }
     }
 }

@@ -2000,11 +2000,6 @@ class Memory extends Adapter implements Feature\Relationships
         return [];
     }
 
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        return '';
-    }
-
     protected function execute(mixed $stmt): bool
     {
         return true;

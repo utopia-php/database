@@ -158,7 +158,7 @@ class QueriesTest extends TestCase
         ];
 
         $validator = new Queries([
-            new Aggregate(),
+            new Aggregate($attributes),
             new Order($attributes),
         ]);
 
@@ -170,7 +170,7 @@ class QueriesTest extends TestCase
 
     public function test_variance_and_stddev_method_type_mapping(): void
     {
-        $validator = new Queries([new Aggregate()]);
+        $validator = new Queries([new Aggregate(supportForAttributes: false)]);
 
         $this->assertTrue($validator->isValid([Query::variance('col', 'var_col')]));
         $this->assertTrue($validator->isValid([Query::stddev('col', 'std_col')]));
@@ -185,7 +185,7 @@ class QueriesTest extends TestCase
 
     public function test_group_by_method_type_mapping(): void
     {
-        $validator = new Queries([new GroupBy()]);
+        $validator = new Queries([new GroupBy(supportForAttributes: false)]);
 
         $this->assertTrue($validator->isValid([Query::groupBy(['category'])]));
     }

@@ -81,8 +81,8 @@ class Documents extends IndexedQueries
             new Order($attributes, $supportForAttributes),
             new Select($attributes, $supportForAttributes),
             new Join(),
-            new Aggregate(),
-            new GroupBy(),
+            new Aggregate($attributes, $supportForAttributes),
+            new GroupBy($attributes, $supportForAttributes),
             new Having(),
             new Distinct(),
         ];

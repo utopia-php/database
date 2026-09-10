@@ -2,29 +2,47 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 
 /**
- * Validates groupBy query methods ensuring at least one grouping attribute is specified.
+ * Validates groupBy query methods ensuring the grouped attributes exist in the schema.
  */
 class GroupBy extends Base
 {
     /**
-     * Get the method type this validator handles.
-     *
-     * @return string
+     * @var array<string, true>
      */
+    protected array $schema = [];
+
+    /**
+     * @param  array<Document>  $attributes
+     */
+    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
+    {
+        foreach ($attributes as $attribute) {
+            $key = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
+
+            if (\is_string($key)) {
+                $this->schema[$key] = true;
+            }
+        }
+
+        foreach (Database::internalAttributes() as $attribute) {
+            $this->schema[$attribute->key] = true;
+        }
+    }
+
     public function getMethodType(): string
     {
         return self::METHOD_TYPE_GROUP_BY;
     }
 
-    /**
-     * Validate a groupBy query has at least one non-empty attribute.
-     */
     protected function isValidQuery(Query $query): bool
     {
         $columns = $query->getValues();
+
         if (empty($columns)) {
             $this->message = 'GroupBy requires at least one attribute';
 
@@ -34,6 +52,12 @@ class GroupBy extends Base
         foreach ($columns as $column) {
             if (! \is_string($column) || $column === '') {
                 $this->message = 'GroupBy attributes must be non-empty strings';
+
+                return false;
+            }
+
+            if ($this->supportForAttributes && ! isset($this->schema[$column])) {
+                $this->message = 'Attribute not found in schema: '.$column;
 
                 return false;
             }

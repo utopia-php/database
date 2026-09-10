@@ -15,6 +15,30 @@ class Connection
      */
     protected static array $errors = [
         'Max connect timeout reached',
+        'server has gone away',
+        'no connection to the server',
+        'Lost connection',
+        'is dead or not enabled',
+        'Error while sending',
+        'decryption failed or bad record mac',
+        'server closed the connection unexpectedly',
+        'SSL connection has been closed unexpectedly',
+        'Error writing data to the connection',
+        'Resource deadlock avoided',
+        'Transaction() on null',
+        'child connection forced to terminate due to client_idle_limit',
+        'query_wait_timeout',
+        'reset by peer',
+        'Physical connection is not usable',
+        'TCP Provider: Error code 0x68',
+        'ORA-03114',
+        'Packets out of order. Expected',
+        'Adaptive Server connection failed',
+        'Communication link failure',
+        'connection is no longer usable',
+        'Login timeout expired',
+        'running with the --read-only option so it cannot execute this statement',
+        'SQLSTATE[HY000] [2002] Connection refused',
     ];
 
     /**
@@ -25,7 +49,7 @@ class Connection
      */
     public static function hasError(Throwable $e): bool
     {
-        if (\extension_loaded('swoole') && DetectsLostConnections::causedByLostConnection($e)) {
+        if (\class_exists(DetectsLostConnections::class) && DetectsLostConnections::causedByLostConnection($e)) {
             return true;
         }
 

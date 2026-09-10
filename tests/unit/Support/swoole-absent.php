@@ -50,4 +50,16 @@ $deleted = $database->deleteDocuments('logs', [Query::limit(10)]);
 
 echo 'deleted=' . $deleted . PHP_EOL;
 echo 'remaining=' . \count($database->find('logs', [Query::limit(10)])) . PHP_EOL;
-echo 'hasError=' . (Connection::hasError(new RuntimeException('boom')) ? '1' : '0') . PHP_EOL;
+$lost = 0;
+foreach ([
+    'SQLSTATE[HY000]: General error: 2006 MySQL server has gone away',
+    'Lost connection to MySQL server during query',
+    'SQLSTATE[08006] server closed the connection unexpectedly',
+    'Max connect timeout reached',
+    'Communication link failure',
+] as $message) {
+    $lost += Connection::hasError(new RuntimeException($message)) ? 1 : 0;
+}
+
+echo 'lostDetected=' . $lost . PHP_EOL;
+echo 'unrelatedDetected=' . (Connection::hasError(new RuntimeException('syntax error near FROM')) ? '1' : '0') . PHP_EOL;

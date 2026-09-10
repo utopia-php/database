@@ -1460,6 +1460,10 @@ class Database
 
     private function getEventContext(): int
     {
+        if (! \extension_loaded('swoole')) {
+            return -1;
+        }
+
         $context = Coroutine::getCid();
 
         return \is_int($context) ? $context : -1;

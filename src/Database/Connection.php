@@ -25,7 +25,7 @@ class Connection
      */
     public static function hasError(Throwable $e): bool
     {
-        if (DetectsLostConnections::causedByLostConnection($e)) {
+        if (\extension_loaded('swoole') && DetectsLostConnections::causedByLostConnection($e)) {
             return true;
         }
 

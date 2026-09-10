@@ -102,12 +102,8 @@ trait RelationshipTests
                 $this->assertEqualsCanonicalizing($expected, $ids);
             }
 
-            try {
-                $database->find($children, [Query::equal('$id', ['child1', 'child2', 'child3'])]);
-                $this->fail('Explicit queries must still respect the configured value limit.');
-            } catch (QueryException $exception) {
-                $this->assertSame('Invalid query: Query on attribute has greater than 2 values: $id', $exception->getMessage());
-            }
+            $this->expectException(QueryException::class);
+            $database->find($children, [Query::equal('$id', ['child1', 'child2', 'child3'])]);
         } finally {
             $database->setMaxQueryValues($max);
             $database->deleteCollection($parents);

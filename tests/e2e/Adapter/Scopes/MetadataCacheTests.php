@@ -343,6 +343,68 @@ trait MetadataCacheTests
         $this->assertNotContains('parent', $this->definedAttributeKeys($database, $child));
     }
 
+    public function testCollectionDefinitionsAreScopedToTheirDatabase(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $schema = $database->getDatabase();
+        $suffix = \substr(\uniqid(), -8);
+        $first = 'scopedone'.$suffix;
+        $second = 'scopedtwo'.$suffix;
+        $collection = 'scoped';
+
+        try {
+            $database->setDatabase($first)->create();
+            $database->createCollection(new Collection(
+                id: $collection,
+                attributes: [Attribute::string(key: 'first', size: 128)],
+                permissions: [
+                    Permission::create(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                documentSecurity: false,
+            ));
+
+            $database->setDatabase($second)->create();
+            $database->createCollection(new Collection(
+                id: $collection,
+                attributes: [Attribute::string(key: 'second', size: 128)],
+                permissions: [
+                    Permission::create(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                documentSecurity: false,
+            ));
+
+            $this->assertSame(['second'], $this->definedAttributeKeys($database, $collection));
+
+            $database->setDatabase($first);
+
+            $this->assertSame(['first'], $this->definedAttributeKeys($database, $collection));
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'row',
+                '$permissions' => [Permission::read(Role::any())],
+                'first' => 'value',
+            ]));
+
+            $this->assertSame('value', $database->getDocument($collection, 'row')->getAttribute('first'));
+        } finally {
+            foreach ([$first, $second] as $name) {
+                if ($database->exists($name)) {
+                    $database->delete($name);
+                }
+            }
+            $database->setDatabase($schema);
+        }
+    }
+
     public function testRolledBackCollectionUpdateNeverReachesTheNextRead(): void
     {
         $database = $this->getDatabase();

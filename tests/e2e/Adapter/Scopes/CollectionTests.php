@@ -1244,6 +1244,21 @@ trait CollectionTests
         $this->assertFalse($adapter->getDocument($collection, 'doc1')->isEmpty());
     }
 
+    /**
+     * The tenant is the segment before the 'collection' marker. Substring
+     * matching is unsafe because the namespace is a hex uniqid() that may
+     * legitimately contain the tenant digits.
+     */
+    private function cacheKeyTenantSegment(string $collectionKey): string
+    {
+        $segments = \explode(':', $collectionKey);
+        $marker = \array_search('collection', $segments, true);
+        $this->assertIsInt($marker);
+        $this->assertGreaterThan(0, $marker);
+
+        return $segments[$marker - 1];
+    }
+
     public function testSetGlobalCollection(): void
     {
         $db = $this->getDatabase();
@@ -1265,11 +1280,7 @@ trait CollectionTests
         $this->assertNotEmpty($hashKey);
 
         if ($db->getSharedTables()) {
-            // Cache key format: '<cache>-<host>:<namespace>:<tenant>:collection:<id>'.
-            // Substring matching is unsafe because the namespace is a hex
-            // uniqid() that may legitimately contain the tenant digits.
-            $tenantSegment = \explode(':', $collectionKey)[2] ?? null;
-            $this->assertSame('', $tenantSegment);
+            $this->assertSame('', $this->cacheKeyTenantSegment($collectionKey));
         }
 
         // non global collection should contain tenant in the cache key
@@ -1279,8 +1290,10 @@ trait CollectionTests
             $nonGlobalCollectionId
         );
         if ($db->getSharedTables()) {
-            $tenantSegment = \explode(':', $collectionKeyRegular)[2] ?? null;
-            $this->assertSame((string) $db->getAdapter()->getTenant(), $tenantSegment);
+            $this->assertSame(
+                (string) $db->getAdapter()->getTenant(),
+                $this->cacheKeyTenantSegment($collectionKeyRegular)
+            );
         }
 
         // Non metadata collection should contain tenant in the cache key

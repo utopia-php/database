@@ -2403,9 +2403,10 @@ class Database
         }
 
         $collectionKey = \sprintf(
-            '%s-cache-%s:%s:%s:collection:%s',
+            '%s-cache-%s:%s:%s:%s:collection:%s',
             $this->cacheName,
             $hostname ?? '',
+            $this->adapter->getDatabase(),
             $this->getNamespace(),
             $tenantSegment,
             $collectionId
@@ -2475,9 +2476,10 @@ class Database
             : '';
 
         return \sprintf(
-            '%s-cache-%s:%s:%s:collection:%s:query',
+            '%s-cache-%s:%s:%s:%s:collection:%s:query',
             $this->cacheName,
             $hostname,
+            $this->adapter->getDatabase(),
             $namespace ?? $this->getNamespace(),
             $this->adapter->getTenant(),
             $collectionId,

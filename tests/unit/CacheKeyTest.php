@@ -67,6 +67,21 @@ class CacheKeyTest extends TestCase
         }
     }
 
+    public function testCacheKeysSeparateDatabasesSharingANamespace(): void
+    {
+        $console = $this->createDatabase(database: 'console');
+        $project = $this->createDatabase(database: 'project');
+
+        $this->assertNotSame(
+            $console->getCacheKeys('users', 'user1'),
+            $project->getCacheKeys('users', 'user1'),
+        );
+        $this->assertNotSame(
+            $console->getQueryCacheKey('users'),
+            $project->getQueryCacheKey('users'),
+        );
+    }
+
     public function testSameConfigProducesSameCacheKey(): void
     {
         $db1 = $this->createDatabase();
@@ -176,13 +191,14 @@ class CacheKeyTest extends TestCase
             fn (Capability $capability): bool => $capability === Capability::Hostname
         );
         $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('getDatabase')->willReturn('console');
         $adapter->method('getNamespace')->willReturn('_39');
         $adapter->method('getTenant')->willReturn(null);
 
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache-mysql-console:_39::collection:ttl_cache_table:query',
+            'default-cache-mysql-console:console:_39::collection:ttl_cache_table:query',
             $db->getQueryCacheKey('ttl_cache_table'),
         );
     }
@@ -194,13 +210,14 @@ class CacheKeyTest extends TestCase
             fn (Capability $capability): bool => $capability === Capability::Hostname
         );
         $adapter->method('getHostname')->willReturn('mysql-console');
+        $adapter->method('getDatabase')->willReturn('console');
         $adapter->method('getNamespace')->willReturn('');
         $adapter->method('getTenant')->willReturn(null);
 
         $db = new Database($adapter, new Cache(new None()), []);
 
         $this->assertSame(
-            'default-cache-mysql-console:_39::collection:wafrules:query',
+            'default-cache-mysql-console:console:_39::collection:wafrules:query',
             $db->getQueryCacheKey('wafrules', '_39'),
         );
     }
@@ -356,6 +373,7 @@ class CacheKeyTest extends TestCase
             };
         });
         $adapter->method('getHostname')->willReturn($hostname);
+        $adapter->method('getDatabase')->willReturn('appwrite');
         $adapter->method('getTenant')->willReturn(999);
         $adapter->method('getSharedTables')->willReturn(true);
         $adapter->method('getNamespace')->willReturn('_ns');
@@ -366,7 +384,7 @@ class CacheKeyTest extends TestCase
          * Check DSN is parsed correctly
          */
         [$collectionKey, $documentKey] = $db->getCacheKeys('users');
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns:999:collection:users', $collectionKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns:999:collection:users', $collectionKey);
         $this->assertEquals('', $documentKey);
 
         $db->setGlobalCollections(['users']);
@@ -377,14 +395,14 @@ class CacheKeyTest extends TestCase
          */
 
         [$collectionKey, $documentKey] = $db->getCacheKeys(Database::METADATA, 'audit');
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns:999:collection:_metadata', $collectionKey);
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns:999:collection:_metadata:audit', $documentKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns:999:collection:_metadata', $collectionKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns:999:collection:_metadata:audit', $documentKey);
 
         /**
          * Check that tenant 999 was removed
          */
         [$collectionKey, $documentKey] = $db->getCacheKeys(Database::METADATA, 'users');
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns::collection:_metadata', $collectionKey);
-        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:_ns::collection:_metadata:users', $documentKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns::collection:_metadata', $collectionKey);
+        $this->assertEquals('default-cache-database_db_nyc3_self_hosted_0_0:appwrite:_ns::collection:_metadata:users', $documentKey);
     }
 }

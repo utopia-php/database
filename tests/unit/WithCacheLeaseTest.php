@@ -17,7 +17,7 @@ use Utopia\Database\Query;
 
 class WithCacheLeaseTest extends TestCase
 {
-    private LeasableMemoryCache $cacheAdapter;
+    private Cache $cache;
 
     private DatabaseMemory $adapter;
 
@@ -27,9 +27,9 @@ class WithCacheLeaseTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->cacheAdapter = new LeasableMemoryCache();
+        $this->cache = new Cache(new LeasableMemoryCache());
         $this->adapter = new DatabaseMemory();
-        $this->database = new Database($this->adapter, new Cache($this->cacheAdapter));
+        $this->database = new Database($this->adapter, $this->cache);
         $this->database
             ->setDatabase('utopiaTests')
             ->setNamespace('with_cache_' . \uniqid());
@@ -71,13 +71,13 @@ class WithCacheLeaseTest extends TestCase
         $this->assertSame('fresh', $projected());
 
         [$collectionKey, , $plainHash] = $this->database->getCacheKeys('projects', 'project');
-        $epoch = $this->cacheAdapter->load($collectionKey . '#epoch', Database::TTL);
+        $epoch = $this->cache->load($collectionKey . '#epoch', Database::TTL);
         $this->assertIsString($epoch);
 
         // The key, payload and lease a reader that started before the purge writes back under.
         $staleKey = $plainHash . '#' . $epoch;
-        $lease = $this->cacheAdapter->getGeneration($staleKey);
-        $stalePayload = $this->cacheAdapter->load($staleKey, Database::TTL);
+        $lease = $this->cache->getGeneration($staleKey);
+        $stalePayload = $this->cache->load($staleKey, Database::TTL);
         $this->assertIsArray($stalePayload);
 
         $this->staleCache('name', 'changed');
@@ -88,7 +88,7 @@ class WithCacheLeaseTest extends TestCase
 
         $this->assertTrue($this->database->purgeCachedDocument('projects', 'project'));
 
-        $this->cacheAdapter->saveWithLease($staleKey, $stalePayload, $staleKey, $lease);
+        $this->cache->saveWithLease($staleKey, $stalePayload, $staleKey, $lease);
 
         $this->assertSame('changed', $plain());
         $this->assertSame('changed', $projected());

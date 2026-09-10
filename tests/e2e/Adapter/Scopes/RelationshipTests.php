@@ -5686,4 +5686,557 @@ trait RelationshipTests
         $database->deleteCollection('nf_docs');
         $database->deleteCollection('nf_doc_comments');
     }
+
+    private static int $nestedSliceAuthorReads = 0;
+
+    /**
+     * @return array<string>
+     */
+    private function nestedSlicePermissions(): array
+    {
+        return [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return array<string>
+     */
+    private function nestedSliceIds(array $documents): array
+    {
+        return \array_map(fn (Document $document) => $document->getId(), $documents);
+    }
+
+    /**
+     * @param array<string> $collections
+     */
+    private function dropNestedSliceCollections(Database $database, array $collections): void
+    {
+        foreach ($collections as $collection) {
+            if (!$database->silent(fn () => $database->getCollection($collection))->isEmpty()) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    private function createNestedSliceFixture(Database $database): void
+    {
+        $this->deleteNestedSliceFixture($database);
+
+        $permissions = $this->nestedSlicePermissions();
+
+        Database::addFilter(
+            'nsSliceAuthorSpy',
+            fn (mixed $value) => $value,
+            function (mixed $value) {
+                self::$nestedSliceAuthorReads++;
+                return $value;
+            }
+        );
+
+        $database->createCollection('ns_authors', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_authors', 'name', Database::VAR_STRING, 255, true, filters: ['nsSliceAuthorSpy']);
+
+        $database->createCollection('ns_comments', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_comments', 'text', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('ns_posts', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_posts', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'ns_comments',
+            relatedCollection: 'ns_authors',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'author',
+            twoWayKey: 'comments'
+        );
+
+        $database->createRelationship(
+            collection: 'ns_posts',
+            relatedCollection: 'ns_comments',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'comments',
+            twoWayKey: 'post'
+        );
+
+        for ($post = 1; $post <= 3; $post++) {
+            $commentIds = [];
+
+            for ($comment = 1; $comment <= 5; $comment++) {
+                $commentId = 'p' . $post . 'c' . $comment;
+
+                $database->createDocument('ns_authors', new Document([
+                    '$id' => 'a_' . $commentId,
+                    '$permissions' => $permissions,
+                    'name' => 'Author ' . $commentId,
+                ]));
+
+                $database->createDocument('ns_comments', new Document([
+                    '$id' => $commentId,
+                    '$permissions' => $permissions,
+                    'text' => 'Comment ' . $commentId,
+                    'author' => 'a_' . $commentId,
+                ]));
+
+                $commentIds[] = $commentId;
+            }
+
+            $database->createDocument('ns_posts', new Document([
+                '$id' => 'ns_post' . $post,
+                '$permissions' => $permissions,
+                'title' => 'Post ' . $post,
+                'comments' => $commentIds,
+            ]));
+        }
+    }
+
+    private function deleteNestedSliceFixture(Database $database): void
+    {
+        $this->dropNestedSliceCollections($database, ['ns_posts', 'ns_comments', 'ns_authors']);
+    }
+
+    public function testNestedSliceLimitOffsetPerParent(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2), Query::offset(1)]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+
+        foreach ($posts as $index => $post) {
+            $parent = $index + 1;
+            $this->assertSame(
+                ['p' . $parent . 'c2', 'p' . $parent . 'c3'],
+                $this->nestedSliceIds($post->getAttribute('comments')),
+                'limit+offset must be applied per parent, not across the batch'
+            );
+        }
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::orderAsc('$id'),
+        ]);
+
+        foreach ($posts as $index => $post) {
+            $parent = $index + 1;
+            $this->assertSame(
+                ['p' . $parent . 'c1', 'p' . $parent . 'c2'],
+                $this->nestedSliceIds($post->getAttribute('comments')),
+                'limit must be applied per parent'
+            );
+        }
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [Query::orderAsc('$id'), Query::offset(4)]),
+            Query::orderAsc('$id'),
+        ]);
+
+        foreach ($posts as $index => $post) {
+            $parent = $index + 1;
+            $this->assertSame(
+                ['p' . $parent . 'c5'],
+                $this->nestedSliceIds($post->getAttribute('comments')),
+                'offset must be applied per parent'
+            );
+        }
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceCursorAfterDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [
+                Query::orderAsc('$id'),
+                Query::cursorAfter(new Document(['$id' => 'p1c2'])),
+                Query::limit(2),
+            ]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+        $this->assertSame(['p1c3', 'p1c4'], $this->nestedSliceIds($posts[0]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[1]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[2]->getAttribute('comments')));
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceCursorAfterParsed(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $nested = Query::nested('comments', [
+            Query::orderAsc('$id'),
+            Query::cursorAfter(new Document(['$id' => 'p1c2'])),
+            Query::limit(2),
+        ]);
+
+        $parsed = Query::parse($nested->toString());
+
+        $this->assertSame('p1c2', $parsed->getValues()[1]->getValues()[0]);
+
+        $posts = $database->find('ns_posts', [$parsed, Query::orderAsc('$id')]);
+
+        $this->assertCount(3, $posts);
+        $this->assertSame(['p1c3', 'p1c4'], $this->nestedSliceIds($posts[0]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[1]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[2]->getAttribute('comments')));
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceCursorBefore(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [
+                Query::orderAsc('$id'),
+                Query::cursorBefore(new Document(['$id' => 'p1c4'])),
+                Query::limit(2),
+            ]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+        $this->assertSame(['p1c2', 'p1c3'], $this->nestedSliceIds($posts[0]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[1]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[2]->getAttribute('comments')));
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceCursorNotFoundYieldsEmpty(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [
+                Query::orderAsc('$id'),
+                Query::cursorAfter(new Document(['$id' => 'nsMissingComment'])),
+            ]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+
+        foreach ($posts as $post) {
+            $this->assertSame([], $this->nestedSliceIds($post->getAttribute('comments')));
+        }
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $permissions = $this->nestedSlicePermissions();
+
+        $this->dropNestedSliceCollections($database, ['ns_m1_comments', 'ns_m1_posts']);
+
+        $database->createCollection('ns_m1_posts', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_m1_posts', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('ns_m1_comments', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_m1_comments', 'text', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'ns_m1_comments',
+            relatedCollection: 'ns_m1_posts',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'post',
+            twoWayKey: 'comments'
+        );
+
+        for ($post = 1; $post <= 2; $post++) {
+            $database->createDocument('ns_m1_posts', new Document([
+                '$id' => 'ns_m1_post' . $post,
+                '$permissions' => $permissions,
+                'title' => 'Post ' . $post,
+            ]));
+
+            for ($comment = 1; $comment <= 3; $comment++) {
+                $database->createDocument('ns_m1_comments', new Document([
+                    '$id' => 'm1p' . $post . 'c' . $comment,
+                    '$permissions' => $permissions,
+                    'text' => 'Comment ' . $comment,
+                    'post' => 'ns_m1_post' . $post,
+                ]));
+            }
+        }
+
+        $posts = $database->find('ns_m1_posts', [
+            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(2, $posts);
+        $this->assertSame(['m1p1c1', 'm1p1c2'], $this->nestedSliceIds($posts[0]->getAttribute('comments')));
+        $this->assertSame(['m1p2c1', 'm1p2c2'], $this->nestedSliceIds($posts[1]->getAttribute('comments')));
+
+        $this->dropNestedSliceCollections($database, ['ns_m1_comments', 'ns_m1_posts']);
+    }
+
+    public function testNestedSliceManyToMany(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $permissions = $this->nestedSlicePermissions();
+
+        $this->dropNestedSliceCollections($database, ['ns_articles', 'ns_tags']);
+
+        $database->createCollection('ns_tags', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_tags', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('ns_articles', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_articles', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'ns_articles',
+            relatedCollection: 'ns_tags',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'tags',
+            twoWayKey: 'articles'
+        );
+
+        foreach (['ns_tag_a', 'ns_tag_b', 'ns_tag_c'] as $tag) {
+            $database->createDocument('ns_tags', new Document([
+                '$id' => $tag,
+                '$permissions' => $permissions,
+                'name' => $tag,
+            ]));
+        }
+
+        $database->createDocument('ns_articles', new Document([
+            '$id' => 'ns_article1',
+            '$permissions' => $permissions,
+            'title' => 'Article One',
+            'tags' => ['ns_tag_a', 'ns_tag_b'],
+        ]));
+
+        $database->createDocument('ns_articles', new Document([
+            '$id' => 'ns_article2',
+            '$permissions' => $permissions,
+            'title' => 'Article Two',
+            'tags' => ['ns_tag_b', 'ns_tag_c'],
+        ]));
+
+        $articles = $database->find('ns_articles', [
+            Query::nested('tags', [Query::orderAsc('$id'), Query::limit(1)]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(2, $articles);
+        $this->assertSame(['ns_tag_a'], $this->nestedSliceIds($articles[0]->getAttribute('tags')));
+        $this->assertSame(['ns_tag_b'], $this->nestedSliceIds($articles[1]->getAttribute('tags')));
+
+        $this->dropNestedSliceCollections($database, ['ns_articles', 'ns_tags']);
+    }
+
+    public function testNestedSliceDepthTwoFansOutFromSurvivorsOnly(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        self::$nestedSliceAuthorReads = 0;
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+
+        $authorIds = [];
+
+        foreach ($posts as $index => $post) {
+            $parent = $index + 1;
+            $comments = $post->getAttribute('comments');
+            $this->assertCount(2, $comments);
+
+            foreach ($comments as $comment) {
+                $author = $comment->getAttribute('author');
+                $this->assertInstanceOf(Document::class, $author);
+                $this->assertSame('a_' . $comment->getId(), $author->getId());
+                $authorIds[] = $author->getId();
+            }
+
+            $this->assertSame(
+                ['p' . $parent . 'c1', 'p' . $parent . 'c2'],
+                $this->nestedSliceIds($comments)
+            );
+        }
+
+        $this->assertCount(6, $authorIds);
+        $this->assertSame(
+            6,
+            self::$nestedSliceAuthorReads,
+            'depth 2 must fan out from surviving children only'
+        );
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceCombinedWithSelect(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $posts = $database->find('ns_posts', [
+            Query::select(['comments.*']),
+            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+
+        foreach ($posts as $index => $post) {
+            $parent = $index + 1;
+            $comments = $post->getAttribute('comments');
+            $this->assertSame(
+                ['p' . $parent . 'c1', 'p' . $parent . 'c2'],
+                $this->nestedSliceIds($comments)
+            );
+            $this->assertSame('Comment p' . $parent . 'c1', $comments[0]->getAttribute('text'));
+        }
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceSingularFilterExcludedChildIsEmptyDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $permissions = $this->nestedSlicePermissions();
+
+        $this->dropNestedSliceCollections($database, ['ns_profiles', 'ns_users']);
+
+        $database->createCollection('ns_users', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_users', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('ns_profiles', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('ns_profiles', 'label', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'ns_profiles',
+            relatedCollection: 'ns_users',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'user',
+            twoWayKey: 'profile'
+        );
+
+        $database->createDocument('ns_users', new Document([
+            '$id' => 'ns_user1',
+            '$permissions' => $permissions,
+            'name' => 'somebody',
+        ]));
+
+        $database->createDocument('ns_profiles', new Document([
+            '$id' => 'ns_profile1',
+            '$permissions' => $permissions,
+            'label' => 'Profile One',
+            'user' => 'ns_user1',
+        ]));
+
+        $profiles = $database->find('ns_profiles', [
+            Query::nested('user', [Query::equal('name', ['nobody'])]),
+        ]);
+
+        $this->assertCount(1, $profiles);
+        $this->assertSame('ns_profile1', $profiles[0]->getId());
+
+        $user = $profiles[0]->getAttribute('user');
+        $this->assertInstanceOf(Document::class, $user);
+        $this->assertTrue($user->isEmpty());
+
+        $this->dropNestedSliceCollections($database, ['ns_profiles', 'ns_users']);
+    }
 }

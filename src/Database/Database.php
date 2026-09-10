@@ -5408,12 +5408,21 @@ class Database
         // For batch relationship population, we need to fetch documents with all attributes
         // to enable proper grouping by back-reference, then apply selects afterward
         $selectQueries = [];
+        $paginationQueries = [];
         $otherQueries = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $selectQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    $selectQueries[] = $query;
+                    break;
+                case Query::TYPE_LIMIT:
+                case Query::TYPE_OFFSET:
+                case Query::TYPE_CURSOR_AFTER:
+                case Query::TYPE_CURSOR_BEFORE:
+                    $paginationQueries[] = $query;
+                    break;
+                default:
+                    $otherQueries[] = $query;
             }
         }
 
@@ -5428,12 +5437,10 @@ class Database
             \array_push($relatedDocuments, ...$chunkDocs);
         }
 
-        // Group related documents by parent ID
         $relatedByParentId = [];
         foreach ($relatedDocuments as $related) {
             $parentId = $related->getAttribute($twoWayKey);
             if (!\is_null($parentId)) {
-                // Handle case where parentId might be a Document object instead of string
                 $parentKey = $parentId instanceof Document
                     ? $parentId->getId()
                     : $parentId;
@@ -5441,22 +5448,34 @@ class Database
                 if (!isset($relatedByParentId[$parentKey])) {
                     $relatedByParentId[$parentKey] = [];
                 }
-                // We don't remove the back-reference here because documents may be reused across fetches
-                // Cycles are prevented by depth limiting in breadth-first traversal
+                // The back-reference stays until the traversal removes it, because these
+                // documents may be reused across fetches. Cycles are prevented by depth limiting.
                 $relatedByParentId[$parentKey][] = $related;
             }
         }
 
         $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
-        // Assign related documents to their parent documents
+        $pagination = Query::groupByType($paginationQueries);
+        $survivors = [];
+
         foreach ($documents as $document) {
-            $parentId = $document->getId();
-            $relatedDocs = $relatedByParentId[$parentId] ?? [];
+            $relatedDocs = $this->sliceRelated(
+                $relatedByParentId[$document->getId()] ?? [],
+                $pagination['limit'],
+                $pagination['offset'],
+                $pagination['cursor'],
+                $pagination['cursorDirection'],
+            );
+
             $document->setAttribute($key, $relatedDocs);
+
+            foreach ($relatedDocs as $relatedDoc) {
+                $survivors[$relatedDoc->getId()] = $relatedDoc;
+            }
         }
 
-        return $relatedDocuments;
+        return \array_values($survivors);
     }
 
     /**
@@ -5505,12 +5524,21 @@ class Database
         }
 
         $selectQueries = [];
+        $paginationQueries = [];
         $otherQueries = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $selectQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    $selectQueries[] = $query;
+                    break;
+                case Query::TYPE_LIMIT:
+                case Query::TYPE_OFFSET:
+                case Query::TYPE_CURSOR_AFTER:
+                case Query::TYPE_CURSOR_BEFORE:
+                    $paginationQueries[] = $query;
+                    break;
+                default:
+                    $otherQueries[] = $query;
             }
         }
 
@@ -5525,12 +5553,10 @@ class Database
             \array_push($relatedDocuments, ...$chunkDocs);
         }
 
-        // Group related documents by child ID
         $relatedByChildId = [];
         foreach ($relatedDocuments as $related) {
             $childId = $related->getAttribute($twoWayKey);
             if (!\is_null($childId)) {
-                // Handle case where childId might be a Document object instead of string
                 $childKey = $childId instanceof Document
                     ? $childId->getId()
                     : $childId;
@@ -5538,20 +5564,34 @@ class Database
                 if (!isset($relatedByChildId[$childKey])) {
                     $relatedByChildId[$childKey] = [];
                 }
-                // We don't remove the back-reference here because documents may be reused across fetches
-                // Cycles are prevented by depth limiting in breadth-first traversal
+                // The back-reference stays until the traversal removes it, because these
+                // documents may be reused across fetches. Cycles are prevented by depth limiting.
                 $relatedByChildId[$childKey][] = $related;
             }
         }
 
         $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
+        $pagination = Query::groupByType($paginationQueries);
+        $survivors = [];
+
         foreach ($documents as $document) {
-            $childId = $document->getId();
-            $document->setAttribute($key, $relatedByChildId[$childId] ?? []);
+            $relatedDocs = $this->sliceRelated(
+                $relatedByChildId[$document->getId()] ?? [],
+                $pagination['limit'],
+                $pagination['offset'],
+                $pagination['cursor'],
+                $pagination['cursorDirection'],
+            );
+
+            $document->setAttribute($key, $relatedDocs);
+
+            foreach ($relatedDocs as $relatedDoc) {
+                $survivors[$relatedDoc->getId()] = $relatedDoc;
+            }
         }
 
-        return $relatedDocuments;
+        return \array_values($survivors);
     }
 
     /**
@@ -5591,6 +5631,21 @@ class Database
             return [];
         }
 
+        $paginationQueries = [];
+        $fetchQueries = [];
+        foreach ($queries as $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_LIMIT:
+                case Query::TYPE_OFFSET:
+                case Query::TYPE_CURSOR_AFTER:
+                case Query::TYPE_CURSOR_BEFORE:
+                    $paginationQueries[] = $query;
+                    break;
+                default:
+                    $fetchQueries[] = $query;
+            }
+        }
+
         $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
         $junctions = [];
@@ -5620,7 +5675,6 @@ class Database
         }
 
         $related = [];
-        $allRelatedDocs = [];
         if (!empty($relatedIds)) {
             $uniqueRelatedIds = array_unique($relatedIds);
             $foundRelated = [];
@@ -5629,12 +5683,10 @@ class Database
                 $chunkDocs = $this->find($relatedCollection->getId(), [
                     Query::equal('$id', $chunk),
                     Query::limit(PHP_INT_MAX),
-                    ...$queries
+                    ...$fetchQueries
                 ]);
                 \array_push($foundRelated, ...$chunkDocs);
             }
-
-            $allRelatedDocs = $foundRelated;
 
             $relatedById = [];
             foreach ($foundRelated as $doc) {
@@ -5665,12 +5717,72 @@ class Database
             }
         }
 
+        $pagination = Query::groupByType($paginationQueries);
+        $survivors = [];
+
         foreach ($documents as $document) {
-            $documentId = $document->getId();
-            $document->setAttribute($key, $related[$documentId] ?? []);
+            $relatedDocs = $this->sliceRelated(
+                $related[$document->getId()] ?? [],
+                $pagination['limit'],
+                $pagination['offset'],
+                $pagination['cursor'],
+                $pagination['cursorDirection'],
+            );
+
+            $document->setAttribute($key, $relatedDocs);
+
+            foreach ($relatedDocs as $relatedDoc) {
+                $survivors[$relatedDoc->getId()] = $relatedDoc;
+            }
         }
 
-        return $allRelatedDocs;
+        return \array_values($survivors);
+    }
+
+    /**
+     * Apply a nested relationship's pagination to one parent's related documents
+     *
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    private function sliceRelated(
+        array $documents,
+        ?int $limit,
+        ?int $offset,
+        Document|string|null $cursor,
+        ?string $cursorDirection
+    ): array {
+        $documents = \array_values($documents);
+
+        if ($cursor === null) {
+            return \array_slice($documents, $offset ?? 0, $limit);
+        }
+
+        $cursorId = $cursor instanceof Document ? $cursor->getId() : $cursor;
+        $position = null;
+
+        foreach ($documents as $index => $document) {
+            if ($document->getId() === $cursorId) {
+                $position = $index;
+                break;
+            }
+        }
+
+        if ($position === null) {
+            return [];
+        }
+
+        if ($cursorDirection === Database::CURSOR_BEFORE) {
+            $preceding = \array_slice($documents, 0, $position);
+
+            if ($limit === null) {
+                return $preceding;
+            }
+
+            return $limit === 0 ? [] : \array_slice($preceding, -$limit);
+        }
+
+        return \array_slice($documents, $position + 1, $limit);
     }
 
     /**

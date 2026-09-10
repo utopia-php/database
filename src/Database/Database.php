@@ -10342,7 +10342,9 @@ class Database
         $nestedSelections = [];
 
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_NESTED) {
+            $method = $query->getMethod();
+
+            if ($method === Query::TYPE_NESTED) {
                 $key = $query->getAttribute();
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -10361,7 +10363,7 @@ class Database
             }
 
             if (
-                !\in_array($query->getMethod(), [
+                !\in_array($method, [
                     Query::TYPE_SELECT,
                     Query::TYPE_LIMIT,
                     Query::TYPE_OFFSET,
@@ -10383,7 +10385,7 @@ class Database
 
                 if ($relationship) {
                     $nestedSelections[$filteredKey][] = new Query(
-                        $query->getMethod(),
+                        $method,
                         \implode('.', $nesting),
                         $query->getValues(),
                     );
@@ -10392,7 +10394,7 @@ class Database
                 continue;
             }
 
-            if ($query->getMethod() !== Query::TYPE_SELECT) {
+            if ($method !== Query::TYPE_SELECT) {
                 continue;
             }
 
@@ -10403,7 +10405,7 @@ class Database
                 }
 
                 $nesting = \explode('.', $value);
-                $selectedKey = \array_shift($nesting); // Remove and return first item
+                $selectedKey = \array_shift($nesting);
 
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -10414,12 +10416,8 @@ class Database
                     continue;
                 }
 
-                // Shift the top level off the dot-path to pass the selection down the chain
-                // 'foo.bar.baz' becomes 'bar.baz'
-
                 $nestingPath = \implode('.', $nesting);
 
-                // If nestingPath is empty, it means we want all attributes (*) for this relationship
                 if (empty($nestingPath)) {
                     $nestedSelections[$selectedKey][] = Query::select(['*']);
                 } else {
@@ -10454,11 +10452,11 @@ class Database
             }
 
             $finalValues = \array_values($values);
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                if (empty($finalValues)) {
-                    $finalValues = ['*'];
-                }
+
+            if (empty($finalValues)) {
+                $finalValues = ['*'];
             }
+
             $query->setValues($finalValues);
         }
 

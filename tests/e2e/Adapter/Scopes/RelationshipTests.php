@@ -6239,4 +6239,110 @@ trait RelationshipTests
 
         $this->dropNestedSliceCollections($database, ['ns_profiles', 'ns_users']);
     }
+
+    public function testNestedFilterInsideNestedQuery(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection('nfi_authors', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('nfi_authors', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('nfi_comments', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('nfi_comments', 'text', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('nfi_posts', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('nfi_posts', 'title', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'nfi_comments',
+            relatedCollection: 'nfi_authors',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'author',
+            twoWayKey: 'comments'
+        );
+
+        $database->createRelationship(
+            collection: 'nfi_posts',
+            relatedCollection: 'nfi_comments',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'comments',
+            twoWayKey: 'post'
+        );
+
+        foreach (['nfi_alice' => 'Alice', 'nfi_bob' => 'Bob'] as $id => $name) {
+            $database->createDocument('nfi_authors', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'name' => $name,
+            ]));
+        }
+
+        foreach (['nfi_post1', 'nfi_post2', 'nfi_post3'] as $id) {
+            $database->createDocument('nfi_posts', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'title' => $id,
+            ]));
+        }
+
+        $comments = [
+            ['nfi_c1', 'nfi_post1', 'nfi_alice'],
+            ['nfi_c2', 'nfi_post1', 'nfi_bob'],
+            ['nfi_c3', 'nfi_post2', 'nfi_bob'],
+            ['nfi_c4', 'nfi_post3', 'nfi_alice'],
+        ];
+
+        foreach ($comments as [$id, $post, $author]) {
+            $database->createDocument('nfi_comments', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'text' => $id,
+                'post' => $post,
+                'author' => $author,
+            ]));
+        }
+
+        $posts = $database->find('nfi_posts', [
+            Query::nested('comments', [
+                Query::equal('author.name', ['Alice']),
+            ]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertSame(
+            ['nfi_post1', 'nfi_post2', 'nfi_post3'],
+            $this->nestedFilterIds($posts),
+            'nested() constrains the populated children, never the parent result set'
+        );
+        $this->assertSame(['nfi_c1'], $this->nestedFilterIds($posts[0]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedFilterIds($posts[1]->getAttribute('comments')));
+        $this->assertSame(['nfi_c4'], $this->nestedFilterIds($posts[2]->getAttribute('comments')));
+
+        foreach ($posts as $post) {
+            foreach ($post->getAttribute('comments') as $comment) {
+                $author = $comment->getAttribute('author');
+                $this->assertInstanceOf(Document::class, $author);
+                $this->assertSame('nfi_alice', $author->getId());
+            }
+        }
+
+        $database->deleteCollection('nfi_posts');
+        $database->deleteCollection('nfi_comments');
+        $database->deleteCollection('nfi_authors');
+    }
 }

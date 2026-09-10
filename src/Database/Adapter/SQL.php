@@ -28,7 +28,6 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\PermissionAllowNullUid;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Hook\PermissionJoinFilter;
-use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Hook\WriteContext;
@@ -3211,12 +3210,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Synchronize write hooks with current adapter configuration.
+     * Re-register the write hooks this adapter owns.
      *
-     * Ensures Permission is always registered and Tenancy is registered
-     * whenever shared tables are active. The hook takes each row's tenant from
-     * the document being written and falls back to the ambient tenant, so it is
-     * needed in per-document mode, where there is no ambient tenant at all.
+     * Only Tenancy, and only while shared tables are active. It takes each
+     * row's tenant from the document being written and falls back to the
+     * ambient tenant, so it is needed in per-document mode too, where there is
+     * no ambient tenant at all.
+     *
+     * Permissions is deliberately not here, and this does not restore it. It is
+     * registered once by whoever builds the Database, so a handle constructed
+     * without it never writes a `_perms` row -- the row itself looks correct,
+     * its `_permissions` JSON intact, and only the side table the permission
+     * filter joins is empty. Do not read this method as a safety net for that.
      */
     protected function syncWriteHooks(): void
     {

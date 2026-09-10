@@ -68,6 +68,7 @@ class Query
     public const TYPE_OR = 'or';
     public const TYPE_CONTAINS_ALL = 'containsAll';
     public const TYPE_ELEM_MATCH = 'elemMatch';
+    public const TYPE_NESTED = 'nested';
     public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
@@ -119,6 +120,7 @@ class Query
         self::TYPE_OR,
         self::TYPE_CONTAINS_ALL,
         self::TYPE_ELEM_MATCH,
+        self::TYPE_NESTED,
         self::TYPE_REGEX
     ];
 
@@ -132,6 +134,7 @@ class Query
         self::TYPE_AND,
         self::TYPE_OR,
         self::TYPE_ELEM_MATCH,
+        self::TYPE_NESTED,
     ];
 
     protected string $method = '';
@@ -307,6 +310,7 @@ class Query
             self::TYPE_AND,
             self::TYPE_CONTAINS_ALL,
             self::TYPE_ELEM_MATCH,
+            self::TYPE_NESTED,
             self::TYPE_SELECT,
             self::TYPE_VECTOR_DOT,
             self::TYPE_VECTOR_COSINE,
@@ -1001,7 +1005,8 @@ class Query
      *     orderAttributes: array<string>,
      *     orderTypes: array<string>,
      *     cursor: Document|null,
-     *     cursorDirection: string|null
+     *     cursorDirection: string|null,
+     *     nested: array<Query>
      * }
      */
     public static function groupByType(array $queries): array
@@ -1014,6 +1019,7 @@ class Query
         $orderTypes = [];
         $cursor = null;
         $cursorDirection = null;
+        $nested = [];
 
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
@@ -1070,6 +1076,10 @@ class Query
                     $selections[] = clone $query;
                     break;
 
+                case Query::TYPE_NESTED:
+                    $nested[] = clone $query;
+                    break;
+
                 default:
                     $filters[] = clone $query;
                     break;
@@ -1085,6 +1095,7 @@ class Query
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
             'cursorDirection' => $cursorDirection,
+            'nested' => $nested,
         ];
     }
 
@@ -1383,5 +1394,15 @@ class Query
     public static function elemMatch(string $attribute, array $queries): self
     {
         return new self(self::TYPE_ELEM_MATCH, $attribute, $queries);
+    }
+
+    /**
+     * @param string $relationshipKey
+     * @param array<Query> $queries
+     * @return Query
+     */
+    public static function nested(string $relationshipKey, array $queries): self
+    {
+        return new self(self::TYPE_NESTED, $relationshipKey, $queries);
     }
 }

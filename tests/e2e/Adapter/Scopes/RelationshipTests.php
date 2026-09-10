@@ -4817,4 +4817,348 @@ trait RelationshipTests
         $database->deleteCollection('authorsOrder');
         $database->deleteCollection('postsOrder');
     }
+
+    private function createNestedSkeletonFixture(Database $database): void
+    {
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection('nsk_authors', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('nsk_authors', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('nsk_tags', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('nsk_tags', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createCollection('nsk_comments', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('nsk_comments', 'text', Database::VAR_STRING, 255, true);
+        $database->createAttribute('nsk_comments', 'approved', Database::VAR_BOOLEAN, 0, false);
+
+        $database->createCollection('nsk_posts', permissions: $permissions, documentSecurity: false);
+        $database->createAttribute('nsk_posts', 'title', Database::VAR_STRING, 255, true);
+        $database->createAttribute('nsk_posts', 'views', Database::VAR_INTEGER, 0, true);
+
+        $database->createRelationship(
+            collection: 'nsk_comments',
+            relatedCollection: 'nsk_authors',
+            type: Database::RELATION_MANY_TO_ONE,
+            twoWay: true,
+            id: 'author',
+            twoWayKey: 'comments'
+        );
+
+        $database->createRelationship(
+            collection: 'nsk_posts',
+            relatedCollection: 'nsk_comments',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'comments',
+            twoWayKey: 'post'
+        );
+
+        $database->createRelationship(
+            collection: 'nsk_posts',
+            relatedCollection: 'nsk_tags',
+            type: Database::RELATION_MANY_TO_MANY,
+            twoWay: true,
+            id: 'tags',
+            twoWayKey: 'posts'
+        );
+
+        foreach (['nsk_author1' => 'Alice', 'nsk_author2' => 'Bob'] as $id => $name) {
+            $database->createDocument('nsk_authors', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'name' => $name,
+            ]));
+        }
+
+        foreach (['nsk_tag1' => 'php', 'nsk_tag2' => 'database'] as $id => $name) {
+            $database->createDocument('nsk_tags', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'name' => $name,
+            ]));
+        }
+
+        $comments = [
+            ['nsk_comment1', 'First', true, 'nsk_author1'],
+            ['nsk_comment2', 'Second', false, 'nsk_author2'],
+            ['nsk_comment3', 'Third', true, 'nsk_author1'],
+        ];
+
+        foreach ($comments as [$id, $text, $approved, $author]) {
+            $database->createDocument('nsk_comments', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'text' => $text,
+                'approved' => $approved,
+                'author' => $author,
+            ]));
+        }
+
+        $database->createDocument('nsk_posts', new Document([
+            '$id' => 'nsk_post1',
+            '$permissions' => $permissions,
+            'title' => 'Post One',
+            'views' => 10,
+            'comments' => ['nsk_comment1', 'nsk_comment2'],
+            'tags' => ['nsk_tag1', 'nsk_tag2'],
+        ]));
+
+        $database->createDocument('nsk_posts', new Document([
+            '$id' => 'nsk_post2',
+            '$permissions' => $permissions,
+            'title' => 'Post Two',
+            'views' => 20,
+            'comments' => ['nsk_comment3'],
+            'tags' => ['nsk_tag2'],
+        ]));
+    }
+
+    private function deleteNestedSkeletonFixture(Database $database): void
+    {
+        foreach (['nsk_posts', 'nsk_comments', 'nsk_tags', 'nsk_authors'] as $collection) {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return array<string>
+     */
+    private function nestedSkeletonIds(array $documents): array
+    {
+        return \array_map(fn (Document $document) => $document->getId(), $documents);
+    }
+
+    public function testNestedSkeletonSiblingRelationshipStillPopulated(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $posts = $database->find('nsk_posts', [
+            Query::nested('comments', [Query::orderAsc('$id')]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(2, $posts);
+
+        $this->assertIsArray($posts[0]->getAttribute('comments'));
+        $this->assertSame(
+            ['nsk_comment1', 'nsk_comment2'],
+            $this->nestedSkeletonIds($posts[0]->getAttribute('comments'))
+        );
+
+        $this->assertIsArray($posts[0]->getAttribute('tags'));
+        $this->assertSame(
+            ['nsk_tag1', 'nsk_tag2'],
+            $this->nestedSkeletonIds($posts[0]->getAttribute('tags'))
+        );
+
+        $this->assertSame(
+            ['nsk_comment3'],
+            $this->nestedSkeletonIds($posts[1]->getAttribute('comments'))
+        );
+        $this->assertSame(
+            ['nsk_tag2'],
+            $this->nestedSkeletonIds($posts[1]->getAttribute('tags'))
+        );
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedSkeletonSumIgnoresNested(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $baseline = $database->sum('nsk_posts', 'views', []);
+        $this->assertSame(30, $baseline);
+
+        $withNested = $database->sum('nsk_posts', 'views', [
+            Query::nested('comments', [Query::limit(1)]),
+        ]);
+        $this->assertSame(30, $withNested);
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedSkeletonCountIgnoresNested(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $baseline = $database->count('nsk_posts', []);
+        $this->assertSame(2, $baseline);
+
+        $withNested = $database->count('nsk_posts', [
+            Query::nested('comments', [Query::limit(1)]),
+        ]);
+        $this->assertSame(2, $withNested);
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedSkeletonInnerQueriesNotMutatedAcrossFinds(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $nestedQuery = Query::nested('comments', [Query::select(['author.name'])]);
+
+        $first = $database->find('nsk_posts', [$nestedQuery, Query::orderAsc('$id')]);
+        $second = $database->find('nsk_posts', [$nestedQuery, Query::orderAsc('$id')]);
+        $database->skipValidation(fn () => $database->getDocument('nsk_posts', 'nsk_post1', [$nestedQuery]));
+
+        $this->assertSame(['author.name'], $nestedQuery->getValues()[0]->getValues());
+
+        $firstAuthor = $first[0]->getAttribute('comments')[0]->getAttribute('author');
+        $secondAuthor = $second[0]->getAttribute('comments')[0]->getAttribute('author');
+
+        $this->assertSame(
+            $firstAuthor instanceof Document ? $firstAuthor->getArrayCopy() : $firstAuthor,
+            $secondAuthor instanceof Document ? $secondAuthor->getArrayCopy() : $secondAuthor
+        );
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedSkeletonContract(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $found = $database->findOne('nsk_posts', [
+            Query::nested('comments', [Query::limit(1)]),
+            Query::orderAsc('$id'),
+        ]);
+        $this->assertSame('nsk_post1', $found->getId());
+
+        $withoutNested = [];
+        foreach ($database->iterate('nsk_posts', [Query::orderAsc('$id')]) as $post) {
+            $withoutNested[] = $post->getId();
+        }
+
+        $withNested = [];
+        foreach ($database->iterate('nsk_posts', [Query::nested('comments', [Query::orderAsc('$id')]), Query::orderAsc('$id')]) as $post) {
+            $withNested[] = $post->getId();
+        }
+
+        $this->assertSame(['nsk_post1', 'nsk_post2'], $withoutNested);
+        $this->assertSame($withoutNested, $withNested);
+
+        try {
+            $database->updateDocuments('nsk_posts', new Document(['views' => 1]), [
+                Query::nested('comments', [Query::limit(1)]),
+            ]);
+            $this->fail('updateDocuments accepted a nested query');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('Invalid query method: nested', $e->getMessage());
+        }
+
+        try {
+            $database->deleteDocuments('nsk_posts', [
+                Query::nested('comments', [Query::limit(1)]),
+            ]);
+            $this->fail('deleteDocuments accepted a nested query');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('Invalid query method: nested', $e->getMessage());
+        }
+
+        try {
+            $database->getDocument('nsk_posts', 'nsk_post1', [
+                Query::nested('comments', [Query::limit(1)]),
+            ]);
+            $this->fail('getDocument accepted a nested query');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('Invalid query method: nested', $e->getMessage());
+        }
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedSkeletonInvalidInnerFilterRejectedWhenParentsMatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $database->find('nsk_posts', [
+                Query::nested('comments', [Query::equal('doesNotExist', ['x'])]),
+            ]);
+            $this->fail('An invalid inner filter was accepted');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('doesNotExist', $e->getMessage());
+        }
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedSkeletonInvalidInnerFilterWhenNoParentsMatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $posts = $database->find('nsk_posts', [
+            Query::equal('title', ['No Such Post']),
+            Query::nested('comments', [Query::equal('doesNotExist', ['x'])]),
+        ]);
+
+        $this->assertSame([], $posts);
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
 }

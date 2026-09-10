@@ -5054,7 +5054,7 @@ class Database
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
-            $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth, $nestedSelections));
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth, $nestedSelections, !empty($selects)));
             $document = $documents[0];
         }
 
@@ -5116,6 +5116,7 @@ class Database
      * @param Document $collection
      * @param int $relationshipFetchDepth
      * @param array<string, array<Query>> $selects
+     * @param bool $hasExplicitSelects
      * @return array<Document>
      * @throws DatabaseException
      */
@@ -5123,7 +5124,8 @@ class Database
         array $documents,
         Document $collection,
         int $relationshipFetchDepth = 0,
-        array $selects = []
+        array $selects = [],
+        bool $hasExplicitSelects = false
     ): array {
         // Prevent nested relationship population during fetches
         $this->inBatchRelationshipPopulation = true;
@@ -5136,7 +5138,7 @@ class Database
                     'depth' => $relationshipFetchDepth,
                     'selects' => $selects,
                     'skipKey' => null, // No back-reference to skip at top level
-                    'hasExplicitSelects' => !empty($selects) // Track if we're in explicit select mode
+                    'hasExplicitSelects' => $hasExplicitSelects
                 ]
             ];
 
@@ -6630,7 +6632,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForUnsignedBigInt()
+                $this->adapter->getSupportForUnsignedBigInt(),
+                false
             );
 
             if (!$validator->isValid($queries)) {
@@ -8405,7 +8408,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForUnsignedBigInt()
+                $this->adapter->getSupportForUnsignedBigInt(),
+                false
             );
 
             if (!$validator->isValid($queries)) {
@@ -8671,6 +8675,7 @@ class Database
         $orderTypes = $grouped['orderTypes'];
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
+        $nested = $grouped['nested'];
 
         $uniqueOrderBy = false;
         foreach ($orderAttributes as $order) {
@@ -8734,7 +8739,7 @@ class Database
         );
 
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
+        $nestedSelections = $this->processRelationshipQueries($relationships, \array_merge($queries, $nested));
 
         // Convert relationship filter queries to SQL-level subqueries
         $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
@@ -8762,7 +8767,7 @@ class Database
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
-                $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections));
+                $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections, !empty($selects)));
             }
         }
 
@@ -9253,7 +9258,10 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $queries = $this->convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, \array_values(\array_filter(
+            $queries,
+            fn (Query $query) => $query->getMethod() !== Query::TYPE_NESTED
+        )));
         $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
 
         // If conversion returns null, it means no documents can match (relationship filter found no matches)
@@ -10210,6 +10218,24 @@ class Database
         $nestedSelections = [];
 
         foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_NESTED) {
+                $key = $query->getAttribute();
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $key,
+                ))[0] ?? null;
+
+                if (!$relationship) {
+                    continue;
+                }
+
+                $nestedSelections[$key] = \array_merge(
+                    $nestedSelections[$key] ?? [],
+                    \array_map(fn (Query $nestedQuery) => clone $nestedQuery, $query->getValues()),
+                );
+                continue;
+            }
+
             if ($query->getMethod() !== Query::TYPE_SELECT) {
                 continue;
             }

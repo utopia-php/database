@@ -11,6 +11,7 @@ use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
+use Utopia\Database\Validator\Query\Nested;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
 
@@ -115,5 +116,45 @@ class QueriesTest extends TestCase
                 ]),
             ])
         );
+    }
+
+    public function testOrRejectsNestedQuery(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'name',
+                'key' => 'name',
+                'type' => Database::VAR_STRING,
+                'array' => false,
+            ]),
+            new Document([
+                '$id' => 'comments',
+                'key' => 'comments',
+                'type' => Database::VAR_RELATIONSHIP,
+                'array' => false,
+                'options' => [
+                    'relationType' => Database::RELATION_ONE_TO_MANY,
+                    'side' => Database::RELATION_SIDE_PARENT,
+                    'relatedCollection' => 'comments',
+                    'twoWay' => true,
+                    'twoWayKey' => 'post',
+                ],
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Filter($attributes, Database::VAR_INTEGER),
+            new Nested($attributes),
+        ]);
+
+        $this->assertTrue($validator->isValid([Query::nested('comments', [Query::limit(1)])]), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([
+            Query::or([
+                Query::nested('comments', [Query::limit(1)]),
+                Query::equal('name', ['value']),
+            ]),
+        ]));
+        $this->assertStringContainsString('Or queries can only contain filter queries', $validator->getDescription());
     }
 }

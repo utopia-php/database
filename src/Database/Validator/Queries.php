@@ -4,8 +4,10 @@ namespace Utopia\Database\Validator;
 
 use Throwable;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\GroupBy;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
@@ -80,6 +82,9 @@ class Queries extends Validator
             ) {
                 $validator->resetJoinAliases();
             }
+            if ($validator instanceof Aggregate || $validator instanceof GroupBy) {
+                $validator->resetJoinedAttributes();
+            }
             if ($validator->getMethodType() === Base::METHOD_TYPE_FILTER) {
                 $hasFilterValidator = true;
             }
@@ -94,6 +99,7 @@ class Queries extends Validator
         /** @var array<string> $aggregationAliases */
         $aggregationAliases = [];
         $joinAliases = [];
+        $hasJoins = false;
         foreach ($value as $q) {
             if (! $q instanceof Query) {
                 try {
@@ -117,9 +123,21 @@ class Queries extends Validator
             }
 
             if ($method->isJoin()) {
+                $hasJoins = true;
                 $alias = $q->getJoinAlias();
                 if ($alias !== '') {
                     $joinAliases[] = $alias;
+                }
+            }
+        }
+
+        if ($hasJoins) {
+            // A join widens the attribute space past this collection's schema, and the
+            // joined collection's attributes are not available here. Aggregating or
+            // grouping by one of them is legitimate, so the schema check stands down.
+            foreach ($this->validators as $validator) {
+                if ($validator instanceof Aggregate || $validator instanceof GroupBy) {
+                    $validator->allowJoinedAttributes();
                 }
             }
         }

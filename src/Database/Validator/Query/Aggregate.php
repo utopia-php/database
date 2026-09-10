@@ -18,6 +18,8 @@ class Aggregate extends Base
      */
     protected array $schema = [];
 
+    protected bool $joinedAttributes = false;
+
     /**
      * @param  array<Document>  $attributes
      */
@@ -45,7 +47,12 @@ class Aggregate extends Base
     {
         $attribute = $query->getAttribute();
 
-        if ($attribute !== '*' && $this->supportForAttributes && ! isset($this->schema[$attribute])) {
+        if (
+            $attribute !== '*'
+            && ! $this->joinedAttributes
+            && $this->supportForAttributes
+            && ! isset($this->schema[$attribute])
+        ) {
             $this->message = 'Attribute not found in schema: '.$attribute;
 
             return false;
@@ -60,5 +67,19 @@ class Aggregate extends Base
         }
 
         return true;
+    }
+
+    /**
+     * Stand the schema check down for a query set that joins: the joined collection's
+     * attributes are legitimate operands here and are not in this collection's schema.
+     */
+    public function allowJoinedAttributes(): void
+    {
+        $this->joinedAttributes = true;
+    }
+
+    public function resetJoinedAttributes(): void
+    {
+        $this->joinedAttributes = false;
     }
 }

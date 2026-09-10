@@ -204,6 +204,80 @@ class QueriesTest extends TestCase
         $this->assertTrue($validator->isValid([Query::join('orders', 'user_id', 'id')]));
     }
 
+    public function test_aggregate_and_group_by_accept_joined_attributes(): void
+    {
+        // `score` and `rev.score` live on the joined collection, so they are absent from
+        // this collection's schema. Rejecting them broke every join aggregation test.
+        $attributes = [
+            new Document([
+                '$id' => 'price',
+                'key' => 'price',
+                'type' => ColumnType::Double->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Aggregate($attributes),
+            new GroupBy($attributes),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::sum('rev.score'),
+            Query::groupBy(['score']),
+        ]));
+    }
+
+    public function test_aggregate_and_group_by_reject_unknown_attributes_without_a_join(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'price',
+                'key' => 'price',
+                'type' => ColumnType::Double->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Aggregate($attributes),
+            new GroupBy($attributes),
+            new Join(),
+        ]);
+
+        $this->assertFalse($validator->isValid([Query::sum('score')]));
+        $this->assertFalse($validator->isValid([Query::groupBy(['score'])]));
+    }
+
+    public function test_joined_attribute_stand_down_does_not_leak_into_the_next_query_set(): void
+    {
+        // Queries caches its validators, so a join in one request must not leave the
+        // schema check disabled for the next one.
+        $attributes = [
+            new Document([
+                '$id' => 'price',
+                'key' => 'price',
+                'type' => ColumnType::Double->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Aggregate($attributes),
+            new GroupBy($attributes),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::sum('score'),
+        ]));
+
+        $this->assertFalse($validator->isValid([Query::sum('score')]));
+    }
+
     public function test_select_before_join_accepts_dotted_alias(): void
     {
         $attributes = [

@@ -16,6 +16,8 @@ class GroupBy extends Base
      */
     protected array $schema = [];
 
+    protected bool $joinedAttributes = false;
+
     /**
      * @param  array<Document>  $attributes
      */
@@ -56,7 +58,7 @@ class GroupBy extends Base
                 return false;
             }
 
-            if ($this->supportForAttributes && ! isset($this->schema[$column])) {
+            if (! $this->joinedAttributes && $this->supportForAttributes && ! isset($this->schema[$column])) {
                 $this->message = 'Attribute not found in schema: '.$column;
 
                 return false;
@@ -64,5 +66,19 @@ class GroupBy extends Base
         }
 
         return true;
+    }
+
+    /**
+     * Stand the schema check down for a query set that joins: the joined collection's
+     * attributes are legitimate operands here and are not in this collection's schema.
+     */
+    public function allowJoinedAttributes(): void
+    {
+        $this->joinedAttributes = true;
+    }
+
+    public function resetJoinedAttributes(): void
+    {
+        $this->joinedAttributes = false;
     }
 }

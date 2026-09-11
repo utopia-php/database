@@ -175,6 +175,20 @@ class Mirror extends Database
         return $this;
     }
 
+    public function skipValidation(callable $callback): mixed
+    {
+        $initial = $this->validate;
+        $this->disableValidation();
+
+        try {
+            return $callback();
+        } finally {
+            if ($initial) {
+                $this->enableValidation();
+            }
+        }
+    }
+
     public function on(string $event, string $name, ?callable $callback): static
     {
         $this->source->on($event, $name, $callback);

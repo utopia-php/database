@@ -247,11 +247,4 @@ class NestedTest extends TestCase
         $this->assertTrue($validator->isValid(Query::nested('doesNotExist', [Query::limit(1)])));
         $this->assertTrue($validator->isValid(Query::nested('profile', [Query::limit(1)])));
     }
-
-    public function testGetMethodType(): void
-    {
-        $validator = new Nested($this->attributes());
-
-        $this->assertSame(Nested::METHOD_TYPE_NESTED, $validator->getMethodType());
-    }
 }

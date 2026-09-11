@@ -177,15 +177,29 @@ class Mirror extends Database
 
     public function skipValidation(callable $callback): mixed
     {
-        $initial = $this->validate;
+        $mirrorInitial = $this->validate;
+        $sourceInitial = $this->source->validate;
+        $destinationInitial = $this->destination?->validate;
+
         $this->disableValidation();
 
         try {
             return $callback();
         } finally {
-            if ($initial) {
-                $this->enableValidation();
+            $this->validate = $mirrorInitial;
+            $this->restoreValidation($this->source, $sourceInitial);
+            if ($this->destination !== null && $destinationInitial !== null) {
+                $this->restoreValidation($this->destination, $destinationInitial);
             }
+        }
+    }
+
+    private function restoreValidation(Database $database, bool $enabled): void
+    {
+        if ($enabled) {
+            $database->enableValidation();
+        } else {
+            $database->disableValidation();
         }
     }
 

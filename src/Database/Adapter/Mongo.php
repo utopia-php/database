@@ -3091,6 +3091,10 @@ class Mongo extends Adapter
 
         foreach ($queries as $query) {
             /* @var $query Query */
+            if ($query->getMethod() === Query::TYPE_NESTED) {
+                continue;
+            }
+
             if ($query->isNested()) {
                 if ($query->getMethod() === Query::TYPE_ELEM_MATCH) {
                     $filters[$separator][] = [

@@ -5225,9 +5225,15 @@ class Database
 
                                 $nextSelects = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
 
-                                // If parent has explicit selects, child inherits that mode
-                                // (even if nextSelects is empty, we're still in explicit mode)
                                 $childHasExplicitSelects = $parentHasExplicitSelects;
+                                if (!$childHasExplicitSelects) {
+                                    foreach ($relationshipQueries as $relationshipQuery) {
+                                        if ($relationshipQuery->getMethod() === Query::TYPE_SELECT) {
+                                            $childHasExplicitSelects = true;
+                                            break;
+                                        }
+                                    }
+                                }
 
                                 $nextQueue[] = [
                                     'documents' => $relatedDocs,
@@ -9922,6 +9928,10 @@ class Database
     public function convertQueries(Document $collection, array $queries): array
     {
         foreach ($queries as $index => $query) {
+            if ($query->getMethod() === Query::TYPE_NESTED) {
+                continue;
+            }
+
             if ($query->isNested()) {
                 $values = $this->convertQueries($collection, $query->getValues());
                 $query->setValues($values);

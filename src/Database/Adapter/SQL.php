@@ -2244,7 +2244,7 @@ abstract class SQL extends Adapter
     {
         $conditions = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
+            if ($query->getMethod() === Query::TYPE_SELECT || $query->getMethod() === Query::TYPE_NESTED) {
                 continue;
             }
 

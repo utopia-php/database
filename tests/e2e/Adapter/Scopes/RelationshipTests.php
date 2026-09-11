@@ -6345,4 +6345,64 @@ trait RelationshipTests
         $database->deleteCollection('nfi_comments');
         $database->deleteCollection('nfi_authors');
     }
+
+    public function testNestedInnerSelectDoesNotPopulateUnselectedRelationships(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $posts = $database->find('nsk_posts', [
+            Query::nested('comments', [Query::select(['text'])]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(2, $posts);
+        $this->assertSame(
+            ['nsk_tag1', 'nsk_tag2'],
+            $this->nestedSkeletonIds($posts[0]->getAttribute('tags')),
+            'a nested select must not put the parent into explicit-select mode'
+        );
+
+        $comments = $posts[0]->getAttribute('comments');
+        $this->assertNotEmpty($comments);
+        $this->assertSame('First', $comments[0]->getAttribute('text'));
+        $this->assertNull(
+            $comments[0]->getAttribute('author'),
+            'inner select([text]) must not re-populate unselected child relationships at depth 2'
+        );
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedInsideOrIsIgnoredWhenValidationIsSkipped(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $posts = $database->skipValidation(fn () => $database->find('nsk_posts', [
+            Query::or([
+                Query::nested('comments', [Query::limit(1)]),
+                Query::equal('title', ['Post One']),
+            ]),
+            Query::orderAsc('$id'),
+        ]));
+
+        $this->assertSame(['nsk_post1'], $this->nestedSkeletonIds($posts));
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
 }

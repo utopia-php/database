@@ -5706,10 +5706,30 @@ class Database
                 $ordered
                 && !\in_array(Database::ORDER_RANDOM, $grouped['orderTypes'], true)
             ) {
+                $orderAttributes = $grouped['orderAttributes'];
+                $orderTypes = $grouped['orderTypes'];
+                $uniqueOrderBy = false;
+
+                foreach ($orderAttributes as $orderAttribute) {
+                    if ($orderAttribute === '$id' || $orderAttribute === '$sequence') {
+                        $uniqueOrderBy = true;
+                        break;
+                    }
+                }
+
+                if ($uniqueOrderBy === false) {
+                    $leadingAttribute = $orderAttributes[0] ?? null;
+                    $leadingOrderType = $orderTypes[0] ?? Database::ORDER_ASC;
+                    $orderAttributes[] = '$sequence';
+                    $orderTypes[] = \in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)
+                        ? $leadingOrderType
+                        : Database::ORDER_ASC;
+                }
+
                 $foundRelated = $this->sortDocuments(
                     $foundRelated,
-                    $grouped['orderAttributes'],
-                    $grouped['orderTypes'],
+                    $orderAttributes,
+                    $orderTypes,
                 );
             }
 
@@ -5789,19 +5809,10 @@ class Database
             }
 
             if ($cursorDirection === Database::CURSOR_BEFORE) {
-                $documents = \array_slice($documents, 0, $position);
+                $documents = \array_reverse(\array_slice($documents, 0, $position));
+                $documents = \array_slice($documents, $offset, $limit);
 
-                if ($limit === 0) {
-                    return [];
-                }
-
-                if ($limit !== null) {
-                    return \array_values(\array_slice($documents, -($limit + $offset), $limit));
-                }
-
-                return $offset === 0
-                    ? $documents
-                    : \array_values(\array_slice($documents, 0, -$offset));
+                return \array_values(\array_reverse($documents));
             }
 
             $documents = \array_slice($documents, $position + 1);

@@ -3069,6 +3069,7 @@ class Redis extends Adapter
                 Query::TYPE_OFFSET,
                 Query::TYPE_CURSOR_AFTER,
                 Query::TYPE_CURSOR_BEFORE,
+                Query::TYPE_NESTED,
             ], true)) {
                 continue;
             }
@@ -3106,7 +3107,13 @@ class Redis extends Adapter
 
         if ($method === Query::TYPE_AND) {
             foreach ($query->getValues() as $sub) {
-                if (! ($sub instanceof Query) || ! $this->matchesDocument($document, $sub)) {
+                if (! ($sub instanceof Query)) {
+                    return false;
+                }
+                if ($sub->getMethod() === Query::TYPE_NESTED) {
+                    continue;
+                }
+                if (! $this->matchesDocument($document, $sub)) {
                     return false;
                 }
             }
@@ -3116,7 +3123,7 @@ class Redis extends Adapter
 
         if ($method === Query::TYPE_OR) {
             foreach ($query->getValues() as $sub) {
-                if ($sub instanceof Query && $this->matchesDocument($document, $sub)) {
+                if ($sub instanceof Query && $sub->getMethod() !== Query::TYPE_NESTED && $this->matchesDocument($document, $sub)) {
                     return true;
                 }
             }

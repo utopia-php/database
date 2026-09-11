@@ -73,7 +73,7 @@ class Nested extends Base
                 return false;
             }
 
-            if ($query->getMethod() === Query::TYPE_NESTED) {
+            if ($query->getMethod() === Query::TYPE_NESTED || $this->containsNestedQuery($query)) {
                 $this->message = 'Nested queries cannot be nested';
                 return false;
             }
@@ -120,6 +120,25 @@ class Nested extends Base
         }
 
         return true;
+    }
+
+    private function containsNestedQuery(Query $query): bool
+    {
+        if (!\in_array($query->getMethod(), [Query::TYPE_AND, Query::TYPE_OR, Query::TYPE_ELEM_MATCH], true)) {
+            return false;
+        }
+
+        foreach ($query->getValues() as $value) {
+            if (!$value instanceof Query) {
+                continue;
+            }
+
+            if ($value->getMethod() === Query::TYPE_NESTED || $this->containsNestedQuery($value)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function getMethodType(): string

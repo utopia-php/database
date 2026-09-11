@@ -4820,6 +4820,8 @@ trait RelationshipTests
 
     private function createNestedSkeletonFixture(Database $database): void
     {
+        $this->deleteNestedSkeletonFixture($database);
+
         $permissions = [
             Permission::create(Role::any()),
             Permission::read(Role::any()),
@@ -4922,7 +4924,9 @@ trait RelationshipTests
     private function deleteNestedSkeletonFixture(Database $database): void
     {
         foreach (['nsk_posts', 'nsk_comments', 'nsk_tags', 'nsk_authors'] as $collection) {
-            $database->deleteCollection($collection);
+            if (!$database->silent(fn () => $database->getCollection($collection))->isEmpty()) {
+                $database->deleteCollection($collection);
+            }
         }
     }
 
@@ -5122,6 +5126,11 @@ trait RelationshipTests
         $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
             return;
         }
@@ -5917,6 +5926,36 @@ trait RelationshipTests
             $this->nestedSliceIds($posts[0]->getAttribute('comments')),
             'offset must apply after the cursor, matching top-level find()'
         );
+        $this->assertSame([], $this->nestedSliceIds($posts[1]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[2]->getAttribute('comments')));
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
+    public function testNestedSliceCursorBeforeOffsetPastWindowIsEmpty(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [
+                Query::orderAsc('$id'),
+                Query::cursorBefore(new Document(['$id' => 'p1c4'])),
+                Query::offset(10),
+                Query::limit(2),
+            ]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+        $this->assertSame([], $this->nestedSliceIds($posts[0]->getAttribute('comments')));
         $this->assertSame([], $this->nestedSliceIds($posts[1]->getAttribute('comments')));
         $this->assertSame([], $this->nestedSliceIds($posts[2]->getAttribute('comments')));
 

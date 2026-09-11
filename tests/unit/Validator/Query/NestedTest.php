@@ -167,6 +167,19 @@ class NestedTest extends TestCase
         $this->assertSame('Nested queries cannot be nested', $validator->getDescription());
     }
 
+    public function testRejectsNestedInsideLogicalInnerQuery(): void
+    {
+        $validator = new Nested($this->attributes());
+
+        $this->assertFalse($validator->isValid(Query::nested('comments', [
+            Query::or([
+                Query::nested('author', [Query::limit(1)]),
+                Query::equal('text', ['hi']),
+            ]),
+        ])));
+        $this->assertSame('Nested queries cannot be nested', $validator->getDescription());
+    }
+
     /**
      * @return array<string, array{0: string}>
      */

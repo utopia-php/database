@@ -5699,7 +5699,19 @@ class Database
                 $relatedById[$doc->getId()] = $doc;
             }
 
-            $ordered = Query::groupByType($queries)['orderTypes'] !== [];
+            $grouped = Query::groupByType($queries);
+            $ordered = $grouped['orderTypes'] !== [];
+
+            if (
+                $ordered
+                && !\in_array(Database::ORDER_RANDOM, $grouped['orderTypes'], true)
+            ) {
+                $foundRelated = $this->sortDocuments(
+                    $foundRelated,
+                    $grouped['orderAttributes'],
+                    $grouped['orderTypes'],
+                );
+            }
 
             foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
                 $documentRelated = [];
@@ -5759,36 +5771,76 @@ class Database
         ?string $cursorDirection
     ): array {
         $documents = \array_values($documents);
+        $offset = $offset ?? 0;
 
-        if ($cursor === null) {
-            return \array_slice($documents, $offset ?? 0, $limit);
-        }
+        if ($cursor !== null) {
+            $cursorId = $cursor instanceof Document ? $cursor->getId() : $cursor;
+            $position = null;
 
-        $cursorId = $cursor instanceof Document ? $cursor->getId() : $cursor;
-        $position = null;
-
-        foreach ($documents as $index => $document) {
-            if ($document->getId() === $cursorId) {
-                $position = $index;
-                break;
-            }
-        }
-
-        if ($position === null) {
-            return [];
-        }
-
-        if ($cursorDirection === Database::CURSOR_BEFORE) {
-            $preceding = \array_slice($documents, 0, $position);
-
-            if ($limit === null) {
-                return $preceding;
+            foreach ($documents as $index => $document) {
+                if ($document->getId() === $cursorId) {
+                    $position = $index;
+                    break;
+                }
             }
 
-            return $limit === 0 ? [] : \array_slice($preceding, -$limit);
+            if ($position === null) {
+                return [];
+            }
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $documents = \array_slice($documents, 0, $position);
+
+                if ($limit === 0) {
+                    return [];
+                }
+
+                if ($limit !== null) {
+                    return \array_values(\array_slice($documents, -($limit + $offset), $limit));
+                }
+
+                return $offset === 0
+                    ? $documents
+                    : \array_values(\array_slice($documents, 0, -$offset));
+            }
+
+            $documents = \array_slice($documents, $position + 1);
         }
 
-        return \array_slice($documents, $position + 1, $limit);
+        return \array_slice($documents, $offset, $limit);
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @return array<Document>
+     */
+    private function sortDocuments(array $documents, array $orderAttributes, array $orderTypes): array
+    {
+        if ($orderAttributes === []) {
+            return \array_values($documents);
+        }
+
+        \usort(
+            $documents,
+            function (Document $left, Document $right) use ($orderAttributes, $orderTypes): int {
+                foreach ($orderAttributes as $index => $attribute) {
+                    $comparison = $left->getAttribute($attribute) <=> $right->getAttribute($attribute);
+                    if ($comparison === 0) {
+                        continue;
+                    }
+
+                    return ($orderTypes[$index] ?? Database::ORDER_ASC) === Database::ORDER_DESC
+                        ? -$comparison
+                        : $comparison;
+                }
+
+                return 0;
+            }
+        );
+
+        return $documents;
     }
 
     /**
@@ -10382,6 +10434,7 @@ class Database
                     Query::TYPE_ORDER_ASC,
                     Query::TYPE_ORDER_DESC,
                     Query::TYPE_ORDER_RANDOM,
+                    Query::TYPE_CONTAINS_ALL,
                 ], true)
                 && \str_contains($query->getAttribute(), '.')
             ) {

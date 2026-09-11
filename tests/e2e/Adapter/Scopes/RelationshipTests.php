@@ -5889,6 +5889,40 @@ trait RelationshipTests
         $this->deleteNestedSliceFixture($database);
     }
 
+    public function testNestedSliceCursorAfterWithOffset(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSliceFixture($database);
+
+        $posts = $database->find('ns_posts', [
+            Query::nested('comments', [
+                Query::orderAsc('$id'),
+                Query::cursorAfter(new Document(['$id' => 'p1c2'])),
+                Query::offset(1),
+                Query::limit(2),
+            ]),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertCount(3, $posts);
+        $this->assertSame(
+            ['p1c4', 'p1c5'],
+            $this->nestedSliceIds($posts[0]->getAttribute('comments')),
+            'offset must apply after the cursor, matching top-level find()'
+        );
+        $this->assertSame([], $this->nestedSliceIds($posts[1]->getAttribute('comments')));
+        $this->assertSame([], $this->nestedSliceIds($posts[2]->getAttribute('comments')));
+
+        $this->deleteNestedSliceFixture($database);
+    }
+
     public function testNestedSliceCursorAfterParsed(): void
     {
         /** @var Database $database */
@@ -6344,6 +6378,33 @@ trait RelationshipTests
         $database->deleteCollection('nfi_posts');
         $database->deleteCollection('nfi_comments');
         $database->deleteCollection('nfi_authors');
+    }
+
+    public function testNestedFilterContainsAllDoesNotEmptyChildren(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        $posts = $database->find('nsk_posts', [
+            Query::containsAll('tags.name', ['php', 'database']),
+            Query::orderAsc('$id'),
+        ]);
+
+        $this->assertSame(['nsk_post1'], $this->nestedSkeletonIds($posts));
+        $this->assertSame(
+            ['nsk_tag1', 'nsk_tag2'],
+            $this->nestedSkeletonIds($posts[0]->getAttribute('tags')),
+            'containsAll is a parent-set operator and must not require one child to match every value'
+        );
+
+        $this->deleteNestedSkeletonFixture($database);
     }
 
     public function testNestedInnerSelectDoesNotPopulateUnselectedRelationships(): void

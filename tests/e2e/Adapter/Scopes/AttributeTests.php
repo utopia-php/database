@@ -1935,6 +1935,41 @@ trait AttributeTests
         $database->deleteCollection($collection);
     }
 
+    public function testCreateAttributesAddingAutoFilter(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->markTestSkipped('Adapter does not support batch attribute creation');
+        }
+
+        $collection = 'datetime_batch_auto_filter';
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+
+        $database->createAttributes($collection, [Attribute::datetime(key: 'batch')]);
+
+        $database->createDocument($collection, new Document([
+            Document::ID => 'offset',
+            'batch' => '2024-01-02T03:04:05.000+05:00',
+        ]));
+
+        $this->assertSame(
+            '2024-01-01T22:04:05.000+00:00',
+            $database->getDocument($collection, 'offset')->getAttribute('batch')
+        );
+
+        $database->deleteCollection($collection);
+    }
+
     public function testCreateAttributesBigIntIgnoresSizeMetadata(): void
     {
         /** @var Database $database */

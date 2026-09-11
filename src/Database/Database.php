@@ -92,9 +92,9 @@ class Database
     public const DELETE_BATCH_SIZE = 1_000;
 
     /**
-     * Attribute types whose stored value is produced by a filter of the same name. Both public
-     * creation paths add it, so an attribute made through createCollection() encodes and decodes
-     * the same way as the identical one made through createAttribute().
+     * Attribute types whose stored value is produced by a filter of the same name. Every public
+     * creation path adds it, so an attribute made through createCollection(), createAttribute()
+     * or createAttributes() encodes and decodes the same way as any identical one.
      *
      * @var list<ColumnType>
      */

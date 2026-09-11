@@ -4,10 +4,9 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Utopia\Cache\Adapter\None as NoneAdapter;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Attribute\ArrayType;
 use Utopia\Database\Attribute\BigInteger;
@@ -41,8 +40,12 @@ use Utopia\Database\Attribute\Uuid;
 use Utopia\Database\Attribute\Uuid7;
 use Utopia\Database\Attribute\Varchar;
 use Utopia\Database\Attribute\Vector;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
 
 final class AttributeSubclassTest extends TestCase
@@ -251,20 +254,13 @@ final class AttributeSubclassTest extends TestCase
      * @param class-string<Attribute> $class
      */
     #[DataProvider('types')]
-    public function testCreateDocumentInstanceHydratesMappedSubclass(
+    public function testReadingBackHydratesTheMappedSubclass(
         string $class,
         string $_factory,
         ColumnType $type,
         int $_defaultSize,
     ): void {
-        $database = $this->database();
-        $database->setDocumentType('schema', $class);
-
-        $document = $this->instantiate($database, 'schema', [
-            '$id' => 'x',
-            'key' => 'x',
-            'type' => $type->value,
-        ]);
+        $document = $this->store($class, $type);
 
         $this->assertInstanceOf($class, $document);
         $this->assertSame($type, $document->type);
@@ -275,38 +271,22 @@ final class AttributeSubclassTest extends TestCase
      * @param class-string<Attribute> $class
      */
     #[DataProvider('types')]
-    public function testCreateDocumentInstanceHydratesSubclassFromAttributeType(
+    public function testReadingBackHydratesTheSubclassThatTheStoredTypeNames(
         string $class,
         string $_factory,
         ColumnType $type,
         int $_defaultSize,
     ): void {
-        $database = $this->database();
-        $database->setDocumentType('schema', Attribute::class);
-
-        $document = $this->instantiate($database, 'schema', [
-            '$id' => 'x',
-            'key' => 'x',
-            'type' => $type->value,
-        ]);
+        $document = $this->store(Attribute::class, $type);
 
         $this->assertInstanceOf($class, $document);
         $this->assertSame($type, $document->type);
         $this->assertSame('x', $document->key);
     }
 
-    public function testCreateDocumentInstanceUsesStoredTypeNotMappedClass(): void
+    public function testStoredTypeWinsOverTheMappedClass(): void
     {
-        $database = $this->database();
-        $database->setDocumentType('schema', StringType::class);
-
-        $document = $this->instantiate($database, 'schema', [
-            '$id' => 'age',
-            'key' => 'age',
-            'type' => ColumnType::Integer->value,
-        ]);
-
-        $this->assertInstanceOf(Integer::class, $document);
+        $this->assertInstanceOf(Integer::class, $this->store(StringType::class, ColumnType::Integer));
     }
 
     public function testFromDocumentMissingSizeIsZero(): void
@@ -372,24 +352,37 @@ final class AttributeSubclassTest extends TestCase
         $this->assertSame(0, $array->size);
     }
 
-    private function database(): Database
-    {
-        return new Database(
-            $this->createStub(Adapter::class),
-            new Cache(new NoneAdapter()),
-        );
-    }
-
     /**
-     * @param array<string, mixed> $data
+     * Write one attribute row and read it back through the public API, under
+     * the given document type mapping.
+     *
+     * @param  class-string<Attribute>  $documentType
      */
-    private function instantiate(Database $database, string $collection, array $data): Document
+    private function store(string $documentType, ColumnType $type): Document
     {
-        $method = new ReflectionMethod(Database::class, 'createDocumentInstance');
+        $database = new Database(new Memory(), new Cache(new NoneAdapter()));
+        $database->setAuthorization(new Authorization())
+            ->setDatabase('attribute_subclass')
+            ->setNamespace('subclass_'.\uniqid());
+        $database->create();
 
-        /** @var Document $document */
-        $document = $method->invoke($database, $collection, $data);
+        $database->createCollection(new Collection(id: 'schema', attributes: [
+            Attribute::string(key: 'key', size: 255),
+            Attribute::string(key: 'type', size: 64),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
 
-        return $document;
+        $database->setDocumentType('schema', $documentType);
+
+        $database->createDocument('schema', new Document([
+            '$id' => 'x',
+            '$permissions' => [Permission::read(Role::any())],
+            'key' => 'x',
+            'type' => $type->value,
+        ]));
+
+        return $database->getDocument('schema', 'x');
     }
 }

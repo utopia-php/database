@@ -227,6 +227,12 @@ trait Attributes
                 throw new DatabaseException('Missing attribute key');
             }
 
+            if (in_array($attribute->type, Database::ATTRIBUTE_FILTER_TYPES, true)) {
+                $attribute->filters = array_values(
+                    array_unique(array_merge($attribute->filters, [$attribute->type->value]))
+                );
+            }
+
             $existsInSchema = false;
 
             try {

@@ -167,6 +167,22 @@ class RelationshipTest extends TestCase
         $this->assertSame('Relationship queries cannot contain relationship queries', $validator->getDescription());
     }
 
+    public function testRejectsMalformedInnerSelect(): void
+    {
+        $validator = new Relationship($this->attributes());
+
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [Query::select([])])));
+        $this->assertSame('No attributes selected', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(new Query(Query::TYPE_RELATIONSHIP, 'comments', [
+            new Query(Query::TYPE_SELECT, '', [123]),
+        ])));
+        $this->assertSame('Attribute selection must be a string, got int', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [Query::select(['text', 'text'])])));
+        $this->assertSame('Duplicate attributes selected', $validator->getDescription());
+    }
+
     public function testRejectsRelationshipInsideLogicalInnerQuery(): void
     {
         $validator = new Relationship($this->attributes());

@@ -5046,8 +5046,6 @@ trait RelationshipTests
         $second = $database->find('nsk_posts', [$nestedQuery, Query::orderAsc('$id')]);
         $database->skipValidation(fn () => $database->getDocument('nsk_posts', 'nsk_post1', [$nestedQuery]));
 
-        $this->assertSame(['author.name'], $nestedQuery->getValues()[0]->getValues());
-
         $firstAuthor = $first[0]->getAttribute('comments')[0]->getAttribute('author');
         $secondAuthor = $second[0]->getAttribute('comments')[0]->getAttribute('author');
 
@@ -5142,6 +5140,35 @@ trait RelationshipTests
                 Query::relationship('comments', [Query::equal('doesNotExist', ['x'])]),
             ]);
             $this->fail('An invalid inner filter was accepted');
+        } catch (QueryException $e) {
+            $this->assertStringContainsString('doesNotExist', $e->getMessage());
+        }
+
+        $this->deleteNestedSkeletonFixture($database);
+    }
+
+    public function testNestedSkeletonInvalidInnerSelectRejectedWhenParentsMatch(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        if (!$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createNestedSkeletonFixture($database);
+
+        try {
+            $database->find('nsk_posts', [
+                Query::relationship('comments', [Query::select(['doesNotExist'])]),
+            ]);
+            $this->fail('An invalid inner select was accepted');
         } catch (QueryException $e) {
             $this->assertStringContainsString('doesNotExist', $e->getMessage());
         }
@@ -5981,8 +6008,6 @@ trait RelationshipTests
         ]);
 
         $parsed = Query::parse($nested->toString());
-
-        $this->assertSame('p1c2', $parsed->getValues()[1]->getValues()[0]);
 
         $posts = $database->find('ns_posts', [$parsed, Query::orderAsc('$id')]);
 

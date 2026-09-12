@@ -35,6 +35,7 @@ use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Query\Select as SelectValidator;
 use Utopia\Database\Validator\Spatial;
 use Utopia\Database\Validator\Structure;
 
@@ -5460,6 +5461,7 @@ class Database
             }
         }
 
+        $this->validateRelationshipSelects($relatedCollection, $selectQueries);
         $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
         $pagination = Query::groupByType($paginationQueries);
@@ -5576,6 +5578,7 @@ class Database
             }
         }
 
+        $this->validateRelationshipSelects($relatedCollection, $selectQueries);
         $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
         $pagination = Query::groupByType($paginationQueries);
@@ -5852,6 +5855,28 @@ class Database
         );
 
         return $documents;
+    }
+
+    /**
+     * @param array<Query> $selectQueries
+     * @throws QueryException
+     */
+    private function validateRelationshipSelects(Document $collection, array $selectQueries): void
+    {
+        if (empty($selectQueries) || !$this->validate) {
+            return;
+        }
+
+        $validator = new SelectValidator(
+            $collection->getAttribute('attributes', []),
+            $this->adapter->getSupportForAttributes()
+        );
+
+        foreach ($selectQueries as $query) {
+            if (!$validator->isValid($query)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
     }
 
     /**

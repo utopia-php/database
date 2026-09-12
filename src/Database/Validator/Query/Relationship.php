@@ -77,6 +77,14 @@ class Relationship extends Base
                 $this->message = 'Relationship queries cannot contain relationship queries';
                 return false;
             }
+
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                $validator = new Select([], supportForAttributes: false);
+                if (!$validator->isValid($query)) {
+                    $this->message = $validator->getDescription();
+                    return false;
+                }
+            }
         }
 
         $hasPagination = false;

@@ -35,6 +35,7 @@ use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Query\Select as SelectValidator;
 use Utopia\Database\Validator\Spatial;
 use Utopia\Database\Validator\Structure;
 
@@ -5054,7 +5055,7 @@ class Database
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
-            $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth, $nestedSelections));
+            $documents = $this->silent(fn () => $this->populateDocumentsRelationships([$document], $collection, $this->relationshipFetchDepth, $nestedSelections, !empty($selects)));
             $document = $documents[0];
         }
 
@@ -5116,6 +5117,7 @@ class Database
      * @param Document $collection
      * @param int $relationshipFetchDepth
      * @param array<string, array<Query>> $selects
+     * @param bool $hasExplicitSelects
      * @return array<Document>
      * @throws DatabaseException
      */
@@ -5123,7 +5125,8 @@ class Database
         array $documents,
         Document $collection,
         int $relationshipFetchDepth = 0,
-        array $selects = []
+        array $selects = [],
+        bool $hasExplicitSelects = false
     ): array {
         // Prevent nested relationship population during fetches
         $this->inBatchRelationshipPopulation = true;
@@ -5136,7 +5139,7 @@ class Database
                     'depth' => $relationshipFetchDepth,
                     'selects' => $selects,
                     'skipKey' => null, // No back-reference to skip at top level
-                    'hasExplicitSelects' => !empty($selects) // Track if we're in explicit select mode
+                    'hasExplicitSelects' => $hasExplicitSelects
                 ]
             ];
 
@@ -5223,9 +5226,15 @@ class Database
 
                                 $nextSelects = $this->processRelationshipQueries($relatedCollectionRelationships, $relationshipQueries);
 
-                                // If parent has explicit selects, child inherits that mode
-                                // (even if nextSelects is empty, we're still in explicit mode)
                                 $childHasExplicitSelects = $parentHasExplicitSelects;
+                                if (!$childHasExplicitSelects) {
+                                    foreach ($relationshipQueries as $relationshipQuery) {
+                                        if ($relationshipQuery->getMethod() === Query::TYPE_SELECT) {
+                                            $childHasExplicitSelects = true;
+                                            break;
+                                        }
+                                    }
+                                }
 
                                 $nextQueue[] = [
                                     'documents' => $relatedDocs,
@@ -5406,12 +5415,21 @@ class Database
         // For batch relationship population, we need to fetch documents with all attributes
         // to enable proper grouping by back-reference, then apply selects afterward
         $selectQueries = [];
+        $paginationQueries = [];
         $otherQueries = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $selectQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    $selectQueries[] = $query;
+                    break;
+                case Query::TYPE_LIMIT:
+                case Query::TYPE_OFFSET:
+                case Query::TYPE_CURSOR_AFTER:
+                case Query::TYPE_CURSOR_BEFORE:
+                    $paginationQueries[] = $query;
+                    break;
+                default:
+                    $otherQueries[] = $query;
             }
         }
 
@@ -5426,12 +5444,10 @@ class Database
             \array_push($relatedDocuments, ...$chunkDocs);
         }
 
-        // Group related documents by parent ID
         $relatedByParentId = [];
         foreach ($relatedDocuments as $related) {
             $parentId = $related->getAttribute($twoWayKey);
             if (!\is_null($parentId)) {
-                // Handle case where parentId might be a Document object instead of string
                 $parentKey = $parentId instanceof Document
                     ? $parentId->getId()
                     : $parentId;
@@ -5439,22 +5455,35 @@ class Database
                 if (!isset($relatedByParentId[$parentKey])) {
                     $relatedByParentId[$parentKey] = [];
                 }
-                // We don't remove the back-reference here because documents may be reused across fetches
-                // Cycles are prevented by depth limiting in breadth-first traversal
+                // The back-reference stays until the traversal removes it, because these
+                // documents may be reused across fetches. Cycles are prevented by depth limiting.
                 $relatedByParentId[$parentKey][] = $related;
             }
         }
 
+        $this->validateRelationshipSelects($relatedCollection, $selectQueries);
         $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
-        // Assign related documents to their parent documents
+        $pagination = Query::groupByType($paginationQueries);
+        $survivors = [];
+
         foreach ($documents as $document) {
-            $parentId = $document->getId();
-            $relatedDocs = $relatedByParentId[$parentId] ?? [];
+            $relatedDocs = $this->sliceRelated(
+                $relatedByParentId[$document->getId()] ?? [],
+                $pagination['limit'],
+                $pagination['offset'],
+                $pagination['cursor'],
+                $pagination['cursorDirection'],
+            );
+
             $document->setAttribute($key, $relatedDocs);
+
+            foreach ($relatedDocs as $relatedDoc) {
+                $survivors[$relatedDoc->getId()] = $relatedDoc;
+            }
         }
 
-        return $relatedDocuments;
+        return \array_values($survivors);
     }
 
     /**
@@ -5503,12 +5532,21 @@ class Database
         }
 
         $selectQueries = [];
+        $paginationQueries = [];
         $otherQueries = [];
         foreach ($queries as $query) {
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                $selectQueries[] = $query;
-            } else {
-                $otherQueries[] = $query;
+            switch ($query->getMethod()) {
+                case Query::TYPE_SELECT:
+                    $selectQueries[] = $query;
+                    break;
+                case Query::TYPE_LIMIT:
+                case Query::TYPE_OFFSET:
+                case Query::TYPE_CURSOR_AFTER:
+                case Query::TYPE_CURSOR_BEFORE:
+                    $paginationQueries[] = $query;
+                    break;
+                default:
+                    $otherQueries[] = $query;
             }
         }
 
@@ -5523,12 +5561,10 @@ class Database
             \array_push($relatedDocuments, ...$chunkDocs);
         }
 
-        // Group related documents by child ID
         $relatedByChildId = [];
         foreach ($relatedDocuments as $related) {
             $childId = $related->getAttribute($twoWayKey);
             if (!\is_null($childId)) {
-                // Handle case where childId might be a Document object instead of string
                 $childKey = $childId instanceof Document
                     ? $childId->getId()
                     : $childId;
@@ -5536,20 +5572,35 @@ class Database
                 if (!isset($relatedByChildId[$childKey])) {
                     $relatedByChildId[$childKey] = [];
                 }
-                // We don't remove the back-reference here because documents may be reused across fetches
-                // Cycles are prevented by depth limiting in breadth-first traversal
+                // The back-reference stays until the traversal removes it, because these
+                // documents may be reused across fetches. Cycles are prevented by depth limiting.
                 $relatedByChildId[$childKey][] = $related;
             }
         }
 
+        $this->validateRelationshipSelects($relatedCollection, $selectQueries);
         $this->applySelectFiltersToDocuments($relatedDocuments, $selectQueries);
 
+        $pagination = Query::groupByType($paginationQueries);
+        $survivors = [];
+
         foreach ($documents as $document) {
-            $childId = $document->getId();
-            $document->setAttribute($key, $relatedByChildId[$childId] ?? []);
+            $relatedDocs = $this->sliceRelated(
+                $relatedByChildId[$document->getId()] ?? [],
+                $pagination['limit'],
+                $pagination['offset'],
+                $pagination['cursor'],
+                $pagination['cursorDirection'],
+            );
+
+            $document->setAttribute($key, $relatedDocs);
+
+            foreach ($relatedDocs as $relatedDoc) {
+                $survivors[$relatedDoc->getId()] = $relatedDoc;
+            }
         }
 
-        return $relatedDocuments;
+        return \array_values($survivors);
     }
 
     /**
@@ -5589,6 +5640,21 @@ class Database
             return [];
         }
 
+        $paginationQueries = [];
+        $fetchQueries = [];
+        foreach ($queries as $query) {
+            switch ($query->getMethod()) {
+                case Query::TYPE_LIMIT:
+                case Query::TYPE_OFFSET:
+                case Query::TYPE_CURSOR_AFTER:
+                case Query::TYPE_CURSOR_BEFORE:
+                    $paginationQueries[] = $query;
+                    break;
+                default:
+                    $fetchQueries[] = $query;
+            }
+        }
+
         $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
         $junctions = [];
@@ -5618,7 +5684,6 @@ class Database
         }
 
         $related = [];
-        $allRelatedDocs = [];
         if (!empty($relatedIds)) {
             $uniqueRelatedIds = array_unique($relatedIds);
             $foundRelated = [];
@@ -5627,36 +5692,191 @@ class Database
                 $chunkDocs = $this->find($relatedCollection->getId(), [
                     Query::equal('$id', $chunk),
                     Query::limit(PHP_INT_MAX),
-                    ...$queries
+                    ...$fetchQueries
                 ]);
                 \array_push($foundRelated, ...$chunkDocs);
             }
-
-            $allRelatedDocs = $foundRelated;
 
             $relatedById = [];
             foreach ($foundRelated as $doc) {
                 $relatedById[$doc->getId()] = $doc;
             }
 
-            // Build final related arrays maintaining junction order
-            foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
-                $documentRelated = [];
-                foreach ($relatedDocIds as $relatedId) {
-                    if (isset($relatedById[$relatedId])) {
-                        $documentRelated[] = $relatedById[$relatedId];
+            $grouped = Query::groupByType($queries);
+            $ordered = $grouped['orderTypes'] !== [];
+
+            if (
+                $ordered
+                && !\in_array(Database::ORDER_RANDOM, $grouped['orderTypes'], true)
+            ) {
+                $orderAttributes = $grouped['orderAttributes'];
+                $orderTypes = $grouped['orderTypes'];
+                $uniqueOrderBy = false;
+
+                foreach ($orderAttributes as $orderAttribute) {
+                    if ($orderAttribute === '$id' || $orderAttribute === '$sequence') {
+                        $uniqueOrderBy = true;
+                        break;
                     }
                 }
+
+                if ($uniqueOrderBy === false) {
+                    $leadingAttribute = $orderAttributes[0] ?? null;
+                    $leadingOrderType = $orderTypes[0] ?? Database::ORDER_ASC;
+                    $orderAttributes[] = '$sequence';
+                    $orderTypes[] = \in_array($leadingAttribute, ['$createdAt', '$updatedAt'], true)
+                        ? $leadingOrderType
+                        : Database::ORDER_ASC;
+                }
+
+                $foundRelated = $this->sortDocuments(
+                    $foundRelated,
+                    $orderAttributes,
+                    $orderTypes,
+                );
+            }
+
+            foreach ($junctionsByDocumentId as $documentId => $relatedDocIds) {
+                $documentRelated = [];
+
+                if ($ordered) {
+                    $wanted = \array_flip($relatedDocIds);
+                    foreach ($foundRelated as $doc) {
+                        if (isset($wanted[$doc->getId()])) {
+                            $documentRelated[] = $doc;
+                        }
+                    }
+                } else {
+                    foreach ($relatedDocIds as $relatedId) {
+                        if (isset($relatedById[$relatedId])) {
+                            $documentRelated[] = $relatedById[$relatedId];
+                        }
+                    }
+                }
+
                 $related[$documentId] = $documentRelated;
             }
         }
 
+        $pagination = Query::groupByType($paginationQueries);
+        $survivors = [];
+
         foreach ($documents as $document) {
-            $documentId = $document->getId();
-            $document->setAttribute($key, $related[$documentId] ?? []);
+            $relatedDocs = $this->sliceRelated(
+                $related[$document->getId()] ?? [],
+                $pagination['limit'],
+                $pagination['offset'],
+                $pagination['cursor'],
+                $pagination['cursorDirection'],
+            );
+
+            $document->setAttribute($key, $relatedDocs);
+
+            foreach ($relatedDocs as $relatedDoc) {
+                $survivors[$relatedDoc->getId()] = $relatedDoc;
+            }
         }
 
-        return $allRelatedDocs;
+        return \array_values($survivors);
+    }
+
+    /**
+     * Apply a nested relationship's pagination to one parent's related documents
+     *
+     * @param array<Document> $documents
+     * @return array<Document>
+     */
+    private function sliceRelated(
+        array $documents,
+        ?int $limit,
+        ?int $offset,
+        Document|string|null $cursor,
+        ?string $cursorDirection
+    ): array {
+        $documents = \array_values($documents);
+        $offset = $offset ?? 0;
+
+        if ($cursor !== null) {
+            $cursorId = $cursor instanceof Document ? $cursor->getId() : $cursor;
+            $position = null;
+
+            foreach ($documents as $index => $document) {
+                if ($document->getId() === $cursorId) {
+                    $position = $index;
+                    break;
+                }
+            }
+
+            if ($position === null) {
+                return [];
+            }
+
+            if ($cursorDirection === Database::CURSOR_BEFORE) {
+                $documents = \array_reverse(\array_slice($documents, 0, $position));
+                $documents = \array_slice($documents, $offset, $limit);
+
+                return \array_values(\array_reverse($documents));
+            }
+
+            $documents = \array_slice($documents, $position + 1);
+        }
+
+        return \array_slice($documents, $offset, $limit);
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @param array<string> $orderAttributes
+     * @param array<string> $orderTypes
+     * @return array<Document>
+     */
+    private function sortDocuments(array $documents, array $orderAttributes, array $orderTypes): array
+    {
+        if ($orderAttributes === []) {
+            return \array_values($documents);
+        }
+
+        \usort(
+            $documents,
+            function (Document $left, Document $right) use ($orderAttributes, $orderTypes): int {
+                foreach ($orderAttributes as $index => $attribute) {
+                    $comparison = $left->getAttribute($attribute) <=> $right->getAttribute($attribute);
+                    if ($comparison === 0) {
+                        continue;
+                    }
+
+                    return ($orderTypes[$index] ?? Database::ORDER_ASC) === Database::ORDER_DESC
+                        ? -$comparison
+                        : $comparison;
+                }
+
+                return 0;
+            }
+        );
+
+        return $documents;
+    }
+
+    /**
+     * @param array<Query> $selectQueries
+     * @throws QueryException
+     */
+    private function validateRelationshipSelects(Document $collection, array $selectQueries): void
+    {
+        if (empty($selectQueries) || !$this->validate) {
+            return;
+        }
+
+        $validator = new SelectValidator(
+            $collection->getAttribute('attributes', []),
+            $this->adapter->getSupportForAttributes()
+        );
+
+        foreach ($selectQueries as $query) {
+            if (!$validator->isValid($query)) {
+                throw new QueryException($validator->getDescription());
+            }
+        }
     }
 
     /**
@@ -6630,7 +6850,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForUnsignedBigInt()
+                $this->adapter->getSupportForUnsignedBigInt(),
+                false
             );
 
             if (!$validator->isValid($queries)) {
@@ -8405,7 +8626,8 @@ class Database
                 $this->adapter->getMinDateTime(),
                 $this->adapter->getMaxDateTime(),
                 $this->adapter->getSupportForAttributes(),
-                $this->adapter->getSupportForUnsignedBigInt()
+                $this->adapter->getSupportForUnsignedBigInt(),
+                false
             );
 
             if (!$validator->isValid($queries)) {
@@ -8671,6 +8893,7 @@ class Database
         $orderTypes = $grouped['orderTypes'];
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
+        $relationshipQueries = $grouped['relationship'];
 
         $uniqueOrderBy = false;
         foreach ($orderAttributes as $order) {
@@ -8734,7 +8957,7 @@ class Database
         );
 
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = $this->processRelationshipQueries($relationships, $queries);
+        $nestedSelections = $this->processRelationshipQueries($relationships, \array_merge($queries, $relationshipQueries));
 
         // Convert relationship filter queries to SQL-level subqueries
         $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
@@ -8762,7 +8985,7 @@ class Database
 
         if (!$this->inBatchRelationshipPopulation && $this->resolveRelationships && !empty($relationships) && (empty($selects) || !empty($nestedSelections))) {
             if (count($results) > 0) {
-                $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections));
+                $results = $this->silent(fn () => $this->populateDocumentsRelationships($results, $collection, $this->relationshipFetchDepth, $nestedSelections, !empty($selects)));
             }
         }
 
@@ -9253,7 +9476,10 @@ class Database
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
         );
 
-        $queries = $this->convertQueries($collection, $queries);
+        $queries = $this->convertQueries($collection, \array_values(\array_filter(
+            $queries,
+            fn (Query $query) => $query->getMethod() !== Query::TYPE_RELATIONSHIP
+        )));
         $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
 
         // If conversion returns null, it means no documents can match (relationship filter found no matches)
@@ -9790,6 +10016,10 @@ class Database
     public function convertQueries(Document $collection, array $queries): array
     {
         foreach ($queries as $index => $query) {
+            if ($query->getMethod() === Query::TYPE_RELATIONSHIP) {
+                continue;
+            }
+
             if ($query->isNested()) {
                 $values = $this->convertQueries($collection, $query->getValues());
                 $query->setValues($values);
@@ -10210,7 +10440,60 @@ class Database
         $nestedSelections = [];
 
         foreach ($queries as $query) {
-            if ($query->getMethod() !== Query::TYPE_SELECT) {
+            $method = $query->getMethod();
+
+            if ($method === Query::TYPE_RELATIONSHIP) {
+                $key = $query->getAttribute();
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $key,
+                ))[0] ?? null;
+
+                if (!$relationship) {
+                    continue;
+                }
+
+                $nestedSelections[$key] = \array_merge(
+                    $nestedSelections[$key] ?? [],
+                    \array_map(fn (Query $nestedQuery) => clone $nestedQuery, $query->getValues()),
+                );
+                continue;
+            }
+
+            if (
+                !\in_array($method, [
+                    Query::TYPE_SELECT,
+                    Query::TYPE_LIMIT,
+                    Query::TYPE_OFFSET,
+                    Query::TYPE_CURSOR_AFTER,
+                    Query::TYPE_CURSOR_BEFORE,
+                    Query::TYPE_ORDER_ASC,
+                    Query::TYPE_ORDER_DESC,
+                    Query::TYPE_ORDER_RANDOM,
+                    Query::TYPE_CONTAINS_ALL,
+                ], true)
+                && \str_contains($query->getAttribute(), '.')
+            ) {
+                $nesting = \explode('.', $query->getAttribute());
+                $filteredKey = \array_shift($nesting);
+
+                $relationship = \array_values(\array_filter(
+                    $relationships,
+                    fn (Document $relationship) => $relationship->getAttribute('key') === $filteredKey,
+                ))[0] ?? null;
+
+                if ($relationship) {
+                    $nestedSelections[$filteredKey][] = new Query(
+                        $method,
+                        \implode('.', $nesting),
+                        $query->getValues(),
+                    );
+                }
+
+                continue;
+            }
+
+            if ($method !== Query::TYPE_SELECT) {
                 continue;
             }
 
@@ -10221,7 +10504,7 @@ class Database
                 }
 
                 $nesting = \explode('.', $value);
-                $selectedKey = \array_shift($nesting); // Remove and return first item
+                $selectedKey = \array_shift($nesting);
 
                 $relationship = \array_values(\array_filter(
                     $relationships,
@@ -10232,12 +10515,8 @@ class Database
                     continue;
                 }
 
-                // Shift the top level off the dot-path to pass the selection down the chain
-                // 'foo.bar.baz' becomes 'bar.baz'
-
                 $nestingPath = \implode('.', $nesting);
 
-                // If nestingPath is empty, it means we want all attributes (*) for this relationship
                 if (empty($nestingPath)) {
                     $nestedSelections[$selectedKey][] = Query::select(['*']);
                 } else {
@@ -10272,11 +10551,11 @@ class Database
             }
 
             $finalValues = \array_values($values);
-            if ($query->getMethod() === Query::TYPE_SELECT) {
-                if (empty($finalValues)) {
-                    $finalValues = ['*'];
-                }
+
+            if (empty($finalValues)) {
+                $finalValues = ['*'];
             }
+
             $query->setValues($finalValues);
         }
 

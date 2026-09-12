@@ -101,7 +101,7 @@ class IndexedQueries extends Queries
                 }
             }
 
-            if ($query->isNested()) {
+            if ($query->isNested() && $query->getMethod() !== Query::TYPE_RELATIONSHIP) {
                 if (! self::isValid($query->getValues())) {
                     return false;
                 }

@@ -175,6 +175,34 @@ class Mirror extends Database
         return $this;
     }
 
+    public function skipValidation(callable $callback): mixed
+    {
+        $mirrorInitial = $this->validate;
+        $sourceInitial = $this->source->validate;
+        $destinationInitial = $this->destination?->validate;
+
+        $this->disableValidation();
+
+        try {
+            return $callback();
+        } finally {
+            $this->validate = $mirrorInitial;
+            $this->restoreValidation($this->source, $sourceInitial);
+            if ($this->destination !== null && $destinationInitial !== null) {
+                $this->restoreValidation($this->destination, $destinationInitial);
+            }
+        }
+    }
+
+    private function restoreValidation(Database $database, bool $enabled): void
+    {
+        if ($enabled) {
+            $database->enableValidation();
+        } else {
+            $database->disableValidation();
+        }
+    }
+
     public function on(string $event, string $name, ?callable $callback): static
     {
         $this->source->on($event, $name, $callback);

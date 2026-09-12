@@ -501,6 +501,8 @@ class QueryTest extends TestCase
         $this->assertContains(Query::TYPE_NOT_ENDS_WITH, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_BETWEEN, Query::TYPES);
         $this->assertContains(Query::TYPE_ORDER_RANDOM, Query::TYPES);
+        $this->assertContains(Query::TYPE_RELATIONSHIP, Query::TYPES);
+        $this->assertTrue(Query::isMethod(Query::TYPE_RELATIONSHIP));
     }
 
     public function testFingerprint(): void
@@ -593,6 +595,9 @@ class QueryTest extends TestCase
         $elem = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
         $this->assertSame('elemMatch:tags(equal:name)', $elem->shape());
 
+        $relationship = Query::relationship('comments', [Query::equal('approved', [true]), Query::limit(2)]);
+        $this->assertSame('relationship:comments(equal:approved|limit:)', $relationship->shape());
+
         // Deeply nested — iterative traversal must match recursive result
         $deep = Query::and([
             Query::or([
@@ -608,5 +613,45 @@ class QueryTest extends TestCase
             'and:(greaterThan:d|or:(and:(equal:b|lessThan:c)|equal:a))',
             $deep->shape(),
         );
+    }
+
+    public function testRelationshipRoundTrip(): void
+    {
+        $query = Query::relationship('comments', [
+            Query::equal('approved', [true]),
+            Query::orderDesc('$createdAt'),
+            Query::limit(2),
+            Query::offset(1),
+            Query::cursorAfter(new Document(['$id' => 'c1'])),
+        ]);
+
+        $this->assertSame(Query::TYPE_RELATIONSHIP, $query->getMethod());
+        $this->assertSame('comments', $query->getAttribute());
+        $this->assertTrue($query->isNested());
+        $this->assertInstanceOf(Document::class, $query->getValues()[4]->getValues()[0]);
+
+        $parsed = Query::parse($query->toString());
+
+        $this->assertSame(Query::TYPE_RELATIONSHIP, $parsed->getMethod());
+        $this->assertSame('comments', $parsed->getAttribute());
+
+        $inner = $parsed->getValues();
+        $this->assertCount(5, $inner);
+
+        $this->assertSame(Query::TYPE_EQUAL, $inner[0]->getMethod());
+        $this->assertSame('approved', $inner[0]->getAttribute());
+        $this->assertSame([true], $inner[0]->getValues());
+
+        $this->assertSame(Query::TYPE_ORDER_DESC, $inner[1]->getMethod());
+        $this->assertSame('$createdAt', $inner[1]->getAttribute());
+
+        $this->assertSame(Query::TYPE_LIMIT, $inner[2]->getMethod());
+        $this->assertSame([2], $inner[2]->getValues());
+
+        $this->assertSame(Query::TYPE_OFFSET, $inner[3]->getMethod());
+        $this->assertSame([1], $inner[3]->getValues());
+
+        $this->assertSame(Query::TYPE_CURSOR_AFTER, $inner[4]->getMethod());
+        $this->assertSame(['c1'], $inner[4]->getValues());
     }
 }

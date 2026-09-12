@@ -8,9 +8,9 @@ use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
-use Utopia\Database\Validator\Query\Nested;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Query\Relationship;
 use Utopia\Database\Validator\Query\Select;
 
 class Documents extends IndexedQueries
@@ -24,7 +24,7 @@ class Documents extends IndexedQueries
      * @param \DateTime $maxAllowedDate
      * @param bool $supportForAttributes
      * @param bool $supportUnsignedBigInt
-     * @param bool $supportForNested
+     * @param bool $supportForRelationship
      * @throws \Utopia\Database\Exception
      */
     public function __construct(
@@ -37,7 +37,7 @@ class Documents extends IndexedQueries
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         bool $supportForAttributes = true,
         bool $supportUnsignedBigInt = true,
-        bool $supportForNested = true
+        bool $supportForRelationship = true
     ) {
         $attributes[] = new Document([
             '$id' => '$id',
@@ -81,8 +81,8 @@ class Documents extends IndexedQueries
             new Select($attributes, $supportForAttributes),
         ];
 
-        if ($supportForNested) {
-            $validators[] = new Nested($attributes, $maxUIDLength, $supportForAttributes);
+        if ($supportForRelationship) {
+            $validators[] = new Relationship($attributes, $maxUIDLength, $supportForAttributes);
         }
 
         parent::__construct($attributes, $indexes, $validators);

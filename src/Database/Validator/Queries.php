@@ -71,7 +71,7 @@ class Queries extends Validator
                 }
             }
 
-            if ($query->isNested() && $query->getMethod() !== Query::TYPE_NESTED) {
+            if ($query->isNested() && $query->getMethod() !== Query::TYPE_RELATIONSHIP) {
                 if (!self::isValid($query->getValues())) {
                     return false;
                 }
@@ -128,7 +128,7 @@ class Queries extends Validator
                 Query::TYPE_REGEX,
                 Query::TYPE_EXISTS,
                 Query::TYPE_NOT_EXISTS => Base::METHOD_TYPE_FILTER,
-                Query::TYPE_NESTED => Base::METHOD_TYPE_NESTED,
+                Query::TYPE_RELATIONSHIP => Base::METHOD_TYPE_RELATIONSHIP,
                 default => '',
             };
 

@@ -3091,7 +3091,7 @@ class Mongo extends Adapter
 
         foreach ($queries as $query) {
             /* @var $query Query */
-            if ($query->getMethod() === Query::TYPE_NESTED) {
+            if ($query->getMethod() === Query::TYPE_RELATIONSHIP) {
                 continue;
             }
 

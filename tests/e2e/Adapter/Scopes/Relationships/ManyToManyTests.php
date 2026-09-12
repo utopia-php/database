@@ -2479,7 +2479,7 @@ trait ManyToManyTests
 
         $albums = $database->find('m2mno_albums', [
             Query::equal('$id', ['m2mno_album1']),
-            Query::nested('tracks', [Query::orderDesc('name')]),
+            Query::relationship('tracks', [Query::orderDesc('name')]),
         ]);
 
         $this->assertCount(1, $albums);
@@ -2505,7 +2505,7 @@ trait ManyToManyTests
 
         $albums = $database->find('m2mno_albums', [
             Query::equal('$id', ['m2mno_album1']),
-            Query::nested('tracks', [Query::orderAsc('name')]),
+            Query::relationship('tracks', [Query::orderAsc('name')]),
         ]);
 
         $this->assertCount(1, $albums);
@@ -2530,7 +2530,7 @@ trait ManyToManyTests
         $this->createM2mNestedOrderFixture($database);
 
         $albums = $database->find('m2mno_albums', [
-            Query::nested('tracks', [Query::orderAsc('name')]),
+            Query::relationship('tracks', [Query::orderAsc('name')]),
             Query::orderAsc('$id'),
         ]);
 
@@ -2571,7 +2571,7 @@ trait ManyToManyTests
 
         $albums = $database->find('m2mno_albums', [
             Query::equal('$id', ['m2mno_album1']),
-            Query::nested('tracks', [Query::select(['name'])]),
+            Query::relationship('tracks', [Query::select(['name'])]),
         ]);
 
         $this->assertCount(1, $albums);

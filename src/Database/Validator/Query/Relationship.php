@@ -6,7 +6,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 
-class Nested extends Base
+class Relationship extends Base
 {
     /**
      * @var array<int|string, mixed>
@@ -38,7 +38,7 @@ class Nested extends Base
             return false;
         }
 
-        if ($value->getMethod() !== Query::TYPE_NESTED) {
+        if ($value->getMethod() !== Query::TYPE_RELATIONSHIP) {
             $this->message = 'Invalid query method: ' . $value->getMethod();
             return false;
         }
@@ -46,7 +46,7 @@ class Nested extends Base
         $attribute = $value->getAttribute();
 
         if (empty($attribute)) {
-            $this->message = 'Nested queries require a relationship attribute';
+            $this->message = 'Relationship queries require a relationship attribute';
             return false;
         }
 
@@ -55,7 +55,7 @@ class Nested extends Base
                 !isset($this->schema[$attribute])
                 || $this->schema[$attribute]['type'] !== Database::VAR_RELATIONSHIP
             ) {
-                $this->message = 'Nested queries can only be used on relationship attributes: ' . $attribute;
+                $this->message = 'Relationship queries can only be used on relationship attributes: ' . $attribute;
                 return false;
             }
         }
@@ -63,18 +63,18 @@ class Nested extends Base
         $queries = $value->getValues();
 
         if (empty($queries)) {
-            $this->message = 'Nested queries can only contain queries';
+            $this->message = 'Relationship queries can only contain queries';
             return false;
         }
 
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
-                $this->message = 'Nested queries can only contain queries';
+                $this->message = 'Relationship queries can only contain queries';
                 return false;
             }
 
-            if ($query->getMethod() === Query::TYPE_NESTED || $this->containsNestedQuery($query)) {
-                $this->message = 'Nested queries cannot be nested';
+            if ($query->getMethod() === Query::TYPE_RELATIONSHIP || $this->containsRelationshipQuery($query)) {
+                $this->message = 'Relationship queries cannot contain relationship queries';
                 return false;
             }
         }
@@ -115,14 +115,14 @@ class Nested extends Base
             || ($relationType === Database::RELATION_ONE_TO_MANY && $side === Database::RELATION_SIDE_CHILD);
 
         if ($isSingular) {
-            $this->message = 'Nested pagination is not supported on a singular relationship: ' . $attribute;
+            $this->message = 'Relationship pagination is not supported on a singular relationship: ' . $attribute;
             return false;
         }
 
         return true;
     }
 
-    private function containsNestedQuery(Query $query): bool
+    private function containsRelationshipQuery(Query $query): bool
     {
         if (!\in_array($query->getMethod(), [Query::TYPE_AND, Query::TYPE_OR, Query::TYPE_ELEM_MATCH], true)) {
             return false;
@@ -133,7 +133,7 @@ class Nested extends Base
                 continue;
             }
 
-            if ($value->getMethod() === Query::TYPE_NESTED || $this->containsNestedQuery($value)) {
+            if ($value->getMethod() === Query::TYPE_RELATIONSHIP || $this->containsRelationshipQuery($value)) {
                 return true;
             }
         }
@@ -143,6 +143,6 @@ class Nested extends Base
 
     public function getMethodType(): string
     {
-        return self::METHOD_TYPE_NESTED;
+        return self::METHOD_TYPE_RELATIONSHIP;
     }
 }

@@ -501,8 +501,8 @@ class QueryTest extends TestCase
         $this->assertContains(Query::TYPE_NOT_ENDS_WITH, Query::TYPES);
         $this->assertContains(Query::TYPE_NOT_BETWEEN, Query::TYPES);
         $this->assertContains(Query::TYPE_ORDER_RANDOM, Query::TYPES);
-        $this->assertContains(Query::TYPE_NESTED, Query::TYPES);
-        $this->assertTrue(Query::isMethod(Query::TYPE_NESTED));
+        $this->assertContains(Query::TYPE_RELATIONSHIP, Query::TYPES);
+        $this->assertTrue(Query::isMethod(Query::TYPE_RELATIONSHIP));
     }
 
     public function testFingerprint(): void
@@ -595,8 +595,8 @@ class QueryTest extends TestCase
         $elem = new Query(Query::TYPE_ELEM_MATCH, 'tags', [Query::equal('name', ['php'])]);
         $this->assertSame('elemMatch:tags(equal:name)', $elem->shape());
 
-        $nested = Query::nested('comments', [Query::equal('approved', [true]), Query::limit(2)]);
-        $this->assertSame('nested:comments(equal:approved|limit:)', $nested->shape());
+        $relationship = Query::relationship('comments', [Query::equal('approved', [true]), Query::limit(2)]);
+        $this->assertSame('relationship:comments(equal:approved|limit:)', $relationship->shape());
 
         // Deeply nested — iterative traversal must match recursive result
         $deep = Query::and([
@@ -615,9 +615,9 @@ class QueryTest extends TestCase
         );
     }
 
-    public function testNestedRoundTrip(): void
+    public function testRelationshipRoundTrip(): void
     {
-        $query = Query::nested('comments', [
+        $query = Query::relationship('comments', [
             Query::equal('approved', [true]),
             Query::orderDesc('$createdAt'),
             Query::limit(2),
@@ -625,14 +625,14 @@ class QueryTest extends TestCase
             Query::cursorAfter(new Document(['$id' => 'c1'])),
         ]);
 
-        $this->assertSame(Query::TYPE_NESTED, $query->getMethod());
+        $this->assertSame(Query::TYPE_RELATIONSHIP, $query->getMethod());
         $this->assertSame('comments', $query->getAttribute());
         $this->assertTrue($query->isNested());
         $this->assertInstanceOf(Document::class, $query->getValues()[4]->getValues()[0]);
 
         $parsed = Query::parse($query->toString());
 
-        $this->assertSame(Query::TYPE_NESTED, $parsed->getMethod());
+        $this->assertSame(Query::TYPE_RELATIONSHIP, $parsed->getMethod());
         $this->assertSame('comments', $parsed->getAttribute());
 
         $inner = $parsed->getValues();

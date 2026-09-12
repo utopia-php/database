@@ -8868,7 +8868,7 @@ class Database
         $orderTypes = $grouped['orderTypes'];
         $cursor = $grouped['cursor'];
         $cursorDirection = $grouped['cursorDirection'] ?? Database::CURSOR_AFTER;
-        $nested = $grouped['nested'];
+        $relationshipQueries = $grouped['relationship'];
 
         $uniqueOrderBy = false;
         foreach ($orderAttributes as $order) {
@@ -8932,7 +8932,7 @@ class Database
         );
 
         $selections = $this->validateSelections($collection, $selects);
-        $nestedSelections = $this->processRelationshipQueries($relationships, \array_merge($queries, $nested));
+        $nestedSelections = $this->processRelationshipQueries($relationships, \array_merge($queries, $relationshipQueries));
 
         // Convert relationship filter queries to SQL-level subqueries
         $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
@@ -9453,7 +9453,7 @@ class Database
 
         $queries = $this->convertQueries($collection, \array_values(\array_filter(
             $queries,
-            fn (Query $query) => $query->getMethod() !== Query::TYPE_NESTED
+            fn (Query $query) => $query->getMethod() !== Query::TYPE_RELATIONSHIP
         )));
         $queriesOrNull = $this->convertRelationshipQueries($relationships, $queries, $collection);
 
@@ -9991,7 +9991,7 @@ class Database
     public function convertQueries(Document $collection, array $queries): array
     {
         foreach ($queries as $index => $query) {
-            if ($query->getMethod() === Query::TYPE_NESTED) {
+            if ($query->getMethod() === Query::TYPE_RELATIONSHIP) {
                 continue;
             }
 
@@ -10417,7 +10417,7 @@ class Database
         foreach ($queries as $query) {
             $method = $query->getMethod();
 
-            if ($method === Query::TYPE_NESTED) {
+            if ($method === Query::TYPE_RELATIONSHIP) {
                 $key = $query->getAttribute();
                 $relationship = \array_values(\array_filter(
                     $relationships,

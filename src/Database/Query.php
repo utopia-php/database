@@ -68,7 +68,7 @@ class Query
     public const TYPE_OR = 'or';
     public const TYPE_CONTAINS_ALL = 'containsAll';
     public const TYPE_ELEM_MATCH = 'elemMatch';
-    public const TYPE_NESTED = 'nested';
+    public const TYPE_RELATIONSHIP = 'relationship';
     public const DEFAULT_ALIAS = 'main';
 
     public const TYPES = [
@@ -120,7 +120,7 @@ class Query
         self::TYPE_OR,
         self::TYPE_CONTAINS_ALL,
         self::TYPE_ELEM_MATCH,
-        self::TYPE_NESTED,
+        self::TYPE_RELATIONSHIP,
         self::TYPE_REGEX
     ];
 
@@ -134,7 +134,7 @@ class Query
         self::TYPE_AND,
         self::TYPE_OR,
         self::TYPE_ELEM_MATCH,
-        self::TYPE_NESTED,
+        self::TYPE_RELATIONSHIP,
     ];
 
     protected string $method = '';
@@ -310,7 +310,7 @@ class Query
             self::TYPE_AND,
             self::TYPE_CONTAINS_ALL,
             self::TYPE_ELEM_MATCH,
-            self::TYPE_NESTED,
+            self::TYPE_RELATIONSHIP,
             self::TYPE_SELECT,
             self::TYPE_VECTOR_DOT,
             self::TYPE_VECTOR_COSINE,
@@ -1006,7 +1006,7 @@ class Query
      *     orderTypes: array<string>,
      *     cursor: Document|null,
      *     cursorDirection: string|null,
-     *     nested: array<Query>
+     *     relationship: array<Query>
      * }
      */
     public static function groupByType(array $queries): array
@@ -1019,7 +1019,7 @@ class Query
         $orderTypes = [];
         $cursor = null;
         $cursorDirection = null;
-        $nested = [];
+        $relationshipQueries = [];
 
         foreach ($queries as $query) {
             if (!$query instanceof Query) {
@@ -1076,8 +1076,8 @@ class Query
                     $selections[] = clone $query;
                     break;
 
-                case Query::TYPE_NESTED:
-                    $nested[] = clone $query;
+                case Query::TYPE_RELATIONSHIP:
+                    $relationshipQueries[] = clone $query;
                     break;
 
                 default:
@@ -1095,7 +1095,7 @@ class Query
             'orderTypes' => $orderTypes,
             'cursor' => $cursor,
             'cursorDirection' => $cursorDirection,
-            'nested' => $nested,
+            'relationship' => $relationshipQueries,
         ];
     }
 
@@ -1401,8 +1401,8 @@ class Query
      * @param array<Query> $queries
      * @return Query
      */
-    public static function nested(string $relationshipKey, array $queries): self
+    public static function relationship(string $relationshipKey, array $queries): self
     {
-        return new self(self::TYPE_NESTED, $relationshipKey, $queries);
+        return new self(self::TYPE_RELATIONSHIP, $relationshipKey, $queries);
     }
 }

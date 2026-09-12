@@ -6,9 +6,9 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
-use Utopia\Database\Validator\Query\Nested;
+use Utopia\Database\Validator\Query\Relationship;
 
-class NestedTest extends TestCase
+class RelationshipTest extends TestCase
 {
     /**
      * @return array<Document>
@@ -92,9 +92,9 @@ class NestedTest extends TestCase
 
     public function testAcceptsInnerQueriesOnPluralRelationship(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertTrue($validator->isValid(Query::nested('comments', [
+        $this->assertTrue($validator->isValid(Query::relationship('comments', [
             Query::equal('approved', [true]),
             Query::orderDesc('$createdAt'),
             Query::limit(2),
@@ -102,7 +102,7 @@ class NestedTest extends TestCase
             Query::cursorAfter(new Document(['$id' => 'comment1'])),
         ])));
 
-        $this->assertTrue($validator->isValid(Query::nested('tags', [
+        $this->assertTrue($validator->isValid(Query::relationship('tags', [
             Query::select(['name']),
             Query::limit(5),
         ])));
@@ -110,7 +110,7 @@ class NestedTest extends TestCase
 
     public function testRejectsWrongMethod(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
         $this->assertFalse($validator->isValid(Query::limit(1)));
         $this->assertSame('Invalid query method: limit', $validator->getDescription());
@@ -118,66 +118,66 @@ class NestedTest extends TestCase
 
     public function testRejectsNonRelationshipAttribute(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertFalse($validator->isValid(Query::nested('title', [Query::limit(1)])));
+        $this->assertFalse($validator->isValid(Query::relationship('title', [Query::limit(1)])));
         $this->assertSame(
-            'Nested queries can only be used on relationship attributes: title',
+            'Relationship queries can only be used on relationship attributes: title',
             $validator->getDescription()
         );
     }
 
     public function testRejectsUnknownAttribute(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertFalse($validator->isValid(Query::nested('doesNotExist', [Query::limit(1)])));
+        $this->assertFalse($validator->isValid(Query::relationship('doesNotExist', [Query::limit(1)])));
         $this->assertSame(
-            'Nested queries can only be used on relationship attributes: doesNotExist',
+            'Relationship queries can only be used on relationship attributes: doesNotExist',
             $validator->getDescription()
         );
     }
 
     public function testRejectsEmptyAttribute(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertFalse($validator->isValid(Query::nested('', [Query::limit(1)])));
-        $this->assertSame('Nested queries require a relationship attribute', $validator->getDescription());
+        $this->assertFalse($validator->isValid(Query::relationship('', [Query::limit(1)])));
+        $this->assertSame('Relationship queries require a relationship attribute', $validator->getDescription());
     }
 
     public function testRejectsNonQueryValues(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertFalse($validator->isValid(new Query(Query::TYPE_NESTED, 'comments', ['approved'])));
-        $this->assertSame('Nested queries can only contain queries', $validator->getDescription());
+        $this->assertFalse($validator->isValid(new Query(Query::TYPE_RELATIONSHIP, 'comments', ['approved'])));
+        $this->assertSame('Relationship queries can only contain queries', $validator->getDescription());
 
-        $this->assertFalse($validator->isValid(Query::nested('comments', [])));
-        $this->assertSame('Nested queries can only contain queries', $validator->getDescription());
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [])));
+        $this->assertSame('Relationship queries can only contain queries', $validator->getDescription());
     }
 
-    public function testRejectsNestedInNested(): void
+    public function testRejectsRelationshipInRelationship(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertFalse($validator->isValid(Query::nested('comments', [
-            Query::nested('author', [Query::limit(1)]),
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [
+            Query::relationship('author', [Query::limit(1)]),
         ])));
-        $this->assertSame('Nested queries cannot be nested', $validator->getDescription());
+        $this->assertSame('Relationship queries cannot contain relationship queries', $validator->getDescription());
     }
 
-    public function testRejectsNestedInsideLogicalInnerQuery(): void
+    public function testRejectsRelationshipInsideLogicalInnerQuery(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertFalse($validator->isValid(Query::nested('comments', [
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [
             Query::or([
-                Query::nested('author', [Query::limit(1)]),
+                Query::relationship('author', [Query::limit(1)]),
                 Query::equal('text', ['hi']),
             ]),
         ])));
-        $this->assertSame('Nested queries cannot be nested', $validator->getDescription());
+        $this->assertSame('Relationship queries cannot contain relationship queries', $validator->getDescription());
     }
 
     /**
@@ -197,12 +197,12 @@ class NestedTest extends TestCase
      */
     public function testRejectsPaginationOnSingularRelationship(string $attribute): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
         foreach ([Query::limit(1), Query::offset(1), Query::cursorAfter(new Document(['$id' => 'x1']))] as $pagination) {
-            $this->assertFalse($validator->isValid(Query::nested($attribute, [$pagination])));
+            $this->assertFalse($validator->isValid(Query::relationship($attribute, [$pagination])));
             $this->assertSame(
-                'Nested pagination is not supported on a singular relationship: ' . $attribute,
+                'Relationship pagination is not supported on a singular relationship: ' . $attribute,
                 $validator->getDescription()
             );
         }
@@ -213,9 +213,9 @@ class NestedTest extends TestCase
      */
     public function testAcceptsFiltersOnSingularRelationship(string $attribute): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertTrue($validator->isValid(Query::nested($attribute, [
+        $this->assertTrue($validator->isValid(Query::relationship($attribute, [
             Query::equal('name', ['Alice']),
             Query::select(['name']),
         ])));
@@ -223,28 +223,28 @@ class NestedTest extends TestCase
 
     public function testRejectsInvalidInnerLimit(): void
     {
-        $validator = new Nested($this->attributes());
+        $validator = new Relationship($this->attributes());
 
-        $this->assertFalse($validator->isValid(Query::nested('comments', [Query::limit(0)])));
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [Query::limit(0)])));
         $this->assertStringContainsString('Invalid limit', $validator->getDescription());
 
-        $this->assertFalse($validator->isValid(Query::nested('comments', [Query::limit(-1)])));
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [Query::limit(-1)])));
         $this->assertStringContainsString('Invalid limit', $validator->getDescription());
     }
 
     public function testRejectsInvalidInnerCursor(): void
     {
-        $validator = new Nested($this->attributes(), 4);
+        $validator = new Relationship($this->attributes(), 4);
 
-        $this->assertFalse($validator->isValid(Query::nested('comments', [Query::cursorAfter(new Document(['$id' => 'waytoolongforfour']))])));
+        $this->assertFalse($validator->isValid(Query::relationship('comments', [Query::cursorAfter(new Document(['$id' => 'waytoolongforfour']))])));
         $this->assertStringContainsString('Invalid cursor', $validator->getDescription());
     }
 
     public function testUnknownAttributeAcceptedWithoutAttributeSupport(): void
     {
-        $validator = new Nested($this->attributes(), 36, false);
+        $validator = new Relationship($this->attributes(), 36, false);
 
-        $this->assertTrue($validator->isValid(Query::nested('doesNotExist', [Query::limit(1)])));
-        $this->assertTrue($validator->isValid(Query::nested('profile', [Query::limit(1)])));
+        $this->assertTrue($validator->isValid(Query::relationship('doesNotExist', [Query::limit(1)])));
+        $this->assertTrue($validator->isValid(Query::relationship('profile', [Query::limit(1)])));
     }
 }

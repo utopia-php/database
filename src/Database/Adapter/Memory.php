@@ -2561,7 +2561,7 @@ class Memory extends Adapter
         $effectiveQueries = [];
         foreach ($queries as $query) {
             $method = $query->getMethod();
-            if (\in_array($method, [Query::TYPE_SELECT, Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC, Query::TYPE_ORDER_RANDOM, Query::TYPE_LIMIT, Query::TYPE_OFFSET, Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE, Query::TYPE_NESTED], true)) {
+            if (\in_array($method, [Query::TYPE_SELECT, Query::TYPE_ORDER_ASC, Query::TYPE_ORDER_DESC, Query::TYPE_ORDER_RANDOM, Query::TYPE_LIMIT, Query::TYPE_OFFSET, Query::TYPE_CURSOR_AFTER, Query::TYPE_CURSOR_BEFORE, Query::TYPE_RELATIONSHIP], true)) {
                 continue;
             }
             $effectiveQueries[] = $query;
@@ -2617,7 +2617,7 @@ class Memory extends Adapter
                 if (! ($sub instanceof Query)) {
                     return false;
                 }
-                if ($sub->getMethod() === Query::TYPE_NESTED) {
+                if ($sub->getMethod() === Query::TYPE_RELATIONSHIP) {
                     continue;
                 }
                 if (! $this->matches($row, $sub)) {
@@ -2630,7 +2630,7 @@ class Memory extends Adapter
 
         if ($method === Query::TYPE_OR) {
             foreach ($query->getValues() as $sub) {
-                if ($sub instanceof Query && $sub->getMethod() !== Query::TYPE_NESTED && $this->matches($row, $sub)) {
+                if ($sub instanceof Query && $sub->getMethod() !== Query::TYPE_RELATIONSHIP && $this->matches($row, $sub)) {
                     return true;
                 }
             }

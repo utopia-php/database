@@ -11,9 +11,9 @@ use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Cursor;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
-use Utopia\Database\Validator\Query\Nested;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Query\Relationship;
 
 class QueriesTest extends TestCase
 {
@@ -118,7 +118,7 @@ class QueriesTest extends TestCase
         );
     }
 
-    public function testOrRejectsNestedQuery(): void
+    public function testOrRejectsRelationshipQuery(): void
     {
         $attributes = [
             new Document([
@@ -144,14 +144,14 @@ class QueriesTest extends TestCase
 
         $validator = new Queries([
             new Filter($attributes, Database::VAR_INTEGER),
-            new Nested($attributes),
+            new Relationship($attributes),
         ]);
 
-        $this->assertTrue($validator->isValid([Query::nested('comments', [Query::limit(1)])]), $validator->getDescription());
+        $this->assertTrue($validator->isValid([Query::relationship('comments', [Query::limit(1)])]), $validator->getDescription());
 
         $this->assertFalse($validator->isValid([
             Query::or([
-                Query::nested('comments', [Query::limit(1)]),
+                Query::relationship('comments', [Query::limit(1)]),
                 Query::equal('name', ['value']),
             ]),
         ]));

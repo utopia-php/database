@@ -4952,7 +4952,7 @@ trait RelationshipTests
         $this->createNestedSkeletonFixture($database);
 
         $posts = $database->find('nsk_posts', [
-            Query::nested('comments', [Query::orderAsc('$id')]),
+            Query::relationship('comments', [Query::orderAsc('$id')]),
             Query::orderAsc('$id'),
         ]);
 
@@ -4998,7 +4998,7 @@ trait RelationshipTests
         $this->assertSame(30, $baseline);
 
         $withNested = $database->sum('nsk_posts', 'views', [
-            Query::nested('comments', [Query::limit(1)]),
+            Query::relationship('comments', [Query::limit(1)]),
         ]);
         $this->assertSame(30, $withNested);
 
@@ -5021,7 +5021,7 @@ trait RelationshipTests
         $this->assertSame(2, $baseline);
 
         $withNested = $database->count('nsk_posts', [
-            Query::nested('comments', [Query::limit(1)]),
+            Query::relationship('comments', [Query::limit(1)]),
         ]);
         $this->assertSame(2, $withNested);
 
@@ -5040,7 +5040,7 @@ trait RelationshipTests
 
         $this->createNestedSkeletonFixture($database);
 
-        $nestedQuery = Query::nested('comments', [Query::select(['author.name'])]);
+        $nestedQuery = Query::relationship('comments', [Query::select(['author.name'])]);
 
         $first = $database->find('nsk_posts', [$nestedQuery, Query::orderAsc('$id')]);
         $second = $database->find('nsk_posts', [$nestedQuery, Query::orderAsc('$id')]);
@@ -5072,7 +5072,7 @@ trait RelationshipTests
         $this->createNestedSkeletonFixture($database);
 
         $found = $database->findOne('nsk_posts', [
-            Query::nested('comments', [Query::limit(1)]),
+            Query::relationship('comments', [Query::limit(1)]),
             Query::orderAsc('$id'),
         ]);
         $this->assertSame('nsk_post1', $found->getId());
@@ -5083,7 +5083,7 @@ trait RelationshipTests
         }
 
         $withNested = [];
-        foreach ($database->iterate('nsk_posts', [Query::nested('comments', [Query::orderAsc('$id')]), Query::orderAsc('$id')]) as $post) {
+        foreach ($database->iterate('nsk_posts', [Query::relationship('comments', [Query::orderAsc('$id')]), Query::orderAsc('$id')]) as $post) {
             $withNested[] = $post->getId();
         }
 
@@ -5092,29 +5092,29 @@ trait RelationshipTests
 
         try {
             $database->updateDocuments('nsk_posts', new Document(['views' => 1]), [
-                Query::nested('comments', [Query::limit(1)]),
+                Query::relationship('comments', [Query::limit(1)]),
             ]);
-            $this->fail('updateDocuments accepted a nested query');
+            $this->fail('updateDocuments accepted a relationship query');
         } catch (QueryException $e) {
-            $this->assertStringContainsString('Invalid query method: nested', $e->getMessage());
+            $this->assertStringContainsString('Invalid query method: relationship', $e->getMessage());
         }
 
         try {
             $database->deleteDocuments('nsk_posts', [
-                Query::nested('comments', [Query::limit(1)]),
+                Query::relationship('comments', [Query::limit(1)]),
             ]);
-            $this->fail('deleteDocuments accepted a nested query');
+            $this->fail('deleteDocuments accepted a relationship query');
         } catch (QueryException $e) {
-            $this->assertStringContainsString('Invalid query method: nested', $e->getMessage());
+            $this->assertStringContainsString('Invalid query method: relationship', $e->getMessage());
         }
 
         try {
             $database->getDocument('nsk_posts', 'nsk_post1', [
-                Query::nested('comments', [Query::limit(1)]),
+                Query::relationship('comments', [Query::limit(1)]),
             ]);
-            $this->fail('getDocument accepted a nested query');
+            $this->fail('getDocument accepted a relationship query');
         } catch (QueryException $e) {
-            $this->assertStringContainsString('Invalid query method: nested', $e->getMessage());
+            $this->assertStringContainsString('Invalid query method: relationship', $e->getMessage());
         }
 
         $this->deleteNestedSkeletonFixture($database);
@@ -5139,7 +5139,7 @@ trait RelationshipTests
 
         try {
             $database->find('nsk_posts', [
-                Query::nested('comments', [Query::equal('doesNotExist', ['x'])]),
+                Query::relationship('comments', [Query::equal('doesNotExist', ['x'])]),
             ]);
             $this->fail('An invalid inner filter was accepted');
         } catch (QueryException $e) {
@@ -5163,7 +5163,7 @@ trait RelationshipTests
 
         $posts = $database->find('nsk_posts', [
             Query::equal('title', ['No Such Post']),
-            Query::nested('comments', [Query::equal('doesNotExist', ['x'])]),
+            Query::relationship('comments', [Query::equal('doesNotExist', ['x'])]),
         ]);
 
         $this->assertSame([], $posts);
@@ -5823,7 +5823,7 @@ trait RelationshipTests
         $this->createNestedSliceFixture($database);
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2), Query::offset(1)]),
+            Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2), Query::offset(1)]),
             Query::orderAsc('$id'),
         ]);
 
@@ -5839,7 +5839,7 @@ trait RelationshipTests
         }
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2)]),
             Query::orderAsc('$id'),
         ]);
 
@@ -5853,7 +5853,7 @@ trait RelationshipTests
         }
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [Query::orderAsc('$id'), Query::offset(4)]),
+            Query::relationship('comments', [Query::orderAsc('$id'), Query::offset(4)]),
             Query::orderAsc('$id'),
         ]);
 
@@ -5882,7 +5882,7 @@ trait RelationshipTests
         $this->createNestedSliceFixture($database);
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [
+            Query::relationship('comments', [
                 Query::orderAsc('$id'),
                 Query::cursorAfter(new Document(['$id' => 'p1c2'])),
                 Query::limit(2),
@@ -5911,7 +5911,7 @@ trait RelationshipTests
         $this->createNestedSliceFixture($database);
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [
+            Query::relationship('comments', [
                 Query::orderAsc('$id'),
                 Query::cursorAfter(new Document(['$id' => 'p1c2'])),
                 Query::offset(1),
@@ -5945,7 +5945,7 @@ trait RelationshipTests
         $this->createNestedSliceFixture($database);
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [
+            Query::relationship('comments', [
                 Query::orderAsc('$id'),
                 Query::cursorBefore(new Document(['$id' => 'p1c4'])),
                 Query::offset(10),
@@ -5974,7 +5974,7 @@ trait RelationshipTests
 
         $this->createNestedSliceFixture($database);
 
-        $nested = Query::nested('comments', [
+        $nested = Query::relationship('comments', [
             Query::orderAsc('$id'),
             Query::cursorAfter(new Document(['$id' => 'p1c2'])),
             Query::limit(2),
@@ -6007,7 +6007,7 @@ trait RelationshipTests
         $this->createNestedSliceFixture($database);
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [
+            Query::relationship('comments', [
                 Query::orderAsc('$id'),
                 Query::cursorBefore(new Document(['$id' => 'p1c4'])),
                 Query::limit(2),
@@ -6036,7 +6036,7 @@ trait RelationshipTests
         $this->createNestedSliceFixture($database);
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [
+            Query::relationship('comments', [
                 Query::orderAsc('$id'),
                 Query::cursorAfter(new Document(['$id' => 'nsMissingComment'])),
             ]),
@@ -6099,7 +6099,7 @@ trait RelationshipTests
         }
 
         $posts = $database->find('ns_m1_posts', [
-            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2)]),
             Query::orderAsc('$id'),
         ]);
 
@@ -6162,7 +6162,7 @@ trait RelationshipTests
         ]));
 
         $articles = $database->find('ns_articles', [
-            Query::nested('tags', [Query::orderAsc('$id'), Query::limit(1)]),
+            Query::relationship('tags', [Query::orderAsc('$id'), Query::limit(1)]),
             Query::orderAsc('$id'),
         ]);
 
@@ -6188,7 +6188,7 @@ trait RelationshipTests
         self::$nestedSliceAuthorReads = 0;
 
         $posts = $database->find('ns_posts', [
-            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2)]),
             Query::orderAsc('$id'),
         ]);
 
@@ -6238,7 +6238,7 @@ trait RelationshipTests
 
         $posts = $database->find('ns_posts', [
             Query::select(['comments.*']),
-            Query::nested('comments', [Query::orderAsc('$id'), Query::limit(2)]),
+            Query::relationship('comments', [Query::orderAsc('$id'), Query::limit(2)]),
             Query::orderAsc('$id'),
         ]);
 
@@ -6300,7 +6300,7 @@ trait RelationshipTests
         ]));
 
         $profiles = $database->find('ns_profiles', [
-            Query::nested('user', [Query::equal('name', ['nobody'])]),
+            Query::relationship('user', [Query::equal('name', ['nobody'])]),
         ]);
 
         $this->assertCount(1, $profiles);
@@ -6391,7 +6391,7 @@ trait RelationshipTests
         }
 
         $posts = $database->find('nfi_posts', [
-            Query::nested('comments', [
+            Query::relationship('comments', [
                 Query::equal('author.name', ['Alice']),
             ]),
             Query::orderAsc('$id'),
@@ -6459,7 +6459,7 @@ trait RelationshipTests
         $this->createNestedSkeletonFixture($database);
 
         $posts = $database->find('nsk_posts', [
-            Query::nested('comments', [Query::select(['text'])]),
+            Query::relationship('comments', [Query::select(['text'])]),
             Query::orderAsc('$id'),
         ]);
 
@@ -6495,7 +6495,7 @@ trait RelationshipTests
 
         $posts = $database->skipValidation(fn () => $database->find('nsk_posts', [
             Query::or([
-                Query::nested('comments', [Query::limit(1)]),
+                Query::relationship('comments', [Query::limit(1)]),
                 Query::equal('title', ['Post One']),
             ]),
             Query::orderAsc('$id'),

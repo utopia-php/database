@@ -1764,7 +1764,7 @@ trait RelationshipTests
             );
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
+            $this->assertEquals('Missing "update" permission for roles ["any"]. Only ["user:user1"] roles are allowed.', $e->getMessage());
         }
 
         // Try delete root document
@@ -1775,7 +1775,7 @@ trait RelationshipTests
             );
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
+            $this->assertEquals('Missing "delete" permission for roles ["any"]. Only ["user:user2"] roles are allowed.', $e->getMessage());
         }
 
         $tree1 = $database->getDocument('trees', 'tree1');
@@ -1789,7 +1789,7 @@ trait RelationshipTests
             );
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
+            $this->assertEquals('Missing "update" permission for roles ["any"]. Only ["user:user1"] roles are allowed.', $e->getMessage());
         }
 
         // Try delete nested document
@@ -1800,7 +1800,7 @@ trait RelationshipTests
             );
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
+            $this->assertEquals('Missing "delete" permission for roles ["any"]. Only ["user:user2"] roles are allowed.', $e->getMessage());
         }
 
         $bird1 = $database->getDocument('birds', 'bird1');
@@ -1814,7 +1814,7 @@ trait RelationshipTests
             );
             $this->fail('Failed to throw exception when updating document with missing permissions');
         } catch (Exception $e) {
-            $this->assertEquals('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $e->getMessage());
+            $this->assertEquals('Missing "update" permission for roles ["any"]. Only ["user:user1"] roles are allowed.', $e->getMessage());
         }
 
         // Try delete multi-level nested document
@@ -1825,7 +1825,7 @@ trait RelationshipTests
             );
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
-            $this->assertEquals('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $e->getMessage());
+            $this->assertEquals('Missing "delete" permission for roles ["any"]. Only ["user:user2"] roles are allowed.', $e->getMessage());
         }
 
         $this->getDatabase()->getAuthorization()->addRole(Role::user('user1')->toString());

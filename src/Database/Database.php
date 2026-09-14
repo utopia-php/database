@@ -146,6 +146,7 @@ class Database
     public const RELATION_SIDE_CHILD = 'child';
 
     public const RELATION_MAX_DEPTH = 3;
+    public const RELATION_QUERY_CHUNK_SIZE = 5000;
 
     // Orders
     public const ORDER_ASC = 'ASC';
@@ -5324,7 +5325,7 @@ class Database
         $relatedDocuments = [];
 
         // Process in chunks to avoid exceeding query value limits
-        foreach (\array_chunk($uniqueRelatedIds, \max(1, $this->maxQueryValues)) as $chunk) {
+        foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal('$id', $chunk),
                 Query::limit(PHP_INT_MAX),
@@ -5416,7 +5417,7 @@ class Database
 
         $relatedDocuments = [];
 
-        foreach (\array_chunk($parentIds, \max(1, $this->maxQueryValues)) as $chunk) {
+        foreach (\array_chunk($parentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX),
@@ -5513,7 +5514,7 @@ class Database
 
         $relatedDocuments = [];
 
-        foreach (\array_chunk($childIds, \max(1, $this->maxQueryValues)) as $chunk) {
+        foreach (\array_chunk($childIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX),
@@ -5592,7 +5593,7 @@ class Database
 
         $junctions = [];
 
-        foreach (\array_chunk($documentIds, \max(1, $this->maxQueryValues)) as $chunk) {
+        foreach (\array_chunk($documentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
             $chunkJunctions = $this->skipRelationships(fn () => $this->find($junction, [
                 Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX)
@@ -5622,7 +5623,7 @@ class Database
             $uniqueRelatedIds = array_unique($relatedIds);
             $foundRelated = [];
 
-            foreach (\array_chunk($uniqueRelatedIds, \max(1, $this->maxQueryValues)) as $chunk) {
+            foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
                 $chunkDocs = $this->find($relatedCollection->getId(), [
                     Query::equal('$id', $chunk),
                     Query::limit(PHP_INT_MAX),

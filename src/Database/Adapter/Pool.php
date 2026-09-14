@@ -437,17 +437,17 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): float|int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
@@ -518,6 +518,21 @@ class Pool extends Adapter
     }
 
     public function getSupportForAttributes(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function getSupportForColumnPermissions(): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function deleteColumnPermissions(Document $collection, string $column): array
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

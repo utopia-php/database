@@ -421,6 +421,7 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
+				`_column` VARCHAR(255) NOT NULL DEFAULT '',
 				`_document` VARCHAR(255) NOT NULL
 			)
 		";
@@ -440,7 +441,7 @@ class SQLite extends MariaDB
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {
@@ -1206,11 +1207,14 @@ class SQLite extends MariaDB
         }
 
         $permissions = [];
+        $permissionBinds = [];
         foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
+            foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
+                $role = \str_replace('"', '', $permission['role']);
                 $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$tenantQuery})";
+                $columnBind = ":_column_{$type}_{$i}";
+                $permissionBinds[$columnBind] = $permission['column'];
+                $permissions[] = "('{$type}', '{$role}', {$columnBind}, '{$document->getId()}' {$tenantQuery})";
             }
         }
 
@@ -1218,12 +1222,16 @@ class SQLite extends MariaDB
             $tenantQuery = $this->sharedTables ? ', _tenant' : '';
 
             $queryPermissions = "
-				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document {$tenantQuery})
+				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _column, _document {$tenantQuery})
 				VALUES " . \implode(', ', $permissions);
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
 
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+
+            foreach ($permissionBinds as $key => $value) {
+                $stmtPermissions->bindValue($key, $value);
+            }
 
             if ($this->sharedTables) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
@@ -1295,10 +1303,11 @@ class SQLite extends MariaDB
             $values = [];
             $binds = [];
             foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
-                    $binds[":_add_{$type}_{$i}"] = $permission;
+                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantQuery})";
+                    $binds[":_add_{$type}_{$i}"] = $permission['role'];
+                    $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
                 }
             }
 
@@ -1306,7 +1315,7 @@ class SQLite extends MariaDB
                 $tenantQuery = $this->sharedTables ? ', _tenant' : '';
 
                 $sql = "
-			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission {$tenantQuery})
+			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission, _column {$tenantQuery})
 			   VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -1513,6 +1522,11 @@ class SQLite extends MariaDB
      *
      * @return bool
      */
+    public function getSupportForColumnPermissions(): bool
+    {
+        return true;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return true;

@@ -189,11 +189,25 @@ class MariaDB extends SQL
         $collection .= ")";
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
+        // _column scopes a permission to a single column. An empty string means
+        // every column, which is how every permission written before column-level
+        // permissions reads. It is NOT NULL on purpose: MySQL and MariaDB treat
+        // NULLs as distinct in a UNIQUE index, so a nullable _column would let
+        // duplicate permission rows slip past _index1.
+        //
+        // Declared ASCII rather than inheriting utf8mb4, so _index1 can hold it in
+        // full: the other four members already cost ~2098 of InnoDB's 3072-byte key
+        // limit, and a utf8mb4 VARCHAR(255) would add 1022 and overflow it. ASCII
+        // costs 257, landing at ~2355. Safe because the Key validator restricts a
+        // column key to /[^A-Za-z0-9_\-\.]/, so a non-ASCII key cannot exist -- and
+        // indexing the whole value means uniqueness does not depend on a prefix
+        // length matching a validator constant in another file.
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
                 _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
+                _column VARCHAR(255) CHARACTER SET ascii COLLATE ascii_general_ci NOT NULL DEFAULT '',
                 _document VARCHAR(255) NOT NULL,
                 PRIMARY KEY (_id),
         ";
@@ -201,12 +215,12 @@ class MariaDB extends SQL
         if ($this->sharedTables) {
             $permissions .= "
                 _tenant INT(11) UNSIGNED DEFAULT NULL,
-                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission, _column),
                 INDEX _permission (_tenant, _permission, _type)
             ";
         } else {
             $permissions .= "
-                UNIQUE INDEX _index1 (_document, _type, _permission),
+                UNIQUE INDEX _index1 (_document, _type, _permission, _column),
                 INDEX _permission (_permission, _type)
             ";
         }
@@ -895,12 +909,14 @@ class MariaDB extends SQL
             }
 
             $permissions = [];
+            $permissionBinds = [];
             foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $permission) {
+                foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $tenantBind = $this->sharedTables ? ", :_tenant" : '';
-                    $permission = \str_replace('"', '', $permission);
-                    $permission = "('{$type}', '{$permission}', :_uid {$tenantBind})";
-                    $permissions[] = $permission;
+                    $role = \str_replace('"', '', $permission['role']);
+                    $columnBind = ":_column_{$type}_{$i}";
+                    $permissionBinds[$columnBind] = $permission['column'];
+                    $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$tenantBind})";
                 }
             }
 
@@ -909,7 +925,7 @@ class MariaDB extends SQL
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$tenantColumn})
                     VALUES {$permissions};
                 ";
 
@@ -917,6 +933,9 @@ class MariaDB extends SQL
                 $stmtPermissions->bindValue(':_uid', $document->getId());
                 if ($this->sharedTables) {
                     $stmtPermissions->bindValue(':_tenant', $document->getTenant());
+                }
+                foreach ($permissionBinds as $key => $value) {
+                    $stmtPermissions->bindValue($key, $value);
                 }
             }
 
@@ -1007,10 +1026,11 @@ class MariaDB extends SQL
                 $values = [];
                 $binds = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                    foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                         $tenantPlaceholder = $this->sharedTables ? ', :_tenant' : '';
-                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$tenantPlaceholder})";
-                        $binds[":_add_{$type}_{$i}"] = $permission;
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantPlaceholder})";
+                        $binds[":_add_{$type}_{$i}"] = $permission['role'];
+                        $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
                     }
                 }
 
@@ -1018,7 +1038,7 @@ class MariaDB extends SQL
                     $tenantColumn = $this->sharedTables ? ', _tenant' : '';
 
                     $sql = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantColumn})
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column {$tenantColumn})
 				    VALUES " . \implode(', ', $values);
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -1767,6 +1787,11 @@ class MariaDB extends SQL
     }
 
     public function getSupportForUpsertOnUniqueIndex(): bool
+    {
+        return true;
+    }
+
+    public function getSupportForColumnPermissions(): bool
     {
         return true;
     }

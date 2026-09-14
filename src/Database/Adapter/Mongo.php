@@ -2461,13 +2461,41 @@ class Mongo extends Adapter
     }
 
     /**
+     * Candidate permission strings to match against the inline _permissions array.
+     *
+     * Mongo keeps permissions as the assembled strings rather than splitting the role
+     * from the column the way the SQL adapters do, so an exact $in has to enumerate
+     * both shapes: the unscoped grant and one per column of the collection. Without
+     * the column-scoped variants a document whose only read grant is column-scoped
+     * matches nothing and disappears from find(), count() and sum(), even though
+     * getDocument() -- which carries no permission filter -- still returns it.
+     *
+     * @param string $type
+     * @param Document $collection
      * @return list<string>
      */
-    private function permissionStrings(string $type): array
+    private function permissionStrings(string $type, Document $collection): array
     {
+        $columns = [];
+
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            $key = $attribute['key'] ?? $attribute['$id'] ?? null;
+
+            if (\is_string($key) && $key !== '') {
+                $columns[$key] = true;
+            }
+        }
+
+        $columns = \array_keys($columns);
+
         $permissions = [];
+
         foreach ($this->authorization->getRoles() as $role) {
             $permissions[] = $type . '("' . $role . '")';
+
+            foreach ($columns as $column) {
+                $permissions[] = $type . '("' . $role . '", "' . $column . '")';
+            }
         }
 
         return $permissions;
@@ -2488,11 +2516,12 @@ class Mongo extends Adapter
      * @param string $cursorDirection
      * @param string $forPermission
      *
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return array<Document>
      * @throws Exception
      * @throws TimeoutException
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -2509,7 +2538,7 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) {
-            $filters['_permissions']['$in'] = $this->permissionStrings($forPermission);
+            $filters['_permissions']['$in'] = $this->permissionStrings($forPermission, $collection);
         }
 
         $options = [];
@@ -2738,10 +2767,11 @@ class Mongo extends Adapter
      * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $max
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int
      * @throws Exception
      */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
@@ -2761,7 +2791,7 @@ class Mongo extends Adapter
 
         // Add permissions filter if authorization is enabled
         if ($this->authorization->getStatus()) {
-            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ, $collection);
         }
 
         /**
@@ -2842,11 +2872,12 @@ class Mongo extends Adapter
      * @param array<Query> $queries
      * @param int|null $max
      *
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int|float
      * @throws Exception
      */
 
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
@@ -2860,7 +2891,7 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ, $collection);
         }
 
         // using aggregation to get sum an attribute as described in
@@ -4202,6 +4233,30 @@ class Mongo extends Adapter
         return [];
     }
 
+    public function getSupportForColumnPermissions(): bool
+    {
+        return false;
+    }
+
+    /**
+     * Column-level permissions are not supported by this adapter, so a rename
+     * can never have column-scoped permissions to repoint.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string $new
+     * @return array<string>
+     */
+    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    {
+        return [];
+    }
+
+    public function deleteColumnPermissions(Document $collection, string $column): array
+    {
+        return [];
+    }
+
     /**
      * Get the query to check for tenant when in shared tables mode
      *
@@ -4209,6 +4264,7 @@ class Mongo extends Adapter
      * @param string $alias The alias of the parent collection if in a subquery
      * @return string
      */
+
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return '';

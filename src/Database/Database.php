@@ -418,6 +418,11 @@ class Database
 
     protected bool $inBatchRelationshipPopulation = false;
 
+    /**
+     * Suppresses column masking for reads the library performs on its own behalf.
+     */
+    protected bool $skipColumnMasking = false;
+
     protected bool $filter = true;
 
     /**
@@ -3292,6 +3297,20 @@ class Database
             if (!$updated) {
                 throw new DatabaseException('Failed to update attribute');
             }
+
+            // A column-scoped permission names its column, in _perms._column and
+            // again inside the $permissions JSON, so a rename has to repoint both.
+            // There is no stable column id to hang permissions off: this method
+            // rewrites the attribute's '$id' and 'key' together, so the key is the
+            // only handle there is. The lookup is skipped entirely when no
+            // permission is scoped to this column, which is the common case.
+            if (!\is_null($newKey) && $newKey !== $id) {
+                $this->repointCollectionColumnPermissions($collectionDoc, $id, $newKey);
+
+                foreach ($this->adapter->renameColumnPermissions($collectionDoc, $id, $newKey) as $documentId) {
+                    $this->purgeCachedDocument($collection, $documentId);
+                }
+            }
         }
 
         $collectionDoc->setAttribute('attributes', $attributes);
@@ -3438,6 +3457,14 @@ class Database
             $shouldRollback = true;
         } catch (NotFoundException) {
             // Ignore
+        }
+
+        // Permissions name their column by key, so grants left behind would be
+        // inherited by any column later created under the same name.
+        $this->repointCollectionColumnPermissions($collection, $id, null);
+
+        foreach ($this->adapter->deleteColumnPermissions($collection, $id) as $documentId) {
+            $this->purgeCachedDocument($collection->getId(), $documentId);
         }
 
         $this->updateMetadata(
@@ -4983,6 +5010,8 @@ class Database
                 }
             }
 
+            $document = $this->maskUnreadableColumns($collection, $document, $documentSecurity);
+
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
             if ($this->isTtlExpired($collection, $document)) {
@@ -5076,9 +5105,501 @@ class Database
             }
         }
 
+        $document = $this->maskUnreadableColumns($collection, $document, $documentSecurity);
+
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
         return $document;
+    }
+
+    /**
+     * Columns the current roles hold the given permission on, or null when they
+     * hold it on every column.
+     *
+     * Resolved entirely from permissions that already travel with the document,
+     * so this costs no extra query.
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @param bool $documentSecurity
+     * @param string $type
+     * @return array<string>|null
+     */
+    private function getPermittedColumns(
+        Document $collection,
+        Document $document,
+        bool $documentSecurity,
+        string $type
+    ): ?array {
+        if (!$this->authorization->getStatus()) {
+            return null;
+        }
+
+        $permissions = $collection->getPermissionsByTypeWithColumns($type);
+
+        if ($documentSecurity) {
+            $permissions = [
+                ...$permissions,
+                ...$document->getPermissionsByTypeWithColumns($type),
+            ];
+        }
+
+        $columns = [];
+
+        foreach ($permissions as $permission) {
+            if (!$this->authorization->hasRole($permission['role'])) {
+                continue;
+            }
+
+            // An unscoped permission covers every column, so there is nothing to scope.
+            if ($permission['column'] === Permission::COLUMN_ALL) {
+                return null;
+            }
+
+            $columns[$permission['column']] = true;
+        }
+
+        return \array_keys($columns);
+    }
+
+    /**
+     * Move or drop the collection's own column-scoped permissions.
+     *
+     * Collection-level grants live on the collection document in _metadata, not in
+     * the collection's _perms table, so the adapter's rename and delete do not reach
+     * them. Rewriting the document in place is free: updateMetadata() is about to
+     * persist it anyway.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string|null $new new column key, or null to drop the permissions
+     * @return void
+     */
+    private function repointCollectionColumnPermissions(Document $collection, string $old, ?string $new): void
+    {
+        $permissions = [];
+        $changed = false;
+
+        foreach ($collection->getPermissions() as $permission) {
+            $parsed = Permission::parse($permission);
+
+            if ($parsed->getColumn() !== $old) {
+                $permissions[] = $permission;
+                continue;
+            }
+
+            $changed = true;
+
+            if (\is_null($new)) {
+                continue;
+            }
+
+            $permissions[] = (new Permission(
+                $parsed->getPermission(),
+                $parsed->getRole(),
+                $parsed->getIdentifier(),
+                $parsed->getDimension(),
+                $new
+            ))->toString();
+        }
+
+        if ($changed) {
+            $collection->setAttribute('$permissions', $permissions);
+        }
+    }
+
+    /**
+     * Run a callback with column masking suppressed.
+     *
+     * Internal reads need the stored document, not the caller's view of it: they feed
+     * permission comparisons and merges, so a masked copy would make the library
+     * delete the columns and grants the caller was never shown.
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    private function unmasked(callable $callback): mixed
+    {
+        $previous = $this->skipColumnMasking;
+        $this->skipColumnMasking = true;
+
+        try {
+            return $callback();
+        } finally {
+            $this->skipColumnMasking = $previous;
+        }
+    }
+
+    /**
+     * The columns the current roles are demonstrably limited to at collection level,
+     * or null when no restriction can be proven.
+     *
+     * Returns null in two different situations, both meaning "do not restrict":
+     * an unscoped grant (every column is allowed), and no collection-level grant at
+     * all (access comes from per-document permissions, which cannot be bounded before
+     * the rows are read). A non-empty list means column-level permissions are
+     * demonstrably in play for this caller.
+     *
+     * @param Document $collection
+     * @param string $type
+     * @return array<string>|null
+     */
+    private function getCollectionColumnRestriction(Document $collection, string $type): ?array
+    {
+        $floor = $this->getCollectionColumnFloor($collection, $type);
+
+        return ($floor === null || $floor === []) ? null : $floor;
+    }
+
+    /**
+     * The columns the collection itself grants the current roles, precisely.
+     *
+     * Distinguishes the two cases getCollectionColumnRestriction() deliberately
+     * conflates: null means an unscoped grant covers every column, while an empty
+     * array means the collection grants nothing and readability can only be settled
+     * per row.
+     *
+     * @param Document $collection
+     * @param string $type
+     * @return array<string>|null
+     */
+    private function getCollectionColumnFloor(Document $collection, string $type): ?array
+    {
+        if (!$this->authorization->getStatus()) {
+            return null;
+        }
+
+        $columns = [];
+
+        foreach ($collection->getPermissionsByTypeWithColumns($type) as $permission) {
+            if (!$this->authorization->hasRole($permission['role'])) {
+                continue;
+            }
+
+            if ($permission['column'] === Permission::COLUMN_ALL) {
+                return null;
+            }
+
+            $columns[$permission['column']] = true;
+        }
+
+        return \array_keys($columns);
+    }
+
+    /**
+     * Column keys whose values a set of queries reads in order to decide the result.
+     *
+     * Filters and ordering qualify: both make the returned set depend on the value,
+     * which is what turns a hidden column into an oracle. Query::select() does not --
+     * it only chooses a projection, and masking already removes from the response any
+     * column the caller cannot read, so gating it would drop rows for no benefit.
+     *
+     * @param array<Query> $queries
+     * @return array<string>
+     */
+    private function getQueriedColumns(array $queries): array
+    {
+        $columns = [];
+
+        foreach ($queries as $query) {
+            if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
+            $key = $query->getAttribute();
+
+            // Internal fields are not columns; dotted keys are relationship paths.
+            if ($key === '' || \str_starts_with($key, '$') || \str_contains($key, '.')) {
+                continue;
+            }
+
+            $columns[$key] = true;
+        }
+
+        return \array_keys($columns);
+    }
+
+    /**
+     * Columns a query reaches whose readability the collection does not settle.
+     *
+     * These go to the adapter, which requires each of them on every returned row, so
+     * a filter or an order on a column the caller may not read on a given row cannot
+     * reveal anything about it. Columns the collection already grants are omitted --
+     * they are readable on every visible row, so gating them would be a no-op.
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param string $type
+     * @return array<string>
+     */
+    private function getRestrictedQueryColumns(Document $collection, array $queries, string $type): array
+    {
+        if (!$this->authorization->getStatus()) {
+            return [];
+        }
+
+        $floor = $this->getCollectionColumnFloor($collection, $type);
+
+        if ($floor === null) {
+            return [];
+        }
+
+        $restricted = [];
+
+        foreach ($this->getQueriedColumns($queries) as $column) {
+            if (!\in_array($column, $floor, true)) {
+                $restricted[$column] = true;
+            }
+        }
+
+        return \array_keys($restricted);
+    }
+
+    /**
+     * Reject a query that reads a column the current roles are restricted from.
+     *
+     * Masking removes a column from the response, but a filter, an order or a select
+     * still reaches it: filtering on a hidden column turns the result set into an
+     * oracle for its value, and ordering by one reveals the ranking. A column the
+     * caller cannot read is treated as a column that does not exist for them, which
+     * is what query validation already does for unknown columns.
+     *
+     * @param Document $collection
+     * @param array<Query> $queries
+     * @param string $type
+     * @return void
+     * @throws AuthorizationException
+     */
+    private function assertColumnsQueryable(Document $collection, array $queries, string $type = self::PERMISSION_READ): void
+    {
+        $restriction = $this->getCollectionColumnRestriction($collection, $type);
+
+        if ($restriction === null) {
+            return;
+        }
+
+        foreach ($this->getQueriedColumns($queries) as $key) {
+            if (!\in_array($key, $restriction, true)) {
+                throw new AuthorizationException('Missing "' . $type . '" permission for column "' . $key . '".');
+            }
+        }
+    }
+
+    /**
+     * Reject a write that touches a column the current roles are restricted from at
+     * collection level.
+     *
+     * Used where no stored document is available to consult: a create (the row does
+     * not exist yet) and a bulk update (one set of changes applied to many rows).
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @param string $type
+     * @return void
+     * @throws AuthorizationException
+     */
+    private function assertColumnsAllowed(Document $collection, Document $document, string $type): void
+    {
+        $columns = $this->getCollectionColumnRestriction($collection, $type);
+
+        if ($columns === null) {
+            return;
+        }
+
+        $relationships = [];
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            if ($attribute['type'] === self::VAR_RELATIONSHIP) {
+                $relationships[$attribute['key']] = true;
+            }
+        }
+
+        foreach ($document as $key => $value) {
+            if (\str_starts_with($key, '$') || isset($relationships[$key])) {
+                continue;
+            }
+
+            if (\is_null($value)) {
+                continue;
+            }
+
+            if (!\in_array($key, $columns, true)) {
+                throw new AuthorizationException('Missing "' . $type . '" permission for column "' . $key . '".');
+            }
+        }
+    }
+
+    /**
+     * Reject an update that changes a column the current roles cannot update.
+     *
+     * Returns immediately unless a column-scoped update permission is what
+     * granted this write, so the ordinary path pays only for resolving the
+     * permission list already loaded with the document.
+     *
+     * @param Document $collection
+     * @param Document $old stored document, whose permissions govern the write
+     * @param Document $document merged new state
+     * @param bool $documentSecurity
+     * @return void
+     * @throws AuthorizationException
+     */
+    private function assertColumnsWritable(
+        Document $collection,
+        Document $old,
+        Document $document,
+        bool $documentSecurity
+    ): void {
+        $columns = $this->getPermittedColumns($collection, $old, $documentSecurity, self::PERMISSION_UPDATE);
+
+        if ($columns === null) {
+            return;
+        }
+
+        // Rewriting $permissions is a document-level right. A caller whose update
+        // access is limited to certain columns must not be able to grant itself more:
+        // otherwise "may update name" is enough to add read+update on every other
+        // column, which makes column-level permissions unenforceable.
+        if ($document->offsetExists('$permissions')) {
+            $before = $old->getPermissions();
+            $after = $document->getPermissions();
+
+            \sort($before);
+            \sort($after);
+
+            if ($before !== $after) {
+                throw new AuthorizationException(
+                    'Missing "update" permission to change $permissions: update access is limited to specific columns.'
+                );
+            }
+        }
+
+        $relationships = [];
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            if ($attribute['type'] === self::VAR_RELATIONSHIP) {
+                $relationships[$attribute['key']] = true;
+            }
+        }
+
+        foreach ($document as $key => $value) {
+            // Internal fields are not columns; $permissions was handled above.
+            if (\str_starts_with($key, '$')) {
+                continue;
+            }
+
+            if (\in_array($key, $columns, true) || isset($relationships[$key])) {
+                continue;
+            }
+
+            $changed = Operator::isOperator($value) || !self::valuesEqual($value, $old->getAttribute($key));
+
+            if ($changed) {
+                throw new AuthorizationException('Missing "update" permission for column "' . $key . '".');
+            }
+        }
+    }
+
+    /**
+     * Strip columns the current roles cannot read.
+     *
+     * Must run *after* the document has been written to cache. The cache is shared
+     * across roles, so caching a masked copy would serve one role's view to another.
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @param bool $documentSecurity
+     * @return Document
+     */
+    private function maskUnreadableColumns(Document $collection, Document $document, bool $documentSecurity): Document
+    {
+        if ($this->skipColumnMasking || $document->isEmpty() || $collection->getId() === self::METADATA) {
+            return $document;
+        }
+
+        $columns = $this->getPermittedColumns($collection, $document, $documentSecurity, self::PERMISSION_READ);
+
+        if ($columns === null) {
+            return $document;
+        }
+
+        $document = clone $document;
+
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            // Internal fields ($id, $createdAt, $permissions, ...) are not columns.
+            if (\str_starts_with($key, '$')) {
+                continue;
+            }
+
+            if (!\in_array($key, $columns, true)) {
+                $document->removeAttribute($key);
+            }
+        }
+
+        // Permission strings name their column, so returning them whole would
+        // disclose the names of columns this caller cannot read. What is hidden here
+        // is restored by preserveHiddenPermissions() if the document is written back.
+        $permissions = [];
+
+        foreach ($document->getPermissions() as $permission) {
+            $parsed = Permission::parse($permission);
+
+            if ($parsed->isForAllColumns() || \in_array($parsed->getColumn(), $columns, true)) {
+                $permissions[] = $permission;
+            }
+        }
+
+        $document->setAttribute('$permissions', $permissions);
+
+        return $document;
+    }
+
+    /**
+     * Put back the permissions a caller was never allowed to see.
+     *
+     * maskUnreadableColumns() strips permissions scoped to columns the caller cannot
+     * read, so a client that reads a document and writes it back would otherwise
+     * delete grants it never received. Runs before change detection, so echoing a
+     * masked document back is correctly seen as no permission change at all.
+     *
+     * @param Document $collection
+     * @param Document $old unmasked stored document
+     * @param Document $document incoming document
+     * @param bool $documentSecurity
+     * @return void
+     */
+    private function preserveHiddenPermissions(
+        Document $collection,
+        Document $old,
+        Document $document,
+        bool $documentSecurity
+    ): void {
+        if (!$document->offsetExists('$permissions')) {
+            return;
+        }
+
+        $columns = $this->getPermittedColumns($collection, $old, $documentSecurity, self::PERMISSION_READ);
+
+        if ($columns === null) {
+            return;
+        }
+
+        $hidden = [];
+
+        foreach ($old->getPermissions() as $permission) {
+            $parsed = Permission::parse($permission);
+
+            if (!$parsed->isForAllColumns() && !\in_array($parsed->getColumn(), $columns, true)) {
+                $hidden[] = $permission;
+            }
+        }
+
+        if (empty($hidden)) {
+            return;
+        }
+
+        $document->setAttribute('$permissions', \array_values(\array_unique([
+            ...$document->getPermissions(),
+            ...$hidden,
+        ])));
     }
 
     private function isTtlExpired(Document $collection, Document $document): bool
@@ -5739,6 +6260,8 @@ class Database
             if (!$isValid) {
                 throw new AuthorizationException($this->authorization->getDescription());
             }
+
+            $this->assertColumnsAllowed($collection, $document, self::PERMISSION_CREATE);
         }
 
         $time = DateTime::now();
@@ -5860,6 +6383,10 @@ class Database
         if ($collection->getId() !== self::METADATA) {
             if (!$this->authorization->isValid(new Input(self::PERMISSION_CREATE, $collection->getCreate()))) {
                 throw new AuthorizationException($this->authorization->getDescription());
+            }
+
+            foreach ($documents as $document) {
+                $this->assertColumnsAllowed($collection, $document, self::PERMISSION_CREATE);
             }
         }
 
@@ -6313,6 +6840,13 @@ class Database
                 return new Document();
             }
 
+            $this->preserveHiddenPermissions(
+                $collection,
+                $old,
+                $document,
+                $collection->getAttribute('documentSecurity', false)
+            );
+
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {
@@ -6472,6 +7006,8 @@ class Database
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, $updatePermissions))) {
                         throw new AuthorizationException($this->authorization->getDescription());
                     }
+
+                    $this->assertColumnsWritable($collection, $old, $document, $documentSecurity);
                 } else {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
                         throw new AuthorizationException($this->authorization->getDescription());
@@ -6507,7 +7043,7 @@ class Database
             }
 
             if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document));
+                $document = $this->unmasked(fn () => $this->silent(fn () => $this->updateDocumentRelationships($collection, $old, $document)));
             }
 
             $document = $this->adapter->castingBefore($collection, $document);
@@ -6614,6 +7150,11 @@ class Database
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
+        if ($collection->getId() !== self::METADATA) {
+            $this->assertColumnsAllowed($collection, $updates, self::PERMISSION_UPDATE);
+            $this->assertColumnsQueryable($collection, $queries);
+        }
+
         $attributes = $collection->getAttribute('attributes', []);
         $indexes = $collection->getAttribute('indexes', []);
 
@@ -6702,11 +7243,11 @@ class Database
                 $new[] = Query::cursorAfter($last);
             }
 
-            $batch = $this->silent(fn () => $this->find(
+            $batch = $this->unmasked(fn () => $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_UPDATE
-            ));
+            )));
 
             if (empty($batch)) {
                 break;
@@ -6716,7 +7257,7 @@ class Database
             $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions, $documentSecurity) {
                 foreach ($batch as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -6736,8 +7277,12 @@ class Database
 
                     $new = new Document(\array_merge($document->getArrayCopy(), $updates->getArrayCopy()));
 
+                    // Per document: the collection-level check cannot see grants that
+                    // individual rows add, so each row is verified against its own.
+                    $this->assertColumnsWritable($collection, $document, $new, $documentSecurity);
+
                     if ($this->resolveRelationships) {
-                        $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new));
+                        $this->unmasked(fn () => $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new)));
                     }
 
                     $document = $new;
@@ -7509,11 +8054,17 @@ class Database
                 if (!$this->authorization->isValid(new Input(self::PERMISSION_CREATE, $collection->getCreate()))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
-            } elseif (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
-                ...$collection->getUpdate(),
-                ...($documentSecurity ? $old->getUpdate() : [])
-            ]))) {
-                throw new AuthorizationException($this->authorization->getDescription());
+
+                $this->assertColumnsAllowed($collection, $document, self::PERMISSION_CREATE);
+            } else {
+                if (!$this->authorization->isValid(new Input(self::PERMISSION_UPDATE, [
+                    ...$collection->getUpdate(),
+                    ...($documentSecurity ? $old->getUpdate() : [])
+                ]))) {
+                    throw new AuthorizationException($this->authorization->getDescription());
+                }
+
+                $this->assertColumnsWritable($collection, $old, $document, $documentSecurity);
             }
 
             $updatedAt = $document->getUpdatedAt();
@@ -7766,6 +8317,14 @@ class Database
                 ]))) {
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
+
+                // This writes one named column, so it needs update permission on that
+                // column specifically. Without this it bypasses the column gate.
+                $columns = $this->getPermittedColumns($collection, $document, $documentSecurity, self::PERMISSION_UPDATE);
+
+                if ($columns !== null && !\in_array($attribute, $columns, true)) {
+                    throw new AuthorizationException('Missing "update" permission for column "' . $attribute . '".');
+                }
             }
 
             if (!\is_null($max) && ($document->getAttribute($attribute) + $value > $max)) {
@@ -7866,6 +8425,14 @@ class Database
                     ...($documentSecurity ? $document->getUpdate() : [])
                 ]))) {
                     throw new AuthorizationException($this->authorization->getDescription());
+                }
+
+                // This writes one named column, so it needs update permission on that
+                // column specifically. Without this it bypasses the column gate.
+                $columns = $this->getPermittedColumns($collection, $document, $documentSecurity, self::PERMISSION_UPDATE);
+
+                if ($columns !== null && !\in_array($attribute, $columns, true)) {
+                    throw new AuthorizationException('Missing "update" permission for column "' . $attribute . '".');
                 }
             }
 
@@ -8001,10 +8568,10 @@ class Database
 
             switch ($onDelete) {
                 case Database::RELATION_MUTATE_RESTRICT:
-                    $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->unmasked(fn () => $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side));
                     break;
                 case Database::RELATION_MUTATE_SET_NULL:
-                    $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->unmasked(fn () => $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side));
                     break;
                 case Database::RELATION_MUTATE_CASCADE:
                     foreach ($this->relationshipDeleteStack as $processedRelationship) {
@@ -8051,7 +8618,7 @@ class Database
                             break 2;
                         }
                     }
-                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWayKey, $side, $relationship);
+                    $this->unmasked(fn () => $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWayKey, $side, $relationship));
                     break;
             }
         }
@@ -8442,11 +9009,11 @@ class Database
             /**
              * @var array<Document> $batch
              */
-            $batch = $this->silent(fn () => $this->find(
+            $batch = $this->unmasked(fn () => $this->silent(fn () => $this->find(
                 $collection->getId(),
                 array_merge($new, $queries),
                 forPermission: Database::PERMISSION_DELETE
-            ));
+            )));
 
             if (empty($batch)) {
                 break;
@@ -8656,6 +9223,25 @@ class Database
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
+        // Adapters that enforce the gate get the column list and settle it per row.
+        // The rest keep the conservative refusal, which is all they can do.
+        $columnPermissions = [];
+
+        if ($collection->getId() !== self::METADATA) {
+            if ($this->adapter->getSupportForColumnPermissions()) {
+                $columnPermissions = $this->getRestrictedQueryColumns($collection, $queries, self::PERMISSION_READ);
+
+                // With documentSecurity off, collection permissions are the whole
+                // story, so a column outside the floor is unreadable on every row.
+                // An error is more use to the caller than an empty result.
+                if (!empty($columnPermissions) && !$documentSecurity) {
+                    throw new AuthorizationException('Missing "read" permission for column "' . $columnPermissions[0] . '".');
+                }
+            } else {
+                $this->assertColumnsQueryable($collection, $queries, $forPermission);
+            }
+        }
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
@@ -8753,7 +9339,8 @@ class Database
                 $orderTypes,
                 $cursor,
                 $cursorDirection,
-                $forPermission
+                $forPermission,
+                $columnPermissions
             );
 
             $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
@@ -8778,6 +9365,12 @@ class Database
             if (!$node->isEmpty()) {
                 $node->setAttribute('$collection', $collection->getId());
             }
+
+            // Not gated on $skipAuth: that flag only means the caller may see every
+            // ROW (it is set by any collection-level read, including a column-scoped
+            // one), so it says nothing about which columns are readable. Masking is
+            // already a no-op when authorization is disabled.
+            $node = $this->maskUnreadableColumns($collection, $node, $documentSecurity);
 
             $results[$index] = $node;
         }
@@ -9173,6 +9766,25 @@ class Database
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
+        // Adapters that enforce the gate get the column list and settle it per row.
+        // The rest keep the conservative refusal, which is all they can do.
+        $columnPermissions = [];
+
+        if ($collection->getId() !== self::METADATA) {
+            if ($this->adapter->getSupportForColumnPermissions()) {
+                $columnPermissions = $this->getRestrictedQueryColumns($collection, $queries, self::PERMISSION_READ);
+
+                // With documentSecurity off, collection permissions are the whole
+                // story, so a column outside the floor is unreadable on every row.
+                // An error is more use to the caller than an empty result.
+                if (!empty($columnPermissions) && !$documentSecurity) {
+                    throw new AuthorizationException('Missing "read" permission for column "' . $columnPermissions[0] . '".');
+                }
+            } else {
+                $this->assertColumnsQueryable($collection, $queries);
+            }
+        }
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
@@ -9189,7 +9801,7 @@ class Database
 
         $queries = $queriesOrNull;
 
-        $getCount = fn () => $this->adapter->count($collection, $queries, $max);
+        $getCount = fn () => $this->adapter->count($collection, $queries, $max, $columnPermissions);
         $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
@@ -9247,6 +9859,47 @@ class Database
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
+        // Adapters that enforce the gate get the column list and settle it per row.
+        // The rest keep the conservative refusal, which is all they can do.
+        $columnPermissions = [];
+
+        if ($collection->getId() !== self::METADATA) {
+            if ($this->adapter->getSupportForColumnPermissions()) {
+                $columnPermissions = $this->getRestrictedQueryColumns($collection, $queries, self::PERMISSION_READ);
+
+                // With documentSecurity off, collection permissions are the whole
+                // story, so a column outside the floor is unreadable on every row.
+                // An error is more use to the caller than an empty result.
+                if (!empty($columnPermissions) && !$documentSecurity) {
+                    throw new AuthorizationException('Missing "read" permission for column "' . $columnPermissions[0] . '".');
+                }
+            } else {
+                $this->assertColumnsQueryable($collection, $queries);
+            }
+        }
+
+        // The aggregated column is read too, so it joins the gate. Rows that do not
+        // grant it simply do not contribute, giving a partial sum over exactly the
+        // rows the caller could have read one at a time.
+        if ($this->adapter->getSupportForColumnPermissions()) {
+            $floor = $this->getCollectionColumnFloor($collection, self::PERMISSION_READ);
+
+            if ($floor !== null && !\in_array($attribute, $floor, true)) {
+                if (!$documentSecurity) {
+                    throw new AuthorizationException('Missing "read" permission for column "' . $attribute . '".');
+                }
+
+                $columnPermissions[] = $attribute;
+                $columnPermissions = \array_values(\array_unique($columnPermissions));
+            }
+        } else {
+            $columns = $this->getCollectionColumnRestriction($collection, self::PERMISSION_READ);
+
+            if ($columns !== null && !\in_array($attribute, $columns, true)) {
+                throw new AuthorizationException('Missing "read" permission for column "' . $attribute . '".');
+            }
+        }
+
         $relationships = \array_filter(
             $collection->getAttribute('attributes', []),
             fn (Document $attribute) => $attribute->getAttribute('type') === self::VAR_RELATIONSHIP
@@ -9262,7 +9915,7 @@ class Database
 
         $queries = $queriesOrNull;
 
-        $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max);
+        $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max, $columnPermissions);
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);

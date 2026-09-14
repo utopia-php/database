@@ -1930,14 +1930,14 @@ trait RelationshipTests
 
             $multiple = \in_array($type, [Database::RELATION_ONE_TO_MANY, Database::RELATION_MANY_TO_MANY], true);
             $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
-            $parent = new Document([
+            $parent = [
                 '$id' => 'reference',
                 '$permissions' => $permissions,
                 'child' => $multiple ? ['private'] : 'private',
-            ]);
+            ];
 
             try {
-                $database->createDocument($parents, $parent);
+                $database->createDocument($parents, new Document($parent));
                 $this->fail('An unreadable child must not be attached by ID.');
             } catch (AuthorizationException $e) {
                 $this->assertSame('Missing read permission for the related document.', $e->getMessage());
@@ -1951,8 +1951,8 @@ trait RelationshipTests
             $database->getAuthorization()->skip(fn () => $database->updateDocument($children, 'private', new Document([
                 '$permissions' => $permissions,
             ])));
-            $created = $database->createDocument($parents, $parent);
-            $related = $created->getAttribute('child');
+            $created = $database->createDocument($parents, new Document($parent));
+            $related = $database->getDocument($parents, $created->getId())->getAttribute('child');
             $this->assertSame('private', ($multiple ? $related[0] : $related)->getId());
 
             // Nested creation references a parent that has not been inserted yet.
@@ -1962,7 +1962,7 @@ trait RelationshipTests
                 '$permissions' => $permissions,
                 'child' => $multiple ? [$child] : $child,
             ]));
-            $related = $nested->getAttribute('child');
+            $related = $database->getDocument($parents, $nested->getId())->getAttribute('child');
             $this->assertSame('nestedChild', ($multiple ? $related[0] : $related)->getId());
             $this->assertFalse($database->getDocument($children, 'nestedChild')->isEmpty());
 

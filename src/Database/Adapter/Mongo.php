@@ -2565,13 +2565,13 @@ class Mongo extends Adapter
                 for ($j = 0; $j < $i; $j++) {
                     $originalPrev = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($originalPrev));
-                    $tmp = $cursor[$originalPrev];
+                    $tmp = $cursor[$originalPrev] ?? null;
                     $andConditions[] = [
                         $prevAttr => $tmp
                     ];
                 }
 
-                $tmp = $cursor[$originalAttribute];
+                $tmp = $cursor[$originalAttribute] ?? null;
 
                 if ($originalAttribute === '$sequence') {
                     /** If there is only $sequence attribute in $orderAttributes skip Or And  operators **/
@@ -2583,11 +2583,18 @@ class Mongo extends Adapter
                     }
                 }
 
-                $andConditions[] = [
-                    $attribute => [
-                        $operator => $tmp
-                    ]
-                ];
+                if ($tmp === null) {
+                    if ($direction === Database::ORDER_DESC) {
+                        // Only a later tie-breaker can follow a null sorted last.
+                        continue;
+                    }
+                    $andConditions[] = [$attribute => ['$ne' => null]];
+                } else {
+                    $comparison = [$attribute => [$operator => $tmp]];
+                    $andConditions[] = $direction === Database::ORDER_DESC
+                        ? ['$or' => [$comparison, [$attribute => null]]]
+                        : $comparison;
+                }
 
                 $orFilters[] = [
                     '$and' => $andConditions

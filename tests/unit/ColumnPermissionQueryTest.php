@@ -92,47 +92,120 @@ class ColumnPermissionQueryTest extends TestCase
     }
 
     /**
-     * Masking hides the value, but an unguarded filter turns the result set into an
-     * oracle for it.
+     * The caller may not read salary on any row, so it may not ask about it either.
+     * An empty result rather than an exception: the adapter settles it per row.
      */
-    public function testFilterOnUnreadableColumnIsRejected(): void
+    public function testFilterOnColumnTheCallerCannotReadAnywhereMatchesNothing(): void
     {
-        $this->expectException(AuthorizationException::class);
-        $this->expectExceptionMessage('Missing "read" permission for column "salary"');
-
-        $this->database->find('employees', [Query::greaterThan('salary', 1)]);
-    }
-
-    public function testOrderByUnreadableColumnIsRejected(): void
-    {
-        $this->expectException(AuthorizationException::class);
-
-        $this->database->find('employees', [Query::orderDesc('salary')]);
-    }
-
-    public function testSelectOfUnreadableColumnIsRejected(): void
-    {
-        $this->expectException(AuthorizationException::class);
-
-        $this->database->find('employees', [Query::select(['salary'])]);
-    }
-
-    public function testCountFilteredByUnreadableColumnIsRejected(): void
-    {
-        $this->expectException(AuthorizationException::class);
-
-        $this->database->count('employees', [Query::equal('salary', [100000])]);
+        $this->assertSame([], $this->database->find('employees', [Query::greaterThan('salary', 1)]));
+        $this->assertSame(0, $this->database->count('employees', [Query::equal('salary', [100000])]));
+        $this->assertSame(0, $this->database->sum('employees', 'salary'));
     }
 
     /**
-     * Without this guard sum() extracts a masked column in a single call.
+     * Case 4: the column is granted per document, not at collection level. The row
+     * that grants it comes back; the collection-level floor cannot see that grant, so
+     * before the per-row gate existed this was refused outright.
      */
-    public function testSumOfUnreadableColumnIsRejected(): void
+    public function testFilterOnColumnGrantedByTheDocumentReturnsThatRow(): void
     {
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('any');
+        $this->authorization->addRole('user:hr');
+
+        $results = $this->database->find('employees', [Query::greaterThan('salary', 95000)]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame('e1', $results[0]->getId());
+        $this->assertSame(100000, $results[0]->getAttribute('salary'));
+    }
+
+    public function testSumIsPartialOverRowsThatGrantTheColumn(): void
+    {
+        $this->authorization->skip(function () {
+            // A second row whose salary nobody may read.
+            $this->database->createDocument('employees', new Document([
+                '$id' => 'e2',
+                '$permissions' => [],
+                'name' => 'Ann',
+                'salary' => 200000,
+            ]));
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('any');
+        $this->authorization->addRole('user:hr');
+
+        // 100000 from e1, which grants salary -- not 300000. Exactly what the caller
+        // could have got by reading e1 on its own.
+        $this->assertSame(100000, $this->database->sum('employees', 'salary'));
+    }
+
+    /**
+     * The reason the gate exists: masking hides the value, but an ungated predicate
+     * still reveals it through the row's presence or absence.
+     */
+    public function testPredicateCannotBoundAHiddenValue(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createDocument('employees', new Document([
+                '$id' => 'e2',
+                '$permissions' => [],
+                'name' => 'Ann',
+                'salary' => 200000,
+            ]));
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('any');
+        $this->authorization->addRole('user:hr');
+
+        // e2 satisfies every one of these predicates, and must never appear.
+        foreach ([150000, 190000, 199999] as $threshold) {
+            $results = $this->database->find('employees', [Query::greaterThan('salary', $threshold)]);
+
+            $this->assertSame([], $results, "threshold {$threshold} leaked e2");
+        }
+    }
+
+    public function testOrderByAColumnTheCallerCannotReadDropsThoseRows(): void
+    {
+        $this->assertSame([], $this->database->find('employees', [Query::orderDesc('salary')]));
+    }
+
+    /**
+     * select() only chooses a projection, so it is not gated: masking already removes
+     * what the caller may not read, and dropping the row instead would be worse.
+     */
+    public function testSelectOfAnUnreadableColumnIsMaskedNotRejected(): void
+    {
+        $results = $this->database->find('employees', [Query::select(['salary'])]);
+
+        $this->assertCount(1, $results);
+        $this->assertNull($results[0]->getAttribute('salary'));
+    }
+
+    /**
+     * With documentSecurity off, collection permissions are the whole story, so the
+     * column is unreadable on every row and an error beats an empty result.
+     */
+    public function testWithoutDocumentSecurityAnUnreadableColumnThrows(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createCollection('strict', documentSecurity: false, permissions: [
+                Permission::read(Role::any(), 'name'),
+            ]);
+            $this->database->createAttribute('strict', 'name', Database::VAR_STRING, 128, false);
+            $this->database->createAttribute('strict', 'salary', Database::VAR_INTEGER, 8, false);
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('any');
+
         $this->expectException(AuthorizationException::class);
         $this->expectExceptionMessage('Missing "read" permission for column "salary"');
 
-        $this->database->sum('employees', 'salary');
+        $this->database->find('strict', [Query::greaterThan('salary', 1)]);
     }
 
     public function testBulkUpdateOfGrantedColumnIsAllowed(): void

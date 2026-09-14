@@ -867,9 +867,10 @@ abstract class Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return array<Document>
      */
-    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array;
+    abstract public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array;
 
     /**
      * Sum an attribute
@@ -879,9 +880,10 @@ abstract class Adapter
      * @param array<Query> $queries
      * @param int|null $max
      *
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int|float
      */
-    abstract public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int;
+    abstract public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): float|int;
 
     /**
      * Count Documents
@@ -890,9 +892,10 @@ abstract class Adapter
      * @param array<Query> $queries
      * @param int|null $max
      *
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int
      */
-    abstract public function count(Document $collection, array $queries = [], ?int $max = null): int;
+    abstract public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int;
 
     /**
      * Get Collection Size of the raw data

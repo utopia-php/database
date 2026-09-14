@@ -2000,13 +2000,26 @@ abstract class SQL extends Adapter
 
         $roles = \array_map(fn ($role) => $this->getPDO()->quote($role), $roles);
         $roles = \implode(', ', $roles);
+        $perms = $this->quote('_rp');
 
-        return "{$this->quote($alias)}.{$this->quote('_uid')} IN (
-            SELECT _document
-            FROM {$this->getSQLTable($collection . '_perms')}
-            WHERE _permission IN ({$roles})
-              AND _type = '{$type}'
-              {$this->getTenantQuery($collection)}
+        // EXISTS rather than _uid IN (SELECT _document ...): correlating on _document
+        // lets _index1 drive it, since that index leads with _document, and the probe
+        // stops at the first matching grant. The IN form had to be answered from the
+        // _permission index, which does not carry _document, so every matching
+        // permission row needed a lookup -- and a document with several column-scoped
+        // grants produces several of those where it used to produce one.
+        //
+        // _column is deliberately absent from the predicate: this decides whether the
+        // ROW is visible, and one readable column is enough for that. Which columns
+        // come back is settled separately, by masking and by
+        // getSQLColumnPermissionsConditions().
+        return "EXISTS (
+            SELECT 1
+            FROM {$this->getSQLTable($collection . '_perms')} AS {$perms}
+            WHERE {$perms}.{$this->quote('_document')} = {$this->quote($alias)}.{$this->quote('_uid')}
+              AND {$perms}.{$this->quote('_permission')} IN ({$roles})
+              AND {$perms}.{$this->quote('_type')} = '{$type}'
+              {$this->getTenantQuery($collection, '_rp')}
         )";
     }
 
@@ -2189,6 +2202,67 @@ abstract class SQL extends Adapter
         }
 
         return $updated;
+    }
+
+    /**
+     * Require read access to specific columns on every returned row.
+     *
+     * One EXISTS per column, ANDed: a row must grant every column the query reaches.
+     * A row granting none of them cannot match, so filtering or ordering on a column
+     * the caller may not read on that row reveals nothing at all -- as opposed to
+     * returning the row with the value masked out, which turns the predicate into an
+     * oracle for the hidden value.
+     *
+     * Correlated on _document, so it is driven by _index1, which leads with that
+     * column and contains every other predicate column.
+     *
+     * When it uses the same type and roles it also subsumes the row-level condition:
+     * any row satisfying _column IN ('', <col>) already satisfies the bare role
+     * match, so the caller may drop the row gate.
+     *
+     * @param string $collection
+     * @param array<string> $columns
+     * @param array<string> $roles
+     * @param string $alias
+     * @param string $type
+     * @return array<string>
+     * @throws DatabaseException
+     */
+    protected function getSQLColumnPermissionsConditions(
+        string $collection,
+        array $columns,
+        array $roles,
+        string $alias,
+        string $type = Database::PERMISSION_READ
+    ): array {
+        if (empty($columns) || empty($roles)) {
+            return [];
+        }
+
+        if (!\in_array($type, Database::PERMISSIONS)) {
+            throw new DatabaseException('Unknown permission type: ' . $type);
+        }
+
+        $quotedRoles = \implode(', ', \array_map(fn ($role) => $this->getPDO()->quote($role), $roles));
+        $perms = $this->quote('_cp');
+
+        $conditions = [];
+
+        foreach ($columns as $column) {
+            $quotedColumn = $this->getPDO()->quote($column);
+
+            $conditions[] = "EXISTS (
+                SELECT 1
+                FROM {$this->getSQLTable($collection . '_perms')} AS {$perms}
+                WHERE {$perms}.{$this->quote('_document')} = {$this->quote($alias)}.{$this->quote('_uid')}
+                  AND {$perms}.{$this->quote('_permission')} IN ({$quotedRoles})
+                  AND {$perms}.{$this->quote('_type')} = '{$type}'
+                  AND {$perms}.{$this->quote('_column')} IN ('', {$quotedColumn})
+                  {$this->getTenantQuery($collection, '_cp')}
+            )";
+        }
+
+        return $conditions;
     }
 
     /**
@@ -3192,12 +3266,13 @@ abstract class SQL extends Adapter
      * @param array<string, mixed> $cursor
      * @param string $cursorDirection
      * @param string $forPermission
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return array<Document>
      * @throws DatabaseException
      * @throws TimeoutException
      * @throws Exception
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array
     {
         $collection = $collection->getId();
         $name = $this->filter($collection);
@@ -3298,8 +3373,25 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        // Deliberately outside the getStatus() guard below. That flag is also false
+        // when the caller holds a collection-level grant (Database wraps the call in
+        // authorization->skip()), and a column-scoped collection grant is exactly the
+        // case that needs column filtering. Database decides whether to pass any
+        // columns at all; an empty list produces no conditions.
+        $columnConditions = $this->getSQLColumnPermissionsConditions($name, $columnPermissions, $roles, $alias);
+
+        // Any row satisfying _column IN ('', <col>) already satisfies the bare role
+        // match, so a column condition of the same type and roles makes the row
+        // condition redundant. Only true for reads: the row condition may be gated on
+        // a different permission (updateDocuments queries with forPermission=update).
+        $subsumesRowCondition = !empty($columnConditions) && $forPermission === Database::PERMISSION_READ;
+
+        if ($this->authorization->getStatus() && !$subsumesRowCondition) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias, $forPermission);
+        }
+
+        foreach ($columnConditions as $condition) {
+            $where[] = $condition;
         }
 
         if ($this->sharedTables) {
@@ -3420,11 +3512,12 @@ abstract class SQL extends Adapter
      * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $max
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int
      * @throws Exception
      * @throws PDOException
      */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int
     {
         $collection = $collection->getId();
         $name = $this->filter($collection);
@@ -3453,8 +3546,16 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        // count() and sum() always gate on read, so a column condition here always
+        // subsumes the row condition -- see getSQLColumnPermissionsConditions().
+        $columnConditions = $this->getSQLColumnPermissionsConditions($name, $columnPermissions, $roles, $alias);
+
+        if ($this->authorization->getStatus() && empty($columnConditions)) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        }
+
+        foreach ($columnConditions as $condition) {
+            $where[] = $condition;
         }
 
         if ($this->sharedTables) {
@@ -3513,11 +3614,12 @@ abstract class SQL extends Adapter
      * @param string $attribute
      * @param array<Query> $queries
      * @param int|null $max
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int|float
      * @throws Exception
      * @throws PDOException
      */
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): int|float
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): int|float
     {
         $collection = $collection->getId();
         $name = $this->filter($collection);
@@ -3547,8 +3649,16 @@ abstract class SQL extends Adapter
             $where[] = $conditions;
         }
 
-        if ($this->authorization->getStatus()) {
+        // count() and sum() always gate on read, so a column condition here always
+        // subsumes the row condition -- see getSQLColumnPermissionsConditions().
+        $columnConditions = $this->getSQLColumnPermissionsConditions($name, $columnPermissions, $roles, $alias);
+
+        if ($this->authorization->getStatus() && empty($columnConditions)) {
             $where[] = $this->getSQLPermissionsCondition($name, $roles, $alias);
+        }
+
+        foreach ($columnConditions as $condition) {
+            $where[] = $condition;
         }
 
         if ($this->sharedTables) {

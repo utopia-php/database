@@ -1854,6 +1854,32 @@ class Postgres extends SQL
             return 'FALSE';
         }
 
+        // The containment list above is built from the assembled string read("role"),
+        // so it can only ever match an UNSCOPED grant. A column-scoped grant is stored
+        // as read("role", "column") and is not contained by it, which would make a
+        // document whose only read grant is column-scoped vanish from find() while
+        // getDocument() -- which carries no permission filter -- still returned it.
+        //
+        // Rather than enumerate a containment check per role per column, which would
+        // multiply the BitmapOr branches by the width of the collection, fall back to
+        // the _perms table for exactly the rows the jsonb path cannot answer. The
+        // probe is driven by _index1, which leads with _document, and only runs for
+        // rows the cheap indexed path already missed.
+        $perms = $this->quote('_rp');
+
+        $permissions[] = "EXISTS (
+            SELECT 1
+            FROM {$this->getSQLTable($collection . '_perms')} AS {$perms}
+            WHERE {$perms}.{$this->quote('_document')} = {$this->quote($alias)}.{$this->quote('_uid')}
+              AND {$perms}.{$this->quote('_permission')} IN (" . \implode(', ', \array_map(
+            fn ($role) => $this->getPDO()->quote($role),
+            $roles
+        )) . ")
+              AND {$perms}.{$this->quote('_type')} = '{$type}'
+              AND {$perms}.{$this->quote('_column')} <> ''
+              {$this->getTenantQuery($collection, '_rp')}
+        )";
+
         return '(' . \implode(' OR ', $permissions) . ')';
     }
 

@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -1633,14 +1634,14 @@ class Memory extends Adapter
         return $count;
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, $forPermission);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, $forPermission, $columnPermissions);
         $rows = $this->applyOrdering($rows, $orderAttributes, $orderTypes, $cursorDirection);
         $rows = $this->applyCursor($rows, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
@@ -1664,14 +1665,14 @@ class Memory extends Adapter
         return $results;
     }
 
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ, $columnPermissions);
 
         if (! is_null($max)) {
             // MariaDB applies LIMIT :max inside the COUNT subquery — LIMIT 0
@@ -1682,14 +1683,14 @@ class Memory extends Adapter
         return \count($rows);
     }
 
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): float|int
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ, $columnPermissions);
 
         if (! is_null($max)) {
             $rows = \array_slice($rows, 0, $max);
@@ -2088,7 +2089,7 @@ class Memory extends Adapter
 
     public function getSupportForColumnPermissions(): bool
     {
-        return false;
+        return true;
     }
 
     /**
@@ -2575,7 +2576,12 @@ class Memory extends Adapter
      * @param  array<Query>  $queries
      * @return array<array<string, mixed>>
      */
-    protected function fusedFilter(string $key, string $collectionId, array $queries, string $forPermission): array
+    /**
+     * @param array<Query> $queries
+     * @param array<string> $columnPermissions columns that must be readable on the row
+     * @return array<array<string, mixed>>
+     */
+    protected function fusedFilter(string $key, string $collectionId, array $queries, string $forPermission, array $columnPermissions = []): array
     {
         $documents = $this->data[$key]['documents'] ?? [];
         if (empty($documents)) {
@@ -2612,6 +2618,12 @@ class Memory extends Adapter
                 continue;
             }
 
+            // The in-memory equivalent of the EXISTS the SQL adapters emit: a row must
+            // grant read on every column the query reaches, or it cannot match at all.
+            if (! empty($columnPermissions) && ! $this->rowGrantsColumns($row, $columnPermissions)) {
+                continue;
+            }
+
             $matched = true;
             foreach ($effectiveQueries as $query) {
                 if (! $this->matches($row, $query)) {
@@ -2627,6 +2639,50 @@ class Memory extends Adapter
         }
 
         return $output;
+    }
+
+    /**
+     * Does this row grant the current roles read access to every one of these columns?
+     *
+     * Only document permissions are consulted, which is correct by construction:
+     * Database only asks about columns the collection itself does not grant, so a
+     * collection-level grant can never be the thing that satisfies this.
+     *
+     * @param array<string, mixed> $row
+     * @param array<string> $columns
+     * @return bool
+     */
+    protected function rowGrantsColumns(array $row, array $columns): bool
+    {
+        $permissions = $row['_permissions'] ?? [];
+
+        if (! \is_array($permissions)) {
+            return false;
+        }
+
+        $granted = [];
+
+        $document = new Document(['$permissions' => $permissions]);
+
+        foreach ($document->getPermissionsByTypeWithColumns(Database::PERMISSION_READ) as $permission) {
+            if (! $this->authorization->hasRole($permission['role'])) {
+                continue;
+            }
+
+            if ($permission['column'] === Permission::COLUMN_ALL) {
+                return true;
+            }
+
+            $granted[$permission['column']] = true;
+        }
+
+        foreach ($columns as $column) {
+            if (! isset($granted[$column])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

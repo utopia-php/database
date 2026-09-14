@@ -168,6 +168,38 @@ class ColumnPermissionEnforcementTest extends TestCase
         $this->assertSame(['name'], $columns, 'find() must mask even when $skipAuth is set');
     }
 
+    /**
+     * Collection-level grants live on the collection document in _metadata, not in
+     * the collection's _perms table, so they need their own repointing on rename and
+     * their own cleanup on delete.
+     */
+    public function testCollectionLevelColumnGrantFollowsARename(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createCollection('scoped', documentSecurity: true, permissions: [
+                Permission::read(Role::any(), 'name'),
+            ]);
+
+            $this->database->createAttribute('scoped', 'name', Database::VAR_STRING, 128, false);
+
+            $this->assertSame(
+                ['read("any", "name")'],
+                $this->database->getCollection('scoped')->getPermissions()
+            );
+
+            $this->database->updateAttribute('scoped', 'name', newKey: 'fullName');
+
+            $this->assertSame(
+                ['read("any", "fullName")'],
+                $this->database->getCollection('scoped')->getPermissions()
+            );
+
+            $this->database->deleteAttribute('scoped', 'fullName');
+
+            $this->assertSame([], $this->database->getCollection('scoped')->getPermissions());
+        });
+    }
+
     public function testUpdateOfGrantedColumnIsAllowed(): void
     {
         $this->authorization->cleanRoles();
@@ -212,6 +244,68 @@ class ColumnPermissionEnforcementTest extends TestCase
         $stored = $this->authorization->skip(fn () => $this->database->getDocument('employees', 'e1'));
         $this->assertSame('bob@example.com', $stored->getAttribute('email'));
         $this->assertSame('100000', $stored->getAttribute('salary'));
+    }
+
+    /**
+     * Regression: a caller whose update access is limited to one column must not be
+     * able to rewrite $permissions. Allowing it made column-level permissions
+     * unenforceable -- "may update email" was enough to grant yourself read and
+     * update on salary, then read and overwrite it.
+     */
+    public function testColumnScopedUpdaterCannotRewritePermissions(): void
+    {
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:peer');
+
+        $this->expectException(AuthorizationException::class);
+        $this->expectExceptionMessage('Missing "update" permission to change $permissions');
+
+        $this->database->updateDocument('employees', 'e1', new Document([
+            '$permissions' => [
+                Permission::read(Role::user('peer'), 'salary'),
+                Permission::update(Role::user('peer'), 'salary'),
+            ],
+        ]));
+    }
+
+    public function testFailedEscalationLeavesTheHiddenColumnHidden(): void
+    {
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:peer');
+
+        try {
+            $this->database->updateDocument('employees', 'e1', new Document([
+                '$permissions' => [Permission::read(Role::user('peer'), 'salary')],
+            ]));
+            $this->fail('Expected an AuthorizationException');
+        } catch (AuthorizationException) {
+            // expected
+        }
+
+        $this->assertSame(['name', 'email'], $this->columnsVisibleTo('user:peer'));
+
+        $stored = $this->authorization->skip(
+            fn () => $this->database->getDocument('employees', 'e1')
+        );
+        $this->assertSame('100000', $stored->getAttribute('salary'));
+    }
+
+    public function testUnscopedUpdaterMayRewritePermissions(): void
+    {
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:boss');
+
+        $current = $this->database->getDocument('employees', 'e1')->getPermissions();
+
+        $this->database->updateDocument('employees', 'e1', new Document([
+            '$permissions' => [...$current, Permission::read(Role::team('audit'), 'salary')],
+        ]));
+
+        $stored = $this->authorization->skip(
+            fn () => $this->database->getDocument('employees', 'e1')
+        );
+
+        $this->assertContains('read("team:audit", "salary")', $stored->getPermissions());
     }
 
     public function testUnscopedRoleMayUpdateAnyColumn(): void

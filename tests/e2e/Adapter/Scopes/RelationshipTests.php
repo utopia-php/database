@@ -1284,11 +1284,19 @@ trait RelationshipTests
                 ]),
             ]);
             $multiple = $type !== Database::RELATION_ONE_TO_ONE;
-            $database->createDocument($parents, new Document([
+            $created = $database->createDocument($parents, new Document([
                 '$id' => 'newParent',
                 '$permissions' => $permissions,
                 'child' => $multiple ? [$child] : $child,
             ]));
+
+            if (!$inverse || $twoWay) {
+                $related = $created->getAttribute('child');
+                if ($multiple) {
+                    $this->assertCount(1, $related, $type . ' twoWay=' . (int) $twoWay);
+                }
+                $this->assertSame('existing', ($multiple ? $related[0] : $related)->getId());
+            }
 
             $parent = $database->getDocument($parents, 'newParent');
             $this->assertFalse($parent->isEmpty());

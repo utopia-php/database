@@ -1900,6 +1900,77 @@ trait RelationshipTests
         $this->assertEquals(true, $bird3->isEmpty());
     }
 
+    public function testCreateRelationshipReferenceRequiresRead(): void
+    {
+        $database = $this->getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        foreach ([
+            [Database::RELATION_ONE_TO_ONE, false],
+            [Database::RELATION_ONE_TO_ONE, true],
+            [Database::RELATION_ONE_TO_MANY, false],
+            [Database::RELATION_ONE_TO_MANY, true],
+            [Database::RELATION_MANY_TO_ONE, false],
+            [Database::RELATION_MANY_TO_ONE, true],
+            [Database::RELATION_MANY_TO_MANY, false],
+            [Database::RELATION_MANY_TO_MANY, true],
+        ] as [$type, $twoWay]) {
+            $parents = 'referenceParents' . $type . (int) $twoWay;
+            $children = 'referenceChildren' . $type . (int) $twoWay;
+            $database->createCollection($parents, documentSecurity: true);
+            $database->createCollection($children, documentSecurity: true);
+            $database->createRelationship($parents, $children, $type, $twoWay, 'child', 'parent');
+            $database->createDocument($children, new Document([
+                '$id' => 'private',
+                '$permissions' => [Permission::update(Role::any())],
+            ]));
+
+            $multiple = \in_array($type, [Database::RELATION_ONE_TO_MANY, Database::RELATION_MANY_TO_MANY], true);
+            $permissions = [Permission::read(Role::any()), Permission::update(Role::any())];
+            $parent = [
+                '$id' => 'reference',
+                '$permissions' => $permissions,
+                'child' => $multiple ? ['private'] : 'private',
+            ];
+
+            try {
+                $database->createDocument($parents, new Document($parent));
+                $this->fail('An unreadable child must not be attached by ID.');
+            } catch (AuthorizationException $e) {
+                $this->assertSame('Missing read permission for the related document.', $e->getMessage());
+            }
+
+            $stored = $database->getAuthorization()->skip(
+                fn () => $database->skipRelationships(fn () => $database->getDocument($parents, 'reference'))
+            );
+            $this->assertTrue($stored->isEmpty());
+
+            $database->getAuthorization()->skip(fn () => $database->updateDocument($children, 'private', new Document([
+                '$permissions' => $permissions,
+            ])));
+            $created = $database->createDocument($parents, new Document($parent));
+            $related = $database->getDocument($parents, $created->getId())->getAttribute('child');
+            $this->assertSame('private', ($multiple ? $related[0] : $related)->getId());
+
+            // Nested creation references a parent that has not been inserted yet.
+            $child = new Document(['$id' => 'nestedChild', '$permissions' => $permissions]);
+            $nested = $database->createDocument($parents, new Document([
+                '$id' => 'nestedParent',
+                '$permissions' => $permissions,
+                'child' => $multiple ? [$child] : $child,
+            ]));
+            $related = $database->getDocument($parents, $nested->getId())->getAttribute('child');
+            $this->assertSame('nestedChild', ($multiple ? $related[0] : $related)->getId());
+            $this->assertFalse($database->getDocument($children, 'nestedChild')->isEmpty());
+
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
+    }
+
     public function testCreateRelationshipMissingCollection(): void
     {
         /** @var Database $database */

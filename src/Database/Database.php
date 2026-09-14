@@ -454,6 +454,12 @@ class Database
     protected array $relationshipWriteStack = [];
 
     /**
+     * Reverse links to parents that are still being created.
+     * @var array<array{collection: string, id: string, tenant: int|string|null, key: string, relatedCollection: string, relatedId: string}>
+     */
+    protected array $relationshipWriteLinks = [];
+
+    /**
      * @var array<Document>
      */
     protected array $relationshipFetchStack = [];
@@ -6159,20 +6165,24 @@ class Database
         string $twoWayKey,
         string $side,
     ): string {
+        $writeLink = false;
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
                 if ($twoWay) {
                     $relation->setAttribute($twoWayKey, $document->getId());
+                    $writeLink = true;
                 }
                 break;
             case Database::RELATION_ONE_TO_MANY:
                 if ($side === Database::RELATION_SIDE_PARENT) {
                     $relation->setAttribute($twoWayKey, $document->getId());
+                    $writeLink = true;
                 }
                 break;
             case Database::RELATION_MANY_TO_ONE:
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     $relation->setAttribute($twoWayKey, $document->getId());
+                    $writeLink = true;
                 }
                 break;
         }
@@ -6193,7 +6203,24 @@ class Database
                 $related->setAttribute($attribute, $value);
             }
 
-            $related = $this->updateDocument($relatedCollection->getId(), $related->getId(), $related);
+            if ($writeLink) {
+                $this->relationshipWriteLinks[] = [
+                    'collection' => $relatedCollection->getId(),
+                    'id' => $related->getId(),
+                    'tenant' => $related->getTenant(),
+                    'key' => $twoWayKey,
+                    'relatedCollection' => $collection->getId(),
+                    'relatedId' => $document->getId(),
+                ];
+            }
+
+            try {
+                $related = $this->updateDocument($relatedCollection->getId(), $related->getId(), $related);
+            } finally {
+                if ($writeLink) {
+                    \array_pop($this->relationshipWriteLinks);
+                }
+            }
         }
 
         if ($relationType === Database::RELATION_MANY_TO_MANY) {
@@ -6211,6 +6238,24 @@ class Database
         }
 
         return $related->getId();
+    }
+
+    private function isRelationshipWriteLink(Document $collection, Document $document, string $key, string $relatedCollection): bool
+    {
+        foreach ($this->relationshipWriteLinks as $link) {
+            if (
+                $link['collection'] === $collection->getId()
+                && $link['id'] === $document->getId()
+                && $link['tenant'] === $document->getTenant()
+                && $link['key'] === $key
+                && $link['relatedCollection'] === $relatedCollection
+                && $link['relatedId'] === $document->getAttribute($key)
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -6375,7 +6420,10 @@ class Database
                 // Compare if the document has any changes
                 foreach ($document as $key => $value) {
                     if (\array_key_exists($key, $relationships)) {
-                        if (\count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1) {
+                        if (
+                            \count($this->relationshipWriteStack) >= Database::RELATION_MAX_DEPTH - 1
+                            && !$this->isRelationshipWriteLink($collection, $document, $key, $relationships[$key]['options']['relatedCollection'])
+                        ) {
                             continue;
                         }
 
@@ -6862,6 +6910,12 @@ class Database
                     $value = $this->applyRelationshipOperator($operator, $existingIds);
                     $document->setAttribute($key, $value);
                 }
+            }
+
+            // The enclosing create owns this reverse link. Its parent is not
+            // persisted yet, but the child's other relationships still need processing.
+            if ($this->isRelationshipWriteLink($collection, $document, $key, $relatedCollection->getId())) {
+                continue;
             }
 
             if ($oldValue == $value) {

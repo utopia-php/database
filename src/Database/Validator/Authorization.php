@@ -68,15 +68,13 @@ class Authorization extends Validator
             return false;
         }
 
-        $permission = '-';
-
         foreach ($permissions as $permission) {
             if (\array_key_exists($permission, $this->roles)) {
                 return true;
             }
         }
 
-        $this->message = 'Missing "'.$action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
+        $this->message = 'Missing "'.$action.'" permission for roles '.\json_encode($this->getRoles()).'. Only '.\json_encode($permissions).' roles are allowed.';
         return false;
     }
 

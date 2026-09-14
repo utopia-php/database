@@ -123,4 +123,26 @@ class AuthorizationTest extends TestCase
 
         $this->assertEquals(true, $this->authorization->getStatus());
     }
+
+    public function testDeniedRolesDescription(): void
+    {
+        $this->authorization->addRole(Role::guests()->toString());
+
+        $this->assertFalse($this->authorization->isValid(new Input('execute', [
+            Role::user('joe')->toString(),
+            Role::team('admins')->toString(),
+        ])));
+        $this->assertSame(
+            'Missing "execute" permission for roles ["any","guests"]. Only ["user:joe","team:admins"] roles are allowed.',
+            $this->authorization->getDescription()
+        );
+
+        $this->authorization->cleanRoles();
+
+        $this->assertFalse($this->authorization->isValid(new Input(Database::PERMISSION_READ, [Role::users()->toString()])));
+        $this->assertSame(
+            'Missing "read" permission for roles []. Only ["users"] roles are allowed.',
+            $this->authorization->getDescription()
+        );
+    }
 }

@@ -8,6 +8,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
@@ -17,6 +18,47 @@ use Utopia\Database\Query;
 
 trait OneToOneTests
 {
+    public function testCreateOneWayReverseRelationshipError(): void
+    {
+        $database = $this->getDatabase();
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $database->createCollection($parents);
+        $database->createCollection($children);
+        $database->createAttribute($parents, 'name', Database::VAR_STRING, 255, false);
+        $database->createRelationship($parents, $children, Database::RELATION_ONE_TO_ONE, false, 'child', 'parent', Database::RELATION_MUTATE_SET_NULL);
+        $database->createDocument($parents, new Document(['$id' => 'parent']));
+
+        try {
+            foreach ([['name' => 'parent'], ['parent'], [], 'parent', new Document(['$id' => 'parent'])] as $value) {
+                $id = ID::unique();
+                try {
+                    $database->createDocument($children, new Document(['$id' => $id, 'parent' => $value]));
+                    $this->fail('Expected the one-way reverse relationship to be rejected.');
+                } catch (RelationshipException $error) {
+                    $this->assertSame('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.', $error->getMessage());
+                }
+                $this->assertTrue($database->getDocument($children, $id)->isEmpty());
+                $this->assertNull($database->getDocument($parents, 'parent')->getAttribute('child'));
+            }
+
+            $forward = $database->createDocument($parents, new Document([
+                '$id' => 'forward',
+                'child' => new Document(['$id' => 'nested']),
+            ]));
+            $this->assertSame('nested', $forward->getAttribute('child')->getId());
+            $this->assertSame('nested', $database->getDocument($parents, 'forward')->getAttribute('child')->getId());
+        } finally {
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
+    }
+
     public function testOneToOneOneWayRelationship(): void
     {
         /** @var Database $database */

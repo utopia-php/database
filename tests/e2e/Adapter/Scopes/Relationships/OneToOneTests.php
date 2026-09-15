@@ -28,8 +28,9 @@ trait OneToOneTests
 
         $parents = ID::unique();
         $children = ID::unique();
-        $database->createCollection($parents);
-        $database->createCollection($children);
+        $permissions = [Permission::read(Role::any()), Permission::create(Role::any()), Permission::update(Role::any())];
+        $database->createCollection($parents, [], [], $permissions);
+        $database->createCollection($children, [], [], $permissions);
         $database->createAttribute($parents, 'name', Database::VAR_STRING, 255, false);
         $database->createRelationship($parents, $children, Database::RELATION_ONE_TO_ONE, false, 'child', 'parent', Database::RELATION_MUTATE_SET_NULL);
         $database->createDocument($parents, new Document(['$id' => 'parent']));

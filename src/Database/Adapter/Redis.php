@@ -795,6 +795,16 @@ class Redis extends Adapter
         return [];
     }
 
+    public function prepareColumnPermissions(Document $collection): bool
+    {
+        return false;
+    }
+
+    public function hasColumnPermissions(Document $collection): bool
+    {
+        return false;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return false;

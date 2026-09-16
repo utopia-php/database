@@ -41,7 +41,7 @@ class ColumnPermissionEnforcementTest extends TestCase
         }
 
         $this->authorization->skip(function () {
-            $this->database->createCollection('employees', permissions: [], documentSecurity: true);
+            $this->database->createCollection('employees', permissions: [], documentSecurity: true, columnSecurity: true);
 
             foreach (['name', 'email', 'salary'] as $column) {
                 $this->database->createAttribute('employees', $column, Database::VAR_STRING, 128, false);
@@ -137,7 +137,7 @@ class ColumnPermissionEnforcementTest extends TestCase
     public function testCollectionLevelColumnGrantIsStillMaskedInFind(): void
     {
         $this->authorization->skip(function () {
-            $this->database->createCollection('public_employees', documentSecurity: true, permissions: [
+            $this->database->createCollection('public_employees', documentSecurity: true, columnSecurity: true, permissions: [
                 Permission::read(Role::any(), 'name'),
             ]);
 
@@ -176,7 +176,7 @@ class ColumnPermissionEnforcementTest extends TestCase
     public function testCollectionLevelColumnGrantFollowsARename(): void
     {
         $this->authorization->skip(function () {
-            $this->database->createCollection('scoped', documentSecurity: true, permissions: [
+            $this->database->createCollection('scoped', documentSecurity: true, columnSecurity: true, permissions: [
                 Permission::read(Role::any(), 'name'),
             ]);
 

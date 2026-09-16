@@ -4257,6 +4257,16 @@ class Mongo extends Adapter
         return [];
     }
 
+    public function prepareColumnPermissions(Document $collection): bool
+    {
+        return false;
+    }
+
+    public function hasColumnPermissions(Document $collection): bool
+    {
+        return false;
+    }
+
     /**
      * Get the query to check for tenant when in shared tables mode
      *

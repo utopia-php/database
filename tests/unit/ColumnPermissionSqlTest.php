@@ -50,7 +50,7 @@ class ColumnPermissionSqlTest extends TestCase
         $this->database->create();
 
         $this->authorization->skip(function () {
-            $this->database->createCollection('employees', documentSecurity: true, permissions: [
+            $this->database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: [
                 Permission::read(Role::any(), 'name'),
             ]);
             $this->database->createAttribute('employees', 'name', Database::VAR_STRING, 128, false);
@@ -127,7 +127,7 @@ class ColumnPermissionSqlTest extends TestCase
     public function testColumnScopedGrantAloneMakesTheRowVisible(): void
     {
         $this->authorization->skip(function () {
-            $this->database->createCollection('scoped', documentSecurity: true, permissions: []);
+            $this->database->createCollection('scoped', documentSecurity: true, columnSecurity: true, permissions: []);
             $this->database->createAttribute('scoped', 'name', Database::VAR_STRING, 128, false);
             $this->database->createAttribute('scoped', 'salary', Database::VAR_INTEGER, 8, false);
 
@@ -217,6 +217,35 @@ class ColumnPermissionSqlTest extends TestCase
             ['e1' => ['name'], 'e2' => ['name']],
             $this->shape($this->database->find('employees'))
         );
+    }
+
+    /**
+     * A permission can name a column that no longer exists -- written before the
+     * column was dropped, or restored from a backup. The caller can then read nothing,
+     * while the row filter still matches on the role. Returning the document would
+     * disclose its id and timestamps to someone entitled to none of its data.
+     */
+    public function testDocumentIsInvisibleWhenNoGrantedColumnExists(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createDocument('employees', new Document([
+                '$id' => 'ghost',
+                '$permissions' => [Permission::read(Role::user('nobody'), 'salary')],
+                'name' => 'Cid',
+                'salary' => 1,
+            ]));
+
+            // the granted column disappears from under the permission
+            $this->database->deleteAttribute('employees', 'salary');
+            $this->database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 8, false);
+        });
+
+        $this->as(['user:nobody']);
+
+        $document = $this->database->getDocument('employees', 'ghost');
+
+        $this->assertTrue($document->isEmpty(), 'document leaked its metadata');
+        $this->assertSame([], $this->database->find('employees'));
     }
 
     public function testSelectOfAnUnreadableColumnIsMaskedNotDropped(): void

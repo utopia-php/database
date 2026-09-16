@@ -9,6 +9,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -42,7 +43,7 @@ class ColumnPermissionQueryTest extends TestCase
         }
 
         $this->authorization->skip(function () {
-            $this->database->createCollection('employees', documentSecurity: true, permissions: [
+            $this->database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: [
                 Permission::read(Role::any(), 'name'),
                 Permission::create(Role::any(), 'name'),
             ]);
@@ -168,6 +169,39 @@ class ColumnPermissionQueryTest extends TestCase
         }
     }
 
+    /**
+     * Internal fields cannot be named by a permission, so they are never in the
+     * collection-level floor. Gating them would make every lookup by id return
+     * nothing for a column-restricted caller, since no permission row can carry
+     * _column = '$id'.
+     */
+    public function testFilteringByIdStillWorksForAColumnRestrictedCaller(): void
+    {
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('any');
+        $this->authorization->addRole('user:hr');
+
+        $results = $this->database->find('employees', [Query::equal('$id', ['e1'])]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame('e1', $results[0]->getId());
+    }
+
+    /**
+     * Skipping internal fields is only safe while none of them can be filtered on
+     * after masking has altered them. $permissions is the one masking rewrites, so
+     * it must stay unfilterable -- otherwise a caller could probe for the permission
+     * strings masking hid from them.
+     */
+    public function testPermissionsCannotBeUsedAsAFilterAttribute(): void
+    {
+        $this->expectException(QueryException::class);
+
+        $this->database->find('employees', [
+            Query::equal('$permissions', ['read("user:hr", "salary")']),
+        ]);
+    }
+
     public function testOrderByAColumnTheCallerCannotReadDropsThoseRows(): void
     {
         $this->assertSame([], $this->database->find('employees', [Query::orderDesc('salary')]));
@@ -192,7 +226,7 @@ class ColumnPermissionQueryTest extends TestCase
     public function testWithoutDocumentSecurityAnUnreadableColumnThrows(): void
     {
         $this->authorization->skip(function () {
-            $this->database->createCollection('strict', documentSecurity: false, permissions: [
+            $this->database->createCollection('strict', documentSecurity: false, columnSecurity: true, permissions: [
                 Permission::read(Role::any(), 'name'),
             ]);
             $this->database->createAttribute('strict', 'name', Database::VAR_STRING, 128, false);

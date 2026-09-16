@@ -990,6 +990,7 @@ class Postgres extends SQL
      */
     public function createDocument(Document $collection, Document $document): Document
     {
+        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1052,9 +1053,13 @@ class Postgres extends SQL
             foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                 $role = \str_replace('"', '', $permission['role']);
                 $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                $columnBind = ":_column_{$type}_{$i}";
-                $permissionBinds[$columnBind] = $permission['column'];
-                $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$sqlTenant})";
+                if ($columnSecurity) {
+                    $columnBind = ":_column_{$type}_{$i}";
+                    $permissionBinds[$columnBind] = $permission['column'];
+                    $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$sqlTenant})";
+                } else {
+                    $permissions[] = "('{$type}', '{$role}', :_uid {$sqlTenant})";
+                }
             }
         }
 
@@ -1062,9 +1067,10 @@ class Postgres extends SQL
         if (!empty($permissions)) {
             $permissions = \implode(', ', $permissions);
             $sqlTenant = $this->sharedTables ? ', _tenant' : '';
+            $columnColumn = $columnSecurity ? ', _column' : '';
 
             $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission{$columnColumn}, _document {$sqlTenant})
 				VALUES {$permissions}
 			";
 
@@ -1110,6 +1116,7 @@ class Postgres extends SQL
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $spatialAttributes = $this->getSpatialAttributes($collection);
+        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1142,17 +1149,23 @@ class Postgres extends SQL
             foreach (Database::PERMISSIONS as $type) {
                 foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$sqlTenant})";
+                    if ($columnSecurity) {
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$sqlTenant})";
+                        $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
+                    } else {
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
+                    }
+
                     $binds[":_add_{$type}_{$i}"] = $permission['role'];
-                    $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
                 }
             }
 
             if (!empty($values)) {
                 $sqlTenant = $this->sharedTables ? ', _tenant' : '';
+                $columnColumn = $columnSecurity ? ', _column' : '';
 
                 $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission{$columnColumn} {$sqlTenant})
 				VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -1833,7 +1846,8 @@ class Postgres extends SQL
         string $collection,
         array $roles,
         string $alias,
-        string $type = Database::PERMISSION_READ
+        string $type = Database::PERMISSION_READ,
+        bool $columnSecurity = false
     ): string {
         if (!\in_array($type, Database::PERMISSIONS)) {
             throw new DatabaseException('Unknown permission type: ' . $type);
@@ -1860,6 +1874,13 @@ class Postgres extends SQL
         // document whose only read grant is column-scoped vanish from find() while
         // getDocument() -- which carries no permission filter -- still returned it.
         //
+        // Only when the collection enabled column security. Otherwise no permission
+        // can be column-scoped, the containment list above is complete, and reads stay
+        // answerable from the row alone -- which is the whole point of the jsonb path.
+        if (!$columnSecurity) {
+            return '(' . \implode(' OR ', $permissions) . ')';
+        }
+
         // Rather than enumerate a containment check per role per column, which would
         // multiply the BitmapOr branches by the width of the collection, fall back to
         // the _perms table for exactly the rows the jsonb path cannot answer. The
@@ -2129,6 +2150,98 @@ class Postgres extends SQL
         return true;
     }
 
+    /**
+     * Give an older permissions table the shape column permissions need.
+     *
+     * Postgres names indexes per schema rather than per table, so the unique index is
+     * dropped and recreated under the same generated name the table was built with.
+     * IF NOT EXISTS keeps this safe to run twice.
+     *
+     * @param Document $collection
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function prepareColumnPermissions(Document $collection): bool
+    {
+        $id = $this->filter($collection->getId());
+        $table = $this->getSQLTable($id . '_perms');
+        $namespace = $this->getNamespace();
+
+        if ($this->sharedTables) {
+            $unique = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
+            $columns = '(_tenant,_document,_type,_permission,_column)';
+        } else {
+            $unique = $this->getShortKey("{$namespace}_{$id}_ukey");
+            $columns = '(_document COLLATE utf8_ci_ai,_type,_permission,_column)';
+        }
+
+        // A table created since column permissions existed already has both the
+        // column and the widened index, so there is nothing to do. Checked separately
+        // because a prepare interrupted between them -- the column is instant, the
+        // index reads every row -- leaves the column present and the index narrow.
+        $hasIndex = $this->hasColumnPermissionsIndex($unique);
+
+        $staged = $this->getShortKey("{$unique}_staged");
+
+        try {
+            $this->getPDO()->prepare("
+                ALTER TABLE {$table}
+                ADD COLUMN IF NOT EXISTS _column VARCHAR(255) NOT NULL DEFAULT ''
+            ")->execute();
+
+            if (!$hasIndex) {
+                // Build the replacement before dropping what it replaces. Postgres
+                // cannot drop and create an index in one statement, so doing it in
+                // that order would leave a window with no uniqueness at all -- and a
+                // duplicate inserted during that window makes the CREATE fail,
+                // leaving the table with no unique index rather than the old one.
+                //
+                // Safe in this order because the existing index is the stricter of
+                // the two: it forbids two rows sharing (document, type, permission)
+                // whatever their column, so nothing it allows can violate the wider
+                // one being built. The swap itself is metadata only.
+                $this->getPDO()->prepare("DROP INDEX IF EXISTS \"{$staged}\"")->execute();
+
+                $this->getPDO()->prepare("
+                    CREATE UNIQUE INDEX \"{$staged}\" ON {$table} USING btree {$columns}
+                ")->execute();
+
+                $this->getPDO()->prepare("DROP INDEX IF EXISTS \"{$unique}\"")->execute();
+
+                $this->getPDO()->prepare("ALTER INDEX \"{$staged}\" RENAME TO \"{$unique}\"")->execute();
+            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return true;
+    }
+
+    /**
+     * Does the named unique index already cover _column?
+     *
+     * @param string $index
+     * @return bool
+     * @throws DatabaseException
+     */
+    protected function hasColumnPermissionsIndex(string $index): bool
+    {
+        $stmt = $this->getPDO()->prepare("
+            SELECT 1
+            FROM pg_indexes
+            WHERE indexname = :index
+              AND indexdef LIKE '%_column%'
+            LIMIT 1
+        ");
+        $stmt->bindValue(':index', $index);
+        $stmt->execute();
+
+        $found = $stmt->fetchColumn();
+        $stmt->closeCursor();
+
+        return $found !== false;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return false;
@@ -2388,17 +2501,19 @@ class Postgres extends SQL
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
-    protected function getInsertPermissionsSuffix(): string
+    protected function getInsertPermissionsSuffix(bool $columnSecurity = false): string
     {
         if (!$this->skipDuplicates) {
             return '';
         }
 
-        $conflictTarget = $this->sharedTables
-            ? '("_type", "_permission", "_document", "_tenant")'
-            : '("_type", "_permission", "_document")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        // No conflict target on purpose. Postgres resolves a target against a real
+        // unique index and demands an exact column match, so naming one would tie this
+        // statement to whether the table has been widened for column permissions --
+        // and a table created before that existed carries the narrower index. Omitting
+        // the target skips a row on any unique violation, which is what
+        // skipDuplicates asks for, and works against either shape.
+        return 'ON CONFLICT DO NOTHING';
     }
 
     public function decodePoint(string $wkb): array

@@ -537,6 +537,16 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
+    public function prepareColumnPermissions(Document $collection): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    public function hasColumnPermissions(Document $collection): bool
+    {
+        return $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return $this->delegate(__FUNCTION__, \func_get_args());

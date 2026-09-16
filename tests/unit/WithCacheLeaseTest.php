@@ -42,6 +42,25 @@ class WithCacheLeaseTest extends TestCase
         $this->key = $this->database->getQueryCacheKey('projects');
     }
 
+    public function testDocumentPurgeRemovesAllVariantsAndRejectsStaleWrites(): void
+    {
+        [$collectionKey, $documentKey, $firstHash] = $this->database->getCacheKeys('projects', 'project');
+        [, , $secondHash] = $this->database->getCacheKeys('projects', 'project', ['name']);
+        $this->cacheAdapter->save($collectionKey, 'legacy', $documentKey);
+        $this->cacheAdapter->save($documentKey, 'first', $firstHash);
+        $this->cacheAdapter->save($documentKey, 'second', $secondHash);
+        $lease = $this->cacheAdapter->getGeneration($documentKey);
+
+        $this->assertTrue($this->database->purgeCachedDocument('projects', 'project'));
+
+        $this->assertFalse($this->cacheAdapter->load($collectionKey, Database::TTL, $documentKey));
+        $this->assertFalse($this->cacheAdapter->load($documentKey, Database::TTL, $firstHash));
+        $this->assertFalse($this->cacheAdapter->load($documentKey, Database::TTL, $secondHash));
+        $this->cacheAdapter->saveWithLease($documentKey, 'stale', $firstHash, $lease);
+        $this->assertFalse($this->cacheAdapter->load($documentKey, Database::TTL, $firstHash));
+        $this->assertSame('fresh', $this->database->getDocument('projects', 'project')->getAttribute('name'));
+    }
+
     public function testStaleListWriteAfterConcurrentPurgeIsRejected(): void
     {
         $hash = 'list-hash';

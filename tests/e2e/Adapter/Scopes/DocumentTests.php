@@ -2684,6 +2684,66 @@ trait DocumentTests
         $this->assertEquals($movieDocuments[0]->getId(), $documents[0]->getId());
     }
 
+    public function testFindAttributeNamedAfterInternalKey(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $database->createCollection(__FUNCTION__);
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'collection', Database::VAR_STRING, 128, false));
+
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => ID::custom('clash'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'collection' => 'value',
+        ]));
+
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => ID::custom('clashNull'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'collection' => null,
+        ]));
+
+        $documents = $database->find(__FUNCTION__, [Query::orderAsc('$id')]);
+
+        $this->assertCount(2, $documents);
+        $this->assertEquals('value', $documents[0]->getAttribute('collection'));
+        // getAttribute() reads a dropped key and a null value the same way
+        $this->assertTrue($documents[1]->offsetExists('collection'));
+    }
+
+    public function testFindAttributeNamedAfterTenantKey(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection(__FUNCTION__);
+        $this->assertEquals(true, $database->createAttribute(__FUNCTION__, 'tenant', Database::VAR_STRING, 128, false));
+
+        $database->createDocument(__FUNCTION__, new Document([
+            '$id' => ID::custom('clash'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'tenant' => 'value',
+        ]));
+
+        // A select leaves _tenant out of the projection, so $tenant is null at decode
+        $documents = $database->find(__FUNCTION__, [Query::select(['tenant'])]);
+
+        $this->assertCount(1, $documents);
+        $this->assertEquals('value', $documents[0]->getAttribute('tenant'));
+    }
+
     public function testFindCheckPermissions(): void
     {
         /** @var Database $database */

@@ -1366,7 +1366,7 @@ class Mongo extends Adapter
                 $value = [$value];
             }
 
-            foreach ($value as &$node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case Database::VAR_INTEGER:
                     case Database::VAR_BIGINT:
@@ -1384,8 +1384,8 @@ class Mongo extends Adapter
                     default:
                         break;
                 }
+                $value[$index] = $node;
             }
-            unset($node);
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
 
@@ -1468,7 +1468,7 @@ class Mongo extends Adapter
                 $value = [$value];
             }
 
-            foreach ($value as &$node) {
+            foreach ($value as $index => $node) {
                 switch ($type) {
                     case Database::VAR_DATETIME:
                         if (!($node instanceof UTCDateTime)) {
@@ -1485,8 +1485,8 @@ class Mongo extends Adapter
                     default:
                         break;
                 }
+                $value[$index] = $node;
             }
-            unset($node);
             $document->setAttribute($key, ($array) ? $value : $value[0]);
         }
         $indexes = $collection->getAttribute('indexes');

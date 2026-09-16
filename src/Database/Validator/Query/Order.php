@@ -8,7 +8,7 @@ use Utopia\Database\Query;
 class Order extends Base
 {
     /**
-     * @var array<int|string, mixed>
+     * @var array<int|string, true>
      */
     protected array $schema = [];
 
@@ -19,7 +19,7 @@ class Order extends Base
     public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
     {
         foreach ($attributes as $attribute) {
-            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = $attribute->getArrayCopy();
+            $this->schema[$attribute->getAttribute('key', $attribute->getAttribute('$id'))] = true;
         }
     }
 

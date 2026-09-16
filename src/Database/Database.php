@@ -146,7 +146,6 @@ class Database
     public const RELATION_SIDE_CHILD = 'child';
 
     public const RELATION_MAX_DEPTH = 3;
-    public const RELATION_QUERY_CHUNK_SIZE = 5000;
 
     // Orders
     public const ORDER_ASC = 'ASC';
@@ -4974,7 +4973,7 @@ class Database
         }
 
         if (empty($id)) {
-            return new Document();
+            return $this->createDocumentInstance($collection, []);
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
@@ -5984,7 +5983,7 @@ class Database
         $relatedDocuments = [];
 
         // Process in chunks to avoid exceeding query value limits
-        foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+        foreach (\array_chunk($uniqueRelatedIds, \max(1, $this->maxQueryValues)) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal('$id', $chunk),
                 Query::limit(PHP_INT_MAX),
@@ -6076,7 +6075,7 @@ class Database
 
         $relatedDocuments = [];
 
-        foreach (\array_chunk($parentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+        foreach (\array_chunk($parentIds, \max(1, $this->maxQueryValues)) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX),
@@ -6173,7 +6172,7 @@ class Database
 
         $relatedDocuments = [];
 
-        foreach (\array_chunk($childIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+        foreach (\array_chunk($childIds, \max(1, $this->maxQueryValues)) as $chunk) {
             $chunkDocs = $this->find($relatedCollection->getId(), [
                 Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX),
@@ -6252,7 +6251,7 @@ class Database
 
         $junctions = [];
 
-        foreach (\array_chunk($documentIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+        foreach (\array_chunk($documentIds, \max(1, $this->maxQueryValues)) as $chunk) {
             $chunkJunctions = $this->skipRelationships(fn () => $this->find($junction, [
                 Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX)
@@ -6282,7 +6281,7 @@ class Database
             $uniqueRelatedIds = array_unique($relatedIds);
             $foundRelated = [];
 
-            foreach (\array_chunk($uniqueRelatedIds, self::RELATION_QUERY_CHUNK_SIZE) as $chunk) {
+            foreach (\array_chunk($uniqueRelatedIds, \max(1, $this->maxQueryValues)) as $chunk) {
                 $chunkDocs = $this->find($relatedCollection->getId(), [
                     Query::equal('$id', $chunk),
                     Query::limit(PHP_INT_MAX),
@@ -9272,7 +9271,7 @@ class Database
             return true;
         }
 
-        [$collectionKey, $documentKey] = $this->getCacheKeys($collectionId, $id);
+        [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $id);
 
         $this->cache->purge($collectionKey, $documentKey);
         $this->cache->purge($documentKey);
@@ -10129,7 +10128,11 @@ class Database
         }
 
         $dropped = [];
-        foreach (\array_keys($document->getArrayCopy()) as $key) {
+        $documentKeys = [];
+        foreach ($document as $key => $value) {
+            $documentKeys[] = $key;
+        }
+        foreach ($documentKeys as $key) {
             if (\str_starts_with($key, '$') || isset($known[$key])) {
                 continue;
             }
@@ -10210,12 +10213,14 @@ class Database
                 $value = ($array) ? $value : [$value];
             }
 
-            foreach ($value as $index => $node) {
-                if ($node !== null) {
-                    foreach ($filters as $filter) {
-                        $node = $this->encodeAttribute($filter, $node, $document);
+            if (!empty($filters)) {
+                foreach ($value as $index => $node) {
+                    if ($node !== null) {
+                        foreach ($filters as $filter) {
+                            $node = $this->encodeAttribute($filter, $node, $document);
+                        }
+                        $value[$index] = $node;
                     }
-                    $value[$index] = $node;
                 }
             }
 
@@ -10265,8 +10270,11 @@ class Database
             }
         }
 
+        $internalKeys = [];
+
         foreach ($this->getInternalAttributes() as $attribute) {
             $attributes[] = $attribute;
+            $internalKeys[$attribute['$id']] = true;
         }
 
         $hasRelationshipSelections = false;
@@ -10288,7 +10296,11 @@ class Database
                 continue;
             }
 
-            if (\is_null($value)) {
+            // filter() strips the leading "$" off an internal key, leaving a name a user
+            // attribute is allowed to have ("$collection" -> "collection"). An internal value
+            // never reaches the document under that name, so the alias lookup below has
+            // nothing of its own to find and can only steal the user's attribute.
+            if (\is_null($value) && !isset($internalKeys[$key])) {
                 $filteredKey = $this->adapter->filter($key);
                 $value = $document->getAttribute($filteredKey);
 
@@ -10313,9 +10325,10 @@ class Database
                 || \in_array($key, $selections)
                 || \in_array('*', $selections);
 
-            if ($selected || $hasRelationshipSelections) {
+            if (!empty($filters) && ($selected || $hasRelationshipSelections)) {
+                $filters = \array_reverse($filters);
                 foreach ($value as $index => $node) {
-                    foreach (\array_reverse($filters) as $filter) {
+                    foreach ($filters as $filter) {
                         $node = $this->decodeAttribute($filter, $node, $document, $key);
                     }
                     $value[$index] = $node;
@@ -10387,33 +10400,35 @@ class Database
                 $value = [$value];
             }
 
-            foreach ($value as $index => $node) {
-                switch ($type) {
-                    case self::VAR_ID:
-                        // Disabled until Appwrite migrates to use real int ID's for MySQL
-                        //$type = $this->adapter->getIdAttributeType();
-                        //\settype($node, $type);
-                        $node = (string)$node;
-                        break;
-                    case self::VAR_BOOLEAN:
-                        $node = (bool)$node;
-                        break;
-                    case self::VAR_INTEGER:
-                        $node = (int)$node;
-                        break;
-                    case self::VAR_BIGINT:
-                        if (\is_string($node) && BigIntValidator::fitsPhpInt($node, $signed)) {
+            if (\in_array($type, [self::VAR_ID, self::VAR_BOOLEAN, self::VAR_INTEGER, self::VAR_BIGINT, self::VAR_FLOAT], true)) {
+                foreach ($value as $index => $node) {
+                    switch ($type) {
+                        case self::VAR_ID:
+                            // Disabled until Appwrite migrates to use real int ID's for MySQL
+                            //$type = $this->adapter->getIdAttributeType();
+                            //\settype($node, $type);
+                            $node = (string)$node;
+                            break;
+                        case self::VAR_BOOLEAN:
+                            $node = (bool)$node;
+                            break;
+                        case self::VAR_INTEGER:
                             $node = (int)$node;
-                        }
-                        break;
-                    case self::VAR_FLOAT:
-                        $node = (float)$node;
-                        break;
-                    default:
-                        break;
-                }
+                            break;
+                        case self::VAR_BIGINT:
+                            if (\is_string($node) && BigIntValidator::fitsPhpInt($node, $signed)) {
+                                $node = (int)$node;
+                            }
+                            break;
+                        case self::VAR_FLOAT:
+                            $node = (float)$node;
+                            break;
+                        default:
+                            break;
+                    }
 
-                $value[$index] = $node;
+                    $value[$index] = $node;
+                }
             }
 
             $document->setAttribute($key, ($array) ? $value : $value[0]);
@@ -10741,10 +10756,9 @@ class Database
     /**
      * @param string $collectionId
      * @param string|null $documentId
-     * @param array<string> $selects
-     * @return array{0: string, 1: string, 2: string}
+     * @return array{0: string, 1: string}
      */
-    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    public function getCacheBaseKeys(string $collectionId, ?string $documentId = null): array
     {
         if ($this->adapter->getSupportForHostname()) {
             $hostname = $this->adapter->getHostname();
@@ -10769,9 +10783,20 @@ class Database
             $collectionId
         );
 
-        if ($documentId) {
-            $documentKey = $documentHashKey = "{$collectionKey}:{$documentId}";
+        return [$collectionKey, $documentId ? "{$collectionKey}:{$documentId}" : ''];
+    }
 
+    /**
+     * @param string $collectionId
+     * @param string|null $documentId
+     * @param array<string> $selects
+     * @return array{0: string, 1: string, 2: string}
+     */
+    public function getCacheKeys(string $collectionId, ?string $documentId = null, array $selects = []): array
+    {
+        [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $documentId);
+
+        if ($documentId) {
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
@@ -10785,7 +10810,7 @@ class Database
 
         return [
             $collectionKey,
-            $documentKey ?? '',
+            $documentKey,
             $documentHashKey ?? ''
         ];
     }

@@ -334,7 +334,16 @@ class ColumnSecurityFlagTest extends TestCase
         $stored = $this->authorization->skip(fn () => $this->database->getDocument('secured', 'd1'));
 
         $this->assertSame('Robert', $stored->getAttribute('name'));
-        $this->assertSame(['read("user:hr", "salary")'], $stored->getPermissions());
+
+        // the grant came through the update intact: hr still reads salary, and the
+        // scope is still a scope -- the name it was never granted stays masked
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        $document = $this->database->getDocument('secured', 'd1');
+
+        $this->assertSame(100000, $document->getAttribute('salary'));
+        $this->assertNull($document->getAttribute('name'));
     }
 
     /**

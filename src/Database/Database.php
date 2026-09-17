@@ -8279,8 +8279,10 @@ class Database
             $old = $existingDocs[$this->tenantKey($document)] ?? new Document();
 
             // Captured here, before encoding materialises every column of the
-            // collection. Keyed by id because the batches are re-indexed later.
-            $suppliedColumns[$document->getId()] = self::suppliedColumns($document);
+            // collection. Keyed by tenant identity, not id: the batches are re-indexed
+            // later, and in tenant-per-document mode one batch can carry the same id for
+            // two tenants, whose exemptions must not overwrite each other.
+            $suppliedColumns[$this->tenantKey($document)] = self::suppliedColumns($document);
 
             $document = $this->removeUnknownAttributes($collection, $document);
 
@@ -8546,7 +8548,7 @@ class Database
                     // not $doc. $doc is the adapter's merged result, so using it would
                     // exempt every stored column and mask nothing at all.
                     $onNext && $onNext(
-                        $this->maskWriteResponse($collection, $doc, $suppliedColumns[$doc->getId()] ?? []),
+                        $this->maskWriteResponse($collection, $doc, $suppliedColumns[$this->tenantKey($doc)] ?? []),
                         $old->isEmpty() ? null : $this->maskUnreadableColumns($collection, $old)
                     );
                 } catch (\Throwable $th) {

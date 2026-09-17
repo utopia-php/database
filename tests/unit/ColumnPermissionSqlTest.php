@@ -110,13 +110,37 @@ class ColumnPermissionSqlTest extends TestCase
         return $shape;
     }
 
-    public function testColumnIsPersistedOnThePermissionsTable(): void
+    /**
+     * A column-scoped grant lives in two places: the _permissions JSON on the row, which
+     * drives masking, and a _perms row, which drives the find/count/sum gate. Re-scoping
+     * the grant to another column has to move both. If only the JSON is rewritten the
+     * filter still answers on the old column -- which is what happens when the permission
+     * diff compares roles and ignores the column.
+     */
+    public function testRescopingAGrantMovesBothTheMaskAndTheFilter(): void
     {
-        $rows = $this->authorization->skip(
-            fn () => $this->database->find('employees', [Query::equal('$id', ['e1'])])
+        $this->as(['any', 'user:hr']);
+
+        $this->assertSame(
+            ['e1' => ['name', 'salary']],
+            $this->shape($this->database->find('employees', [Query::greaterThan('salary', 95000)]))
         );
 
-        $this->assertSame(['read("user:hr", "salary")'], $rows[0]->getPermissions());
+        $this->authorization->skip(fn () => $this->database->updateDocument('employees', 'e1', new Document([
+            '$permissions' => [Permission::read(Role::user('hr'), 'name')],
+        ])));
+
+        $this->as(['any', 'user:hr']);
+
+        // the mask no longer yields salary...
+        $this->assertSame(
+            ['e1' => ['name'], 'e2' => ['name']],
+            $this->shape($this->database->find('employees'))
+        );
+
+        // ...and neither does the gate, so the row cannot be found through it
+        $this->assertSame([], $this->database->find('employees', [Query::greaterThan('salary', 95000)]));
+        $this->assertSame(0, $this->database->sum('employees', 'salary'));
     }
 
     /**

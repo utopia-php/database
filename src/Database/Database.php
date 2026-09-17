@@ -118,6 +118,22 @@ class Database
     public const MAX_ARRAY_INDEX_LENGTH = 255;
     public const MAX_UID_DEFAULT_LENGTH = 36;
 
+    /**
+     * Longest column name a permission may be scoped to.
+     *
+     * Bounded by InnoDB's 3072-byte index limit rather than by anything about column
+     * names. _index1 already spends 2092 of it -- _document 1020, _permission 1020,
+     * _type 48, _tenant 4 -- leaving 980 bytes, which is 244 characters in utf8mb4.
+     *
+     * MySQL enforces that limit; MariaDB is more permissive, so a change here has to
+     * be checked against MySQL specifically. Columns may be named up to 255
+     * characters, so a name between 245 and 255 cannot carry a column-scoped
+     * permission: the write is refused rather than silently truncated, and rather
+     * than indexed by prefix, where two names sharing 244 characters would be
+     * rejected as duplicates of each other.
+     */
+    public const MAX_PERMISSION_COLUMN_LENGTH = 244;
+
     // Maximum byte capacity for TEXT
     public const MAX_TEXT_BYTES = 65535;
     public const MAX_MEDIUMTEXT_BYTES = 16777215;
@@ -5422,6 +5438,23 @@ class Database
 
         foreach ($queries as $query) {
             if ($query->getMethod() === Query::TYPE_SELECT) {
+                continue;
+            }
+
+            // Query::and()/or() carry their filters as nested Query objects and expose
+            // no attribute of their own, so reading only the outer node would let a
+            // filter on an unreadable column through and reopen the oracle the gate
+            // exists to close.
+            if (\in_array($query->getMethod(), [Query::TYPE_AND, Query::TYPE_OR], true)) {
+                $nested = \array_filter(
+                    $query->getValues(),
+                    fn ($value) => $value instanceof Query
+                );
+
+                foreach ($this->getQueriedColumns($nested) as $key) {
+                    $columns[$key] = true;
+                }
+
                 continue;
             }
 

@@ -15,6 +15,73 @@ use Utopia\Database\Query;
 
 trait PermissionTests
 {
+    /**
+     * Column-scoped permissions, exercised through the public API so every adapter is
+     * held to the same observable behaviour rather than to one adapter's internals.
+     */
+    public function testColumnScopedPermissionsMaskAndGate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('columnPerms', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('columnPerms', 'name', Database::VAR_STRING, 128, false);
+            $database->createAttribute('columnPerms', 'salary', Database::VAR_INTEGER, 8, false);
+
+            // one column each, to different roles
+            $database->createDocument('columnPerms', new Document([
+                '$id' => ID::custom('cp1'),
+                '$permissions' => [
+                    Permission::read(Role::user('viewer'), 'name'),
+                    Permission::read(Role::user('payroll'), 'salary'),
+                ],
+                'name' => 'Bob',
+                'salary' => 100000,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:viewer');
+
+        // masked to the granted column
+        $document = $database->getDocument('columnPerms', 'cp1');
+        $this->assertSame('Bob', $document->getAttribute('name'));
+        $this->assertNull($document->getAttribute('salary'));
+
+        // the row is visible, because one readable column is enough
+        $this->assertCount(1, $database->find('columnPerms'));
+
+        // but a filter on the column this role cannot read must not act as an oracle
+        $this->assertSame([], $database->find('columnPerms', [Query::greaterThan('salary', 1)]));
+        $this->assertSame(0, $database->count('columnPerms', [Query::greaterThan('salary', 1)]));
+        $this->assertSame(0, $database->sum('columnPerms', 'salary'));
+
+        // nor through a nested filter
+        $this->assertSame([], $database->find('columnPerms', [
+            Query::or([Query::greaterThan('salary', 1), Query::equal('name', ['nobody'])]),
+        ]));
+
+        // the other role sees the mirror image
+        $authorization->cleanRoles();
+        $authorization->addRole('user:payroll');
+
+        $document = $database->getDocument('columnPerms', 'cp1');
+        $this->assertNull($document->getAttribute('name'));
+        $this->assertSame(100000, $document->getAttribute('salary'));
+        $this->assertSame(100000, $database->sum('columnPerms', 'salary'));
+
+        $authorization->skip(fn () => $database->deleteCollection('columnPerms'));
+    }
+
     public function testUpdatingASharedDefinitionKeepsItsPermissionRowsTenantless(): void
     {
         /** @var Database $database */

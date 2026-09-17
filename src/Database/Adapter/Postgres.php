@@ -256,7 +256,7 @@ class Postgres extends SQL
                 _tenant INTEGER DEFAULT NULL,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
-                _column VARCHAR(255) NOT NULL DEFAULT '',
+                _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
                 _document VARCHAR(255) NOT NULL
             );
         ";
@@ -2186,7 +2186,7 @@ class Postgres extends SQL
         try {
             $this->getPDO()->prepare("
                 ALTER TABLE {$table}
-                ADD COLUMN IF NOT EXISTS _column VARCHAR(255) NOT NULL DEFAULT ''
+                ADD COLUMN IF NOT EXISTS _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT ''
             ")->execute();
 
             if (!$hasIndex) {

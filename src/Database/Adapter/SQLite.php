@@ -421,7 +421,7 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
-				`_column` VARCHAR(255) NOT NULL DEFAULT '',
+				`_column` VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
 				`_document` VARCHAR(255) NOT NULL
 			)
 		";
@@ -1576,7 +1576,7 @@ class SQLite extends MariaDB
         if (!$hasColumn) {
             try {
                 $this->getPDO()->prepare("
-                    ALTER TABLE `{$table}` ADD COLUMN `_column` VARCHAR(255) NOT NULL DEFAULT ''
+                    ALTER TABLE `{$table}` ADD COLUMN `_column` VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT ''
                 ")->execute();
             } catch (PDOException $e) {
                 throw $this->processException($e);

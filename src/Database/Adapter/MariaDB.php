@@ -194,12 +194,19 @@ class MariaDB extends SQL
         // permissions reads. It is NOT NULL on purpose: MySQL and MariaDB treat
         // NULLs as distinct in a UNIQUE index, so a nullable _column would let
         // duplicate permission rows slip past _index1.
+        //
+        // Sized to MAX_UID_DEFAULT_LENGTH rather than the 255 the other string members
+        // use. _index1 holds four of those, and in utf8mb4 a fifth VARCHAR(255) member
+        // takes the key past InnoDB's 3072-byte limit -- MySQL refuses the CREATE with
+        // "Specified key was too long", though MariaDB allows it, so testing on one
+        // says nothing about the other. The Permissions validator already caps a
+        // scoped column at this same constant, so nothing storable is lost.
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
                 _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
-                _column VARCHAR(255) NOT NULL DEFAULT '',
+                _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
                 _document VARCHAR(255) NOT NULL,
                 PRIMARY KEY (_id),
         ";
@@ -1854,7 +1861,7 @@ class MariaDB extends SQL
             if (!$hasColumn) {
                 $this->getPDO()->prepare("
                     ALTER TABLE {$table}
-                    ADD COLUMN _column VARCHAR(255) NOT NULL DEFAULT ''
+                    ADD COLUMN _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT ''
                 ")->execute();
             }
 

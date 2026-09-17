@@ -2486,19 +2486,68 @@ class Mongo extends Adapter
             }
         }
 
-        $columns = \array_keys($columns);
-
         $permissions = [];
 
         foreach ($this->authorization->getRoles() as $role) {
             $permissions[] = $type . '("' . $role . '")';
 
-            foreach ($columns as $column) {
+            foreach (\array_keys($columns) as $column) {
                 $permissions[] = $type . '("' . $role . '", "' . $column . '")';
             }
         }
 
         return $permissions;
+    }
+
+    /**
+     * Candidates that grant one specific column: the unscoped form, and that column.
+     *
+     * The row filter enumerates every column, because a grant on any one of them
+     * makes the row visible. That is the wrong test for a query that reads a column's
+     * value -- a grant on "name" would let a filter on "salary" through and expose
+     * the hidden value by which rows come back. This narrows the set to the grants
+     * that actually cover the column being read.
+     *
+     * @param string $type
+     * @param string $column
+     * @return list<string>
+     */
+    private function columnPermissionStrings(string $type, string $column): array
+    {
+        $permissions = [];
+
+        foreach ($this->authorization->getRoles() as $role) {
+            $permissions[] = $type . '("' . $role . '")';
+            $permissions[] = $type . '("' . $role . '", "' . $column . '")';
+        }
+
+        return $permissions;
+    }
+
+    /**
+     * Require read access to each of these columns on every matched document.
+     *
+     * @param array<string, mixed> $filters
+     * @param array<string> $columnPermissions
+     * @param string $type
+     * @return array<string, mixed>
+     */
+    private function applyColumnPermissions(array $filters, array $columnPermissions, string $type): array
+    {
+        if (empty($columnPermissions) || !$this->authorization->getStatus()) {
+            return $filters;
+        }
+
+        // One clause per column, ANDed: a document has to grant every column the
+        // query reads, not merely one of them. Expressed through $and because each
+        // clause constrains the same _permissions field.
+        foreach ($columnPermissions as $column) {
+            $filters['$and'][] = [
+                '_permissions' => ['$in' => $this->columnPermissionStrings($type, $column)],
+            ];
+        }
+
+        return $filters;
     }
 
     /**
@@ -2540,6 +2589,8 @@ class Mongo extends Adapter
         if ($this->authorization->getStatus()) {
             $filters['_permissions']['$in'] = $this->permissionStrings($forPermission, $collection);
         }
+
+        $filters = $this->applyColumnPermissions($filters, $columnPermissions, Database::PERMISSION_READ);
 
         $options = [];
 
@@ -2794,6 +2845,8 @@ class Mongo extends Adapter
             $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ, $collection);
         }
 
+        $filters = $this->applyColumnPermissions($filters, $columnPermissions, Database::PERMISSION_READ);
+
         /**
          * Use MongoDB aggregation pipeline for accurate counting
          * Accuracy and Sharded Clusters
@@ -2893,6 +2946,8 @@ class Mongo extends Adapter
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
             $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ, $collection);
         }
+
+        $filters = $this->applyColumnPermissions($filters, $columnPermissions, Database::PERMISSION_READ);
 
         // using aggregation to get sum an attribute as described in
         // https://docs.mongodb.com/manual/reference/method/db.collection.aggregate/
@@ -4235,7 +4290,7 @@ class Mongo extends Adapter
 
     public function getSupportForColumnPermissions(): bool
     {
-        return false;
+        return true;
     }
 
     /**

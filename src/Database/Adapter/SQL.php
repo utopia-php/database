@@ -2162,8 +2162,11 @@ abstract class SQL extends Adapter
         // predicate -- once a batch is repointed or deleted it no longer matches
         // _column = :_old, so the next pass returns the following batch.
         while (true) {
+            // The primary key comes back alongside the document id so the mutation
+            // below can address these rows directly. Matching on _column again would
+            // re-find them through a predicate that is not a leading index column.
             $stmt = $this->getPDO()->prepare("
-                SELECT DISTINCT _document
+                SELECT _id, _document
                 FROM {$table}
                 WHERE _column = :_column
                 {$tenantQuery}
@@ -2175,12 +2178,15 @@ abstract class SQL extends Adapter
             }
             $this->execute($stmt);
 
-            $documents = $stmt->fetchAll(\PDO::FETCH_COLUMN);
+            $rows = $stmt->fetchAll();
             $stmt->closeCursor();
 
-            if (empty($documents)) {
+            if (empty($rows)) {
                 break;
             }
+
+            $sequences = \array_column($rows, '_id');
+            $documents = \array_values(\array_unique(\array_column($rows, '_document')));
 
             $placeholders = \implode(', ', \array_map(
                 fn ($index) => ":_uid_{$index}",
@@ -2191,35 +2197,124 @@ abstract class SQL extends Adapter
             // fact, so they move together, scoped to this batch.
             $updated = [...$updated, ...$this->repointPermissionsJson($name, $documents, $placeholders, $tenantQuery, $old, $new)];
 
+            if (!\is_null($new)) {
+                // A document can already hold the same role and action scoped to the
+                // destination column. Repointing the old scope onto it would then be a
+                // second identical row, which _index1 refuses -- and by this point the
+                // physical column has been renamed, so the failure would leave the
+                // schema renamed with permissions still describing the old state.
+                // The old scope is redundant once the destination exists, so drop it
+                // instead of repointing it.
+                $this->dropCollidingColumnPermissions($table, $documents, $placeholders, $tenantQuery, $old, $new);
+            }
+
+            // Addressed by primary key. Rows the collision pass above already removed
+            // simply match nothing.
+            $sequencePlaceholders = \implode(', ', \array_map(
+                fn ($index) => ":_id_{$index}",
+                \array_keys($sequences)
+            ));
+
             if (\is_null($new)) {
                 $mutate = $this->getPDO()->prepare("
                     DELETE FROM {$table}
-                    WHERE _column = :_old
-                      AND _document IN ({$placeholders})
-                    {$tenantQuery}
+                    WHERE _id IN ({$sequencePlaceholders})
                 ");
             } else {
                 $mutate = $this->getPDO()->prepare("
                     UPDATE {$table}
                     SET _column = :_new
-                    WHERE _column = :_old
-                      AND _document IN ({$placeholders})
-                    {$tenantQuery}
+                    WHERE _id IN ({$sequencePlaceholders})
                 ");
                 $mutate->bindValue(':_new', $new);
             }
 
-            $mutate->bindValue(':_old', $old);
-            foreach ($documents as $index => $id) {
-                $mutate->bindValue(":_uid_{$index}", $id);
-            }
-            if ($this->sharedTables) {
-                $mutate->bindValue(':_tenant', $this->tenant);
+            foreach ($sequences as $index => $sequence) {
+                $mutate->bindValue(":_id_{$index}", $sequence);
             }
             $this->execute($mutate);
         }
 
         return $updated;
+    }
+
+    /**
+     * Drop old-column rows whose destination scope already exists on the same
+     * document, role and action.
+     *
+     * @param string $table
+     * @param array<string> $documents
+     * @param string $placeholders
+     * @param string $tenantQuery
+     * @param string $old
+     * @param string $new
+     * @return void
+     * @throws DatabaseException
+     */
+    private function dropCollidingColumnPermissions(
+        string $table,
+        array $documents,
+        string $placeholders,
+        string $tenantQuery,
+        string $old,
+        string $new
+    ): void {
+        $stmt = $this->getPDO()->prepare("
+            SELECT _document, _type, _permission, _column
+            FROM {$table}
+            WHERE _column IN (:_old, :_new)
+              AND _document IN ({$placeholders})
+            {$tenantQuery}
+        ");
+        $stmt->bindValue(':_old', $old);
+        $stmt->bindValue(':_new', $new);
+        foreach ($documents as $index => $id) {
+            $stmt->bindValue(":_uid_{$index}", $id);
+        }
+        if ($this->sharedTables) {
+            $stmt->bindValue(':_tenant', $this->tenant);
+        }
+        $this->execute($stmt);
+
+        $rows = $stmt->fetchAll();
+        $stmt->closeCursor();
+
+        // Resolved here rather than in SQL: a DELETE whose subquery reads the table it
+        // deletes from is rejected by MySQL, and the workarounds differ per engine.
+        $seen = [];
+        foreach ($rows as $row) {
+            if ($row['_column'] === $new) {
+                $seen[$row['_document'] . "\0" . $row['_type'] . "\0" . $row['_permission']] = true;
+            }
+        }
+
+        $delete = $this->getPDO()->prepare("
+            DELETE FROM {$table}
+            WHERE _document = :_document
+              AND _type = :_type
+              AND _permission = :_permission
+              AND _column = :_old
+            {$tenantQuery}
+        ");
+
+        foreach ($rows as $row) {
+            if ($row['_column'] !== $old) {
+                continue;
+            }
+
+            if (!isset($seen[$row['_document'] . "\0" . $row['_type'] . "\0" . $row['_permission']])) {
+                continue;
+            }
+
+            $delete->bindValue(':_document', $row['_document']);
+            $delete->bindValue(':_type', $row['_type']);
+            $delete->bindValue(':_permission', $row['_permission']);
+            $delete->bindValue(':_old', $old);
+            if ($this->sharedTables) {
+                $delete->bindValue(':_tenant', $this->tenant);
+            }
+            $this->execute($delete);
+        }
     }
 
     /**
@@ -2305,7 +2400,7 @@ abstract class SQL extends Adapter
                 continue;
             }
 
-            $update->bindValue(':_permissions', \json_encode($rewritten));
+            $update->bindValue(':_permissions', \json_encode(\array_values(\array_unique($rewritten))));
             $update->bindValue(':_uid', $row['_uid']);
             if ($this->sharedTables) {
                 $update->bindValue(':_tenant', $this->tenant);

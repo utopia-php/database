@@ -2103,12 +2103,77 @@ class Memory extends Adapter
      */
     public function renameColumnPermissions(Document $collection, string $old, string $new): array
     {
-        return [];
+        return $this->repointColumnPermissions($collection, $old, $new);
     }
 
     public function deleteColumnPermissions(Document $collection, string $column): array
     {
-        return [];
+        return $this->repointColumnPermissions($collection, $column, null);
+    }
+
+    /**
+     * Move or drop the permissions scoped to one column.
+     *
+     * Only the stored _permissions of each row are rewritten. The permission indexes
+     * this adapter keeps are built from getPermissionsByType(), which strips the
+     * column, so they hold roles alone and nothing in them refers to a column name.
+     * Column access is decided from the row's own permissions by rowGrantsColumns(),
+     * which is why leaving these unrewritten would silently revoke access after a
+     * rename, and let a recreated column inherit grants after a delete.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string|null $new new column key, or null to drop the permissions
+     * @return array<string> ids of documents whose permissions changed
+     * @throws DatabaseException
+     */
+    private function repointColumnPermissions(Document $collection, string $old, ?string $new): array
+    {
+        $key = $this->key($collection->getId());
+        $updated = [];
+
+        foreach ($this->data[$key]['documents'] ?? [] as $documentKey => $row) {
+            $permissions = $row['_permissions'] ?? [];
+
+            if (!\is_array($permissions)) {
+                continue;
+            }
+
+            $rewritten = [];
+            $changed = false;
+
+            foreach ($permissions as $permission) {
+                $parsed = Permission::parse($permission);
+
+                if ($parsed->getColumn() !== $old) {
+                    $rewritten[] = $permission;
+                    continue;
+                }
+
+                $changed = true;
+
+                if (\is_null($new)) {
+                    continue;
+                }
+
+                $rewritten[] = (new Permission(
+                    $parsed->getPermission(),
+                    $parsed->getRole(),
+                    $parsed->getIdentifier(),
+                    $parsed->getDimension(),
+                    $new
+                ))->toString();
+            }
+
+            if (!$changed) {
+                continue;
+            }
+
+            $this->data[$key]['documents'][$documentKey]['_permissions'] = \array_values(\array_unique($rewritten));
+            $updated[] = $row['_uid'] ?? $documentKey;
+        }
+
+        return $updated;
     }
 
     public function prepareColumnPermissions(Document $collection): bool

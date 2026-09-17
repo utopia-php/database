@@ -35,7 +35,7 @@ class Permissions extends Roles
         $this->length = $length;
         $this->allowed = $allowed;
         $this->columns = $columns;
-        $this->key = new Key();
+        $this->key = new Key(maxLength: Database::MAX_PERMISSION_COLUMN_LENGTH);
     }
 
     /**

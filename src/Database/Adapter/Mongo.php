@@ -23,6 +23,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -4302,24 +4303,186 @@ class Mongo extends Adapter
      * @param string $new
      * @return array<string>
      */
+    /**
+     * Nothing to prepare: permissions live inline on each document, so this adapter
+     * has no permissions table to widen.
+     *
+     * @param Document $collection
+     * @return bool
+     */
+    public function prepareColumnPermissions(Document $collection): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is any permission in this collection still scoped to a column?
+     *
+     * Read by the guard that refuses to disable column security while such grants
+     * exist. No index can answer it -- the column is inside an assembled string -- so
+     * it scans, stopping at the first document that has one.
+     *
+     * @param Document $collection
+     * @return bool
+     * @throws Exception
+     */
+    public function hasColumnPermissions(Document $collection): bool
+    {
+        if (!$collection->getAttribute('columnSecurity', false)) {
+            return false;
+        }
+
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $cursor = null;
+
+        while (true) {
+            $filters = [];
+
+            if (!\is_null($cursor)) {
+                $filters['_uid'] = ['$gt' => $cursor];
+            }
+
+            if ($this->sharedTables) {
+                $filters['_tenant'] = $this->getTenantFilters($collection->getId());
+            }
+
+            $found = $this->client->find($name, $filters, [
+                'limit' => Database::DELETE_BATCH_SIZE,
+                'sort' => ['_uid' => 1],
+                'projection' => ['_uid' => 1, '_permissions' => 1],
+            ])->cursor->firstBatch ?? [];
+
+            if (empty($found)) {
+                return false;
+            }
+
+            foreach ($found as $row) {
+                $row = $this->client->toArray($row);
+                $cursor = $row['_uid'];
+
+                foreach ($row['_permissions'] ?? [] as $permission) {
+                    if (!Permission::parse((string)$permission)->isForAllColumns()) {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
     public function renameColumnPermissions(Document $collection, string $old, string $new): array
     {
-        return [];
+        return $this->repointColumnPermissions($collection, $old, $new);
     }
 
     public function deleteColumnPermissions(Document $collection, string $column): array
     {
-        return [];
+        return $this->repointColumnPermissions($collection, $column, null);
     }
 
-    public function prepareColumnPermissions(Document $collection): bool
+    /**
+     * Move or drop the permissions scoped to one column.
+     *
+     * This adapter keeps permissions inline on each document and authorizes column
+     * access from those same strings, so a rename that left them alone would quietly
+     * revoke access under the old name, and a delete would leave grants for a column
+     * key to inherit if it were recreated.
+     *
+     * Documents are handled in batches. Only those still naming the old column are
+     * fetched, and rewriting them takes them out of that set, so the next pass
+     * returns the following batch without needing an offset.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string|null $new new column key, or null to drop the permissions
+     * @return array<string> ids of documents whose permissions changed
+     * @throws Exception
+     */
+    private function repointColumnPermissions(Document $collection, string $old, ?string $new): array
     {
-        return false;
-    }
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $updated = [];
+        $cursor = null;
 
-    public function hasColumnPermissions(Document $collection): bool
-    {
-        return false;
+        // Paged by _uid rather than by matching the column, because the column lives
+        // inside an assembled permission string that no index can answer. Renames and
+        // deletes are rare, administrator-initiated operations, so a single ordered
+        // pass is the right shape; the cursor is the last id seen, which keeps it
+        // stable as rows are rewritten underneath it.
+        while (true) {
+            $filters = [];
+
+            if (!\is_null($cursor)) {
+                $filters['_uid'] = ['$gt' => $cursor];
+            }
+
+            if ($this->sharedTables) {
+                $filters['_tenant'] = $this->getTenantFilters($collection->getId());
+            }
+
+            $found = $this->client->find($name, $filters, [
+                'limit' => Database::DELETE_BATCH_SIZE,
+                'sort' => ['_uid' => 1],
+                'projection' => ['_uid' => 1, '_permissions' => 1],
+            ])->cursor->firstBatch ?? [];
+
+            if (empty($found)) {
+                break;
+            }
+
+            foreach ($found as $row) {
+                $row = $this->client->toArray($row);
+                $cursor = $row['_uid'];
+
+                $permissions = $row['_permissions'] ?? [];
+
+                if (!\is_array($permissions)) {
+                    continue;
+                }
+
+                $rewritten = [];
+                $changed = false;
+
+                foreach ($permissions as $permission) {
+                    $parsed = Permission::parse((string)$permission);
+
+                    if ($parsed->getColumn() !== $old) {
+                        $rewritten[] = (string)$permission;
+                        continue;
+                    }
+
+                    $changed = true;
+
+                    if (\is_null($new)) {
+                        continue;
+                    }
+
+                    $rewritten[] = (new Permission(
+                        $parsed->getPermission(),
+                        $parsed->getRole(),
+                        $parsed->getIdentifier(),
+                        $parsed->getDimension(),
+                        $new
+                    ))->toString();
+                }
+
+                if (!$changed) {
+                    continue;
+                }
+
+                $where = ['_uid' => $row['_uid']];
+                if ($this->sharedTables) {
+                    $where['_tenant'] = $this->getTenantFilters($collection->getId());
+                }
+
+                $this->client->update($name, $where, [
+                    '$set' => ['_permissions' => \array_values(\array_unique($rewritten))],
+                ]);
+
+                $updated[] = $row['_uid'];
+            }
+        }
+
+        return $updated;
     }
 
     /**

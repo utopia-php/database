@@ -5061,13 +5061,17 @@ class Database
                 }
             }
 
-            $document = $this->maskUnreadableColumns($collection, $document, $documentSecurity);
-
-            $this->trigger(self::EVENT_DOCUMENT_READ, $document);
-
+            // Before masking, as on the uncached path. isTtlExpired() reads the TTL
+            // attribute off the document, and masking can remove it -- a caller who
+            // cannot read that column would then see null, be told the document has
+            // not expired, and be handed an expired one from cache.
             if ($this->isTtlExpired($collection, $document)) {
                 return $this->createDocumentInstance($collection->getId(), []);
             }
+
+            $document = $this->maskUnreadableColumns($collection, $document, $documentSecurity);
+
+            $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
             return $document;
         }
@@ -5549,6 +5553,29 @@ class Database
     }
 
     /**
+     * Reduce a relationship value to what identifies it, for change detection.
+     *
+     * A relationship reads back as a Document, a list of Documents, an id, or a list
+     * of ids depending on how it was loaded, so the same link compares unequal to
+     * itself unless it is reduced to ids first.
+     *
+     * @param mixed $value
+     * @return mixed
+     */
+    private static function relationshipIdentity(mixed $value): mixed
+    {
+        if ($value instanceof Document) {
+            return $value->getId();
+        }
+
+        if (\is_array($value)) {
+            return \array_map(fn ($item) => self::relationshipIdentity($item), $value);
+        }
+
+        return $value;
+    }
+
+    /**
      * Reject a write that touches a column the current roles are restricted from at
      * collection level.
      *
@@ -5577,7 +5604,7 @@ class Database
         }
 
         foreach ($document as $key => $value) {
-            if (\str_starts_with($key, '$') || isset($relationships[$key])) {
+            if (\str_starts_with($key, '$')) {
                 continue;
             }
 
@@ -5585,6 +5612,9 @@ class Database
                 continue;
             }
 
+            // Relationships are attributes of the collection and are authorized as
+            // such. Exempting them let a caller granted one unrelated column supply a
+            // relationship value, which the relationship writer then persisted.
             if (!\in_array($key, $columns, true)) {
                 throw new AuthorizationException('Missing "' . $type . '" permission for column "' . $key . '".');
             }
@@ -5648,7 +5678,23 @@ class Database
                 continue;
             }
 
-            if (\in_array($key, $columns, true) || isset($relationships[$key])) {
+            if (\in_array($key, $columns, true)) {
+                continue;
+            }
+
+            // Relationships included. A merged update carries every attribute, so the
+            // comparison decides -- and for a relationship it runs on identity, since
+            // the same link can arrive as a Document, an id, or a list of either.
+            if (isset($relationships[$key])) {
+                $changed = !self::valuesEqual(
+                    self::relationshipIdentity($value),
+                    self::relationshipIdentity($old->getAttribute($key))
+                );
+
+                if ($changed) {
+                    throw new AuthorizationException('Missing "update" permission for column "' . $key . '".');
+                }
+
                 continue;
             }
 

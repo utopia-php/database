@@ -2226,13 +2226,20 @@ class Postgres extends SQL
      */
     protected function hasColumnPermissionsIndex(string $index): bool
     {
+        // Filtered by schema. pg_indexes spans every schema the connection can see,
+        // and index names are unique only within one -- two projects in their own
+        // schemas generate the same name for a collection with the same id. Without
+        // this, one project already migrated would make another look migrated too,
+        // and its index would silently stay on the narrow shape.
         $stmt = $this->getPDO()->prepare("
             SELECT 1
             FROM pg_indexes
-            WHERE indexname = :index
+            WHERE schemaname = :schema
+              AND indexname = :index
               AND indexdef LIKE '%_column%'
             LIMIT 1
         ");
+        $stmt->bindValue(':schema', $this->getDatabase());
         $stmt->bindValue(':index', $index);
         $stmt->execute();
 

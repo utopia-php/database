@@ -3,10 +3,15 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Permissions;
 
 class ColumnPermissionTest extends TestCase
@@ -95,34 +100,48 @@ class ColumnPermissionTest extends TestCase
     }
 
     /**
-     * A column-scoped permission must still resolve to a bare role, or every
-     * existing document-level authorization check silently breaks.
+     * A column-scoped permission still grants its role ordinary row-level access --
+     * the column narrows what is returned, it does not withhold the row. Asserted
+     * through a read rather than through the shape of the extracted permission list.
      */
-    public function testDocumentPermissionsByTypeReturnsRolesOnly(): void
+    public function testColumnScopedGrantStillGrantsTheRowToThatRole(): void
     {
-        $document = new Document(['$permissions' => [
-            'read("any")',
-            'read("user:1", "salary")',
-            'update("user:1", "name")',
-            'delete("user:1")',
-        ]]);
+        $authorization = new Authorization();
 
-        $this->assertSame(['any', 'user:1'], \array_values($document->getRead()));
-        $this->assertSame(['user:1'], \array_values($document->getUpdate()));
-        $this->assertSame(['user:1'], \array_values($document->getDelete()));
-    }
+        $database = new Database(new Memory(), new Cache(new NoCache()));
+        $database
+            ->setAuthorization($authorization)
+            ->setDatabase('columnPermissions')
+            ->setNamespace('cpt_' . \uniqid());
 
-    public function testDocumentPermissionsByTypeWithColumns(): void
-    {
-        $document = new Document(['$permissions' => [
-            'read("any")',
-            'read("user:1", "salary")',
-        ]]);
+        $database->create();
 
-        $this->assertSame([
-            ['role' => 'any', 'column' => Permission::COLUMN_ALL],
-            ['role' => 'user:1', 'column' => 'salary'],
-        ], $document->getPermissionsByTypeWithColumns('read'));
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('employees', 'name', Database::VAR_STRING, 128, false);
+            $database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('employees', new Document([
+                '$id' => 'e1',
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100000,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $document = $database->getDocument('employees', 'e1');
+
+        $this->assertFalse($document->isEmpty(), 'a column-scoped grant must still make the row visible');
+        $this->assertSame(100000, $document->getAttribute('salary'));
+        $this->assertNull($document->getAttribute('name'));
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:other');
+
+        $this->assertTrue($database->getDocument('employees', 'e1')->isEmpty());
     }
 
     public function testValidatorAcceptsColumnScopedReadCreateUpdate(): void

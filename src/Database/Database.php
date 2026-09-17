@@ -7322,7 +7322,11 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_UPDATE, $document);
 
-        return $document;
+        // Write scopes and read scopes are independent, so what the caller was
+        // allowed to change says nothing about what they may see. The merged document
+        // carries every stored column, and handing it back would let an update on one
+        // column return the rest.
+        return $this->maskUnreadableColumns($collection, $document);
     }
 
     /**
@@ -7555,7 +7559,10 @@ class Database
                     $doc = $this->decode($collection, $doc);
                 }
                 try {
-                    $onNext && $onNext($doc, $old[$index]);
+                    $onNext && $onNext(
+                        $this->maskUnreadableColumns($collection, $doc),
+                        $this->maskUnreadableColumns($collection, $old[$index])
+                    );
                 } catch (Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }
@@ -8456,7 +8463,10 @@ class Database
                 }
 
                 try {
-                    $onNext && $onNext($doc, $old->isEmpty() ? null : $old);
+                    $onNext && $onNext(
+                        $this->maskUnreadableColumns($collection, $doc),
+                        $old->isEmpty() ? null : $this->maskUnreadableColumns($collection, $old)
+                    );
                 } catch (\Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }

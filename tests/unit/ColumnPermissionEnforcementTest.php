@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
 /**
@@ -306,6 +307,89 @@ class ColumnPermissionEnforcementTest extends TestCase
         );
 
         $this->assertContains('read("team:audit", "salary")', $stored->getPermissions());
+    }
+
+    /**
+     * Write scopes and read scopes are independent, so being allowed to change a
+     * column says nothing about being allowed to see the rest of the row. The merged
+     * document a write returns carries every stored column, so it has to go through
+     * the same read masking a get would.
+     */
+    public function testUpdateResponseIsMaskedByReadPermissions(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createDocument('employees', new Document([
+                '$id' => 'w1',
+                '$permissions' => [
+                    Permission::update(Role::user('ed'), 'name'),   // may write name
+                    Permission::read(Role::user('ed'), 'email'),    // may read email
+                ],
+                'name' => 'Bob',
+                'email' => 'bob@example.com',
+                'salary' => '100000',
+            ]));
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:ed');
+
+        $returned = $this->database->updateDocument('employees', 'w1', new Document([
+            'name' => 'Robert',
+        ]));
+
+        $this->assertSame('bob@example.com', $returned->getAttribute('email'));
+        $this->assertNull($returned->getAttribute('name'), 'a writable column is not thereby readable');
+        $this->assertNull($returned->getAttribute('salary'), 'update response leaked a hidden column');
+
+        // the write itself still landed
+        $stored = $this->authorization->skip(
+            fn () => $this->database->getDocument('employees', 'w1')
+        );
+        $this->assertSame('Robert', $stored->getAttribute('name'));
+        $this->assertSame('100000', $stored->getAttribute('salary'));
+    }
+
+    public function testBulkUpdateCallbackPayloadIsMasked(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createDocument('employees', new Document([
+                '$id' => 'w2',
+                '$permissions' => [
+                    Permission::update(Role::user('ed'), 'name'),
+                    Permission::read(Role::user('ed'), 'email'),
+                ],
+                'name' => 'Bob',
+                'email' => 'bob@example.com',
+                'salary' => '100000',
+            ]));
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:ed');
+
+        $seen = [];
+
+        $this->database->updateDocuments(
+            'employees',
+            new Document(['name' => 'Bobby']),
+            [Query::equal('$id', ['w2'])],
+            100,
+            onNext: function (Document $document) use (&$seen) {
+                $seen[] = \array_keys(\array_filter(
+                    $document->getArrayCopy(),
+                    fn (string $key) => !\str_starts_with($key, '$'),
+                    ARRAY_FILTER_USE_KEY
+                ));
+            }
+        );
+
+        $this->assertSame([['email']], $seen, 'bulk callback leaked hidden columns');
+
+        $stored = $this->authorization->skip(
+            fn () => $this->database->getDocument('employees', 'w2')
+        );
+        $this->assertSame('Bobby', $stored->getAttribute('name'));
+        $this->assertSame('100000', $stored->getAttribute('salary'));
     }
 
     public function testUnscopedRoleMayUpdateAnyColumn(): void

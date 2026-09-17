@@ -212,14 +212,15 @@ class Mirror extends Database
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true): Document
+    public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, bool $columnSecurity = false): Document
     {
         $result = $this->source->createCollection(
             $id,
             $attributes,
             $indexes,
             $permissions,
-            $documentSecurity
+            $documentSecurity,
+            $columnSecurity
         );
 
         if ($this->destination === null) {
@@ -241,7 +242,8 @@ class Mirror extends Database
                 $attributes,
                 $indexes,
                 $permissions,
-                $documentSecurity
+                $documentSecurity,
+                $columnSecurity
             );
 
             $this->silent(function () use ($id) {
@@ -259,9 +261,9 @@ class Mirror extends Database
         return $result;
     }
 
-    public function updateCollection(string $id, array $permissions, bool $documentSecurity): Document
+    public function updateCollection(string $id, array $permissions, bool $documentSecurity, ?bool $columnSecurity = null): Document
     {
-        $result = $this->source->updateCollection($id, $permissions, $documentSecurity);
+        $result = $this->source->updateCollection($id, $permissions, $documentSecurity, $columnSecurity);
 
         if ($this->destination === null) {
             return $result;
@@ -277,7 +279,7 @@ class Mirror extends Database
                 );
             }
 
-            $this->destination->updateCollection($id, $permissions, $documentSecurity);
+            $this->destination->updateCollection($id, $permissions, $documentSecurity, $columnSecurity);
         } catch (\Throwable $err) {
             $this->logError('updateCollection', $err);
         }

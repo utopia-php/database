@@ -421,6 +421,7 @@ class SQLite extends MariaDB
 				{$tenantQuery}
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
+				`_column` VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
 				`_document` VARCHAR(255) NOT NULL
 			)
 		";
@@ -440,7 +441,7 @@ class SQLite extends MariaDB
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission'], [], []);
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {
@@ -1145,6 +1146,7 @@ class SQLite extends MariaDB
      */
     public function createDocument(Document $collection, Document $document): Document
     {
+        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1206,24 +1208,36 @@ class SQLite extends MariaDB
         }
 
         $permissions = [];
+        $permissionBinds = [];
         foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
+            foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
+                $role = \str_replace('"', '', $permission['role']);
                 $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', '{$document->getId()}' {$tenantQuery})";
+                if ($columnSecurity) {
+                    $columnBind = ":_column_{$type}_{$i}";
+                    $permissionBinds[$columnBind] = $permission['column'];
+                    $permissions[] = "('{$type}', '{$role}', {$columnBind}, '{$document->getId()}' {$tenantQuery})";
+                } else {
+                    $permissions[] = "('{$type}', '{$role}', '{$document->getId()}' {$tenantQuery})";
+                }
             }
         }
 
         if (!empty($permissions)) {
             $tenantQuery = $this->sharedTables ? ', _tenant' : '';
+            $columnColumn = $columnSecurity ? ', _column' : '';
 
             $queryPermissions = "
-				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _document {$tenantQuery})
+				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission{$columnColumn}, _document {$tenantQuery})
 				VALUES " . \implode(', ', $permissions);
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
 
             $stmtPermissions = $this->getPDO()->prepare($queryPermissions);
+
+            foreach ($permissionBinds as $key => $value) {
+                $stmtPermissions->bindValue($key, $value);
+            }
 
             if ($this->sharedTables) {
                 $stmtPermissions->bindValue(':_tenant', $this->tenant);
@@ -1261,6 +1275,7 @@ class SQLite extends MariaDB
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $spatialAttributes = $this->getSpatialAttributes($collection);
+        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1295,18 +1310,25 @@ class SQLite extends MariaDB
             $values = [];
             $binds = [];
             foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
-                    $binds[":_add_{$type}_{$i}"] = $permission;
+                    if ($columnSecurity) {
+                        $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantQuery})";
+                        $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
+                    } else {
+                        $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
+                    }
+
+                    $binds[":_add_{$type}_{$i}"] = $permission['role'];
                 }
             }
 
             if (!empty($values)) {
                 $tenantQuery = $this->sharedTables ? ', _tenant' : '';
+                $columnColumn = $columnSecurity ? ', _column' : '';
 
                 $sql = "
-			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission {$tenantQuery})
+			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission{$columnColumn} {$tenantQuery})
 			   VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -1513,6 +1535,104 @@ class SQLite extends MariaDB
      *
      * @return bool
      */
+    public function getSupportForColumnPermissions(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Give an older permissions table the shape column permissions need.
+     *
+     * SQLite has no INFORMATION_SCHEMA, so the column list comes from PRAGMA, and
+     * indexes are dropped and recreated rather than altered.
+     *
+     * @param Document $collection
+     * @return bool
+     * @throws DatabaseException
+     */
+    public function prepareColumnPermissions(Document $collection): bool
+    {
+        $id = $this->filter($collection->getId());
+        $table = "{$this->getNamespace()}_{$id}_perms";
+
+        $hasColumn = false;
+        foreach ($this->getPDO()->query("PRAGMA table_info(`{$table}`)")->fetchAll() as $column) {
+            if (($column['name'] ?? null) === '_column') {
+                $hasColumn = true;
+                break;
+            }
+        }
+
+        $hasIndex = $this->hasColumnPermissionsIndex($table);
+
+        // Both are checked, not just the column. A table created since column
+        // permissions existed has both already; and a prepare interrupted between
+        // adding the column and rebuilding the index leaves them disagreeing, which
+        // keying off the column alone would never repair.
+        if ($hasColumn && $hasIndex) {
+            return true;
+        }
+
+        if (!$hasColumn) {
+            try {
+                $this->getPDO()->prepare("
+                    ALTER TABLE `{$table}` ADD COLUMN `_column` VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT ''
+                ")->execute();
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
+        }
+
+        if ($hasIndex) {
+            return true;
+        }
+
+        // One transaction, so uniqueness is never absent. Dropping and recreating as
+        // two statements leaves a window in which a duplicate permission row can be
+        // inserted -- and the recreate then fails, leaving the table with no unique
+        // index at all. SQLite keeps DDL transactional, so the pair is atomic.
+        $this->startTransaction();
+
+        try {
+            $this->deleteIndex("{$id}_perms", '_index_1');
+            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
+        } catch (\Throwable $e) {
+            $this->rollbackTransaction();
+
+            throw $e;
+        }
+
+        $this->commitTransaction();
+
+        return true;
+    }
+
+    /**
+     * Does the unique permissions index already cover _column?
+     *
+     * Found through PRAGMA rather than by rebuilding the index name, so it cannot
+     * drift from however createIndex() chose to name it.
+     *
+     * @param string $table unprefixed physical table name
+     * @return bool
+     */
+    protected function hasColumnPermissionsIndex(string $table): bool
+    {
+        foreach ($this->getPDO()->query("PRAGMA index_list(`{$table}`)")->fetchAll() as $index) {
+            if ((int)($index['unique'] ?? 0) !== 1) {
+                continue;
+            }
+
+            foreach ($this->getPDO()->query("PRAGMA index_info(`{$index['name']}`)")->fetchAll() as $column) {
+                if (($column['name'] ?? null) === '_column') {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return true;

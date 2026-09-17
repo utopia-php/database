@@ -7,6 +7,7 @@ use ReflectionClass;
 use ReflectionMethod;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Validator\Authorization;
 
 class MongoPermissionStringsTest extends TestCase
@@ -61,9 +62,10 @@ class MongoPermissionStringsTest extends TestCase
 
     /**
      * @param list<string> $roles
+     * @param list<string> $columns
      * @return list<string>
      */
-    private function permissionStrings(array $roles, string $type): array
+    private function permissionStrings(array $roles, string $type, array $columns = []): array
     {
         $authorization = new Authorization();
         $authorization->enable();
@@ -77,8 +79,13 @@ class MongoPermissionStringsTest extends TestCase
 
         $method = new ReflectionMethod(Mongo::class, 'permissionStrings');
 
+        $collection = new Document([
+            '$id' => 'test',
+            'attributes' => \array_map(fn (string $column) => ['key' => $column], $columns),
+        ]);
+
         /** @var list<string> $values */
-        $values = $method->invoke($adapter, $type);
+        $values = $method->invoke($adapter, $type, $collection);
 
         return $values;
     }

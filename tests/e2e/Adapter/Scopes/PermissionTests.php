@@ -16,6 +16,78 @@ use Utopia\Database\Query;
 trait PermissionTests
 {
     /**
+     * A write response may show what the caller just wrote and what they may read --
+     * nothing else. Upsert is the path that got this wrong: the callback receives the
+     * adapter's merged result, so using that as the exemption source exempted every
+     * stored column and masked nothing.
+     */
+    public function testUpsertCallbackDoesNotExposeUnreadableColumns(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('upsertMask', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('upsertMask', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('upsertMask', 'email', Database::VAR_STRING, 64, false);
+            $database->createAttribute('upsertMask', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('upsertMask', new Document([
+                '$id' => ID::custom('u1'),
+                '$permissions' => [
+                    Permission::update(Role::user('ed'), 'name'),
+                    Permission::read(Role::user('ed'), 'email'),
+                ],
+                'name' => 'Bob',
+                'email' => 'bob@example.com',
+                'salary' => 100000,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:ed');
+
+        $seen = [];
+
+        try {
+            $database->upsertDocuments(
+                'upsertMask',
+                [new Document(['$id' => ID::custom('u1'), 'name' => 'Robert'])],
+                100,
+                onNext: function (Document $document) use (&$seen) {
+                    $seen[] = \array_keys(\array_filter(
+                        $document->getArrayCopy(),
+                        fn (string $key) => !\str_starts_with($key, '$'),
+                        ARRAY_FILTER_USE_KEY
+                    ));
+                }
+            );
+        } catch (DatabaseException $e) {
+            // adapters without upsert support
+            $this->assertStringContainsString('not implemented', $e->getMessage());
+            $authorization->skip(fn () => $database->deleteCollection('upsertMask'));
+
+            return;
+        }
+
+        // `name` was supplied by this call, `email` is readable; `salary` is neither
+        $this->assertSame([['name', 'email']], $seen, 'upsert callback exposed an unreadable column');
+
+        $stored = $authorization->skip(fn () => $database->getDocument('upsertMask', 'u1'));
+        $this->assertSame(100000, $stored->getAttribute('salary'));
+
+        $authorization->skip(fn () => $database->deleteCollection('upsertMask'));
+    }
+
+    /**
      * Column-scoped permissions, exercised through the public API so every adapter is
      * held to the same observable behaviour rather than to one adapter's internals.
      */

@@ -5765,6 +5765,30 @@ class Database
     }
 
     /**
+     * Column keys a caller supplied in a write payload.
+     *
+     * Operators are excluded: the caller supplied an instruction, not a value, so the
+     * computed result is something they do not already know.
+     *
+     * @param Document $payload raw payload, before encoding
+     * @return array<string>
+     */
+    private static function suppliedColumns(Document $payload): array
+    {
+        $keys = [];
+
+        foreach ($payload->getArrayCopy() as $key => $value) {
+            if (\str_starts_with($key, '$') || Operator::isOperator($value)) {
+                continue;
+            }
+
+            $keys[] = $key;
+        }
+
+        return $keys;
+    }
+
+    /**
      * Mask a document being handed back from a write.
      *
      * Update access and read access are independent, so the merged document a write
@@ -5773,16 +5797,18 @@ class Database
      *
      * What the caller supplied in this same call is exempt. They already have those
      * values, so echoing them discloses nothing, and withholding them would make a
-     * successful write answer with less than it was given. Operators are not exempt:
-     * the caller supplied an instruction, not a value, so the result is something
-     * they do not already know.
+     * successful write answer with less than it was given.
+     *
+     * The exempt keys are passed in rather than read off a payload, because by the
+     * time a write completes the payload has usually been encoded -- and encoding
+     * materialises every column of the collection, which would exempt the lot.
      *
      * @param Document $collection
      * @param Document $document merged result of the write
-     * @param Document $updates what the caller supplied
+     * @param array<string> $supplied column keys this caller provided
      * @return Document
      */
-    private function maskWriteResponse(Document $collection, Document $document, Document $updates): Document
+    private function maskWriteResponse(Document $collection, Document $document, array $supplied): Document
     {
         $columns = $this->getPermittedColumns($collection, $document, self::PERMISSION_READ);
 
@@ -5790,15 +5816,7 @@ class Database
             return $document;
         }
 
-        foreach ($updates->getArrayCopy() as $key => $value) {
-            if (\str_starts_with($key, '$') || Operator::isOperator($value)) {
-                continue;
-            }
-
-            $columns[] = $key;
-        }
-
-        $columns = \array_values(\array_unique($columns));
+        $columns = \array_values(\array_unique([...$columns, ...$supplied]));
 
         $document = clone $document;
 
@@ -7381,7 +7399,7 @@ class Database
         // allowed to change says nothing about what they may see. The merged document
         // carries every stored column, and handing it back would let an update on one
         // column return the rest.
-        return $this->maskWriteResponse($collection, $document, $supplied);
+        return $this->maskWriteResponse($collection, $document, self::suppliedColumns($supplied));
     }
 
     /**
@@ -7615,7 +7633,7 @@ class Database
                 }
                 try {
                     $onNext && $onNext(
-                        $this->maskWriteResponse($collection, $doc, $updates),
+                        $this->maskWriteResponse($collection, $doc, self::suppliedColumns($updates)),
                         $this->maskUnreadableColumns($collection, $old[$index])
                     );
                 } catch (Throwable $th) {
@@ -8255,8 +8273,14 @@ class Database
             }
         }
 
+        $suppliedColumns = [];
+
         foreach ($documents as $key => $document) {
             $old = $existingDocs[$this->tenantKey($document)] ?? new Document();
+
+            // Captured here, before encoding materialises every column of the
+            // collection. Keyed by id because the batches are re-indexed later.
+            $suppliedColumns[$document->getId()] = self::suppliedColumns($document);
 
             $document = $this->removeUnknownAttributes($collection, $document);
 
@@ -8518,8 +8542,11 @@ class Database
                 }
 
                 try {
+                    // The exemption source is what this caller supplied for this entry,
+                    // not $doc. $doc is the adapter's merged result, so using it would
+                    // exempt every stored column and mask nothing at all.
                     $onNext && $onNext(
-                        $this->maskWriteResponse($collection, $doc, $doc),
+                        $this->maskWriteResponse($collection, $doc, $suppliedColumns[$doc->getId()] ?? []),
                         $old->isEmpty() ? null : $this->maskUnreadableColumns($collection, $old)
                     );
                 } catch (\Throwable $th) {
@@ -8642,7 +8669,10 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_INCREASE, $document);
 
-        return $document;
+        // Nothing is exempt here: the caller asked for an increment, not a value, so
+        // the result -- including the counter itself -- is something they only get to
+        // see if they may read it.
+        return $this->maskUnreadableColumns($collection, $document);
     }
 
 
@@ -8751,7 +8781,7 @@ class Database
 
         $this->trigger(self::EVENT_DOCUMENT_DECREASE, $document);
 
-        return $document;
+        return $this->maskUnreadableColumns($collection, $document);
     }
 
     /**
@@ -9346,7 +9376,10 @@ class Database
             foreach ($batch as $index => $document) {
                 $this->withDocumentTenant($document, fn () => $this->purgeCachedDocument($collection->getId(), $document->getId()));
                 try {
-                    $onNext && $onNext($document, $old[$index]);
+                    $onNext && $onNext(
+                        $this->maskUnreadableColumns($collection, $document),
+                        $this->maskUnreadableColumns($collection, $old[$index])
+                    );
                 } catch (Throwable $th) {
                     $onError ? $onError($th) : throw $th;
                 }

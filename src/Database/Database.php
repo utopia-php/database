@@ -5069,7 +5069,7 @@ class Database
                 return $this->createDocumentInstance($collection->getId(), []);
             }
 
-            $document = $this->maskUnreadableColumns($collection, $document, $documentSecurity);
+            $document = $this->maskUnreadableColumns($collection, $document);
 
             $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -5160,7 +5160,7 @@ class Database
             }
         }
 
-        $document = $this->maskUnreadableColumns($collection, $document, $documentSecurity);
+        $document = $this->maskUnreadableColumns($collection, $document);
 
         $this->trigger(self::EVENT_DOCUMENT_READ, $document);
 
@@ -5176,14 +5176,12 @@ class Database
      *
      * @param Document $collection
      * @param Document $document
-     * @param bool $documentSecurity
      * @param string $type
      * @return array<string>|null
      */
     private function getPermittedColumns(
         Document $collection,
         Document $document,
-        bool $documentSecurity,
         string $type
     ): ?array {
         if (!$this->authorization->getStatus()) {
@@ -5192,7 +5190,7 @@ class Database
 
         $permissions = $collection->getPermissionsByTypeWithColumns($type);
 
-        if ($documentSecurity) {
+        if ($collection->getAttribute('documentSecurity', false)) {
             $permissions = [
                 ...$permissions,
                 ...$document->getPermissionsByTypeWithColumns($type),
@@ -5631,17 +5629,15 @@ class Database
      * @param Document $collection
      * @param Document $old stored document, whose permissions govern the write
      * @param Document $document merged new state
-     * @param bool $documentSecurity
      * @return void
      * @throws AuthorizationException
      */
     private function assertColumnsWritable(
         Document $collection,
         Document $old,
-        Document $document,
-        bool $documentSecurity
+        Document $document
     ): void {
-        $columns = $this->getPermittedColumns($collection, $old, $documentSecurity, self::PERMISSION_UPDATE);
+        $columns = $this->getPermittedColumns($collection, $old, self::PERMISSION_UPDATE);
 
         if ($columns === null) {
             return;
@@ -5714,16 +5710,15 @@ class Database
      *
      * @param Document $collection
      * @param Document $document
-     * @param bool $documentSecurity
      * @return Document
      */
-    private function maskUnreadableColumns(Document $collection, Document $document, bool $documentSecurity): Document
+    private function maskUnreadableColumns(Document $collection, Document $document): Document
     {
         if ($this->skipColumnMasking || $document->isEmpty() || $collection->getId() === self::METADATA) {
             return $document;
         }
 
-        $columns = $this->getPermittedColumns($collection, $document, $documentSecurity, self::PERMISSION_READ);
+        $columns = $this->getPermittedColumns($collection, $document, self::PERMISSION_READ);
 
         if ($columns === null) {
             return $document;
@@ -5780,20 +5775,18 @@ class Database
      * @param Document $collection
      * @param Document $old unmasked stored document
      * @param Document $document incoming document
-     * @param bool $documentSecurity
      * @return void
      */
     private function preserveHiddenPermissions(
         Document $collection,
         Document $old,
-        Document $document,
-        bool $documentSecurity
+        Document $document
     ): void {
         if (!$document->offsetExists('$permissions')) {
             return;
         }
 
-        $columns = $this->getPermittedColumns($collection, $old, $documentSecurity, self::PERMISSION_READ);
+        $columns = $this->getPermittedColumns($collection, $old, self::PERMISSION_READ);
 
         if ($columns === null) {
             return;
@@ -7063,12 +7056,7 @@ class Database
                 return new Document();
             }
 
-            $this->preserveHiddenPermissions(
-                $collection,
-                $old,
-                $document,
-                $collection->getAttribute('documentSecurity', false)
-            );
+            $this->preserveHiddenPermissions($collection, $old, $document);
 
             // Only newly introduced ones are rejected. A document that already carries
             // a column-scoped permission must stay editable -- otherwise disabling the
@@ -7240,7 +7228,7 @@ class Database
                         throw new AuthorizationException($this->authorization->getDescription());
                     }
 
-                    $this->assertColumnsWritable($collection, $old, $document, $documentSecurity);
+                    $this->assertColumnsWritable($collection, $old, $document);
                 } else {
                     if (!$this->authorization->isValid(new Input(self::PERMISSION_READ, $readPermissions))) {
                         throw new AuthorizationException($this->authorization->getDescription());
@@ -7491,7 +7479,7 @@ class Database
             $currentPermissions = $updates->getPermissions();
             sort($currentPermissions);
 
-            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions, $documentSecurity) {
+            $this->withTransaction(function () use ($collection, $updates, &$batch, $currentPermissions) {
                 foreach ($batch as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -7513,7 +7501,7 @@ class Database
 
                     // Per document: the collection-level check cannot see grants that
                     // individual rows add, so each row is verified against its own.
-                    $this->assertColumnsWritable($collection, $document, $new, $documentSecurity);
+                    $this->assertColumnsWritable($collection, $document, $new);
 
                     if ($this->resolveRelationships) {
                         $this->unmasked(fn () => $this->silent(fn () => $this->updateDocumentRelationships($collection, $document, $new)));
@@ -8298,7 +8286,7 @@ class Database
                     throw new AuthorizationException($this->authorization->getDescription());
                 }
 
-                $this->assertColumnsWritable($collection, $old, $document, $documentSecurity);
+                $this->assertColumnsWritable($collection, $old, $document);
             }
 
             $updatedAt = $document->getUpdatedAt();
@@ -8554,7 +8542,7 @@ class Database
 
                 // This writes one named column, so it needs update permission on that
                 // column specifically. Without this it bypasses the column gate.
-                $columns = $this->getPermittedColumns($collection, $document, $documentSecurity, self::PERMISSION_UPDATE);
+                $columns = $this->getPermittedColumns($collection, $document, self::PERMISSION_UPDATE);
 
                 if ($columns !== null && !\in_array($attribute, $columns, true)) {
                     throw new AuthorizationException('Missing "update" permission for column "' . $attribute . '".');
@@ -8663,7 +8651,7 @@ class Database
 
                 // This writes one named column, so it needs update permission on that
                 // column specifically. Without this it bypasses the column gate.
-                $columns = $this->getPermittedColumns($collection, $document, $documentSecurity, self::PERMISSION_UPDATE);
+                $columns = $this->getPermittedColumns($collection, $document, self::PERMISSION_UPDATE);
 
                 if ($columns !== null && !\in_array($attribute, $columns, true)) {
                     throw new AuthorizationException('Missing "update" permission for column "' . $attribute . '".');
@@ -9604,7 +9592,7 @@ class Database
             // ROW (it is set by any collection-level read, including a column-scoped
             // one), so it says nothing about which columns are readable. Masking is
             // already a no-op when authorization is disabled.
-            $node = $this->maskUnreadableColumns($collection, $node, $documentSecurity);
+            $node = $this->maskUnreadableColumns($collection, $node);
 
             // Masking can empty a document the row filter let through -- see
             // maskUnreadableColumns(). Drop it rather than return a husk of internal

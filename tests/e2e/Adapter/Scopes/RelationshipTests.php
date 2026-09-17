@@ -2185,6 +2185,34 @@ trait RelationshipTests
         ]));
     }
 
+    public function testCreateInvalidOneWayChildArrayValueRelationship(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $database->createCollection('reverse1');
+        $database->createCollection('reverse2');
+
+        $database->createRelationship(
+            collection: 'reverse1',
+            relatedCollection: 'reverse2',
+            type: Database::RELATION_ONE_TO_ONE,
+        );
+
+        $this->expectException(RelationshipException::class);
+        $this->expectExceptionMessage('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
+
+        $database->createDocument('reverse2', new Document([
+            '$id' => ID::unique(),
+            'reverse1' => ['name' => 'reverse'],
+        ]));
+    }
+
     public function testCreateEmptyValueRelationship(): void
     {
         /** @var Database $database */

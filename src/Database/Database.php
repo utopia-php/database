@@ -5765,6 +5765,57 @@ class Database
     }
 
     /**
+     * Mask a document being handed back from a write.
+     *
+     * Update access and read access are independent, so the merged document a write
+     * produces can hold columns the writer may not read -- returning it whole would
+     * make an update on one column a way to read the rest.
+     *
+     * What the caller supplied in this same call is exempt. They already have those
+     * values, so echoing them discloses nothing, and withholding them would make a
+     * successful write answer with less than it was given. Operators are not exempt:
+     * the caller supplied an instruction, not a value, so the result is something
+     * they do not already know.
+     *
+     * @param Document $collection
+     * @param Document $document merged result of the write
+     * @param Document $updates what the caller supplied
+     * @return Document
+     */
+    private function maskWriteResponse(Document $collection, Document $document, Document $updates): Document
+    {
+        $columns = $this->getPermittedColumns($collection, $document, self::PERMISSION_READ);
+
+        if ($columns === null) {
+            return $document;
+        }
+
+        foreach ($updates->getArrayCopy() as $key => $value) {
+            if (\str_starts_with($key, '$') || Operator::isOperator($value)) {
+                continue;
+            }
+
+            $columns[] = $key;
+        }
+
+        $columns = \array_values(\array_unique($columns));
+
+        $document = clone $document;
+
+        foreach (\array_keys($document->getArrayCopy()) as $key) {
+            if (\str_starts_with($key, '$')) {
+                continue;
+            }
+
+            if (!\in_array($key, $columns, true)) {
+                $document->removeAttribute($key);
+            }
+        }
+
+        return $document;
+    }
+
+    /**
      * Put back the permissions a caller was never allowed to see.
      *
      * maskUnreadableColumns() strips permissions scoped to columns the caller cannot
@@ -7040,6 +7091,10 @@ class Database
      */
     public function updateDocument(string $collection, string $id, Document $document): Document
     {
+        // Held before the merge below replaces $document with the merged result. The
+        // write response exempts what the caller supplied, so it needs the original.
+        $supplied = new Document($document->getArrayCopy());
+
         if (!$id) {
             throw new DatabaseException('Must define $id attribute');
         }
@@ -7326,7 +7381,7 @@ class Database
         // allowed to change says nothing about what they may see. The merged document
         // carries every stored column, and handing it back would let an update on one
         // column return the rest.
-        return $this->maskUnreadableColumns($collection, $document);
+        return $this->maskWriteResponse($collection, $document, $supplied);
     }
 
     /**
@@ -7560,7 +7615,7 @@ class Database
                 }
                 try {
                     $onNext && $onNext(
-                        $this->maskUnreadableColumns($collection, $doc),
+                        $this->maskWriteResponse($collection, $doc, $updates),
                         $this->maskUnreadableColumns($collection, $old[$index])
                     );
                 } catch (Throwable $th) {
@@ -8464,7 +8519,7 @@ class Database
 
                 try {
                     $onNext && $onNext(
-                        $this->maskUnreadableColumns($collection, $doc),
+                        $this->maskWriteResponse($collection, $doc, $doc),
                         $old->isEmpty() ? null : $this->maskUnreadableColumns($collection, $old)
                     );
                 } catch (\Throwable $th) {

@@ -337,8 +337,13 @@ class ColumnPermissionEnforcementTest extends TestCase
             'name' => 'Robert',
         ]));
 
+        // readable, so returned
         $this->assertSame('bob@example.com', $returned->getAttribute('email'));
-        $this->assertNull($returned->getAttribute('name'), 'a writable column is not thereby readable');
+
+        // supplied in this very call, so returned -- the caller already has it
+        $this->assertSame('Robert', $returned->getAttribute('name'));
+
+        // neither readable nor supplied: this is the column the response used to leak
         $this->assertNull($returned->getAttribute('salary'), 'update response leaked a hidden column');
 
         // the write itself still landed
@@ -383,7 +388,8 @@ class ColumnPermissionEnforcementTest extends TestCase
             }
         );
 
-        $this->assertSame([['email']], $seen, 'bulk callback leaked hidden columns');
+        // `name` was supplied by this call, `email` is readable; `salary` is neither
+        $this->assertSame([['name', 'email']], $seen, 'bulk callback leaked hidden columns');
 
         $stored = $this->authorization->skip(
             fn () => $this->database->getDocument('employees', 'w2')

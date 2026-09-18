@@ -4930,4 +4930,126 @@ trait RelationshipTests
         $database->deleteCollection('authorsOrder');
         $database->deleteCollection('postsOrder');
     }
+
+    /**
+     * A nested related document that already exists but is not readable by the
+     * current role must be related to, not re-created. Creating it fails on the
+     * unique `_uid` key and surfaces a bare "Document already exists" duplicate
+     * error instead of linking the two documents.
+     */
+    public function testCreateDocumentWithUnreadableExistingRelatedDocument(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        // No read permission anywhere on the child collection, so its documents
+        // exist but are invisible to the caller.
+        $database->createCollection('hiddenKeys', permissions: [
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+        $database->createCollection('hiddenSeals', permissions: [
+            Permission::create(Role::any()),
+        ]);
+        $database->createCollection('hiddenVaults', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ]);
+
+        $database->createAttribute('hiddenKeys', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('hiddenSeals', 'name', Database::VAR_STRING, 255, true);
+        $database->createAttribute('hiddenVaults', 'name', Database::VAR_STRING, 255, true);
+
+        $database->createRelationship(
+            collection: 'hiddenVaults',
+            relatedCollection: 'hiddenKeys',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'key',
+            twoWayKey: 'vault'
+        );
+
+        $database->createRelationship(
+            collection: 'hiddenVaults',
+            relatedCollection: 'hiddenSeals',
+            type: Database::RELATION_ONE_TO_ONE,
+            twoWay: true,
+            id: 'seal',
+            twoWayKey: 'vault'
+        );
+
+        $database->createDocument('hiddenKeys', new Document([
+            '$id' => 'hidden-key',
+            '$permissions' => [],
+            'name' => 'Hidden Key',
+        ]));
+
+        $database->createDocument('hiddenSeals', new Document([
+            '$id' => 'hidden-seal',
+            '$permissions' => [],
+            'name' => 'Hidden Seal',
+        ]));
+
+        $this->assertTrue($database->getDocument('hiddenKeys', 'hidden-key')->isEmpty());
+        $this->assertTrue($database->getDocument('hiddenSeals', 'hidden-seal')->isEmpty());
+
+        // The caller may update the child collection, so the existing document
+        // is related to the new parent instead of being re-created.
+        $vault = $database->createDocument('hiddenVaults', new Document([
+            '$id' => 'vault-1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            'name' => 'Vault',
+            'key' => new Document([
+                '$id' => 'hidden-key',
+                'name' => 'Hidden Key',
+            ]),
+        ]));
+
+        $this->assertEquals('vault-1', $vault->getId());
+
+        $stored = $database->getAuthorization()->skip(
+            fn () => $database->getDocument('hiddenVaults', 'vault-1')
+        );
+
+        $this->assertEquals('hidden-key', $stored->getAttribute('key')->getId());
+        $this->assertEquals('Hidden Key', $stored->getAttribute('key')->getAttribute('name'));
+
+        $keys = $database->getAuthorization()->skip(fn () => $database->find('hiddenKeys'));
+        $this->assertCount(1, $keys);
+
+        // Without update permission on the child collection the caller gets an
+        // authorization error, not a duplicate key error.
+        try {
+            $database->createDocument('hiddenVaults', new Document([
+                '$id' => 'vault-2',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                'name' => 'Vault 2',
+                'seal' => new Document([
+                    '$id' => 'hidden-seal',
+                    'name' => 'Broken Seal',
+                ]),
+            ]));
+            $this->fail('Failed to throw exception');
+        } catch (AuthorizationException) {
+        }
+
+        $seals = $database->getAuthorization()->skip(fn () => $database->find('hiddenSeals'));
+        $this->assertCount(1, $seals);
+
+        $database->deleteCollection('hiddenVaults');
+        $database->deleteCollection('hiddenKeys');
+        $database->deleteCollection('hiddenSeals');
+    }
 }

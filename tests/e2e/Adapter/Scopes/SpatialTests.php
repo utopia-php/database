@@ -333,7 +333,8 @@ trait SpatialTests
                 ],
             ));
 
-            $database->updateAttribute($collectionName, 'location', required: false);
+            $updated = $database->updateAttribute($collectionName, 'location', required: false);
+            $this->assertFalse($updated->getAttribute('required'), 'the stored definition should no longer be required');
 
             // The stored definition flipping is not enough: the column keeps
             // whatever null constraint it was created with until the adapter

@@ -325,13 +325,9 @@ trait SpatialTests
 
         $collectionName = 'spatial_required_drop_';
         try {
-            $database->createCollection(new Collection(
-                id: $collectionName,
-                attributes: [
-                    Attribute::string(key: 'name', required: true),
-                    Attribute::point(key: 'location', required: true),
-                ],
-            ));
+            $database->createCollection(new Collection(id: $collectionName));
+            $database->createAttribute($collectionName, Attribute::string(key: 'name', required: true));
+            $database->createAttribute($collectionName, Attribute::point(key: 'location', required: true));
 
             $updated = $database->updateAttribute($collectionName, 'location', required: false);
             $this->assertFalse($updated->getAttribute('required'), 'the stored definition should no longer be required');

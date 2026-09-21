@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
@@ -47,9 +48,7 @@ trait RelationshipTests
         return $cases;
     }
 
-    /**
-     * @dataProvider relationshipQueryValueLimitProvider
-     */
+    #[DataProvider('relationshipQueryValueLimitProvider')]
     public function testRelationshipQueryValueLimit(RelationType $type, string $collection, int $limit): void
     {
         /** @var Database $database */

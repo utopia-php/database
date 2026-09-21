@@ -574,6 +574,14 @@ class Pool extends Adapter
         return $result;
     }
 
+    public function relaxAttributeRequired(string $collection, string $id): bool
+    {
+        /** @var bool $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+
+        return $result;
+    }
+
     /**
      * {@inheritDoc}
      */

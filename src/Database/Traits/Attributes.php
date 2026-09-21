@@ -765,7 +765,8 @@ trait Attributes
             || ! \is_null($size)
             || ! \is_null($signed)
             || ! \is_null($array)
-            || ! \is_null($newKey);
+            || ! \is_null($newKey)
+            || (! \is_null($required) && $required !== $originalRequired);
         if ($type === null) {
             $rawType = $attribute->getAttribute('type');
             if (! $rawType instanceof ColumnType && ! \is_string($rawType)) {

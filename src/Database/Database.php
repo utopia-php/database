@@ -8008,7 +8008,7 @@ class Database
                     $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_SET_NULL:
-                    $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case Database::RELATION_MUTATE_CASCADE:
                     foreach ($this->relationshipDeleteStack as $processedRelationship) {
@@ -8139,10 +8139,32 @@ class Database
     }
 
     /**
+     * Find every document in $relatedCollection whose $twoWayKey points at $document.
+     *
+     * Deletes can start from a document fetched without its relationships populated -
+     * deleteDocuments() passes the caller's queries straight to find(), and a select
+     * query turns relationship population off - so the relationship value carried on
+     * the document cannot be trusted here.
+     *
+     * Permissions are skipped: a referencing document the caller cannot read still has
+     * to have its foreign key cleared, or it is left pointing at a deleted row.
+     *
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    private function findReferencingDocuments(Document $relatedCollection, Document $document, string $twoWayKey): array
+    {
+        return $this->authorization->skip(fn () => $this->find($relatedCollection->getId(), [
+            Query::select(['$id']),
+            Query::equal($twoWayKey, [$document->getId()]),
+            Query::limit(PHP_INT_MAX)
+        ]));
+    }
+
+    /**
      * @param Document $collection
      * @param Document $relatedCollection
      * @param Document $document
-     * @param mixed $value
      * @param string $relationType
      * @param bool $twoWay
      * @param string $twoWayKey
@@ -8154,7 +8176,7 @@ class Database
      * @throws RestrictedException
      * @throws StructureException
      */
-    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
@@ -8163,18 +8185,11 @@ class Database
                 }
 
                 // Shouldn't need read or update permission to delete
-                $this->authorization->skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
-                    if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
-                        $related = $this->findOne($relatedCollection->getId(), [
-                            Query::select(['$id']),
-                            Query::equal($twoWayKey, [$document->getId()])
-                        ]);
-                    } else {
-                        if (empty($value)) {
-                            return;
-                        }
-                        $related = $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])]);
-                    }
+                $this->authorization->skip(function () use ($document, $relatedCollection, $twoWayKey) {
+                    $related = $this->findOne($relatedCollection->getId(), [
+                        Query::select(['$id']),
+                        Query::equal($twoWayKey, [$document->getId()])
+                    ]);
 
                     if ($related->isEmpty()) {
                         return;
@@ -8195,10 +8210,9 @@ class Database
                     break;
                 }
 
-                if (empty($value)) {
-                    break;
-                }
-                foreach ($value as $relation) {
+                $relations = $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey);
+
+                foreach ($relations as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
@@ -8216,17 +8230,9 @@ class Database
                     break;
                 }
 
-                $value = $this->find($relatedCollection->getId(), [
-                    Query::select(['$id']),
-                    Query::equal($twoWayKey, [$document->getId()]),
-                    Query::limit(PHP_INT_MAX)
-                ]);
+                $relations = $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey);
 
-                if (empty($value)) {
-                    break;
-                }
-
-                foreach ($value as $relation) {
+                foreach ($relations as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),

@@ -520,6 +520,12 @@ class Database
         self::registerDefaultFilters();
     }
 
+    /**
+     * Registers the built-in filters on first touch of the registry, so an
+     * explicit addFilter() always wins regardless of whether it ran before or
+     * after the first instance. The flag is set first: addFilter() calls back
+     * into this, and the guard is what terminates that recursion.
+     */
     private static function registerDefaultFilters(): void
     {
         if (self::$defaultFiltersRegistered) {
@@ -9331,6 +9337,8 @@ class Database
      */
     public static function addFilter(string $name, callable $encode, callable $decode): void
     {
+        self::registerDefaultFilters();
+
         self::$filters[$name] = [
             'encode' => $encode,
             'decode' => $decode,

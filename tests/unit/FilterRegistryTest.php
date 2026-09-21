@@ -20,6 +20,11 @@ class FilterRegistryTest extends TestCase
 
     private Database $database;
 
+    /**
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
+     */
+    private array $registry;
+
     protected function setUp(): void
     {
         $this->adapter = new DatabaseMemory();
@@ -27,6 +32,12 @@ class FilterRegistryTest extends TestCase
         $this->namespace = 'filter_registry_' . \uniqid();
 
         $this->database = $this->createDatabase();
+
+        // Snapshot once the constructor has registered the built-ins, so the
+        // restore in tearDown puts back a populated registry rather than an
+        // empty one.
+        $this->registry = (new \ReflectionProperty(Database::class, 'filters'))->getValue();
+
         $this->database->create();
         $this->database->createCollection('projects');
         $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
@@ -35,6 +46,14 @@ class FilterRegistryTest extends TestCase
             '$permissions' => [Permission::read(Role::any())],
             'name' => 'cached',
         ]));
+    }
+
+    protected function tearDown(): void
+    {
+        // addFilter() writes to a static registry with no removal API, so a test
+        // registering one would otherwise leak into every later test.
+        (new \ReflectionProperty(Database::class, 'filters'))->setValue(null, $this->registry);
+        (new \ReflectionProperty(Database::class, 'defaultFiltersRegistered'))->setValue(null, true);
     }
 
     private function createDatabase(): Database
@@ -109,6 +128,28 @@ class FilterRegistryTest extends TestCase
             'fresh',
             $this->read($database),
             'a subclass replacing its instance filters must not keep serving the previous entry',
+        );
+    }
+
+    public function testOverridingABuiltInFilterBeforeTheFirstInstanceStillWins(): void
+    {
+        $registry = new \ReflectionProperty(Database::class, 'filters');
+
+        // A fresh process: nothing has constructed a Database yet, so the
+        // built-ins are not in the registry.
+        $registry->setValue(null, []);
+        (new \ReflectionProperty(Database::class, 'defaultFiltersRegistered'))->setValue(null, false);
+
+        $identity = fn (mixed $value) => $value;
+        Database::addFilter('datetime', $identity, $identity);
+        $override = $registry->getValue()['datetime']['signature'];
+
+        $this->createDatabase();
+
+        $this->assertSame(
+            $override,
+            $registry->getValue()['datetime']['signature'],
+            'constructing a database must not restore a built-in filter the caller replaced before it',
         );
     }
 

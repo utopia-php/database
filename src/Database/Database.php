@@ -581,13 +581,15 @@ class Database
             },
             /**
              * @param string|null $value
+             * @param Document $document
+             * @param Database $database
              * @return array|null
              */
-            function (?string $value) {
+            function (?string $value, Document $document, Database $database) {
                 if ($value === null) {
                     return null;
                 }
-                return $this->adapter->decodePoint($value);
+                return $database->adapter->decodePoint($value);
             }
         );
 
@@ -609,13 +611,15 @@ class Database
             },
             /**
              * @param string|null $value
+             * @param Document $document
+             * @param Database $database
              * @return array|null
              */
-            function (?string $value) {
+            function (?string $value, Document $document, Database $database) {
                 if (is_null($value)) {
                     return null;
                 }
-                return $this->adapter->decodeLinestring($value);
+                return $database->adapter->decodeLinestring($value);
             }
         );
 
@@ -637,13 +641,15 @@ class Database
             },
             /**
              * @param string|null $value
+             * @param Document $document
+             * @param Database $database
              * @return array|null
              */
-            function (?string $value) {
+            function (?string $value, Document $document, Database $database) {
                 if (is_null($value)) {
                     return null;
                 }
-                return $this->adapter->decodePolygon($value);
+                return $database->adapter->decodePolygon($value);
             }
         );
 

@@ -596,14 +596,16 @@ class Database
             Database::VAR_POINT,
             /**
              * @param mixed $value
+             * @param Document $document
+             * @param Database $database
              * @return mixed
              */
-            static function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (!is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, Database::VAR_POINT);
+                    return $database->encodeSpatialData($value, Database::VAR_POINT);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -626,14 +628,16 @@ class Database
             Database::VAR_LINESTRING,
             /**
              * @param mixed $value
+             * @param Document $document
+             * @param Database $database
              * @return mixed
              */
-            static function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (!is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                    return $database->encodeSpatialData($value, Database::VAR_LINESTRING);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -656,14 +660,16 @@ class Database
             Database::VAR_POLYGON,
             /**
              * @param mixed $value
+             * @param Document $document
+             * @param Database $database
              * @return mixed
              */
-            static function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (!is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, Database::VAR_POLYGON);
+                    return $database->encodeSpatialData($value, Database::VAR_POLYGON);
                 } catch (\Throwable) {
                     return $value;
                 }
@@ -10861,7 +10867,7 @@ class Database
      * @return string
      * @throws DatabaseException
      */
-    protected static function encodeSpatialData(mixed $value, string $type): string
+    protected function encodeSpatialData(mixed $value, string $type): string
     {
         $validator = new Spatial($type);
         if (!$validator->isValid($value)) {

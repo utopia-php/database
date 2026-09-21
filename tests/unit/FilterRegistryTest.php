@@ -3,87 +3,97 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
 class FilterRegistryTest extends TestCase
 {
+    private DatabaseMemory $adapter;
+
+    private Cache $cache;
+
+    private string $namespace;
+
+    private Database $database;
+
+    protected function setUp(): void
+    {
+        $this->adapter = new DatabaseMemory();
+        $this->cache = new Cache(new HashAwareMemoryCache());
+        $this->namespace = 'filter_registry_' . \uniqid();
+
+        $this->database = $this->createDatabase();
+        $this->database->create();
+        $this->database->createCollection('projects');
+        $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $this->database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'cached',
+        ]));
+    }
+
+    private function createDatabase(): Database
+    {
+        $database = new Database($this->adapter, $this->cache);
+
+        return $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace($this->namespace);
+    }
+
     /**
-     * @param array<float> $point
+     * Write through the adapter, bypassing Database and therefore the cache
+     * purge, so the cache holds a copy the source no longer agrees with. A read
+     * returning 'cached' was served from the cache; one returning 'fresh' missed
+     * and went to the adapter.
      */
-    private function createDatabase(array $point = [0.0, 0.0]): Database
+    private function writeBehindTheCache(string $value): void
     {
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(false);
-        $adapter->method('getTenant')->willReturn(null);
-        $adapter->method('getNamespace')->willReturn('test');
-        $adapter->method('getSharedTables')->willReturn(false);
-        $adapter->method('filter')->willReturnArgument(0);
-        $adapter->method('decodePoint')->willReturn($point);
-
-        return new Database($adapter, new Cache(new None()));
+        $collection = $this->database->getCollection('projects');
+        $document = $this->adapter->getDocument($collection, 'project');
+        $document->setAttribute('name', $value);
+        $this->adapter->updateDocument($collection, 'project', $document, true);
     }
 
-    private function pointCollection(): Document
+    private function read(?Database $database = null): string
     {
-        return new Document([
-            '$id' => 'places',
-            'attributes' => [
-                new Document([
-                    '$id' => 'location',
-                    'type' => Database::VAR_POINT,
-                    'array' => false,
-                    'filters' => [Database::VAR_POINT],
-                ]),
-            ],
-        ]);
+        return ($database ?? $this->database)
+            ->getDocument('projects', 'project')
+            ->getAttribute('name');
     }
 
-    public function testSpatialDecodeUsesTheCallingDatabaseAdapter(): void
+    public function testRegisteringAGlobalFilterStopsStaleEntriesBeingServed(): void
     {
-        $first = $this->createDatabase([1.0, 2.0]);
-        $second = $this->createDatabase([9.0, 9.0]);
+        $this->assertSame('cached', $this->read());
 
-        $decoded = $first->decode(
-            $this->pointCollection(),
-            new Document(['$id' => 'a', 'location' => 'POINT(1 2)']),
-        );
-
-        $this->assertSame([1.0, 2.0], $decoded->getAttribute('location'));
-
-        $decoded = $second->decode(
-            $this->pointCollection(),
-            new Document(['$id' => 'b', 'location' => 'POINT(9 9)']),
-        );
-
-        $this->assertSame([9.0, 9.0], $decoded->getAttribute('location'));
-    }
-
-    public function testDefaultFilterSignaturesSurviveLaterConstruction(): void
-    {
-        $first = $this->createDatabase();
-        [, , $before] = $first->getCacheKeys('places', 'a');
-
-        $this->createDatabase();
-
-        [, , $after] = $first->getCacheKeys('places', 'a');
-
-        $this->assertSame($before, $after);
-    }
-
-    public function testRegisteringAGlobalFilterInvalidatesCacheKeys(): void
-    {
-        $database = $this->createDatabase();
-        [, , $before] = $database->getCacheKeys('places', 'a');
+        $this->writeBehindTheCache('fresh');
+        $this->assertSame('cached', $this->read(), 'read should still be served from cache');
 
         $noop = fn (mixed $value) => $value;
         Database::addFilter(__FUNCTION__, $noop, $noop);
 
-        [, , $after] = $database->getCacheKeys('places', 'a');
+        $this->assertSame(
+            'fresh',
+            $this->read(),
+            'a document cached under the previous filter set must not be served after it changes',
+        );
+    }
 
-        $this->assertNotSame($before, $after);
+    public function testInstancesSharingAConfigShareCachedDocuments(): void
+    {
+        $this->assertSame('cached', $this->read());
+
+        $this->writeBehindTheCache('fresh');
+
+        $this->assertSame(
+            'cached',
+            $this->read($this->createDatabase()),
+            'a later instance with the same config must hit the entry the first one cached',
+        );
     }
 }

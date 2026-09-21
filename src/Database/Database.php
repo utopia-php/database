@@ -402,6 +402,9 @@ class Database
     protected array $instanceFilters = [];
 
     /**
+     * Valid only while $instanceFilters is what the constructor set: nothing
+     * reassigns it, and self::$filters changing is caught by $filtersVersion.
+     *
      * @var array<string, string>
      */
     private array $filterSignatures = [];

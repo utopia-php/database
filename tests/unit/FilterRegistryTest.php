@@ -84,6 +84,34 @@ class FilterRegistryTest extends TestCase
         );
     }
 
+    public function testChangingInstanceFiltersStopsStaleEntriesBeingServed(): void
+    {
+        $database = new class ($this->adapter, $this->cache) extends Database {
+            public function swapInstanceFilter(string $signature): void
+            {
+                $noop = fn (mixed $value) => $value;
+
+                $this->instanceFilters = [
+                    'probe' => ['encode' => $noop, 'decode' => $noop, 'signature' => $signature],
+                ];
+            }
+        };
+        $database->setDatabase('utopiaTests')->setNamespace($this->namespace);
+
+        $this->assertSame('cached', $this->read($database));
+
+        $this->writeBehindTheCache('fresh');
+        $this->assertSame('cached', $this->read($database), 'read should still be served from cache');
+
+        $database->swapInstanceFilter('v2');
+
+        $this->assertSame(
+            'fresh',
+            $this->read($database),
+            'a subclass replacing its instance filters must not keep serving the previous entry',
+        );
+    }
+
     public function testInstancesSharingAConfigShareCachedDocuments(): void
     {
         $this->assertSame('cached', $this->read());

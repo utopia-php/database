@@ -402,9 +402,6 @@ class Database
     protected array $instanceFilters = [];
 
     /**
-     * Valid only while $instanceFilters is what the constructor set: nothing
-     * reassigns it, and self::$filters changing is caught by $filtersVersion.
-     *
      * @var array<string, string>
      */
     private array $filterSignatures = [];
@@ -412,6 +409,11 @@ class Database
     private string $filterSignaturesEncoded = '';
 
     private int $filterSignaturesVersion = -1;
+
+    /**
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
+     */
+    private array $filterSignaturesSource = [];
 
     /**
      * @var array<string, array<string, callable>>
@@ -10193,7 +10195,10 @@ class Database
 
     private function refreshFilterSignatures(): void
     {
-        if ($this->filterSignaturesVersion === self::$filtersVersion) {
+        if (
+            $this->filterSignaturesVersion === self::$filtersVersion
+            && $this->filterSignaturesSource === $this->instanceFilters
+        ) {
             return;
         }
 
@@ -10215,6 +10220,7 @@ class Database
         $this->filterSignatures = $signatures;
         $this->filterSignaturesEncoded = \json_encode($signatures) ?: '';
         $this->filterSignaturesVersion = self::$filtersVersion;
+        $this->filterSignaturesSource = $this->instanceFilters;
     }
 
     private function getFilterSignatureKey(): string

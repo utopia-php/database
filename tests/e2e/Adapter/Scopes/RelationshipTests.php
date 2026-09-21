@@ -15,10 +15,12 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait RelationshipTests
@@ -27,6 +29,103 @@ trait RelationshipTests
     use ManyToOneTests;
     use OneToManyTests;
     use OneToOneTests;
+
+    /**
+     * @return array<string, array{RelationType, string, int}>
+     */
+    public static function relationshipQueryValueLimitProvider(): array
+    {
+        $cases = [];
+        foreach (RelationType::cases() as $type) {
+            foreach (['parents', 'children'] as $collection) {
+                $cases[$type->value . ' ' . $collection] = [$type, $collection, 3];
+            }
+        }
+
+        $cases['manyToMany related documents'] = [RelationType::ManyToMany, 'parents', 1];
+
+        return $cases;
+    }
+
+    /**
+     * @dataProvider relationshipQueryValueLimitProvider
+     */
+    public function testRelationshipQueryValueLimit(RelationType $type, string $collection, int $limit): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection(new Collection(id: $parents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $children, permissions: $permissions));
+        $database->createRelationship(new Relationship(
+            collection: $parents,
+            relatedCollection: $children,
+            type: $type,
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parents',
+        ));
+
+        foreach (['child1', 'child2', 'child3'] as $id) {
+            $database->createDocument($children, new Document(['$id' => $id]));
+        }
+
+        for ($i = 1; $i <= 3; $i++) {
+            $related = match ($type) {
+                RelationType::ManyToMany => ['child1', 'child2', 'child3'],
+                RelationType::OneToMany => ['child' . $i],
+                default => 'child' . $i,
+            };
+            $database->createDocument($parents, new Document([
+                '$id' => 'parent' . $i,
+                'children' => $related,
+            ]));
+        }
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(2);
+
+        try {
+            $documents = $database->find($collection === 'parents' ? $parents : $children, [Query::limit($limit)]);
+
+            $this->assertCount($limit, $documents);
+            foreach ($documents as $document) {
+                $key = $collection === 'parents' ? 'children' : 'parents';
+                $related = $document->getDocuments($key);
+                if ($related === []) {
+                    $single = $document->getDocument($key);
+                    $related = $single->isEmpty() ? [] : [$single];
+                }
+                $ids = \array_map(fn (Document $related) => $related->getId(), $related);
+                $prefix = $collection === 'parents' ? 'child' : 'parent';
+                $expected = $type === RelationType::ManyToMany
+                    ? [$prefix . '1', $prefix . '2', $prefix . '3']
+                    : [$prefix . \substr($document->getId(), -1)];
+                $this->assertEqualsCanonicalizing($expected, $ids);
+            }
+
+            $this->expectException(QueryException::class);
+            $database->find($children, [Query::equal('$id', ['child1', 'child2', 'child3'])]);
+        } finally {
+            $database->setMaxQueryValues($max);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
+    }
 
     public function testZoo(): void
     {

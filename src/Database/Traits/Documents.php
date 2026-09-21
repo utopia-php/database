@@ -296,7 +296,7 @@ trait Documents
         }
 
         if (empty($id)) {
-            return new Document();
+            return $this->createDocumentInstance($collection, []);
         }
 
         $collection = $this->silent(fn () => $this->getCollection($collection));

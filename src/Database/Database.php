@@ -2703,10 +2703,6 @@ class Database
      */
     protected function createDocumentInstance(string $collection, array $data): Document
     {
-        if ($data === []) {
-            return new Document();
-        }
-
         $className = $this->documentTypes[$collection] ?? Document::class;
 
         return $className::fromArray($data);

@@ -483,6 +483,35 @@ class RelationshipValidationTest extends TestCase
         ]));
     }
 
+    public function testCreateInvalidOneWayChildArrayValueRelationship(): void
+    {
+        $relAttr = new Document([
+            '$id' => 'reverse1', 'key' => 'reverse1',
+            'type' => ColumnType::Relationship->value,
+            'size' => 0, 'required' => false, 'default' => null,
+            'signed' => true, 'array' => false, 'filters' => [],
+            'options' => [
+                'relatedCollection' => 'reverse1',
+                'relationType' => RelationType::OneToOne,
+                'twoWay' => false, 'twoWayKey' => 'reverse2',
+                'onDelete' => 'restrict', 'side' => 'child',
+            ],
+        ]);
+
+        $db = $this->buildDatabase([
+            $this->makeCollection('reverse2', [$relAttr]),
+            $this->makeCollection('reverse1'),
+        ], [], true);
+
+        $this->expectException(RelationshipException::class);
+        $this->expectExceptionMessage('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
+
+        $db->createDocument('reverse2', new Document([
+            '$id' => ID::unique(),
+            'reverse1' => ['name' => 'reverse'],
+        ]));
+    }
+
     public function testCreateEmptyValueRelationship(): void
     {
         $o2oRel = new Document([

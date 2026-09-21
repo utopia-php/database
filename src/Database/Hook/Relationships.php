@@ -181,6 +181,10 @@ class Relationships implements Hook
                 $value = $this->coerceToDocument($document, $key, $value);
 
                 if (\is_array($value)) {
+                    if ($relationType === RelationType::OneToOne && ! $twoWay && $side === RelationSide::Child) {
+                        throw new RelationshipException('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.');
+                    }
+
                     if (
                         ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent) ||
                         ($relationType === RelationType::OneToMany && $side === RelationSide::Child) ||

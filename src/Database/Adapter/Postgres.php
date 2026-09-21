@@ -542,6 +542,22 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
     }
 
+    public function relaxAttributeRequired(string $collection, string $id): bool
+    {
+        $schema = $this->createSchemaBuilder();
+        $statement = $schema->alterColumnNullable(
+            $this->getSQLTableRaw($this->filter($collection)),
+            $this->filter($id),
+            true,
+        );
+
+        try {
+            return $this->executeStatement($statement->query, Event::AttributeUpdate);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
     /**
      * Delete Attribute
      *

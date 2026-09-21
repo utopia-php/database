@@ -765,8 +765,7 @@ trait Attributes
             || ! \is_null($size)
             || ! \is_null($signed)
             || ! \is_null($array)
-            || ! \is_null($newKey)
-            || (! \is_null($required) && $required !== $originalRequired);
+            || ! \is_null($newKey);
         if ($type === null) {
             $rawType = $attribute->getAttribute('type');
             if (! $rawType instanceof ColumnType && ! \is_string($rawType)) {
@@ -1104,6 +1103,13 @@ trait Attributes
             operationDescription: "attribute update '{$id}'",
             silentRollback: true
         );
+
+        // An attribute that stops being required leaves the column alone on
+        // every other path, so the constraint it was created with outlives the
+        // definition that asked for it.
+        if ($originalRequired && ! $required) {
+            $this->adapter->relaxAttributeRequired($collection, $newKey ?? $id);
+        }
 
         if ($altering) {
             $this->withRetries(fn () => $this->purgeCachedCollection($collection));

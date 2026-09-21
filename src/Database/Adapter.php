@@ -739,6 +739,19 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool;
 
     /**
+     * Relax a column's null constraint when an attribute stops being required.
+     *
+     * Most engines carry required-ness in the structure validator rather than
+     * the column once it exists, so this does nothing by default. Postgres
+     * overrides it because it created the column NOT NULL and keeps that
+     * through every other alter.
+     */
+    public function relaxAttributeRequired(string $collection, string $id): bool
+    {
+        return true;
+    }
+
+    /**
      * Delete Attribute
      */
     abstract public function deleteAttribute(string $collection, string $id): bool;

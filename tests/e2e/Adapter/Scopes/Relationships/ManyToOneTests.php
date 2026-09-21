@@ -782,6 +782,24 @@ trait ManyToOneTests
         $database->getDocument('product', 'product1');
         $this->assertEquals(null, $product1->getAttribute('newStore'));
 
+
+        // Create child with no related parents and verify deleteSetNull succeeds
+        $database->createDocument('store', new Document([
+            '$id' => 'store8',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Store 8',
+            'opensAt' => '10:00',
+        ]));
+
+        $deleted = $database->deleteDocument('store', 'store8');
+        $this->assertEquals(true, $deleted);
+
+        $store8 = $database->getDocument('store', 'store8');
+        $this->assertEquals(true, $store8->isEmpty());
         // Change on delete to cascade
         $database->updateRelationship(
             collection: 'product',

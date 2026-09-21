@@ -8194,6 +8194,10 @@ class Database
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
                 }
+
+                if (empty($value)) {
+                    break;
+                }
                 foreach ($value as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
@@ -8212,12 +8216,14 @@ class Database
                     break;
                 }
 
-                if (!$twoWay) {
-                    $value = $this->find($relatedCollection->getId(), [
-                        Query::select(['$id']),
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX)
-                    ]);
+                $value = $this->find($relatedCollection->getId(), [
+                    Query::select(['$id']),
+                    Query::equal($twoWayKey, [$document->getId()]),
+                    Query::limit(PHP_INT_MAX)
+                ]);
+
+                if (empty($value)) {
+                    break;
                 }
 
                 foreach ($value as $relation) {

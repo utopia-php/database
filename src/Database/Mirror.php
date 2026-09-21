@@ -193,6 +193,18 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
+    public function setMaxQueryValues(int $max): self
+    {
+        parent::setMaxQueryValues($max);
+        $this->source->setMaxQueryValues($max);
+        $this->destination?->setMaxQueryValues($max);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function setDropUnknownAttributes(bool $drop): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());

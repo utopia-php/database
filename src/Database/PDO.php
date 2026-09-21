@@ -14,6 +14,8 @@ class PDO
 {
     protected \PDO $pdo;
 
+    private ?string $hostname = null;
+
     /**
      * @param string $dsn
      * @param ?string $username
@@ -136,14 +138,18 @@ class PDO
      */
     public function getHostname(): string
     {
-        $parts = $this->parseDsn($this->dsn);
+        if ($this->hostname === null) {
+            $parts = $this->parseDsn($this->dsn);
 
-        /**
-         * @var string $host
-         */
-        $host = $parts['host'] ?? throw new \Exception('No host found in DSN');
+            /**
+             * @var string $host
+             */
+            $host = $parts['host'] ?? throw new \Exception('No host found in DSN');
 
-        return $host;
+            $this->hostname = $host;
+        }
+
+        return $this->hostname;
     }
 
     /**

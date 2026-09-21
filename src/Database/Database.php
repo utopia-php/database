@@ -387,10 +387,28 @@ class Database
      */
     protected static array $filters = [];
 
+    protected static bool $defaultFiltersRegistered = false;
+
+    protected static int $filtersVersion = 0;
+
+    /**
+     * @var array<array<string, mixed>>|null
+     */
+    private static ?array $tenantlessInternalAttributes = null;
+
     /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
+
+    /**
+     * @var array<string, string>
+     */
+    private array $filterSignatures = [];
+
+    private string $filterSignaturesEncoded = '';
+
+    private int $filterSignaturesVersion = -1;
 
     /**
      * @var array<string, array<string, callable>>
@@ -494,13 +512,24 @@ class Database
 
         $this->setAuthorization(new Authorization());
 
+        self::registerDefaultFilters();
+    }
+
+    private static function registerDefaultFilters(): void
+    {
+        if (self::$defaultFiltersRegistered) {
+            return;
+        }
+
+        self::$defaultFiltersRegistered = true;
+
         self::addFilter(
             'json',
             /**
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
                 if (!is_array($value) && !$value instanceof \stdClass) {
@@ -514,7 +543,7 @@ class Database
              * @return mixed
              * @throws Exception
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!is_string($value)) {
                     return $value;
                 }
@@ -524,7 +553,7 @@ class Database
                 if (array_key_exists('$id', $value)) {
                     return new Document($value);
                 } else {
-                    $value = array_map(function ($item) {
+                    $value = array_map(static function ($item) {
                         if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
                             return new Document($item);
                         }
@@ -542,7 +571,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (is_null($value)) {
                     return;
                 }
@@ -558,7 +587,7 @@ class Database
              * @param string|null $value
              * @return string|null
              */
-            function (?string $value) {
+            static function (?string $value) {
                 return DateTime::formatTz($value);
             }
         );
@@ -569,7 +598,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!is_array($value)) {
                     return $value;
                 }
@@ -585,7 +614,7 @@ class Database
              * @param Database $database
              * @return array|null
              */
-            function (?string $value, Document $document, Database $database) {
+            static function (?string $value, Document $document, Database $database) {
                 if ($value === null) {
                     return null;
                 }
@@ -599,7 +628,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!is_array($value)) {
                     return $value;
                 }
@@ -615,7 +644,7 @@ class Database
              * @param Database $database
              * @return array|null
              */
-            function (?string $value, Document $document, Database $database) {
+            static function (?string $value, Document $document, Database $database) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -629,7 +658,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!is_array($value)) {
                     return $value;
                 }
@@ -645,7 +674,7 @@ class Database
              * @param Database $database
              * @return array|null
              */
-            function (?string $value, Document $document, Database $database) {
+            static function (?string $value, Document $document, Database $database) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -659,7 +688,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!\is_array($value)) {
                     return $value;
                 }
@@ -678,7 +707,7 @@ class Database
              * @param string|null $value
              * @return mixed
              */
-            function (?string $value) {
+            static function (?string $value) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -696,7 +725,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!\is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
@@ -707,7 +736,7 @@ class Database
              * @param mixed $value
              * @return array|null
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (is_null($value)) {
                     return;
                 }
@@ -9296,6 +9325,8 @@ class Database
             'decode' => $decode,
             'signature' => self::computeCallableSignature($encode) . ':' . self::computeCallableSignature($decode),
         ];
+
+        self::$filtersVersion++;
     }
 
     /**
@@ -9917,15 +9948,14 @@ class Database
      */
     public function getInternalAttributes(): array
     {
-        $attributes = self::INTERNAL_ATTRIBUTES;
-
-        if (!$this->adapter->getSharedTables()) {
-            $attributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-                return $attribute['$id'] !== '$tenant';
-            });
+        if ($this->adapter->getSharedTables()) {
+            return self::INTERNAL_ATTRIBUTES;
         }
 
-        return $attributes;
+        return self::$tenantlessInternalAttributes ??= \array_values(\array_filter(
+            self::INTERNAL_ATTRIBUTES,
+            fn (array $attribute): bool => $attribute['$id'] !== '$tenant',
+        ));
     }
 
     /**
@@ -9996,11 +10026,10 @@ class Database
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
-            $payload = \json_encode([
-                'selects' => $sortedSelects,
-                'relationships' => $this->resolveRelationships,
-                'filters' => $this->getActiveFilterSignatures(),
-            ]) ?: '';
+            $payload = ($this->resolveRelationships ? '1' : '0')
+                . ':' . $this->getFilterSignatureKey()
+                . ':' . ($sortedSelects === [] ? '' : (\json_encode($sortedSelects) ?: ''));
+
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
 
@@ -10142,33 +10171,56 @@ class Database
      */
     private function getActiveFilterSignatures(): array
     {
-        $filterSignatures = [];
         if (!$this->filter) {
-            return $filterSignatures;
+            return [];
         }
 
-        $disabled = $this->disabledFilters ?? [];
+        $this->refreshFilterSignatures();
+
+        return $this->disabledFilters
+            ? \array_diff_key($this->filterSignatures, $this->disabledFilters)
+            : $this->filterSignatures;
+    }
+
+    private function refreshFilterSignatures(): void
+    {
+        if ($this->filterSignaturesVersion === self::$filtersVersion) {
+            return;
+        }
+
+        $signatures = [];
 
         foreach (self::$filters as $name => $callbacks) {
-            if (isset($disabled[$name])) {
-                continue;
-            }
             if (\array_key_exists($name, $this->instanceFilters)) {
                 continue;
             }
-            $filterSignatures[$name] = $callbacks['signature'];
+            $signatures[$name] = $callbacks['signature'];
         }
 
         foreach ($this->instanceFilters as $name => $callbacks) {
-            if (isset($disabled[$name])) {
-                continue;
-            }
-            $filterSignatures[$name] = $callbacks['signature'];
+            $signatures[$name] = $callbacks['signature'];
         }
 
-        \ksort($filterSignatures);
+        \ksort($signatures);
 
-        return $filterSignatures;
+        $this->filterSignatures = $signatures;
+        $this->filterSignaturesEncoded = \json_encode($signatures) ?: '';
+        $this->filterSignaturesVersion = self::$filtersVersion;
+    }
+
+    private function getFilterSignatureKey(): string
+    {
+        if (!$this->filter) {
+            return '';
+        }
+
+        if ($this->disabledFilters) {
+            return \json_encode($this->getActiveFilterSignatures()) ?: '';
+        }
+
+        $this->refreshFilterSignatures();
+
+        return $this->filterSignaturesEncoded;
     }
 
     private static function computeCallableSignature(callable $callable): string
@@ -10809,7 +10861,7 @@ class Database
      * @return string
      * @throws DatabaseException
      */
-    protected function encodeSpatialData(mixed $value, string $type): string
+    protected static function encodeSpatialData(mixed $value, string $type): string
     {
         $validator = new Spatial($type);
         if (!$validator->isValid($value)) {

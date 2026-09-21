@@ -61,4 +61,29 @@ class FilterRegistryTest extends TestCase
 
         $this->assertSame([9.0, 9.0], $decoded->getAttribute('location'));
     }
+
+    public function testDefaultFilterSignaturesSurviveLaterConstruction(): void
+    {
+        $first = $this->createDatabase();
+        [, , $before] = $first->getCacheKeys('places', 'a');
+
+        $this->createDatabase();
+
+        [, , $after] = $first->getCacheKeys('places', 'a');
+
+        $this->assertSame($before, $after);
+    }
+
+    public function testRegisteringAGlobalFilterInvalidatesCacheKeys(): void
+    {
+        $database = $this->createDatabase();
+        [, , $before] = $database->getCacheKeys('places', 'a');
+
+        $noop = fn (mixed $value) => $value;
+        Database::addFilter(__FUNCTION__, $noop, $noop);
+
+        [, , $after] = $database->getCacheKeys('places', 'a');
+
+        $this->assertNotSame($before, $after);
+    }
 }

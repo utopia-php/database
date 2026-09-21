@@ -778,6 +778,24 @@ trait ManyToOneTests
         $database->getDocument('product', 'product1');
         $this->assertEquals(null, $product1->getAttribute('newStore'));
 
+
+        // Create child with no related parents and verify deleteSetNull succeeds
+        $database->createDocument('store', new Document([
+            '$id' => 'store8',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Store 8',
+            'opensAt' => '10:00',
+        ]));
+
+        $deleted = $database->deleteDocument('store', 'store8');
+        $this->assertEquals(true, $deleted);
+
+        $store8 = $database->getDocument('store', 'store8');
+        $this->assertEquals(true, $store8->isEmpty());
         // Change on delete to cascade
         $database->updateRelationship(
             collection: 'product',
@@ -1804,5 +1822,124 @@ trait ManyToOneTests
 
         $database->deleteCollection('departments');
         $database->deleteCollection('staff');
+    }
+
+    /**
+     * Deleting the child must clear the parent foreign keys even when the delete ran through a select query.
+     */
+    public function testManyToOneSetNullAfterSelectDelete(): void
+    {
+        $database = static::getDatabase();
+
+        $collectionPermissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $documentPermissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: 'mto_select_parent', permissions: $collectionPermissions, documentSecurity: true));
+        $database->createCollection(new Collection(id: 'mto_select_child', permissions: $collectionPermissions, documentSecurity: true));
+        $database->createAttribute('mto_select_parent', Attribute::string(key: 'name', size: 255));
+        $database->createAttribute('mto_select_child', Attribute::string(key: 'name', size: 255));
+
+        $database->createRelationship(Relationship::manyToOne(
+            collection: 'mto_select_parent',
+            relatedCollection: 'mto_select_child',
+            twoWay: true,
+            key: 'child',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument('mto_select_child', new Document([
+            '$id' => 'child1',
+            '$permissions' => $documentPermissions,
+            'name' => 'Child',
+        ]));
+
+        $database->createDocument('mto_select_parent', new Document([
+            '$id' => 'parent1',
+            '$permissions' => $documentPermissions,
+            'name' => 'Parent',
+            'child' => 'child1',
+        ]));
+
+        // A select query turns relationship population off, so the deleted document
+        // reaches deleteSetNull() without its relationship value
+        $database->deleteDocuments('mto_select_child', [
+            Query::select(['$id', 'name']),
+            Query::equal('$id', ['child1']),
+        ]);
+
+        $survivor = $database->getDocument('mto_select_parent', 'parent1');
+        $this->assertFalse($survivor->isEmpty());
+        $this->assertNull($survivor->getAttribute('child'));
+    }
+
+    /**
+     * A referencing document the caller cannot read must still have its foreign key
+     * cleared, otherwise it is left pointing at a deleted row.
+     */
+    public function testManyToOneSetNullClearsUnreadableReferences(): void
+    {
+        $database = static::getDatabase();
+
+        // No collection-level read: only document permissions grant access
+        $database->createCollection(new Collection(id: 'mto_hidden_product', permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true));
+        $database->createCollection(new Collection(id: 'mto_hidden_store', permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::delete(Role::any()),
+        ], documentSecurity: true));
+
+        $database->createAttribute('mto_hidden_product', Attribute::string(key: 'name', size: 255));
+        $database->createAttribute('mto_hidden_store', Attribute::string(key: 'name', size: 255));
+
+        $database->createRelationship(Relationship::manyToOne(
+            collection: 'mto_hidden_product',
+            relatedCollection: 'mto_hidden_store',
+            twoWay: true,
+            key: 'store',
+            twoWayKey: 'products',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument('mto_hidden_store', new Document([
+            '$id' => 'store1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'name' => 'Store',
+        ]));
+
+        $database->createDocument('mto_hidden_product', new Document([
+            '$id' => 'product1',
+            '$permissions' => [
+                Permission::read(Role::user('someone-else')),
+                Permission::update(Role::user('someone-else')),
+            ],
+            'name' => 'Hidden Product',
+            'store' => 'store1',
+        ]));
+
+        $this->assertTrue($database->getDocument('mto_hidden_product', 'product1')->isEmpty());
+
+        $this->assertTrue($database->deleteDocument('mto_hidden_store', 'store1'));
+
+        $hidden = $database->getAuthorization()->skip(
+            fn () => $database->getDocument('mto_hidden_product', 'product1')
+        );
+        $this->assertFalse($hidden->isEmpty());
+        $this->assertNull($hidden->getAttribute('store'));
     }
 }

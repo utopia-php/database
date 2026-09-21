@@ -2504,4 +2504,62 @@ trait OneToManyTests
         $database->deleteCollection($libraries);
         $database->deleteCollection($booksLib);
     }
+
+    /**
+     * Deleting the parent must clear the child foreign keys even when the delete ran through a select query.
+     */
+    public function testOneToManySetNullAfterSelectDelete(): void
+    {
+        $database = static::getDatabase();
+
+        $collectionPermissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $documentPermissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: 'otm_select_parent', permissions: $collectionPermissions, documentSecurity: true));
+        $database->createCollection(new Collection(id: 'otm_select_child', permissions: $collectionPermissions, documentSecurity: true));
+        $database->createAttribute('otm_select_parent', Attribute::string(key: 'name', size: 255));
+        $database->createAttribute('otm_select_child', Attribute::string(key: 'name', size: 255));
+
+        $database->createRelationship(Relationship::oneToMany(
+            collection: 'otm_select_parent',
+            relatedCollection: 'otm_select_child',
+            twoWay: true,
+            key: 'child',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument('otm_select_child', new Document([
+            '$id' => 'child1',
+            '$permissions' => $documentPermissions,
+            'name' => 'Child',
+        ]));
+
+        $database->createDocument('otm_select_parent', new Document([
+            '$id' => 'parent1',
+            '$permissions' => $documentPermissions,
+            'name' => 'Parent',
+            'child' => ['child1'],
+        ]));
+
+        // A select query turns relationship population off, so the deleted document
+        // reaches deleteSetNull() without its relationship value
+        $database->deleteDocuments('otm_select_parent', [
+            Query::select(['$id', 'name']),
+            Query::equal('$id', ['parent1']),
+        ]);
+
+        $survivor = $database->getDocument('otm_select_child', 'child1');
+        $this->assertFalse($survivor->isEmpty());
+        $this->assertNull($survivor->getAttribute('parent'));
+    }
 }

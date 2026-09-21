@@ -771,7 +771,7 @@ class Relationships implements Hook
                     $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case ForeignKeyAction::SetNull:
-                    $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side);
                     break;
                 case ForeignKeyAction::Cascade:
                     foreach ($this->deleteStack as $processedRelationship) {
@@ -1939,7 +1939,50 @@ class Relationships implements Hook
         }
     }
 
-    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, mixed $value, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): void
+    /**
+     * Find every document in $relatedCollection whose $twoWayKey points at $document.
+     *
+     * A delete can start from a document fetched without its relationships
+     * populated, because deleteDocuments passes the caller's queries to find()
+     * and a select turns population off, so the value carried on the document
+     * cannot be trusted to list the referencing rows.
+     *
+     * Permissions are skipped: a referencing document the caller cannot read
+     * still has to have its foreign key cleared, or it is left pointing at a
+     * row that no longer exists.
+     *
+     * @return array<Document>
+     */
+    private function findReferencingDocuments(Document $relatedCollection, Document $document, string $twoWayKey): array
+    {
+        return $this->db->getAuthorization()->skip(fn () => $this->db->find($relatedCollection->getId(), [
+            Query::select([Document::ID]),
+            Query::equal($twoWayKey, [$document->getId()]),
+            Query::limit(PHP_INT_MAX),
+        ]));
+    }
+
+    /**
+     * Clear the foreign key on every document referencing $document.
+     */
+    private function clearReferences(Document $relatedCollection, Document $document, string $twoWayKey): void
+    {
+        $relations = $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey);
+
+        if (empty($relations)) {
+            return;
+        }
+
+        $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $relations);
+
+        $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
+            $relatedCollection->getId(),
+            new Document([$twoWayKey => null]),
+            [Query::equal(Document::ID, $relationIds)],
+        )));
+    }
+
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): void
     {
         switch ($relationType) {
             case RelationType::OneToOne:
@@ -1947,19 +1990,11 @@ class Relationships implements Hook
                     break;
                 }
 
-                $this->db->getAuthorization()->skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey) {
-                    if (! $twoWay) {
-                        $related = $this->db->findOne($relatedCollection->getId(), [
-                            Query::select([Document::ID]),
-                            Query::equal($twoWayKey, [$document->getId()]),
-                        ]);
-                    } else {
-                        if (empty($value)) {
-                            return;
-                        }
-                        /** @var Document $value */
-                        $related = $this->db->getDocument($relatedCollection->getId(), $value->getId(), [Query::select([Document::ID])]);
-                    }
+                $this->db->getAuthorization()->skip(function () use ($document, $relatedCollection, $twoWayKey) {
+                    $related = $this->db->findOne($relatedCollection->getId(), [
+                        Query::select([Document::ID]),
+                        Query::equal($twoWayKey, [$document->getId()]),
+                    ]);
 
                     if ($related->isEmpty()) {
                         return;
@@ -1979,15 +2014,8 @@ class Relationships implements Hook
                 if ($side === RelationSide::Child) {
                     break;
                 }
-                /** @var array<Document> $value */
-                if (! empty($value)) {
-                    $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                    $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
-                        $relatedCollection->getId(),
-                        new Document([$twoWayKey => null]),
-                        [Query::equal(Document::ID, $relationIds)],
-                    )));
-                }
+
+                $this->clearReferences($relatedCollection, $document, $twoWayKey);
                 break;
 
             case RelationType::ManyToOne:
@@ -1995,23 +2023,7 @@ class Relationships implements Hook
                     break;
                 }
 
-                if (! $twoWay) {
-                    $value = $this->db->find($relatedCollection->getId(), [
-                        Query::select([Document::ID]),
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX),
-                    ]);
-                }
-
-                /** @var array<Document> $value */
-                if (! empty($value)) {
-                    $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                    $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
-                        $relatedCollection->getId(),
-                        new Document([$twoWayKey => null]),
-                        [Query::equal(Document::ID, $relationIds)],
-                    )));
-                }
+                $this->clearReferences($relatedCollection, $document, $twoWayKey);
                 break;
 
             case RelationType::ManyToMany:

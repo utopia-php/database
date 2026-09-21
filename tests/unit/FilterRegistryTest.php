@@ -133,23 +133,34 @@ class FilterRegistryTest extends TestCase
 
     public function testOverridingABuiltInFilterBeforeTheFirstInstanceStillWins(): void
     {
-        $registry = new \ReflectionProperty(Database::class, 'filters');
-
         // A fresh process: nothing has constructed a Database yet, so the
         // built-ins are not in the registry.
-        $registry->setValue(null, []);
+        (new \ReflectionProperty(Database::class, 'filters'))->setValue(null, []);
         (new \ReflectionProperty(Database::class, 'defaultFiltersRegistered'))->setValue(null, false);
 
         $identity = fn (mixed $value) => $value;
         Database::addFilter('datetime', $identity, $identity);
-        $override = $registry->getValue()['datetime']['signature'];
 
-        $this->createDatabase();
+        $decoded = $this->createDatabase()->decode(
+            new Document([
+                '$id' => 'events',
+                'attributes' => [
+                    new Document([
+                        '$id' => 'occurredAt',
+                        'type' => Database::VAR_DATETIME,
+                        'array' => false,
+                        'filters' => ['datetime'],
+                    ]),
+                ],
+            ]),
+            new Document(['$id' => 'event', 'occurredAt' => '2026-09-21 10:00:00.000']),
+        );
 
+        // The built-in decode would hand back '2026-09-21T10:00:00.000+00:00'.
         $this->assertSame(
-            $override,
-            $registry->getValue()['datetime']['signature'],
-            'constructing a database must not restore a built-in filter the caller replaced before it',
+            '2026-09-21 10:00:00.000',
+            $decoded->getAttribute('occurredAt'),
+            'the override registered before the first instance must be the filter that runs',
         );
     }
 

@@ -520,6 +520,15 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         try {
             $ok = $this->executeStatement($sql, Event::AttributeUpdate);
+
+            // Postgres carries NOT NULL through ALTER COLUMN ... TYPE, so a
+            // column moving between required and optional keeps the old
+            // constraint unless it is altered on its own.
+            if ($ok) {
+                $nullable = $schema->alterColumnNullable($tableRaw, $id, ! $attribute->required);
+                $ok = $this->executeStatement($nullable->query, Event::AttributeUpdate);
+            }
+
             $this->invalidateSpatialAttributesCache($collection);
 
             return $ok;

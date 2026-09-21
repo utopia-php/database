@@ -313,6 +313,45 @@ trait SpatialTests
         $database->deleteCollection('building');
     }
 
+    public function testSpatialRequiredDropAcceptsNull(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class)) || ! $database->getAdapter()->supports(Capability::SpatialIndexNull)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionName = 'spatial_required_drop_';
+        try {
+            $database->createCollection(new Collection(
+                id: $collectionName,
+                attributes: [
+                    Attribute::string(key: 'name', required: true),
+                    Attribute::point(key: 'location', required: true),
+                ],
+            ));
+
+            $database->updateAttribute($collectionName, 'location', required: false);
+
+            // The stored definition flipping is not enough: the column keeps
+            // whatever null constraint it was created with until the adapter
+            // alters it, and only a write proves that happened.
+            $document = $database->createDocument($collectionName, new Document([
+                '$id' => ID::unique(),
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'Test Location',
+                'location' => null,
+            ]));
+
+            $this->assertFalse($document->isEmpty());
+            $this->assertNull($document->getAttribute('location'));
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
     public function testSpatialAttributes(): void
     {
         /** @var Database $database */

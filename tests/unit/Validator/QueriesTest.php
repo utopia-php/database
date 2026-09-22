@@ -251,6 +251,67 @@ class QueriesTest extends TestCase
         $this->assertFalse($validator->isValid([Query::groupBy(['score'])]));
     }
 
+    public function test_aggregate_and_group_by_reject_an_undeclared_join_alias(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'price',
+                'key' => 'price',
+                'type' => ColumnType::Double->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Aggregate($attributes),
+            new GroupBy($attributes),
+            new Join(),
+        ]);
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::sum('revv.score'),
+        ]), 'an aggregate qualified with an undeclared alias must not pass');
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::groupBy(['revv.score']),
+        ]), 'a groupBy qualified with an undeclared alias must not pass');
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::sum('rev.score.nested'),
+        ]), 'a multi-segment join column must not pass');
+    }
+
+    public function test_join_alias_stand_down_does_not_leak_into_the_next_query_set(): void
+    {
+        $attributes = [
+            new Document([
+                '$id' => 'price',
+                'key' => 'price',
+                'type' => ColumnType::Double->value,
+                'array' => false,
+            ]),
+        ];
+
+        $validator = new Queries([
+            new Aggregate($attributes),
+            new GroupBy($attributes),
+            new Join(),
+        ]);
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
+            Query::sum('rev.score'),
+        ]));
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('reviews', 'productId', '$id', '=', 'other'),
+            Query::sum('rev.score'),
+        ]), 'an alias from the previous query set must not stay valid');
+    }
+
     public function test_joined_attribute_stand_down_does_not_leak_into_the_next_query_set(): void
     {
         // Queries caches its validators, so a join in one request must not leave the

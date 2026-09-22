@@ -132,11 +132,6 @@ class Order extends Base
         $this->joinAliases = [];
     }
 
-    private function isAllowedJoinColumn(string $column): bool
-    {
-        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
-    }
-
     /**
      * Register aggregation aliases that become valid order targets for the
      * current validation pass. Callers (see Queries::isValid) must invoke

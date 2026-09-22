@@ -134,7 +134,9 @@ class Queries extends Validator
         if ($hasJoins) {
             // A join widens the attribute space past this collection's schema, and the
             // joined collection's attributes are not available here. Aggregating or
-            // grouping by one of them is legitimate, so the schema check stands down.
+            // grouping by one of them is legitimate, so the schema check stands down —
+            // but only for a bare name; an alias-qualified one still has to name an
+            // alias this query set declared (see JoinedAttributes::isJoinedAttribute).
             foreach ($this->validators as $validator) {
                 if ($validator instanceof Aggregate || $validator instanceof GroupBy) {
                     $validator->allowJoinedAttributes();
@@ -153,6 +155,8 @@ class Queries extends Validator
                         $validator instanceof Select
                         || $validator instanceof Filter
                         || $validator instanceof Order
+                        || $validator instanceof Aggregate
+                        || $validator instanceof GroupBy
                     )
                 ) {
                     $validator->allowJoinAliases($joinAliases);

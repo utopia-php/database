@@ -137,11 +137,6 @@ class Select extends Base
         $this->joinAliases = [];
     }
 
-    private function isAllowedJoinColumn(string $column): bool
-    {
-        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
-    }
-
     /**
      * Get the method type this validator handles.
      *

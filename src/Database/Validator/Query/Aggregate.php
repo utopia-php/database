@@ -11,14 +11,14 @@ use Utopia\Database\Query;
  */
 class Aggregate extends Base
 {
+    use JoinedAttributes;
+
     private const ALIAS_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/';
 
     /**
      * @var array<string, true>
      */
     protected array $schema = [];
-
-    protected bool $joinedAttributes = false;
 
     /**
      * @param  array<Document>  $attributes
@@ -49,9 +49,9 @@ class Aggregate extends Base
 
         if (
             $attribute !== '*'
-            && ! $this->joinedAttributes
             && $this->supportForAttributes
             && ! isset($this->schema[$attribute])
+            && ! $this->isJoinedAttribute($attribute)
         ) {
             $this->message = 'Attribute not found in schema: '.$attribute;
 
@@ -67,19 +67,5 @@ class Aggregate extends Base
         }
 
         return true;
-    }
-
-    /**
-     * Stand the schema check down for a query set that joins: the joined collection's
-     * attributes are legitimate operands here and are not in this collection's schema.
-     */
-    public function allowJoinedAttributes(): void
-    {
-        $this->joinedAttributes = true;
-    }
-
-    public function resetJoinedAttributes(): void
-    {
-        $this->joinedAttributes = false;
     }
 }

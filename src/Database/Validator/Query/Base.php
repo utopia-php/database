@@ -93,6 +93,16 @@ abstract class Base extends Validator
     }
 
     /**
+     * The column half of an `alias.column` reference must be a single plain
+     * identifier, so a dotted path cannot smuggle extra segments past the
+     * alias check.
+     */
+    protected function isAllowedJoinColumn(string $column): bool
+    {
+        return $column !== '' && \preg_match('/^[A-Za-z_$][A-Za-z0-9_$]*$/', $column) === 1;
+    }
+
+    /**
      * Returns what type of query this Validator is for
      */
     abstract public function getMethodType(): string;

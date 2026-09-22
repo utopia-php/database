@@ -2623,8 +2623,16 @@ trait Documents
      */
     private function withDocumentTenant(Document $document, callable $callback): void
     {
-        if ($this->getSharedTables() && $this->getTenantPerDocument()) {
-            $this->withTenant($document->getTenant(), $callback);
+        $tenant = $document->getTenant();
+
+        // A tenant of null is not a tenant to switch to. Collection definitions
+        // are the one kind of row createDocument() lets through without one
+        // under tenant-per-document, and readers still resolve their cache key
+        // under the adapter's tenant, so borrowing the document's null here
+        // purged an epoch no reader ever looks at and left every cached
+        // _metadata entry - a negative marker above all - live for its full TTL.
+        if ($this->getSharedTables() && $this->getTenantPerDocument() && $tenant !== null) {
+            $this->withTenant($tenant, $callback);
 
             return;
         }

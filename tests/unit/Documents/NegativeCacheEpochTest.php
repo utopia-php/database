@@ -18,8 +18,6 @@ use Utopia\Database\Helpers\Role;
 
 final class NegativeCacheEpochTest extends TestCase
 {
-    private const EMPTY_MARKER = '$empty';
-
     public function testAMissObservedBeforeAConcurrentWriteIsNotNegativeCached(): void
     {
         $cache = new LeasedMemoryCache();
@@ -41,12 +39,12 @@ final class NegativeCacheEpochTest extends TestCase
             ]));
         });
 
-        $before = $this->markerKeys($cache);
+        $cache->recordLeasedWrites();
         $this->assertTrue($database->getDocument('webhooks', 'hook')->isEmpty());
 
         $this->assertSame(
-            [],
-            $this->markersAddedSince($cache, $before),
+            0,
+            $cache->leasedEmptyMarkers(),
             'A miss observed before the epoch rotated must not be negative cached',
         );
 
@@ -62,12 +60,12 @@ final class NegativeCacheEpochTest extends TestCase
         $cache = new LeasedMemoryCache();
         $database = $this->createDatabase(new InterceptingMemory(), $cache);
 
-        $before = $this->markerKeys($cache);
+        $cache->recordLeasedWrites();
         $this->assertTrue($database->getDocument('webhooks', 'absent')->isEmpty());
 
-        $this->assertCount(
+        $this->assertSame(
             1,
-            $this->markersAddedSince($cache, $before),
+            $cache->leasedEmptyMarkers(),
             'Without a rotation the negative cache must still be written',
         );
 
@@ -93,30 +91,6 @@ final class NegativeCacheEpochTest extends TestCase
         return $database;
     }
 
-    /**
-     * @param  list<string>  $before
-     * @return list<string>
-     */
-    private function markersAddedSince(MemoryCache $cache, array $before): array
-    {
-        return \array_values(\array_diff($this->markerKeys($cache), $before));
-    }
-
-    /**
-     * @return list<string>
-     */
-    private function markerKeys(MemoryCache $cache): array
-    {
-        $keys = [];
-        foreach ($cache->store as $key => $entry) {
-            $data = \is_array($entry) ? ($entry['data'] ?? null) : null;
-            if (\is_array($data) && isset($data[self::EMPTY_MARKER])) {
-                $keys[] = (string) $key;
-            }
-        }
-
-        return $keys;
-    }
 }
 
 /**
@@ -158,10 +132,29 @@ final class InterceptingMemory extends DatabaseMemory
     }
 }
 
+/**
+ * Counts the empty-document markers the database asks the cache to store,
+ * through the Leasable contract the database actually calls, so a test can
+ * assert what was written without reading the adapter's storage.
+ */
 final class LeasedMemoryCache extends MemoryCache implements Leasable
 {
+    private const EMPTY_MARKER = '$empty';
+
     /** @var array<string, int> */
     private array $generations = [];
+
+    private ?int $emptyMarkers = null;
+
+    public function recordLeasedWrites(): void
+    {
+        $this->emptyMarkers = 0;
+    }
+
+    public function leasedEmptyMarkers(): int
+    {
+        return $this->emptyMarkers ?? 0;
+    }
 
     public function getGeneration(string $key): string
     {
@@ -175,6 +168,10 @@ final class LeasedMemoryCache extends MemoryCache implements Leasable
     #[Override]
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
     {
+        if ($this->emptyMarkers !== null && \is_array($data) && isset($data[self::EMPTY_MARKER])) {
+            $this->emptyMarkers++;
+        }
+
         if ($this->getGeneration($key) !== $generation) {
             return false;
         }

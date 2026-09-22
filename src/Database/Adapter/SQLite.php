@@ -1621,12 +1621,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value),
         };
 
-        $attributes = \array_map(fn ($attribute) => match ($attribute) {
-            Document::ID => ID::custom(Storage::UID),
-            Document::CREATED_AT => Storage::CREATED_AT,
-            Document::UPDATED_AT => Storage::UPDATED_AT,
-            default => $attribute
-        }, $attributes);
+        $attributes = \array_map($this->getInternalKeyForAttribute(...), $attributes);
 
         foreach ($attributes as $key => $attribute) {
             $attribute = $this->filter($attribute);

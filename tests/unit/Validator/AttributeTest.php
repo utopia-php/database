@@ -2219,4 +2219,17 @@ class AttributeTest extends TestCase
 
         $this->assertTrue($validator->isValid($attrVO));
     }
+
+    public function testBigIntegerDefaultRejectsNonNumericString(): void
+    {
+        $validator = new Attribute(attributes: []);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('does not match given type biginteger');
+        $validator->isValid(new AttributeVO(
+            key: 'counter',
+            type: ColumnType::BigInteger,
+            default: 'not_a_bigint',
+        ));
+    }
 }

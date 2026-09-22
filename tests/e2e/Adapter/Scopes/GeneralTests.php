@@ -2,6 +2,11 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use Exception;
+use Redis;
+use Throwable;
+use Utopia\Cache\Adapter\Redis as RedisAdapter;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -13,6 +18,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
@@ -848,4 +854,415 @@ trait GeneralTests
     /**
      * Wait for Redis to be ready with a readiness probe
      */
+
+    public function testCacheReconnect(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
+
+        $original = $database->getCache();
+        $database->setCache($cache);
+
+        $collection = 'cacheReconnect_'.uniqid();
+
+        try {
+            $database->createCollection(new Collection(id: $collection, attributes: [
+                Attribute::string(key: 'title', size: 255, required: true),
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+            ]));
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Test Document',
+            ]));
+
+            $this->assertSame('Test Document', $database->getDocument($collection, 'reconnect_doc')->getAttribute('title'));
+
+            $this->dropRedisConnection($redis);
+
+            $this->assertTrue((bool) $cache->save('reconnect_probe', 'alive'), 'The cache must reconnect after the server dropped the connection');
+            $this->assertSame('alive', $cache->load('reconnect_probe', 60));
+
+            $this->assertSame('Test Document', $database->getDocument($collection, 'reconnect_doc')->getAttribute('title'));
+
+            $database->updateDocument($collection, 'reconnect_doc', new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Updated Title',
+            ]));
+
+            $this->assertSame('Updated Title', $database->getDocument($collection, 'reconnect_doc')->getAttribute('title'));
+        } finally {
+            $database->setCache($original);
+            $database->deleteCollection($collection);
+        }
+    }
+
+    private function dropRedisConnection(Redis $redis): void
+    {
+        $id = $redis->rawCommand('CLIENT', 'ID');
+        $this->assertIsInt($id);
+
+        $killer = new Redis();
+        $killer->connect('redis', 6379);
+        $killer->rawCommand('CLIENT', 'KILL', 'ID', (string) $id);
+        $killer->close();
+    }
+
+    public function testCountTimeout(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Timeouts::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: 'count-timeouts'));
+
+        $this->assertTrue($database->createAttribute('count-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true)));
+
+        $longtext = file_get_contents(__DIR__.'/../../../resources/longtext.txt');
+        $this->assertIsString($longtext);
+
+        for ($i = 0; $i < 20; $i++) {
+            $database->createDocument('count-timeouts', new Document([
+                'longtext' => $longtext,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]));
+        }
+
+        try {
+            $database->setTimeout(1);
+
+            $thrown = null;
+            try {
+                $database->count('count-timeouts', [
+                    Query::containsString('longtext', ['needle-that-does-not-exist']),
+                ]);
+            } catch (Exception $e) {
+                $thrown = $e;
+            }
+
+            $this->assertInstanceOf(TimeoutException::class, $thrown, 'count() must throw a timeout exception');
+        } finally {
+            $database->clearTimeout();
+            $database->deleteCollection('count-timeouts');
+        }
+    }
+
+    public function testFindOrderByAfterException(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'cursorCollection_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection));
+
+        try {
+            $database->find($collection, [
+                Query::limit(2),
+                Query::offset(0),
+                Query::cursorAfter(new Document([
+                    '$id' => 'cursor',
+                    '$sequence' => '1',
+                    '$collection' => 'other collection',
+                ])),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertSame('cursor Document must be from the same Collection.', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testGetAttributeLimit(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if ($adapter->getLimitForAttributes() === 0) {
+            $this->assertSame(0, $database->getLimitForAttributes(), 'An adapter without a column limit reports no limit');
+
+            return;
+        }
+
+        $this->assertSame($adapter->getLimitForAttributes() - $adapter->getCountOfDefaultAttributes(), $database->getLimitForAttributes(), 'The limit must leave room for the internal columns');
+    }
+
+    public function testGetIndexLimit(): void
+    {
+        $this->assertSame(58, $this->getDatabase()->getLimitForIndexes());
+    }
+
+    public function testGetId(): void
+    {
+        $this->assertSame(20, strlen(ID::unique()));
+        $this->assertSame(13, strlen(ID::unique(0)));
+        $this->assertSame(13, strlen(ID::unique(-1)));
+        $this->assertSame(23, strlen(ID::unique(10)));
+
+        $this->assertNotSame(ID::unique(10), ID::unique(10));
+    }
+
+    public function testNestedQueryValidation(): void
+    {
+        $database = $this->getDatabase();
+
+        $database->createCollection(new Collection(id: __FUNCTION__, attributes: [
+            Attribute::string(key: 'name', size: 255, required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+
+        $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'test1',
+            ]),
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'doc2',
+            ]),
+        ]);
+
+        try {
+            $database->find(__FUNCTION__, [
+                Query::or([
+                    Query::equal('name', ['test1']),
+                    Query::search('name', 'doc'),
+                ]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(QueryException::class, $e);
+            $this->assertSame('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
+        } finally {
+            $database->deleteCollection(__FUNCTION__);
+        }
+    }
+
+    public function testPreserveDatesCreate(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->getAuthorization()->disable();
+        $database->setPreserveDates(true);
+
+        try {
+            $database->createCollection(new Collection(id: 'preserve_create_dates', attributes: [
+                Attribute::string(key: 'attr1', size: 10),
+            ]));
+
+            $date = '';
+
+            try {
+                $database->createDocument('preserve_create_dates', new Document([
+                    '$id' => 'doc1',
+                    '$permissions' => [],
+                    'attr1' => 'value1',
+                    '$createdAt' => $date,
+                ]));
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+            }
+
+            try {
+                $database->createDocuments('preserve_create_dates', [
+                    new Document([
+                        '$id' => 'doc2',
+                        '$permissions' => [],
+                        'attr1' => 'value2',
+                        '$createdAt' => $date,
+                    ]),
+                    new Document([
+                        '$id' => 'doc3',
+                        '$permissions' => [],
+                        'attr1' => 'value3',
+                        '$createdAt' => $date,
+                    ]),
+                ], batchSize: 2);
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+            }
+
+            $date = '2000-01-01T10:00:00.000+00:00';
+
+            $database->createDocument('preserve_create_dates', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'attr1' => 'value1',
+                '$createdAt' => $date,
+            ]));
+
+            $database->createDocuments('preserve_create_dates', [
+                new Document([
+                    '$id' => 'doc2',
+                    '$permissions' => [],
+                    'attr1' => 'value2',
+                    '$createdAt' => $date,
+                ]),
+                new Document([
+                    '$id' => 'doc3',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                    '$createdAt' => $date,
+                ]),
+                new Document([
+                    '$id' => 'doc4',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                    '$createdAt' => null,
+                ]),
+                new Document([
+                    '$id' => 'doc5',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                ]),
+            ], batchSize: 2);
+
+            $doc1 = $database->getDocument('preserve_create_dates', 'doc1');
+            $doc2 = $database->getDocument('preserve_create_dates', 'doc2');
+            $doc3 = $database->getDocument('preserve_create_dates', 'doc3');
+            $doc4 = $database->getDocument('preserve_create_dates', 'doc4');
+            $doc5 = $database->getDocument('preserve_create_dates', 'doc5');
+            $this->assertSame($date, $doc1->getCreatedAt());
+            $this->assertSame($date, $doc2->getCreatedAt());
+            $this->assertSame($date, $doc3->getCreatedAt());
+            $this->assertNotEmpty($doc4->getCreatedAt());
+            $this->assertNotSame($date, $doc4->getCreatedAt(), 'A null date is replaced by the current time');
+            $this->assertNotEmpty($doc5->getCreatedAt());
+            $this->assertNotSame($date, $doc5->getCreatedAt(), 'A missing date is replaced by the current time');
+        } finally {
+            $database->deleteCollection('preserve_create_dates');
+            $database->setPreserveDates(false);
+            $database->getAuthorization()->reset();
+        }
+    }
+
+    public function testPreserveDatesUpdate(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->getAuthorization()->disable();
+        $database->setPreserveDates(true);
+
+        try {
+            $database->createCollection(new Collection(id: 'preserve_update_dates', attributes: [
+                Attribute::string(key: 'attr1', size: 10),
+            ]));
+
+            $doc1 = $database->createDocument('preserve_update_dates', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'attr1' => 'value1',
+            ]));
+
+            $doc2 = $database->createDocument('preserve_update_dates', new Document([
+                '$id' => 'doc2',
+                '$permissions' => [],
+                'attr1' => 'value2',
+            ]));
+
+            $doc3 = $database->createDocument('preserve_update_dates', new Document([
+                '$id' => 'doc3',
+                '$permissions' => [],
+                'attr1' => 'value3',
+            ]));
+
+            try {
+                $doc1->setAttribute('$updatedAt', '');
+                $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+            }
+
+            try {
+                $database->updateDocuments(
+                    'preserve_update_dates',
+                    new Document([
+                        '$updatedAt' => '',
+                    ]),
+                    [
+                        Query::equal('$id', [
+                            $doc2->getId(),
+                            $doc3->getId(),
+                        ]),
+                    ]
+                );
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+            }
+
+            $newDate = '2000-01-01T10:00:00.000+00:00';
+
+            $doc1->setAttribute('$updatedAt', $newDate);
+            $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
+            $this->assertSame($newDate, $doc1->getUpdatedAt());
+            $doc1 = $database->getDocument('preserve_update_dates', 'doc1');
+            $this->assertSame($newDate, $doc1->getUpdatedAt());
+
+            $database->updateDocuments(
+                'preserve_update_dates',
+                new Document([
+                    '$updatedAt' => $newDate,
+                ]),
+                [
+                    Query::equal('$id', [
+                        $doc2->getId(),
+                        $doc3->getId(),
+                    ]),
+                ]
+            );
+
+            $doc2 = $database->getDocument('preserve_update_dates', 'doc2');
+            $doc3 = $database->getDocument('preserve_update_dates', 'doc3');
+            $this->assertSame($newDate, $doc2->getUpdatedAt());
+            $this->assertSame($newDate, $doc3->getUpdatedAt());
+        } finally {
+            $database->deleteCollection('preserve_update_dates');
+            $database->setPreserveDates(false);
+            $database->getAuthorization()->reset();
+        }
+    }
 }

@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
@@ -91,12 +92,9 @@ trait AttributeTests
     }
 
     /**
-     * Using phpunit dataProviders to check that all these combinations of types/defaults throw exceptions
-     * https://phpunit.de/manual/3.7/en/writing-tests-for-phpunit.html#writing-tests-for-phpunit.data-providers
-     *
      * @return list<array{0: ColumnType, 1: bool|float|int|string}>
      */
-    public function invalidDefaultValues(): array
+    public static function invalidDefaultValues(): array
     {
         return [
             [ColumnType::String, 1],
@@ -2249,5 +2247,296 @@ trait AttributeTests
 
         $updatedDoc = $database->getDocument('stringTypes', 'doc1');
         $this->assertEquals('Updated varchar value', $updatedDoc->getAttribute('varchar_field'));
+    }
+
+    #[DataProvider('invalidDefaultValues')]
+    public function testInvalidDefaultValues(ColumnType $type, mixed $default): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'bad_default_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection));
+
+        try {
+            $database->createAttribute($collection, new Attribute(key: 'bad_default', type: $type, size: 256, default: $default));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('does not match given type', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testAttributeAndIndexKeysAreCaseInsensitive(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'case_insensitive_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection));
+
+        $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'caseSensitive', size: 128, required: true)));
+
+        try {
+            $database->createAttribute($collection, Attribute::string(key: 'CaseSensitive', size: 128, required: true));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        $this->assertTrue($database->createIndex($collection, Index::key(key: 'key_caseSensitive', attributes: ['caseSensitive'], lengths: [128])));
+
+        try {
+            $database->createIndex($collection, Index::key(key: 'key_CaseSensitive', attributes: ['caseSensitive'], lengths: [128]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testUnknownFormat(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'unknown_format_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection));
+
+        try {
+            $database->createAttribute($collection, Attribute::string(key: 'bad_format', size: 256, required: true, format: 'url'));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testExceptionAttributeLimit(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if ($adapter->getLimitForAttributes() === 0) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $limit = $adapter->getLimitForAttributes() - $adapter->getCountOfDefaultAttributes();
+
+        $attributes = [];
+        for ($i = 0; $i <= $limit; $i++) {
+            $attributes[] = Attribute::integer(key: "attr_{$i}");
+        }
+
+        try {
+            $database->createCollection(new Collection(id: 'attributes_limit', attributes: $attributes));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertSame('Attribute limit of '.$adapter->getLimitForAttributes().' exceeded. Cannot create collection.', $e->getMessage());
+        }
+
+        array_pop($attributes);
+
+        $collection = $database->createCollection(new Collection(id: 'attributes_limit', attributes: $attributes));
+
+        $attribute = Attribute::string(key: 'breaking', size: 100, required: true);
+
+        try {
+            $database->checkAttribute($collection, $attribute);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertStringContainsString('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Remove some attributes to free up space.', $e->getMessage());
+        }
+
+        try {
+            $database->createAttribute($collection->getId(), $attribute);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+            $this->assertStringContainsString('Column limit reached. Cannot create new attribute.', $e->getMessage());
+            $this->assertStringContainsString('Remove some attributes to free up space.', $e->getMessage());
+        }
+
+        $database->deleteCollection('attributes_limit');
+    }
+
+    public function testWidthLimit(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if ($adapter->getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $database->createCollection(new Collection(id: 'width_limit'));
+
+        $init = $adapter->getAttributeWidth($collection);
+        $this->assertSame(1067, $init);
+
+        $width = fn (Attribute $attribute): int => $adapter->getAttributeWidth($collection->setAttribute('attributes', [$attribute])) - $init;
+
+        $this->assertSame(401, $width(Attribute::string(key: 'varchar_100', size: 100)), 'VARCHAR(100) is 100 * 4 bytes plus a 1 byte length');
+        $this->assertSame(20, $width(Attribute::string(key: 'json', size: 100, array: true)), 'An array is stored externally, only the pointer counts');
+        $this->assertSame(20, $width(Attribute::string(key: 'text', size: 20000)), 'A string past the varchar limit is stored externally');
+        $this->assertSame(8, $width(Attribute::integer(key: 'bigint', size: 8)));
+        $this->assertSame(7, $width(Attribute::datetime(key: 'date', size: 8)));
+
+        $database->deleteCollection('width_limit');
+    }
+
+    public function testCreateAttributesEmpty(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+
+        try {
+            $database->createAttributes(__FUNCTION__, []);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesMissingKey(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+
+        try {
+            $database->createAttributes(__FUNCTION__, [new Attribute(type: ColumnType::String, size: 10)]);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertSame('Missing attribute key', $e->getMessage());
+        }
+    }
+
+    public function testCreateAttributesDuplicateMetadata(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+        $database->createAttribute(__FUNCTION__, Attribute::string(key: 'dup', size: 10));
+
+        try {
+            $database->createAttributes(__FUNCTION__, [Attribute::string(key: 'dup', size: 10)]);
+            $this->fail('Expected DuplicateException not thrown');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DuplicateException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesInvalidFormat(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+
+        try {
+            $database->createAttributes(__FUNCTION__, [Attribute::string(key: 'foo', size: 10, format: 'nonexistent')]);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesDefaultOnRequired(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+
+        try {
+            $database->createAttributes(__FUNCTION__, [Attribute::string(key: 'foo', size: 10, required: true, default: 'bar')]);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertSame('Cannot set a default value for a required attribute', $e->getMessage());
+        }
+    }
+
+    public function testCreateAttributesStringSizeLimit(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+
+        $max = $database->getAdapter()->getLimitForString();
+
+        try {
+            $database->createAttributes(__FUNCTION__, [Attribute::string(key: 'foo', size: $max + 1)]);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
+    }
+
+    public function testCreateAttributesIntegerSizeLimit(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+
+        $limit = (int) ($database->getAdapter()->getLimitForInt() / 2);
+
+        try {
+            $database->createAttributes(__FUNCTION__, [Attribute::integer(key: 'foo', size: $limit + 1)]);
+            $this->fail('Expected DatabaseException not thrown');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+        }
     }
 }

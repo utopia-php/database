@@ -281,9 +281,38 @@ final class PermissionsTest extends TestCase
         $adapter->updateDocuments($collection, $updates, $documents);
     }
 
-    private function adapter(): SQLite
+    public function testUpdateMovesPermissionRowsToTheRenamedDocument(): void
     {
-        $adapter = new SQLite(new PDO('sqlite::memory:', null, null));
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $adapter = $this->adapter($pdo);
+        $this->assertTrue($adapter->createCollection('movies'));
+        $collection = new Document(['$id' => 'movies']);
+        $permissions = [
+            Permission::read(Role::user('alice')),
+            Permission::update(Role::user('alice')),
+        ];
+        [$created] = $adapter->createDocuments($collection, [
+            new Document(['$id' => 'before', '$permissions' => $permissions]),
+        ]);
+
+        $adapter->updateDocument($collection, 'before', new Document([
+            '$id' => 'after',
+            '$sequence' => $created->getSequence(),
+            '$permissions' => $permissions,
+        ]), false);
+
+        $rows = $pdo->prepare('SELECT _document, _type, _permission FROM permissions_movies_perms ORDER BY _type');
+        $rows->execute();
+
+        $this->assertSame([
+            ['_document' => 'after', '_type' => 'read', '_permission' => 'user:alice'],
+            ['_document' => 'after', '_type' => 'update', '_permission' => 'user:alice'],
+        ], $rows->fetchAll(\PDO::FETCH_ASSOC), 'The rows keyed by the old id are unreadable and must follow the document to its new id');
+    }
+
+    private function adapter(?PDO $pdo = null): SQLite
+    {
+        $adapter = new SQLite($pdo ?? new PDO('sqlite::memory:', null, null));
         $adapter->setNamespace('permissions');
         $authorization = new Authorization();
         $authorization->disable();

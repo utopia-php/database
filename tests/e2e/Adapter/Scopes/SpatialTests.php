@@ -9,6 +9,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -2437,5 +2438,65 @@ trait SpatialTests
         } finally {
             $database->deleteCollection($collectionName);
         }
+    }
+
+    public function testSpatialDistanceInMeterError(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Spatial::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        if ($database->getAdapter()->supports(Capability::MultiDimensionDistance)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'spatial_distance_error_test';
+        $database->createCollection(new Collection(id: $collection));
+        $this->assertTrue($database->createAttribute($collection, Attribute::point(key: 'loc', required: true)));
+        $this->assertTrue($database->createAttribute($collection, Attribute::linestring(key: 'line', required: true)));
+        $this->assertTrue($database->createAttribute($collection, Attribute::polygon(key: 'poly', required: true)));
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'doc1',
+            'loc' => [0.0, 0.0],
+            'line' => [[0.0, 0.0], [0.001, 0.0]],
+            'poly' => [[[-0.001, -0.001], [-0.001, 0.001], [0.001, 0.001], [-0.001, -0.001]]],
+            '$permissions' => [],
+        ]));
+        $this->assertSame('doc1', $document->getId());
+
+        $cases = [
+            ['attribute' => 'line', 'geometry' => [0.002, 0.0], 'expected' => ['linestring', 'point']],
+            ['attribute' => 'poly', 'geometry' => [0.002, 0.0], 'expected' => ['polygon', 'point']],
+            ['attribute' => 'loc', 'geometry' => [[0.0, 0.0], [0.001, 0.001]], 'expected' => ['point', 'linestring']],
+            ['attribute' => 'poly', 'geometry' => [[0.0, 0.0], [0.001, 0.001]], 'expected' => ['polygon', 'linestring']],
+            ['attribute' => 'loc', 'geometry' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'expected' => ['point', 'polygon']],
+            ['attribute' => 'line', 'geometry' => [[[0.0, 0.0], [0.001, 0.0], [0.001, 0.001], [0.0, 0.0]]], 'expected' => ['linestring', 'polygon']],
+            ['attribute' => 'poly', 'geometry' => [[[0.002, -0.001], [0.002, 0.001], [0.004, 0.001], [0.002, -0.001]]], 'expected' => ['polygon', 'polygon']],
+            ['attribute' => 'line', 'geometry' => [[0.002, 0.0], [0.003, 0.0]], 'expected' => ['linestring', 'linestring']],
+        ];
+
+        foreach ($cases as $case) {
+            try {
+                $database->find($collection, [
+                    Query::distanceLessThan($case['attribute'], $case['geometry'], 1000, true),
+                ]);
+                $this->fail('Expected Exception not thrown for '.implode(' vs ', $case['expected']));
+            } catch (\Exception $e) {
+                $this->assertInstanceOf(QueryException::class, $e);
+
+                $message = strtolower($e->getMessage());
+                $this->assertStringContainsString($case['expected'][0], $message, 'Attribute type missing in exception');
+                $this->assertStringContainsString($case['expected'][1], $message, 'Geometry type missing in exception');
+            }
+        }
+
+        $database->deleteCollection($collection);
     }
 }

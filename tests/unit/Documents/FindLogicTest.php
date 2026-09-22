@@ -287,7 +287,31 @@ class FindLogicTest extends TestCase
         $this->database->find('testCol', [Query::orderAsc('$sequence')]);
     }
 
-    public function testVectorFindIncludesSequenceTieBreakerWithoutCursor(): void
+    public function testVectorFindOrdersByDistanceAloneWithoutCursor(): void
+    {
+        $attributes = [
+            new Document(['$id' => 'embedding', 'key' => 'embedding', 'type' => ColumnType::Vector->value, 'size' => 2, 'required' => false, 'array' => false]),
+        ];
+        $this->setupCollectionLookup('testCol', $attributes);
+        $this->adapter->expects($this->once())
+            ->method('find')
+            ->with(
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+                [],
+                [],
+                $this->anything(),
+                $this->anything(),
+                $this->anything(),
+            )
+            ->willReturn([]);
+
+        $this->database->find('testCol', [Query::vectorCosine('embedding', [0.1, 0.2])]);
+    }
+
+    public function testVectorFindWithCursorKeepsSequenceTieBreaker(): void
     {
         $attributes = [
             new Document(['$id' => 'embedding', 'key' => 'embedding', 'type' => ColumnType::Vector->value, 'size' => 2, 'required' => false, 'array' => false]),
@@ -301,17 +325,27 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 ['$sequence'],
-                $this->anything(),
+                [OrderDirection::Asc],
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
             )
             ->willReturn([]);
 
-        $this->database->find('testCol', [Query::vectorCosine('embedding', [0.1, 0.2])]);
+        $cursor = new Document([
+            '$id' => 'page',
+            '$sequence' => 17,
+            '$collection' => 'testCol',
+            '$distance' => 0.25,
+        ]);
+
+        $this->database->find('testCol', [
+            Query::vectorCosine('embedding', [0.1, 0.2]),
+            Query::cursorAfter($cursor),
+        ]);
     }
 
-    public function testDateOrderInsertsMatchingSequenceTieBreakSecond(): void
+    public function testDateOrderAppendsMatchingSequenceTieBreakLast(): void
     {
         $this->setupCollectionLookup('testCol');
         $this->adapter->expects($this->once())
@@ -321,8 +355,8 @@ class FindLogicTest extends TestCase
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),
-                ['$createdAt', '$sequence', '$updatedAt'],
-                [OrderDirection::Desc, OrderDirection::Desc, OrderDirection::Asc],
+                ['$createdAt', '$updatedAt', '$sequence'],
+                [OrderDirection::Desc, OrderDirection::Asc, OrderDirection::Desc],
                 $this->anything(),
                 $this->anything(),
                 $this->anything(),

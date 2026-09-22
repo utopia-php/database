@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use Throwable;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -11,10 +12,15 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\Order;
@@ -186,23 +192,19 @@ trait IndexTests
     {
         $database = $this->getDatabase();
         $collection = $this->getNumbersCollection();
-
-        $numbers = $database->createCollection(new Collection(id: $collection));
-        $database->createAttribute($collection, Attribute::string(key: 'verbose', size: 128, required: true));
-        $database->createAttribute($collection, Attribute::integer(key: 'symbol', required: true));
-
-        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['verbose'], lengths: [128], orders: [Order::Asc]));
-        $database->createIndex($collection, Index::key(key: 'index2', attributes: ['symbol'], lengths: [0], orders: [Order::Asc]));
-
-        $index = $database->renameIndex($collection, 'index1', 'index3');
-
-        $this->assertTrue($index);
+        $this->initRenameIndexFixture();
 
         $numbers = $database->getCollection($collection);
 
-        $this->assertEquals('index2', $numbers->indexes[1]['$id']);
-        $this->assertEquals('index3', $numbers->indexes[0]['$id']);
         $this->assertCount(2, $numbers->indexes);
+        $this->assertSame('index3', $numbers->indexes[0]->getId());
+        $this->assertSame('index2', $numbers->indexes[1]->getId());
+
+        $this->assertTrue($database->renameIndex($collection, 'index2', 'index4'));
+        $this->assertSame('index4', $database->getCollection($collection)->indexes[1]->getId());
+
+        $this->assertTrue($database->renameIndex($collection, 'index4', 'index2'));
+        $this->assertSame('index2', $database->getCollection($collection)->indexes[1]->getId());
     }
 
     private static string $numbersCollection = '';
@@ -450,4 +452,450 @@ trait IndexTests
         $database->deleteCollection($col2);
     }
 
+    public function testRenameIndexMissing(): void
+    {
+        $database = $this->getDatabase();
+        $this->initRenameIndexFixture();
+
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('Index not found');
+        $database->renameIndex($this->getNumbersCollection(), 'index1', 'index4');
+    }
+
+    public function testRenameIndexExisting(): void
+    {
+        $database = $this->getDatabase();
+        $this->initRenameIndexFixture();
+
+        $this->expectException(DuplicateException::class);
+        $this->expectExceptionMessage('Index name already used');
+        $database->renameIndex($this->getNumbersCollection(), 'index3', 'index2');
+    }
+
+    /**
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     */
+    private function indexValidator(array $attributes, array $indexes): IndexValidator
+    {
+        $adapter = $this->getDatabase()->getAdapter();
+
+        return new IndexValidator(
+            $attributes,
+            $indexes,
+            $adapter->getMaxIndexLength(),
+            $adapter->getInternalIndexesKeys(),
+            $adapter->supports(Capability::IndexArray),
+            $adapter->supports(Capability::SpatialIndexNull),
+            $adapter->supports(Capability::SpatialIndexOrder),
+            $adapter->supports(Capability::Vectors),
+            $adapter->supports(Capability::DefinedAttributes),
+            $adapter->supports(Capability::MultipleFulltextIndexes),
+            $adapter->supports(Capability::IdenticalIndexes),
+            $adapter->supports(Capability::ObjectIndexes),
+            $adapter->supports(Capability::TrigramIndex),
+            $adapter->hasFeature(Feature\Spatial::class),
+            $adapter->supports(Capability::Index),
+            $adapter->supports(Capability::UniqueIndex),
+            $adapter->supports(Capability::Fulltext),
+            $adapter->supports(Capability::TTLIndexes),
+            $adapter->supports(Capability::Objects),
+        );
+    }
+
+    public function testIndexValidation(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        $attributes = [
+            Attribute::string(key: 'title1', size: 700),
+            Attribute::string(key: 'title2', size: 500),
+        ];
+
+        $indexes = [
+            Index::key(key: 'index1', attributes: ['title1', 'title2'], lengths: [701, 50]),
+        ];
+
+        $validator = $this->indexValidator($attributes, $indexes);
+
+        if ($adapter->supports(Capability::IdenticalIndexes)) {
+            $errorMessage = 'Index length 701 is larger than the size for title1: 700"';
+            $this->assertFalse($validator->isValid($indexes[0]));
+            $this->assertSame($errorMessage, $validator->getDescription());
+
+            try {
+                $database->createCollection(new Collection(id: 'index_length', attributes: $attributes, indexes: $indexes, permissions: [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                ]));
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertSame($errorMessage, $e->getMessage());
+            }
+        }
+
+        $indexes = [
+            Index::key(key: 'index1', attributes: ['title1', 'title2'], lengths: [700]),
+        ];
+
+        if ($adapter->supports(Capability::DefinedAttributes) && $adapter->getMaxIndexLength() > 0) {
+            $errorMessage = 'Index length is longer than the maximum: '.$adapter->getMaxIndexLength();
+            $this->assertFalse($validator->isValid($indexes[0]));
+            $this->assertSame($errorMessage, $validator->getDescription());
+
+            try {
+                $database->createCollection(new Collection(id: 'index_length', attributes: $attributes, indexes: $indexes));
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertSame($errorMessage, $e->getMessage());
+            }
+        }
+
+        $attributes[] = Attribute::integer(key: 'integer', size: 10000);
+
+        $indexes = [
+            Index::fullText(key: 'index1', attributes: ['title1', 'integer']),
+        ];
+
+        $newIndex = Index::fullText(key: 'newIndex1', attributes: ['title1', 'integer']);
+
+        $validator = $this->indexValidator($attributes, $indexes);
+
+        $this->assertFalse($validator->isValid($newIndex));
+
+        if (! $adapter->supports(Capability::Fulltext)) {
+            $this->assertSame('Fulltext index is not supported', $validator->getDescription());
+        } elseif (! $adapter->supports(Capability::MultipleFulltextIndexes)) {
+            $this->assertSame('There is already a fulltext index in the collection', $validator->getDescription());
+        } elseif ($adapter->supports(Capability::DefinedAttributes)) {
+            $this->assertSame('Attribute "integer" cannot be part of a fulltext index, must be of type string', $validator->getDescription());
+        }
+
+        try {
+            $database->createCollection(new Collection(id: 'index_length', attributes: $attributes, indexes: $indexes));
+            if ($adapter->supports(Capability::DefinedAttributes)) {
+                $this->fail('Failed to throw exception');
+            }
+            $database->deleteCollection('index_length');
+        } catch (Exception $e) {
+            if (! $adapter->supports(Capability::Fulltext)) {
+                $this->assertSame('Fulltext index is not supported', $e->getMessage());
+            } else {
+                $this->assertSame('Attribute "integer" cannot be part of a fulltext index, must be of type string', $e->getMessage());
+            }
+        }
+
+        if (! $adapter->supports(Capability::DefinedAttributes)) {
+            return;
+        }
+
+        $indexes = [
+            Index::key(key: 'index_negative_length', attributes: ['title1'], lengths: [-1]),
+        ];
+
+        $this->assertFalse($validator->isValid($indexes[0]));
+        $this->assertSame('Negative index length provided for title1', $validator->getDescription());
+
+        try {
+            $database->createCollection(new Collection(id: ID::unique(), attributes: $attributes, indexes: $indexes));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertSame('Negative index length provided for title1', $e->getMessage());
+        }
+
+        $indexes = [
+            Index::key(key: 'index_extra_lengths', attributes: ['title1', 'title2'], lengths: [100, 100, 100]),
+        ];
+
+        $this->assertFalse($validator->isValid($indexes[0]));
+        $this->assertSame('Invalid index lengths. Count of lengths must be equal or less than the number of attributes.', $validator->getDescription());
+
+        try {
+            $database->createCollection(new Collection(id: ID::unique(), attributes: $attributes, indexes: $indexes));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertSame('Invalid index lengths. Count of lengths must be equal or less than the number of attributes.', $e->getMessage());
+        }
+    }
+
+    public function testCreateCollectionWithIndexOnSequence(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Index)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $database->createCollection(new Collection(id: 'sequenceIndexes', attributes: [
+            Attribute::string(key: 'username', size: 128),
+            Attribute::string(key: 'email', size: 128),
+        ], indexes: [
+            Index::key(key: '_index 123', attributes: ['username', '$sequence'], orders: [Order::Asc, Order::Desc]),
+            Index::unique(key: '_index 456', attributes: ['email', '$sequence'], orders: [Order::Asc, Order::Desc]),
+        ]));
+
+        $indexes = $collection->indexes;
+        $this->assertCount(2, $indexes);
+        $this->assertSame('_index 123', $indexes[0]->getId());
+        $this->assertSame(['username', '$sequence'], $indexes[0]->attributes);
+        $this->assertSame('_index 456', $indexes[1]->getId());
+        $this->assertSame(['email', '$sequence'], $indexes[1]->attributes);
+
+        $this->assertSequenceIndexesAnswerQueries('sequenceIndexes');
+
+        $database->deleteCollection('sequenceIndexes');
+    }
+
+    public function testCreateIndexOnSequence(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Index)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: __FUNCTION__));
+
+        $this->assertTrue($database->createAttribute(__FUNCTION__, Attribute::string(key: 'username', size: 128)));
+        $this->assertTrue($database->createAttribute(__FUNCTION__, Attribute::string(key: 'email', size: 128)));
+
+        $this->assertTrue($database->createIndex(__FUNCTION__, Index::key(key: '_index 123', attributes: ['username', '$sequence'], orders: [Order::Asc, Order::Desc])));
+        $this->assertTrue($database->createIndex(__FUNCTION__, Index::unique(key: '_index 456', attributes: ['email', '$sequence'], orders: [Order::Asc, Order::Desc])));
+
+        $indexes = $database->getCollection(__FUNCTION__)->indexes;
+        $this->assertCount(2, $indexes);
+        $this->assertSame('_index 123', $indexes[0]->getId());
+        $this->assertSame(['username', '$sequence'], $indexes[0]->attributes);
+        $this->assertSame('_index 456', $indexes[1]->getId());
+        $this->assertSame(['email', '$sequence'], $indexes[1]->attributes);
+
+        $this->assertSequenceIndexesAnswerQueries(__FUNCTION__);
+
+        $database->deleteCollection(__FUNCTION__);
+    }
+
+    private function assertSequenceIndexesAnswerQueries(string $collection): void
+    {
+        $database = $this->getDatabase();
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'username' => 'chester',
+            'email' => 'chester@example.com',
+        ]));
+
+        $documents = $database->find($collection, [
+            Query::equal('username', ['chester']),
+            Query::orderDesc('$sequence'),
+        ]);
+
+        $this->assertCount(1, $documents);
+        $this->assertSame('chester', $documents[0]->getAttribute('username'));
+
+        $database->createDocument($collection, new Document([
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'username' => 'chester',
+            'email' => 'chester@example.com',
+        ]));
+
+        $this->assertCount(2, $database->find($collection, [
+            Query::equal('email', ['chester@example.com']),
+        ]), '$sequence is unique on its own, so a unique index containing it never conflicts. A duplicate here means the index was built without the $sequence column');
+    }
+
+    public function testExceptionIndexLimit(): void
+    {
+        $database = $this->getDatabase();
+
+        $database->createCollection(new Collection(id: 'indexLimit'));
+
+        for ($i = 0; $i < 64; $i++) {
+            $this->assertTrue($database->createAttribute('indexLimit', Attribute::string(key: "test{$i}", size: 16, required: true)));
+        }
+
+        for ($i = 0; $i < $database->getLimitForIndexes(); $i++) {
+            $this->assertTrue($database->createIndex('indexLimit', Index::key(key: "index{$i}", attributes: ["test{$i}"], lengths: [16])));
+        }
+
+        try {
+            $database->createIndex('indexLimit', Index::key(key: 'index64', attributes: ['test64'], lengths: [16]));
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+        } finally {
+            $database->deleteCollection('indexLimit');
+        }
+    }
+
+    public function testIdenticalIndexValidation(): void
+    {
+        $database = $this->getDatabase();
+
+        $collectionId = 'identical_index_test';
+
+        try {
+            $database->createCollection(new Collection(id: $collectionId));
+
+            $database->createAttribute($collectionId, Attribute::string(key: 'name', size: 256));
+            $database->createAttribute($collectionId, Attribute::integer(key: 'age', size: 8));
+
+            $database->createIndex($collectionId, Index::key(key: 'index1', attributes: ['name', 'age'], orders: [Order::Asc, Order::Desc]));
+
+            $supportsIdenticalIndexes = $database->getAdapter()->supports(Capability::IdenticalIndexes);
+
+            try {
+                $database->createIndex($collectionId, Index::key(key: 'index2', attributes: ['name', 'age'], orders: [Order::Asc, Order::Desc]));
+                $this->assertTrue($supportsIdenticalIndexes, 'An identical index must be rejected when the adapter does not support identical indexes');
+            } catch (Throwable $e) {
+                $this->assertFalse($supportsIdenticalIndexes, 'Unexpected exception when creating identical index: '.$e->getMessage());
+                $this->assertSame('There is already an index with the same attributes and orders', $e->getMessage());
+            }
+
+            try {
+                $database->createIndex($collectionId, Index::key(key: 'index3', attributes: ['age', 'name'], orders: [Order::Asc, Order::Desc]));
+            } catch (Throwable $e) {
+                $this->assertFalse($supportsIdenticalIndexes, 'Unexpected exception when creating index with a different attribute order: '.$e->getMessage());
+            }
+
+            try {
+                $database->createIndex($collectionId, Index::key(key: 'index4', attributes: ['age', 'name'], orders: [Order::Desc, Order::Asc]));
+            } catch (Throwable $e) {
+                $this->assertFalse($supportsIdenticalIndexes, 'Unexpected exception when creating index with different orders: '.$e->getMessage());
+            }
+
+            $this->assertTrue($database->createIndex($collectionId, Index::key(key: 'index5', attributes: ['name'], orders: [Order::Asc])));
+            $this->assertTrue($database->createIndex($collectionId, Index::key(key: 'index6', attributes: ['name', 'age'], orders: [Order::Asc])));
+        } finally {
+            $database->deleteCollection($collectionId);
+        }
+    }
+
+    public function testMaxQueriesValues(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'maxQueryValues_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection));
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(5);
+
+        try {
+            $database->find($collection, [Query::equal('$id', ['1', '2', '3', '4', '5', '6'])]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(QueryException::class, $e);
+            $this->assertSame('Invalid query: Query on attribute has greater than 5 values: $id', $e->getMessage());
+        } finally {
+            $database->setMaxQueryValues($max);
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testMultipleFulltextIndexValidation(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionId = 'multiple_fulltext_test';
+
+        try {
+            $database->createCollection(new Collection(id: $collectionId));
+
+            $database->createAttribute($collectionId, Attribute::string(key: 'title', size: 256));
+            $database->createAttribute($collectionId, Attribute::string(key: 'content', size: 256));
+            $database->createIndex($collectionId, Index::fullText(key: 'fulltext_title', attributes: ['title']));
+
+            $supportsMultipleFulltext = $database->getAdapter()->supports(Capability::MultipleFulltextIndexes);
+
+            try {
+                $database->createIndex($collectionId, Index::fullText(key: 'fulltext_content', attributes: ['content']));
+                $this->assertTrue($supportsMultipleFulltext, 'Expected exception when creating second fulltext index, but none was thrown');
+            } catch (Throwable $e) {
+                $this->assertFalse($supportsMultipleFulltext, 'Unexpected exception when creating second fulltext index: '.$e->getMessage());
+                $this->assertSame('There is already a fulltext index in the collection', $e->getMessage());
+            }
+        } finally {
+            $database->deleteCollection($collectionId);
+        }
+    }
+
+    public function testTTLIndexDuplicatePrevention(): void
+    {
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::TTLIndexes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = uniqid('sl_ttl_dup');
+        $database->createCollection(new Collection(id: $collection));
+
+        $database->createAttribute($collection, Attribute::datetime(key: 'expiresAt'));
+        $database->createAttribute($collection, Attribute::datetime(key: 'deletedAt'));
+
+        $this->assertTrue($database->createIndex($collection, Index::ttl(key: 'idx_ttl_expires', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600)));
+
+        foreach ([
+            Index::ttl(key: 'idx_ttl_expires_duplicate', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200),
+            Index::ttl(key: 'idx_ttl_deleted', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 86400),
+        ] as $duplicate) {
+            try {
+                $database->createIndex($collection, $duplicate);
+                $this->fail('Expected exception for creating a second TTL index in a collection');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(DatabaseException::class, $e);
+                $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+            }
+        }
+
+        $indexes = $database->getCollection($collection)->indexes;
+        $this->assertCount(1, $indexes);
+
+        $indexIds = array_map(fn (Index $index) => $index->getId(), $indexes);
+        $this->assertContains('idx_ttl_expires', $indexIds);
+        $this->assertNotContains('idx_ttl_deleted', $indexIds);
+
+        $this->assertTrue($database->deleteIndex($collection, 'idx_ttl_expires'));
+
+        $this->assertTrue($database->createIndex($collection, Index::ttl(key: 'idx_ttl_deleted', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 1800)));
+
+        $indexes = $database->getCollection($collection)->indexes;
+        $this->assertCount(1, $indexes);
+
+        $indexIds = array_map(fn (Index $index) => $index->getId(), $indexes);
+        $this->assertNotContains('idx_ttl_expires', $indexIds);
+        $this->assertContains('idx_ttl_deleted', $indexIds);
+
+        try {
+            $database->createCollection(new Collection(id: uniqid('sl_ttl_dup_collection'), attributes: [
+                Attribute::datetime(key: 'expiresAt', signed: false),
+            ], indexes: [
+                Index::ttl(key: 'idx_ttl_1', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600),
+                Index::ttl(key: 'idx_ttl_2', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200),
+            ]));
+            $this->fail('Expected exception for duplicate TTL indexes in createCollection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+        }
+
+        $database->deleteCollection($collection);
+    }
 }

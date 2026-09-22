@@ -1255,4 +1255,83 @@ class StructureTest extends TestCase
         $this->assertSame(PHP_INT_MIN, $document->getAttribute('signed'));
         $this->assertSame('18446744073709551615', $document->getAttribute('unsigned'));
     }
+
+    public function testBigIntUnsignedRejectsNegativeNumericString(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'bigint_unsigned',
+                    'type' => ColumnType::BigInteger->value,
+                    'format' => '',
+                    'size' => 0,
+                    'required' => true,
+                    'signed' => false,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, ColumnType::Integer->value);
+
+        $document = new Document([
+            '$collection' => ID::custom('posts'),
+            'bigint_unsigned' => '-1',
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ]);
+
+        $this->assertFalse($validator->isValid($document));
+        $this->assertSame(
+            'Invalid document structure: Attribute "bigint_unsigned" has invalid type. Value must be a valid unsigned 64-bit integer between 0 and 18,446,744,073,709,551,615',
+            $validator->getDescription()
+        );
+    }
+
+    /**
+     * A legacy text attribute can declare a size far past the 65,535 bytes a TEXT column holds,
+     * so the limit has to come from the column type and be measured in bytes.
+     */
+    public function testTextValidationUsesColumnCapacityNotDeclaredSize(): void
+    {
+        $collection = new Document([
+            '$id' => ID::custom('posts'),
+            '$collection' => Database::METADATA,
+            'name' => 'posts',
+            'attributes' => [
+                [
+                    '$id' => 'text',
+                    'type' => ColumnType::Text->value,
+                    'format' => '',
+                    'size' => 1048576,
+                    'required' => false,
+                    'signed' => true,
+                    'array' => false,
+                    'filters' => [],
+                ],
+            ],
+            'indexes' => [],
+        ]);
+
+        $validator = new Structure($collection, ColumnType::Integer->value);
+
+        $base = [
+            '$collection' => ID::custom('posts'),
+            '$createdAt' => '2000-04-01T12:00:00.000+00:00',
+            '$updatedAt' => '2000-04-01T12:00:00.000+00:00',
+        ];
+
+        $this->assertTrue($validator->isValid(new Document($base + ['text' => \str_repeat('a', 65535)])), 'A value filling the full column capacity is accepted');
+
+        $this->assertFalse($validator->isValid(new Document($base + ['text' => \str_repeat('a', 65536)])));
+        $this->assertSame('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(new Document($base + ['text' => \str_repeat('📝', 20000)])), '20,000 emoji are 80,000 bytes and must be rejected by byte length');
+        $this->assertSame('Invalid document structure: Attribute "text" has invalid type. Value must be a valid string no longer than 65535 bytes', $validator->getDescription());
+    }
 }

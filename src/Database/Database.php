@@ -1821,7 +1821,7 @@ class Database
                 $filteredKey = $this->adapter->filter($key);
                 $value = $document->getAttribute($filteredKey);
 
-                if (! \is_null($value)) {
+                if ($filteredKey !== $key && $document->offsetExists($filteredKey)) {
                     $document->removeAttribute($filteredKey);
                 }
             }

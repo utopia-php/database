@@ -73,6 +73,13 @@ class Permissions extends Interceptor
             return;
         }
 
+        $previousId = $context->lookupId;
+        if ($previousId !== null && $previousId !== '' && \strcasecmp($previousId, $document->getId()) !== 0) {
+            $this->movePermissions($collection, $previousId, $document, $context);
+
+            return;
+        }
+
         [$permissionsMap, $storedIds] = $this->readCurrentPermissionsBatch($collection, [$document], $context);
         $permissions = $this->currentPermissions($permissionsMap, $document->getId());
         $permissionDocumentId = $this->permissionDocumentId($document->getId(), $storedIds);
@@ -461,6 +468,20 @@ class Permissions extends Interceptor
         }
 
         return $initial;
+    }
+
+    /**
+     * A renamed document leaves its rows keyed by the old id, which nothing reads any more, so
+     * they are dropped and the full set is written under the new id.
+     */
+    private function movePermissions(string $collection, string $previousId, Document $document, WriteContext $context): void
+    {
+        $removeBuilder = ($context->newBuilder)(Storage::permissionsTable($collection));
+        $removeBuilder->filter([Query::equal(Storage::PERM_DOCUMENT, [$previousId])]);
+        $deleteStmt = ($context->executeResult)($removeBuilder->delete(), Event::PermissionsDelete);
+        ($context->execute)($deleteStmt);
+
+        $this->afterDocumentCreate($collection, [$document], $context);
     }
 
     /**

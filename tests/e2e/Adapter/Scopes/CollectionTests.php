@@ -20,6 +20,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -1501,5 +1502,232 @@ trait CollectionTests
         } catch (\Throwable) {
             $database->getAdapter()->deleteCollection($collection);
         }
+    }
+
+    public function testCollectionNotFound(): void
+    {
+        $database = $this->getDatabase();
+
+        try {
+            $database->find('not_exist', []);
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(NotFoundException::class, $e);
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
+    }
+
+    public function testUpdateDeleteCollectionNotFound(): void
+    {
+        $database = $this->getDatabase();
+
+        try {
+            $database->deleteCollection('not_found');
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(NotFoundException::class, $e);
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
+
+        try {
+            $database->updateCollection('not_found', [], true);
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(NotFoundException::class, $e);
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
+    }
+
+    public function testCollectionUpdate(): void
+    {
+        $database = $this->getDatabase();
+
+        $collection = $database->createCollection(new Collection(id: 'collectionUpdate', permissions: [
+            Permission::create(Role::users()),
+            Permission::read(Role::users()),
+            Permission::update(Role::users()),
+            Permission::delete(Role::users()),
+        ], documentSecurity: false));
+
+        $this->assertFalse($collection->isEmpty());
+
+        $collection = $database->getCollection('collectionUpdate');
+
+        $this->assertFalse($collection->getAttribute('documentSecurity'));
+        $this->assertCount(4, $collection->getPermissions());
+
+        $collection = $database->updateCollection('collectionUpdate', [], true);
+
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
+        $this->assertSame([], $collection->getPermissions());
+
+        $collection = $database->getCollection('collectionUpdate');
+
+        $this->assertTrue($collection->getAttribute('documentSecurity'));
+        $this->assertSame([], $collection->getPermissions());
+
+        $database->deleteCollection('collectionUpdate');
+    }
+
+    public function testCreateCollectionValidator(): void
+    {
+        $database = $this->getDatabase();
+
+        $collections = [
+            'validatorTest',
+            'validator-test',
+            'validator_test',
+            'validator.test',
+        ];
+
+        $attributes = [
+            Attribute::string(key: 'attribute1', size: 2500),
+            Attribute::integer(key: 'attribute-2'),
+            Attribute::boolean(key: 'attribute_3'),
+            Attribute::boolean(key: 'attribute.4'),
+            Attribute::string(key: 'attribute5', size: 2500),
+        ];
+
+        $indexes = [
+            Index::key(key: 'index1', attributes: ['attribute1'], lengths: [256], orders: [Order::Asc]),
+            Index::key(key: 'index-2', attributes: ['attribute-2'], orders: [Order::Asc]),
+            Index::key(key: 'index_3', attributes: ['attribute_3'], orders: [Order::Asc]),
+            Index::key(key: 'index.4', attributes: ['attribute.4'], orders: [Order::Asc]),
+            Index::key(key: 'index_2_attributes', attributes: ['attribute1', 'attribute5'], lengths: [200, 300], orders: [Order::Desc]),
+        ];
+
+        foreach ($collections as $id) {
+            $collection = $database->createCollection(new Collection(id: $id, attributes: $attributes, indexes: $indexes));
+
+            $this->assertFalse($collection->isEmpty());
+            $this->assertSame($id, $collection->getId());
+
+            $this->assertCount(5, $collection->attributes);
+            $this->assertSame('attribute1', $collection->attributes[0]->getId());
+            $this->assertSame(ColumnType::String, $collection->attributes[0]->type);
+            $this->assertSame('attribute-2', $collection->attributes[1]->getId());
+            $this->assertSame(ColumnType::Integer, $collection->attributes[1]->type);
+            $this->assertSame('attribute_3', $collection->attributes[2]->getId());
+            $this->assertSame(ColumnType::Boolean, $collection->attributes[2]->type);
+            $this->assertSame('attribute.4', $collection->attributes[3]->getId());
+            $this->assertSame(ColumnType::Boolean, $collection->attributes[3]->type);
+
+            $this->assertCount(5, $collection->indexes);
+            $this->assertSame('index1', $collection->indexes[0]->getId());
+            $this->assertSame(IndexType::Key, $collection->indexes[0]->type);
+            $this->assertSame('index-2', $collection->indexes[1]->getId());
+            $this->assertSame(IndexType::Key, $collection->indexes[1]->type);
+            $this->assertSame('index_3', $collection->indexes[2]->getId());
+            $this->assertSame(IndexType::Key, $collection->indexes[2]->type);
+            $this->assertSame('index.4', $collection->indexes[3]->getId());
+            $this->assertSame(IndexType::Key, $collection->indexes[3]->type);
+
+            $database->deleteCollection($id);
+        }
+    }
+
+    public function testMetadata(): void
+    {
+        $database = $this->getDatabase();
+
+        $database->setMetadata('key', 'value');
+
+        $database->createCollection(new Collection(id: 'testers'));
+
+        $this->assertSame(['key' => 'value'], $database->getMetadata());
+
+        $database->resetMetadata();
+
+        $this->assertSame([], $database->getMetadata());
+
+        $database->deleteCollection('testers');
+    }
+
+    public function testPurgeCollectionCache(): void
+    {
+        $database = $this->getDatabase();
+
+        $database->createCollection(new Collection(id: 'purgeCache'));
+
+        $this->assertTrue($database->createAttribute('purgeCache', Attribute::string(key: 'name', size: 128, required: true)));
+        $this->assertTrue($database->createAttribute('purgeCache', Attribute::integer(key: 'age', required: true)));
+
+        $database->createDocument('purgeCache', new Document([
+            '$id' => 'doc1',
+            'name' => 'Richard',
+            'age' => 15,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+        ]));
+
+        $document = $database->getDocument('purgeCache', 'doc1');
+
+        $this->assertSame('Richard', $document->getAttribute('name'));
+        $this->assertSame(15, $document->getAttribute('age'));
+
+        $this->assertTrue($database->deleteAttribute('purgeCache', 'age'));
+
+        $document = $database->getDocument('purgeCache', 'doc1');
+        $this->assertSame('Richard', $document->getAttribute('name'));
+        $this->assertArrayNotHasKey('age', $document);
+
+        $this->assertTrue($database->createAttribute('purgeCache', Attribute::integer(key: 'age', required: true)));
+
+        $document = $database->getDocument('purgeCache', 'doc1');
+        $this->assertSame('Richard', $document->getAttribute('name'));
+        $this->assertArrayHasKey('age', $document);
+
+        $database->deleteCollection('purgeCache');
+    }
+
+    public function testRowSizeToLarge(): void
+    {
+        $database = $this->getDatabase();
+
+        if ($database->getAdapter()->getDocumentSizeLimit() === 0) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection1 = $database->createCollection(new Collection(id: 'row_size_1'));
+        $collection2 = $database->createCollection(new Collection(id: 'row_size_2'));
+
+        $this->assertTrue($database->createAttribute($collection1->getId(), Attribute::string(key: 'attr_1', size: 16000, required: true)));
+
+        try {
+            $database->createAttribute($collection1->getId(), Attribute::string(key: 'attr_2', size: Database::LENGTH_KEY, required: true));
+            $this->fail('Failed to throw exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(LimitException::class, $e);
+        }
+
+        if ($database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            try {
+                $database->createRelationship(Relationship::oneToOne(
+                    collection: $collection2->getId(),
+                    relatedCollection: $collection1->getId(),
+                    twoWay: true,
+                ));
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(LimitException::class, $e, 'A relationship column takes the length of a key and must respect the row size limit');
+            }
+
+            try {
+                $database->createRelationship(Relationship::oneToOne(
+                    collection: $collection1->getId(),
+                    relatedCollection: $collection2->getId(),
+                    twoWay: true,
+                ));
+                $this->fail('Failed to throw exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(LimitException::class, $e);
+            }
+        }
+
+        $database->deleteCollection('row_size_1');
+        $database->deleteCollection('row_size_2');
     }
 }

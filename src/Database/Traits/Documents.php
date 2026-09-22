@@ -945,6 +945,9 @@ trait Documents
             if (\is_string($incomingId) && \strcasecmp($incomingId, $old->getId()) === 0) {
                 $document[Document::ID] = $old->getId();
             }
+            if ($document[Document::ID] !== $old->getId()) {
+                $skipPermissionsUpdate = false;
+            }
             $document[Document::CREATED_AT] = ($createdAt === null || ! $this->preserveDates) ? $old->getCreatedAt() : $createdAt;
 
             if ($this->adapter->getSharedTables()) {
@@ -3002,17 +3005,28 @@ trait Documents
                 }
             }
 
-            if ($uniqueOrderBy === false) {
+            $vectorSearch = false;
+            foreach ($filters as $filter) {
+                if (\in_array($filter->getMethod(), [Method::VectorCosine, Method::VectorDot, Method::VectorEuclidean], true)) {
+                    $vectorSearch = true;
+                    break;
+                }
+            }
+
+            // A vector index answers exactly one sort key, the distance. A tie break behind it
+            // makes the ordering unanswerable from the index and the collection is read in full,
+            // so the tie break is only added when a cursor needs a stable page boundary.
+            // The tie break sits behind the caller's own order so every requested key is still
+            // read. It follows the direction of a leading timestamp so a descending list returns
+            // a batch that shares one timestamp newest-inserted first.
+            if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
                 $leadingAttribute = $orderAttributes[0] ?? null;
                 $leadingOrderType = $orderTypes[0] ?? \Utopia\Query\OrderDirection::Asc;
 
-                if (\in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)) {
-                    \array_splice($orderAttributes, 1, 0, [Document::SEQUENCE]);
-                    \array_splice($orderTypes, 1, 0, [$leadingOrderType]);
-                } else {
-                    $orderAttributes[] = Document::SEQUENCE;
-                    $orderTypes[] = \Utopia\Query\OrderDirection::Asc;
-                }
+                $orderAttributes[] = Document::SEQUENCE;
+                $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
+                    ? $leadingOrderType
+                    : \Utopia\Query\OrderDirection::Asc;
             }
         }
 

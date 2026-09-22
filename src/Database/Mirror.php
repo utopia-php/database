@@ -5,6 +5,7 @@ namespace Utopia\Database;
 use DateTime;
 use Throwable;
 use Utopia\Async\Promise;
+use Utopia\Cache\Cache;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
@@ -198,6 +199,18 @@ class Mirror extends Database
         parent::setMaxQueryValues($max);
         $this->source->setMaxQueryValues($max);
         $this->destination?->setMaxQueryValues($max);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setCache(Cache $cache): static
+    {
+        parent::setCache($cache);
+        $this->source->setCache($cache);
+        $this->destination?->setCache($cache);
 
         return $this;
     }

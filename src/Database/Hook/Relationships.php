@@ -1975,11 +1975,13 @@ class Relationships implements Hook
 
         $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $relations);
 
-        $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
-            $relatedCollection->getId(),
-            new Document([$twoWayKey => null]),
-            [Query::equal(Document::ID, $relationIds)],
-        )));
+        foreach (\array_chunk($relationIds, $this->relationQueryChunkSize()) as $chunk) {
+            $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
+                $relatedCollection->getId(),
+                new Document([$twoWayKey => null]),
+                [Query::equal(Document::ID, $chunk)],
+            )));
+        }
     }
 
     private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): void

@@ -2562,4 +2562,53 @@ trait OneToManyTests
         $this->assertFalse($survivor->isEmpty());
         $this->assertNull($survivor->getAttribute('parent'));
     }
+
+    public function testOneToManySetNullClearsMoreReferencesThanTheQueryValueLimit(): void
+    {
+        $database = static::getDatabase();
+
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: 'otm_setnull_limit_parent', permissions: $permissions));
+        $database->createCollection(new Collection(id: 'otm_setnull_limit_child', permissions: $permissions));
+
+        $database->createRelationship(Relationship::oneToMany(
+            collection: 'otm_setnull_limit_parent',
+            relatedCollection: 'otm_setnull_limit_child',
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $childIds = ['child1', 'child2', 'child3'];
+        foreach ($childIds as $childId) {
+            $database->createDocument('otm_setnull_limit_child', new Document(['$id' => $childId]));
+        }
+
+        $database->createDocument('otm_setnull_limit_parent', new Document([
+            '$id' => 'parent1',
+            'children' => $childIds,
+        ]));
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(2);
+
+        try {
+            $database->deleteDocument('otm_setnull_limit_parent', 'parent1');
+        } finally {
+            $database->setMaxQueryValues($max);
+        }
+
+        foreach ($childIds as $childId) {
+            $child = $database->getDocument('otm_setnull_limit_child', $childId);
+            $this->assertFalse($child->isEmpty());
+            $this->assertNull($child->getAttribute('parent'));
+        }
+    }
 }

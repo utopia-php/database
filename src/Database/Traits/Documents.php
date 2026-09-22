@@ -357,6 +357,7 @@ trait Documents
             && ! $this->adapter->inTransaction()
             && empty($joins);
         $physicalKey = '';
+        $epoch = null;
         if ($cacheable) {
             $epoch = $this->getDocumentCacheEpoch($collectionKey);
             if ($epoch === null) {
@@ -434,8 +435,17 @@ trait Documents
 
             if ($cacheable && empty($relationships) && $missing) {
                 try {
-                    $marker = [self::CACHE_EMPTY_MARKER => true];
-                    $this->cache->saveWithLease($physicalKey, $marker, '', $generation);
+                    // The marker says "absent as of $epoch". A schema mutation
+                    // that landed while this read was in flight rotates the
+                    // epoch, which makes the observation stale and the marker
+                    // a negative cache entry for a collection that now exists.
+                    // saveWithLease only leases the key's own generation, and
+                    // an epoch rotation never touches it, so the lease cannot
+                    // see this; re-read the epoch and drop the marker instead.
+                    if ($this->getDocumentCacheEpoch($collectionKey) === $epoch) {
+                        $marker = [self::CACHE_EMPTY_MARKER => true];
+                        $this->cache->saveWithLease($physicalKey, $marker, '', $generation);
+                    }
                 } catch (Exception $e) {
                     Console::warning('Failed to save empty document to cache: '.$e->getMessage());
                 }

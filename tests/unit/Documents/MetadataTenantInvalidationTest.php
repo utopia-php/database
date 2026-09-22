@@ -76,6 +76,55 @@ final class MetadataTenantInvalidationTest extends TestCase
     }
 
     /**
+     * The same guarantee without shared tables, which is how a project with its
+     * own database is configured: sharedTables false, tenant null, namespace
+     * per project. withDocumentTenant() never switches a tenant here, so the
+     * read key and the rotated key are the same one for a different reason -
+     * worth pinning, because this is the configuration the maintenance sweep
+     * runs under when it reads a collection a project has not provisioned yet.
+     */
+    public function testACollectionIsReadableAfterCreationWithoutSharedTables(): void
+    {
+        $adapter = new DatabaseMemory();
+        $cache = new Cache(new LeasedMemoryCacheAdapter());
+        $namespace = '_'.\uniqid();
+
+        $databases = [];
+        foreach ([0, 1] as $ignored) {
+            $database = new Database($adapter, $cache);
+            $database
+                ->setDatabase('utopiaTests')
+                ->setNamespace($namespace)
+                ->setSharedTables(false)
+                ->setTenant(null);
+            $database->getAuthorization()->addRole(Role::any()->toString());
+            $databases[] = $database;
+        }
+        [$writer, $reader] = $databases;
+        $writer->create();
+
+        $this->assertTrue(
+            $reader->getCollection('targets')->isEmpty(),
+            'The collection does not exist yet, so the read must miss',
+        );
+
+        $writer->createCollection(new Collection(id: 'targets', attributes: [
+            Attribute::string(key: 'name', size: 64),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        $this->assertFalse(
+            $reader->getCollection('targets')->isEmpty(),
+            'A miss cached before provisioning must not outlive the collection being created',
+        );
+
+        $this->assertCount(1, $this->attributesOf($reader));
+    }
+
+    /**
      * @return array<mixed>
      */
     private function attributesOf(Database $database): array

@@ -15,7 +15,6 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
-use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -144,7 +143,6 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $table->datetime(Storage::CREATED_AT, 3)->nullable()->default(null);
         $table->datetime(Storage::UPDATED_AT, 3)->nullable()->default(null);
         $table->mediumText(Storage::PERMISSIONS)->nullable()->default(null);
-        $table->rawColumn('`'.Storage::VERSION.'` INT(11) UNSIGNED DEFAULT 1');
 
         foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->key);
@@ -621,11 +619,6 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
-            $version = $document->getVersion();
-            if ($version !== null) {
-                $attributes[Storage::VERSION] = $version;
-            }
-
             $name = $this->filter($collection);
 
             // Build document INSERT using query builder
@@ -706,23 +699,17 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
      * @throws DuplicateException
      * @throws \Throwable
      */
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
             $this->syncWriteHooks();
 
-            $collectionDocument = $collection;
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
-
-            $version = $document->getVersion();
-            if ($version !== null) {
-                $attributes[Storage::VERSION] = $version;
-            }
 
             $name = $this->filter($collection);
 
@@ -765,22 +752,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
             $builder->set($regularRow);
             $filters = [BaseQuery::equal(Storage::SEQUENCE, [$document->getSequence()])];
-            if ($expectedVersion !== null) {
-                $filters[] = BaseQuery::equal(Storage::UID, [$id]);
-                $filters[] = BaseQuery::equal(Storage::VERSION, [$expectedVersion]);
-            }
             $builder->filter($filters);
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
             $this->execute($stmt);
-
-            if ($expectedVersion !== null && $stmt->rowCount() === 0) {
-                $current = $this->getDocument($collectionDocument, $id, forUpdate: true);
-                if ($current->isEmpty() || $current->getVersion() !== $expectedVersion) {
-                    throw new ConflictException('Document version does not match the expected version');
-                }
-            }
 
             $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));

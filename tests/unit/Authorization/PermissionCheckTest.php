@@ -172,7 +172,6 @@ class PermissionCheckTest extends TestCase
             '$permissions' => [],
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
-            '$version' => 1,
             'title' => 'old',
         ]);
 
@@ -215,7 +214,6 @@ class PermissionCheckTest extends TestCase
             '$permissions' => [],
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
-            '$version' => 1,
             'title' => 'old',
         ]);
 
@@ -544,7 +542,6 @@ class PermissionCheckTest extends TestCase
             '$permissions' => [],
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
-            '$version' => 1,
             'title' => 'old',
         ]);
 
@@ -721,7 +718,6 @@ class PermissionCheckTest extends TestCase
             ],
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
-            '$version' => 1,
             'title' => 'old',
         ]);
 

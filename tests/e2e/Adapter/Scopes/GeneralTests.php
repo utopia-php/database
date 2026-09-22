@@ -236,8 +236,8 @@ trait GeneralTests
 
             if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
                 // An upsert has to recognise a row that createDocument() wrote, not shadow it
-                // with a second one: a duplicate restarts $version, moves $createdAt, and is
-                // checked against create permission rather than update permission.
+                // with a second one: a duplicate moves $createdAt and is checked against
+                // create permission rather than update permission.
                 $database
                     ->setTenant(null)
                     ->setTenantPerDocument(true)
@@ -254,7 +254,6 @@ trait GeneralTests
 
                 $this->assertCount(1, $documents);
                 $this->assertSame('Spiderman revised', $documents[0]->getAttribute('name'));
-                $this->assertSame(2, $documents[0]->getVersion());
                 $this->assertSame($doc1CreatedAt, $documents[0]->getCreatedAt());
 
                 // Test upsert with tenant per doc

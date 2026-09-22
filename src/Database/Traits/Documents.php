@@ -637,10 +637,6 @@ trait Documents
             ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
             ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
-        if ($collection->getId() !== self::METADATA) {
-            $document->setAttribute(Document::VERSION, 1);
-        }
-
         if (empty($document->getPermissions())) {
             $document->setAttribute(Document::PERMISSIONS, []);
         }
@@ -800,10 +796,6 @@ trait Documents
                 ->setAttribute(Document::CREATED_AT, ($createdAt === null || ! $this->preserveDates) ? $time : $createdAt)
                 ->setAttribute(Document::UPDATED_AT, ($updatedAt === null || ! $this->preserveDates) ? $time : $updatedAt);
 
-            if ($collection->getId() !== self::METADATA) {
-                $document->setAttribute(Document::VERSION, 1);
-            }
-
             if (empty($document->getPermissions())) {
                 $document->setAttribute(Document::PERMISSIONS, []);
             }
@@ -912,7 +904,7 @@ trait Documents
      * @throws DuplicateException
      * @throws StructureException
      */
-    public function updateDocument(string $collection, string $id, Document $document, ?int $expectedVersion = null): Document
+    public function updateDocument(string $collection, string $id, Document $document): Document
     {
         if (! $id) {
             throw new DatabaseException('Must define $id attribute');
@@ -921,32 +913,15 @@ trait Documents
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $newUpdatedAt = $document->getUpdatedAt();
         $hasOperators = false;
-        if ($expectedVersion !== null) {
-            $current = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
-            ));
-            if ($current->isEmpty()) {
-                return $current;
-            }
-            if ($current->getVersion() !== $expectedVersion) {
-                throw new ConflictException('Document version does not match the expected version');
-            }
-        }
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, $expectedVersion, &$hasOperators) {
+        $document = $this->withMutation(Event::DocumentUpdate, $cacheTarget, function () use ($collection, $id, $document, $newUpdatedAt, &$hasOperators) {
             $old = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
             if ($old->isEmpty()) {
-                if ($expectedVersion !== null) {
-                    throw new ConflictException('Document version does not match the expected version');
-                }
                 return new Document();
-            }
-            if ($expectedVersion !== null && $old->getVersion() !== $expectedVersion) {
-                throw new ConflictException('Document version does not match the expected version');
             }
             $time = DateTime::nowAfter($old->getUpdatedAt() ?: null);
 
@@ -1132,32 +1107,6 @@ trait Documents
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
-            $oldVersion = $old->getVersion();
-            if ($oldVersion !== null && $shouldUpdate) {
-                $document->setAttribute(Document::VERSION, $oldVersion + 1);
-            } elseif ($oldVersion !== null) {
-                $document->setAttribute(Document::VERSION, $oldVersion);
-            }
-
-            if (
-                $expectedVersion !== null
-                && $this->relationshipHook?->isEnabled()
-                && ! $this->adapter->supports(Capability::AtomicTransactions)
-            ) {
-                foreach ($relationships as $relationship) {
-                    $key = $relationship->getAttribute('key');
-                    if (! \is_string($key) || $key === '') {
-                        $key = $relationship->getId();
-                    }
-                    if (! self::valuesEqual(
-                        self::relationshipIdentifiers($document->getAttribute($key)),
-                        self::relationshipIdentifiers($old->getAttribute($key)),
-                    )) {
-                        throw new DatabaseException('Versioned relationship updates require an adapter with atomic transactions');
-                    }
-                }
-            }
-
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {
@@ -1188,7 +1137,7 @@ trait Documents
 
             $document = $this->castingBefore($collection, $document);
 
-            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate, $expectedVersion));
+            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate));
 
             $document = $this->castingAfter($collection, $document);
 
@@ -1428,11 +1377,6 @@ trait Documents
 
                     if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
-                    }
-
-                    $docVersion = $document->getVersion();
-                    if ($docVersion !== null) {
-                        $document->setAttribute(Document::VERSION, $docVersion + 1);
                     }
 
                     $encoded = $this->encode($collection, $document);
@@ -1726,17 +1670,6 @@ trait Documents
                 $document->setAttribute(Document::CREATED_AT, $old->isEmpty() ? $time : $old->getCreatedAt());
             } else {
                 $document->setAttribute(Document::CREATED_AT, $createdAt);
-            }
-
-            if ($old->isEmpty()) {
-                $document->setAttribute(Document::VERSION, 1);
-            } else {
-                $oldVersion = $old->getVersion();
-                if ($oldVersion !== null) {
-                    $document->setAttribute(Document::VERSION, $oldVersion + 1);
-                } else {
-                    $document->setAttribute(Document::VERSION, 1);
-                }
             }
 
             // Force matching optional parameter sets
@@ -2248,51 +2181,20 @@ trait Documents
      * @throws DatabaseException
      * @throws RestrictedException
      */
-    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
+    public function deleteDocument(string $collection, string $id): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
-
-        if ($expectedVersion !== null) {
-            $current = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
-            ));
-            if ($current->isEmpty()) {
-                return false;
-            }
-            if ($current->getVersion() !== $expectedVersion) {
-                throw new ConflictException('Document version does not match the expected version');
-            }
-
-            if (
-                $this->relationshipHook?->isEnabled()
-                && ! $this->adapter->supports(Capability::AtomicTransactions)
-            ) {
-                /** @var array<Attribute|Document> $attributes */
-                $attributes = $collection->getAttribute('attributes', []);
-                foreach ($attributes as $attribute) {
-                    if (Attribute::isRelationship($attribute)) {
-                        throw new DatabaseException('Versioned relationship deletes require an adapter with atomic transactions');
-                    }
-                }
-            }
-        }
 
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $expectedVersion, &$document) {
+        $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, &$document) {
             $document = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
             if ($document->isEmpty()) {
-                if ($expectedVersion !== null) {
-                    throw new ConflictException('Document version does not match the expected version');
-                }
                 return false;
-            }
-            if ($expectedVersion !== null && $document->getVersion() !== $expectedVersion) {
-                throw new ConflictException('Document version does not match the expected version');
             }
 
             if ($collection->getId() !== self::METADATA) {
@@ -2321,7 +2223,7 @@ trait Documents
                 $document = $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete($collection, $document));
             }
 
-            $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection->getId(), $id, $expectedVersion));
+            $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection->getId(), $id));
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
@@ -3849,18 +3751,5 @@ trait Documents
         }
 
         return $document;
-    }
-
-    private static function relationshipIdentifiers(mixed $value): mixed
-    {
-        if ($value instanceof Document) {
-            return $value->getId();
-        }
-
-        if (is_array($value)) {
-            return array_map(self::relationshipIdentifiers(...), $value);
-        }
-
-        return $value;
     }
 }

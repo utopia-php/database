@@ -802,7 +802,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /**
      * Update Document
      */
-    abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document;
+    abstract public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document;
 
     /**
      * Update documents
@@ -833,7 +833,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /**
      * Delete Document
      */
-    abstract public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool;
+    abstract public function deleteDocument(string $collection, string $id): bool;
 
     /**
      * Delete Documents

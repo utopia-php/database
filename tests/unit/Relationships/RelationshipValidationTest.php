@@ -40,7 +40,6 @@ class RelationshipValidationTest extends TestCase
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
             '$permissions' => [Permission::read(Role::any()), Permission::create(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())],
-            '$version' => 1,
             'name' => 'collections',
             'attributes' => [
                 new Document(['$id' => 'name', 'key' => 'name', 'type' => 'string', 'size' => 256, 'required' => true, 'signed' => true, 'array' => false, 'filters' => []]),
@@ -75,7 +74,6 @@ class RelationshipValidationTest extends TestCase
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
             '$permissions' => $permissions,
-            '$version' => 1,
             'name' => $id,
             'attributes' => $attributes,
             'indexes' => [],

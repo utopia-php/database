@@ -17,7 +17,6 @@ use Utopia\Database\DateTime as DatabaseDateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -527,8 +526,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 				{$tenantQuery}
 				{$this->quote(Storage::CREATED_AT)} DATETIME(3) DEFAULT NULL,
 				{$this->quote(Storage::UPDATED_AT)} DATETIME(3) DEFAULT NULL,
-				{$this->quote(Storage::PERMISSIONS)} MEDIUMTEXT DEFAULT NULL,
-				{$this->quote(Storage::VERSION)} INTEGER DEFAULT 1".(! empty($attributes) ? ',' : '').'
+				{$this->quote(Storage::PERMISSIONS)} MEDIUMTEXT DEFAULT NULL".(! empty($attributes) ? ',' : '').'
 				'.\substr(\implode(' ', $attributeStrings), 0, -2).'
 			)
 		';
@@ -1241,11 +1239,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
 
-            $version = $document->getVersion();
-            if ($version !== null) {
-                $attributes[Storage::VERSION] = $version;
-            }
-
             $name = $this->filter($collection);
 
             $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
@@ -1297,23 +1290,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * @throws PDOException
      * @throws DuplicateException
      */
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         try {
             $this->syncWriteHooks();
 
-            $collectionDocument = $collection;
             $spatialAttributes = $this->getSpatialAttributes($collection);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes[Storage::CREATED_AT] = $document->getCreatedAt();
             $attributes[Storage::UPDATED_AT] = $document->getUpdatedAt();
             $attributes[Storage::PERMISSIONS] = json_encode($document->getPermissions());
-
-            $version = $document->getVersion();
-            if ($version !== null) {
-                $attributes[Storage::VERSION] = $version;
-            }
 
             $name = $this->filter($collection);
 
@@ -1356,21 +1343,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $builder->set($regularRow);
             $filters = [BaseQuery::equal(Storage::UID, [$id])];
-            if ($expectedVersion !== null) {
-                $filters[] = BaseQuery::equal(Storage::VERSION, [$expectedVersion]);
-            }
             $builder->filter($filters);
             $result = $builder->update();
             $stmt = $this->executeResult($result, Event::DocumentUpdate);
 
             $this->execute($stmt);
-
-            if ($expectedVersion !== null && $stmt->rowCount() === 0) {
-                $current = $this->getDocument($collectionDocument, $id, forUpdate: true);
-                if ($current->isEmpty() || $current->getVersion() !== $expectedVersion) {
-                    throw new ConflictException('Document version does not match the expected version');
-                }
-            }
 
             $ctx = $this->buildWriteContext($name, $id);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentUpdate($name, $document, $skipPermissions, $ctx));
@@ -2390,11 +2367,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
 
             $currentRegularAttributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
-
-            $version = $document->getVersion();
-            if ($version !== null) {
-                $currentRegularAttributes[Storage::VERSION] = $version;
-            }
 
             if (! empty($document->getSequence())) {
                 $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();

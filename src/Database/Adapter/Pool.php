@@ -695,7 +695,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
@@ -726,7 +726,7 @@ class Pool extends Adapter
     /**
      * {@inheritDoc}
      */
-    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
+    public function deleteDocument(string $collection, string $id): bool
     {
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());

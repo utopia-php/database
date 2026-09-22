@@ -122,19 +122,6 @@ class CreateDocumentLogicTest extends TestCase
         $this->assertNotNull($result->getUpdatedAt());
     }
 
-    public function testCreateDocumentSetsVersionTo1(): void
-    {
-        $this->setupCollection('testCol');
-
-        $doc = new Document([
-            '$permissions' => [Permission::read(Role::any())],
-            '$collection' => 'testCol',
-        ]);
-
-        $result = $this->database->createDocument('testCol', $doc);
-        $this->assertSame(1, $result->getVersion());
-    }
-
     public function testCreateDocumentGeneratesIdIfEmpty(): void
     {
         $this->setupCollection('testCol');
@@ -252,7 +239,7 @@ class CreateDocumentLogicTest extends TestCase
         $this->database->createDocument('testCol', $doc);
     }
 
-    public function testCreateDocumentsSetsTimestampsAndVersion(): void
+    public function testCreateDocumentsCreatesEveryDocument(): void
     {
         $this->setupCollection('testCol');
 

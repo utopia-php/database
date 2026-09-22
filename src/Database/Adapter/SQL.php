@@ -18,7 +18,6 @@ use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -975,8 +974,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
         }
 
-        $builder->setRaw(Storage::VERSION, $this->quote(Storage::VERSION) . ' + 1', []);
-
         // WHERE _id IN (sequence values)
         $sequences = \array_map(fn ($document) => $document->getSequence(), $documents);
         $builder->filter([BaseQuery::equal(Storage::SEQUENCE, \array_values($sequences))]);
@@ -1218,7 +1215,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return true;
     }
 
-    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
+    public function deleteDocument(string $collection, string $id): bool
     {
         try {
             $this->syncWriteHooks();
@@ -1227,9 +1224,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             $builder = $this->newBuilder($name);
             $filters = [BaseQuery::equal(Storage::UID, [$id])];
-            if ($expectedVersion !== null) {
-                $filters[] = BaseQuery::equal(Storage::VERSION, [$expectedVersion]);
-            }
             $builder->filter($filters);
             $result = $builder->delete();
             $stmt = $this->executeResult($result, Event::DocumentDelete);
@@ -1240,14 +1234,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             $deleted = $stmt->rowCount();
 
-            if ($expectedVersion !== null && $deleted === 0) {
-                throw new ConflictException('Document version does not match the expected version');
-            }
-
             $ctx = $this->buildWriteContext($name);
             $this->runWriteHooks(fn ($hook) => $hook->afterDocumentDelete($name, [$id], $ctx));
-        } catch (ConflictException $e) {
-            throw $e;
         } catch (\Throwable $e) {
             throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
         }
@@ -3433,11 +3421,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             $currentRegularAttributes[Storage::PERMISSIONS] = \json_encode($document->getPermissions());
 
-            $version = $document->getVersion();
-            if ($version !== null) {
-                $currentRegularAttributes[Storage::VERSION] = $version;
-            }
-
             if (! empty($document->getSequence())) {
                 $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();
             }
@@ -4565,7 +4548,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             Storage::UPDATED_AT => true,
             Storage::COLLECTION => true,
             Storage::TENANT => true,
-            Storage::VERSION => true,
             Document::ID => true,
             Document::SEQUENCE => true,
             Document::PERMISSIONS => true,
@@ -4573,7 +4555,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             Document::UPDATED_AT => true,
             Document::COLLECTION => true,
             Document::TENANT => true,
-            Document::VERSION => true,
         ];
 
         foreach (\array_keys($row) as $key) {
@@ -4658,11 +4639,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             Storage::UPDATED_AT => $document->getUpdatedAt(),
             Storage::PERMISSIONS => \json_encode($document->getPermissions()),
         ];
-
-        $version = $document->getVersion();
-        if ($version !== null) {
-            $row[Storage::VERSION] = $version;
-        }
 
         if (! empty($document->getSequence())) {
             $row[Storage::SEQUENCE] = $document->getSequence();

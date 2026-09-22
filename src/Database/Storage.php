@@ -18,8 +18,6 @@ final readonly class Storage
 
     public const string PERMISSIONS = '_permissions';
 
-    public const string VERSION = '_version';
-
     public const string DISTANCE = '_distance';
 
     public const string DELETED_AT = '_deletedAt';
@@ -56,7 +54,6 @@ final readonly class Storage
         Document::UPDATED_AT => self::UPDATED_AT,
         Document::DELETED_AT => self::DELETED_AT,
         Document::PERMISSIONS => self::PERMISSIONS,
-        Document::VERSION => self::VERSION,
         Document::DISTANCE => self::DISTANCE,
     ];
 

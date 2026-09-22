@@ -17,7 +17,7 @@ use Utopia\Database\Validator\Authorization;
 
 final class SQLiteForUpdateDocumentTest extends TestCase
 {
-    public function testVersionedUpdateOnRawSqlitePdoDoesNotTreatColumnIndexesAsAttributes(): void
+    public function testForUpdateReadOnRawSqlitePdoDoesNotTreatColumnIndexesAsAttributes(): void
     {
         $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
         $database
@@ -54,11 +54,10 @@ final class SQLiteForUpdateDocumentTest extends TestCase
         $newer = $database->updateDocument('migrations', $active->getId(), new Document([
             '$updatedAt' => $active->getUpdatedAt(),
             'stage' => 'migrating',
-        ]), expectedVersion: $active->getVersion());
+        ]));
 
         $this->assertSame('migrating', $newer->getAttribute('stage'));
         $this->assertSame('processing', $newer->getAttribute('status'));
         $this->assertSame($active->getUpdatedAt(), $newer->getUpdatedAt());
-        $this->assertNotSame($active->getVersion(), $newer->getVersion());
     }
 }

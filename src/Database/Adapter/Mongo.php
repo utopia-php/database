@@ -1509,7 +1509,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @throws DuplicateException
      * @throws DatabaseException
      */
-    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions, ?int $expectedVersion = null): Document
+    public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
@@ -1517,9 +1517,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $record = $this->replaceChars('$', '_', $record);
 
         $filters = [Storage::UID => $id];
-        if ($expectedVersion !== null) {
-            $filters[Storage::VERSION] = $expectedVersion;
-        }
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection->getId());
@@ -1537,10 +1534,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     '$set' => $record,
                 ];
                 $updated = $this->client->update($name, $filters, $updateQuery, $options);
-            }
-
-            if ($expectedVersion !== null && $updated === 0) {
-                throw new ConflictException('Document version does not match the expected version');
             }
         } catch (MongoException $e) {
             throw $this->processException($e);
@@ -1575,21 +1568,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
-        unset($record[Storage::VERSION]);
 
         try {
             $pipeline = $this->buildOperatorPipeline($record);
             if ($pipeline !== null) {
-                $pipeline[0]['$set'][Storage::VERSION] = [
-                    '$add' => [['$ifNull' => ['$' . Storage::VERSION, 0]], 1],
-                ];
-
                 return $this->updateWithPipeline($name, $filters, $pipeline, $options, multi: true);
             }
 
             $updateQuery = [
                 '$set' => $record,
-                '$inc' => [Storage::VERSION => 1],
             ];
 
             return $this->client->update(
@@ -2043,24 +2030,17 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @throws Exception
      */
-    public function deleteDocument(string $collection, string $id, ?int $expectedVersion = null): bool
+    public function deleteDocument(string $collection, string $id): bool
     {
         $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $filters = [Storage::UID => $id];
-        if ($expectedVersion !== null) {
-            $filters[Storage::VERSION] = $expectedVersion;
-        }
 
         $this->syncReadHooks();
         $filters = $this->applyReadFilters($filters, $collection);
 
         $options = $this->getTransactionOptions();
         $result = $this->client->delete($name, $filters, 1, [], $options);
-
-        if ($expectedVersion !== null && $result === 0) {
-            throw new ConflictException('Document version does not match the expected version');
-        }
 
         return (bool) $result;
     }
@@ -3328,7 +3308,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             \substr(Document::CREATED_AT, 1),
             \substr(Document::UPDATED_AT, 1),
             \substr(Document::COLLECTION, 1),
-            \substr(Document::VERSION, 1),
         ];
 
         // First pass: recursively process array values and collect keys to rename
@@ -4237,7 +4216,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $oldUserAttributes = $oldDocument->getAttributes();
         $newUserAttributes = $newDocument->getAttributes();
 
-        $protectedFields = [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::UPDATED_AT, Storage::PERMISSIONS, Storage::TENANT, Storage::VERSION];
+        $protectedFields = [Storage::UID, Storage::SEQUENCE, Storage::CREATED_AT, Storage::UPDATED_AT, Storage::PERMISSIONS, Storage::TENANT];
 
         foreach ($oldUserAttributes as $originalKey => $originalValue) {
             if (in_array($originalKey, $protectedFields) || array_key_exists($originalKey, $newUserAttributes)) {

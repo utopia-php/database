@@ -182,16 +182,6 @@ class Database
             'array' => false,
             'filters' => ['json'],
         ],
-        [
-            Document::ID => Document::VERSION,
-            'type' => ColumnType::Integer->value,
-            'size' => 0,
-            'required' => false,
-            'default' => null,
-            'signed' => false,
-            'array' => false,
-            'filters' => [],
-        ],
     ];
 
     public const INTERNAL_ATTRIBUTE_KEYS = [
@@ -199,7 +189,6 @@ class Database
         Storage::CREATED_AT,
         Storage::UPDATED_AT,
         Storage::PERMISSIONS,
-        Storage::VERSION,
     ];
 
     public const INTERNAL_INDEXES = [

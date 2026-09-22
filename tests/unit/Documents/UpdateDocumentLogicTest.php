@@ -126,7 +126,6 @@ class UpdateDocumentLogicTest extends TestCase
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$version' => 1,
             'name' => 'old',
         ]);
         $attributes = [
@@ -146,35 +145,6 @@ class UpdateDocumentLogicTest extends TestCase
         $this->assertNotSame('2024-01-01T00:00:00.000+00:00', $result->getUpdatedAt());
     }
 
-    public function testUpdateDocumentIncrementsVersion(): void
-    {
-        $adapter = $this->makeAdapter();
-        $existing = new Document([
-            '$id' => 'doc1',
-            '$collection' => 'testCol',
-            '$createdAt' => '2024-01-01T00:00:00.000+00:00',
-            '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$version' => 5,
-            'name' => 'old',
-        ]);
-        $attributes = [
-            new Document(['$id' => 'name', 'key' => 'name', 'type' => 'string', 'size' => 128, 'required' => false, 'array' => false, 'signed' => true, 'filters' => []]),
-        ];
-        $this->setupCollectionAndDocument($adapter, 'testCol', $existing, $attributes);
-        $db = $this->buildDatabase($adapter);
-
-        $updated = new Document([
-            '$id' => 'doc1',
-            '$collection' => 'testCol',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'name' => 'new',
-        ]);
-
-        $result = $db->updateDocument('testCol', 'doc1', $updated);
-        $this->assertSame(6, $result->getVersion());
-    }
-
     public function testUpdateDocumentChecksUpdatePermission(): void
     {
         $adapter = $this->makeAdapter();
@@ -184,7 +154,6 @@ class UpdateDocumentLogicTest extends TestCase
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
             '$permissions' => [Permission::update(Role::user('admin'))],
-            '$version' => 1,
             'name' => 'old',
         ]);
         $attributes = [
@@ -219,7 +188,6 @@ class UpdateDocumentLogicTest extends TestCase
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$version' => 1,
             'title' => 'ok',
         ]);
 
@@ -238,7 +206,7 @@ class UpdateDocumentLogicTest extends TestCase
         $db->updateDocument('testCol', 'doc1', $updated);
     }
 
-    public function testUpdateDocumentDetectsNoChangesAndPreservesVersion(): void
+    public function testUpdateDocumentDetectsNoChangesAndPreservesUpdatedAt(): void
     {
         $adapter = $this->makeAdapter();
         $existing = new Document([
@@ -247,7 +215,6 @@ class UpdateDocumentLogicTest extends TestCase
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$version' => 3,
             'name' => 'same',
         ]);
         $attributes = [
@@ -264,7 +231,7 @@ class UpdateDocumentLogicTest extends TestCase
         ]);
 
         $result = $db->updateDocument('testCol', 'doc1', $noChange);
-        $this->assertSame(3, $result->getVersion());
+        $this->assertSame('2024-01-01T00:00:00.000+00:00', $result->getUpdatedAt());
     }
 
     public function testUpdateDocumentRequiresId(): void
@@ -321,7 +288,6 @@ class UpdateDocumentLogicTest extends TestCase
             '$createdAt' => '2020-06-15T12:00:00.000+00:00',
             '$updatedAt' => '2020-06-15T12:00:00.000+00:00',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$version' => 1,
             'name' => 'old',
         ]);
         $attributes = [
@@ -341,35 +307,6 @@ class UpdateDocumentLogicTest extends TestCase
         $this->assertSame('2020-06-15T12:00:00.000+00:00', $result->getCreatedAt());
     }
 
-    public function testUpdateDocumentVersionNotIncrementedWhenNoChanges(): void
-    {
-        $adapter = $this->makeAdapter();
-        $existing = new Document([
-            '$id' => 'doc1',
-            '$collection' => 'testCol',
-            '$createdAt' => '2024-01-01T00:00:00.000+00:00',
-            '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$version' => 7,
-            'name' => 'unchanged',
-        ]);
-        $attributes = [
-            new Document(['$id' => 'name', 'key' => 'name', 'type' => 'string', 'size' => 128, 'required' => false, 'array' => false, 'signed' => true, 'filters' => []]),
-        ];
-        $this->setupCollectionAndDocument($adapter, 'testCol', $existing, $attributes);
-        $db = $this->buildDatabase($adapter);
-
-        $noChange = new Document([
-            '$id' => 'doc1',
-            '$collection' => 'testCol',
-            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            'name' => 'unchanged',
-        ]);
-
-        $result = $db->updateDocument('testCol', 'doc1', $noChange);
-        $this->assertSame(7, $result->getVersion());
-    }
-
     public function testUpdateDocumentPermissionChangeIsHandled(): void
     {
         $adapter = $this->makeAdapter();
@@ -379,7 +316,6 @@ class UpdateDocumentLogicTest extends TestCase
             '$createdAt' => '2024-01-01T00:00:00.000+00:00',
             '$updatedAt' => '2024-01-01T00:00:00.000+00:00',
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
-            '$version' => 1,
             'name' => 'same',
         ]);
         $attributes = [

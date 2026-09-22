@@ -27,8 +27,6 @@ class Document extends ArrayObject
 
     public const string TENANT = '$tenant';
 
-    public const string VERSION = '$version';
-
     public const string DISTANCE = '$distance';
 
     public const string DELETED_AT = '$deletedAt';
@@ -354,23 +352,6 @@ class Document extends ArrayObject
         }
 
         return null;
-    }
-
-    /**
-     * Get the document's optimistic locking version.
-     *
-     * @return int|null The version number, or null if not set.
-     */
-    public function getVersion(): ?int
-    {
-        $version = $this->getAttribute(self::VERSION);
-
-        if ($version === null) {
-            return null;
-        }
-
-        /** @var int $version */
-        return $version;
     }
 
     /**

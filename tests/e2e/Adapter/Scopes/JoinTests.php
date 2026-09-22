@@ -5630,7 +5630,6 @@ trait JoinTests
             Document::CREATED_AT,
             Document::UPDATED_AT,
             Document::TENANT,
-            Document::VERSION,
             Document::COLLECTION,
             Document::DISTANCE,
             Document::DELETED_AT,

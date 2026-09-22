@@ -36,6 +36,12 @@ use Utopia\Database\Query;
  */
 class SQLite extends MariaDB
 {
+    /**
+     * SQLite spelt the legacy permissions index with a separator the other
+     * adapters never used, so the name the migration moves away from differs here.
+     */
+    protected const PERMISSIONS_INDEX_LEGACY = '_index_1';
+
     /** Suffix appended to every FTS5 virtual table name created by this adapter. */
     private const FTS_TABLE_SUFFIX = '_fts';
 
@@ -441,7 +447,7 @@ class SQLite extends MariaDB
             $this->createIndex($id, '_created_at', Database::INDEX_KEY, [ '_createdAt'], [], []);
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
+            $this->createIndex("{$id}_perms", static::PERMISSIONS_INDEX, Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {
@@ -1538,99 +1544,6 @@ class SQLite extends MariaDB
     public function getSupportForColumnPermissions(): bool
     {
         return true;
-    }
-
-    /**
-     * Give an older permissions table the shape column permissions need.
-     *
-     * SQLite has no INFORMATION_SCHEMA, so the column list comes from PRAGMA, and
-     * indexes are dropped and recreated rather than altered.
-     *
-     * @param Document $collection
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function prepareColumnPermissions(Document $collection): bool
-    {
-        $id = $this->filter($collection->getId());
-        $table = "{$this->getNamespace()}_{$id}_perms";
-
-        $hasColumn = false;
-        foreach ($this->getPDO()->query("PRAGMA table_info(`{$table}`)")->fetchAll() as $column) {
-            if (($column['name'] ?? null) === '_column') {
-                $hasColumn = true;
-                break;
-            }
-        }
-
-        $hasIndex = $this->hasColumnPermissionsIndex($table);
-
-        // Both are checked, not just the column. A table created since column
-        // permissions existed has both already; and a prepare interrupted between
-        // adding the column and rebuilding the index leaves them disagreeing, which
-        // keying off the column alone would never repair.
-        if ($hasColumn && $hasIndex) {
-            return true;
-        }
-
-        if (!$hasColumn) {
-            try {
-                $this->getPDO()->prepare("
-                    ALTER TABLE `{$table}` ADD COLUMN `_column` VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT ''
-                ")->execute();
-            } catch (PDOException $e) {
-                throw $this->processException($e);
-            }
-        }
-
-        if ($hasIndex) {
-            return true;
-        }
-
-        // One transaction, so uniqueness is never absent. Dropping and recreating as
-        // two statements leaves a window in which a duplicate permission row can be
-        // inserted -- and the recreate then fails, leaving the table with no unique
-        // index at all. SQLite keeps DDL transactional, so the pair is atomic.
-        $this->startTransaction();
-
-        try {
-            $this->deleteIndex("{$id}_perms", '_index_1');
-            $this->createIndex("{$id}_perms", '_index_1', Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
-        } catch (\Throwable $e) {
-            $this->rollbackTransaction();
-
-            throw $e;
-        }
-
-        $this->commitTransaction();
-
-        return true;
-    }
-
-    /**
-     * Does the unique permissions index already cover _column?
-     *
-     * Found through PRAGMA rather than by rebuilding the index name, so it cannot
-     * drift from however createIndex() chose to name it.
-     *
-     * @param string $table unprefixed physical table name
-     * @return bool
-     */
-    protected function hasColumnPermissionsIndex(string $table): bool
-    {
-        foreach ($this->getPDO()->query("PRAGMA index_list(`{$table}`)")->fetchAll() as $index) {
-            if ((int)($index['unique'] ?? 0) !== 1) {
-                continue;
-            }
-
-            foreach ($this->getPDO()->query("PRAGMA index_info(`{$index['name']}`)")->fetchAll() as $column) {
-                if (($column['name'] ?? null) === '_column') {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     public function getSupportForSchemaAttributes(): bool

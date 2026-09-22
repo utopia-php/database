@@ -4295,27 +4295,6 @@ class Mongo extends Adapter
     }
 
     /**
-     * Column-level permissions are not supported by this adapter, so a rename
-     * can never have column-scoped permissions to repoint.
-     *
-     * @param Document $collection
-     * @param string $old
-     * @param string $new
-     * @return array<string>
-     */
-    /**
-     * Nothing to prepare: permissions live inline on each document, so this adapter
-     * has no permissions table to widen.
-     *
-     * @param Document $collection
-     * @return bool
-     */
-    public function prepareColumnPermissions(Document $collection): bool
-    {
-        return true;
-    }
-
-    /**
      * Is any permission in this collection still scoped to a column?
      *
      * Read by the guard that refuses to disable column security while such grants

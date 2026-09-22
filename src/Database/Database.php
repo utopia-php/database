@@ -5239,11 +5239,15 @@ class Database
     /**
      * Turn column security on or off for a collection.
      *
-     * Enabling prepares the permissions table, which for a collection created before
-     * column permissions existed means an ALTER. Disabling is refused while any
-     * permission is still scoped to a column: the row filter matches on the role
-     * alone, so such a permission would widen to the whole row once the column part
-     * stops being written and queried.
+     * Enabling only sets the flag. Every permissions table created since column
+     * permissions existed already carries _column and the unique index over it, and
+     * older ones are brought to that shape by a migration rather than on the fly --
+     * an ALTER that reads every permission row has no business running inside an
+     * API request.
+     *
+     * Disabling is refused while any permission is still scoped to a column: the row
+     * filter matches on the role alone, so such a permission would widen to the whole
+     * row once the column part stops being written and queried.
      *
      * @param Document $collection
      * @param bool $columnSecurity
@@ -5256,8 +5260,6 @@ class Database
             if (!$this->adapter->getSupportForColumnPermissions()) {
                 throw new DatabaseException('Column security is not supported by this adapter');
             }
-
-            $this->adapter->prepareColumnPermissions($collection);
 
             return;
         }

@@ -23,6 +23,22 @@ abstract class SQL extends Adapter
 {
     protected const VECTOR_DISTANCE_COLUMN = '_distance';
 
+    /**
+     * Name of the unique index that keeps a permissions table free of duplicate
+     * grants. It always covers _column.
+     */
+    protected const PERMISSIONS_INDEX = '_unique';
+
+    /**
+     * What that index was called before it covered _column.
+     *
+     * Nothing here creates or rebuilds it -- a table still carrying this name is one
+     * the column-permissions migration has not reached yet, and the migration is what
+     * moves it. It is named only so a duplicate-key error raised on such a table is
+     * still recognised as a permission collision.
+     */
+    protected const PERMISSIONS_INDEX_LEGACY = '_index1';
+
     protected mixed $pdo;
 
     /**

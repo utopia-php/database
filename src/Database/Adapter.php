@@ -1041,17 +1041,6 @@ abstract class Adapter
     abstract public function deleteColumnPermissions(Document $collection, string $column): array;
 
     /**
-     * Prepare a collection's permissions table to hold column-scoped permissions.
-     *
-     * Tables created after column permissions existed are already in this shape, so
-     * this is a no-op for them; older ones gain the column and a widened unique index.
-     *
-     * @param Document $collection
-     * @return bool
-     */
-    abstract public function prepareColumnPermissions(Document $collection): bool;
-
-    /**
      * Is any permission in this collection still scoped to a column?
      *
      * @param Document $collection

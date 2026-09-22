@@ -448,12 +448,12 @@ class Database
             /**
              * @return mixed
              */
-            static function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (! is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, ColumnType::Point->value);
+                    return $database->encodeSpatialData($value, ColumnType::Point->value);
                 } catch (Throwable) {
                     return $value;
                 }
@@ -461,8 +461,8 @@ class Database
             /**
              * @return array|null
              */
-            static function (?string $value, mixed $document = null, ?Database $database = null) {
-                if ($value === null || $database === null) {
+            static function (?string $value, Document $document, Database $database) {
+                if ($value === null) {
                     return null;
                 }
                 if ($database->adapter->hasFeature(Feature\Spatial::class)) {
@@ -478,12 +478,12 @@ class Database
             /**
              * @return mixed
              */
-            static function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (! is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, ColumnType::Linestring->value);
+                    return $database->encodeSpatialData($value, ColumnType::Linestring->value);
                 } catch (Throwable) {
                     return $value;
                 }
@@ -491,8 +491,8 @@ class Database
             /**
              * @return array|null
              */
-            static function (?string $value, mixed $document = null, ?Database $database = null) {
-                if (is_null($value) || $database === null) {
+            static function (?string $value, Document $document, Database $database) {
+                if (is_null($value)) {
                     return null;
                 }
                 if ($database->adapter->hasFeature(Feature\Spatial::class)) {
@@ -508,12 +508,12 @@ class Database
             /**
              * @return mixed
              */
-            static function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (! is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, ColumnType::Polygon->value);
+                    return $database->encodeSpatialData($value, ColumnType::Polygon->value);
                 } catch (Throwable) {
                     return $value;
                 }
@@ -521,8 +521,8 @@ class Database
             /**
              * @return array|null
              */
-            static function (?string $value, mixed $document = null, ?Database $database = null) {
-                if (is_null($value) || $database === null) {
+            static function (?string $value, Document $document, Database $database) {
+                if (is_null($value)) {
                     return null;
                 }
                 if ($database->adapter->hasFeature(Feature\Spatial::class)) {
@@ -2786,7 +2786,7 @@ class Database
      *
      * @throws DatabaseException
      */
-    protected static function encodeSpatialData(mixed $value, string $type): string
+    protected function encodeSpatialData(mixed $value, string $type): string
     {
         $validator = new SpatialValidator($type);
         if (! $validator->isValid($value)) {

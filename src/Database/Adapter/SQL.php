@@ -4105,6 +4105,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         PermissionType $forPermission,
         bool $preservingOuter,
     ): void {
+        $queries = $this->populationStatistics($queries);
         $this->remapDottedQueryAttributes($queries, $joinTablePrefixes, $collection);
         $builder->filter($queries);
 
@@ -4151,6 +4152,40 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 ));
             }
         }
+    }
+
+    /**
+     * Rewrite the two ambiguous statistical aggregates to their explicit
+     * population forms.
+     *
+     * Bare `STDDEV` and `VARIANCE` are not portable: MySQL and MariaDB read
+     * both as the population statistic, PostgreSQL reads both as the sample
+     * one, so the same query answered 67.0238 on one engine and 77.3985 on
+     * the other. `STDDEV_POP` and `VAR_POP` mean the population statistic on
+     * every engine this adapter targets, so emitting them explicitly fixes
+     * the contract at population - which is what MySQL and MariaDB already
+     * returned, and what the ClickHouse builder already chose. Callers who
+     * want the sample statistic ask for it by name with stddevSamp() or
+     * varSamp(), which were always unambiguous.
+     *
+     * @param  array<BaseQuery>  $queries
+     * @return array<BaseQuery>
+     */
+    private function populationStatistics(array $queries): array
+    {
+        foreach ($queries as $index => $query) {
+            $method = match ($query->getMethod()) {
+                Method::Stddev => Method::StddevPop,
+                Method::Variance => Method::VarPop,
+                default => null,
+            };
+
+            if ($method !== null) {
+                $queries[$index] = (clone $query)->setMethod($method);
+            }
+        }
+
+        return $queries;
     }
 
     /**

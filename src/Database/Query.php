@@ -157,6 +157,32 @@ class Query extends BaseQuery
     }
 
     /**
+     * Standard deviation over the **population**.
+     *
+     * Bare SQL `STDDEV` is population on MySQL and MariaDB and sample on
+     * PostgreSQL. The adapters pin this method to `STDDEV_POP` so every engine
+     * answers the same number; ask for stddevSamp() when you want the sample
+     * statistic.
+     */
+    public static function stddev(string $attribute, string $alias = ''): static
+    {
+        return parent::stddev($attribute, $alias);
+    }
+
+    /**
+     * Variance over the **population**.
+     *
+     * Bare SQL `VARIANCE` is population on MySQL and MariaDB and sample on
+     * PostgreSQL. The adapters pin this method to `VAR_POP` so every engine
+     * answers the same number; ask for varSamp() when you want the sample
+     * statistic.
+     */
+    public static function variance(string $attribute, string $alias = ''): static
+    {
+        return parent::variance($attribute, $alias);
+    }
+
+    /**
      * Check if method is supported. Accepts both string and Method enum.
      */
     public static function isMethod(Method|string $value): bool

@@ -1511,6 +1511,38 @@ trait AggregationTests
         $database->deleteCollection($col);
     }
 
+    /**
+     * stddev() and variance() are the POPULATION statistic on every adapter.
+     *
+     * Bare SQL `STDDEV` / `VARIANCE` are population on MySQL and MariaDB and
+     * sample on PostgreSQL, so the same query answered different numbers per
+     * engine. The adapters now emit `STDDEV_POP` / `VAR_POP` explicitly, so
+     * these must equal the stddevPop / varPop cases below over the same rows.
+     */
+    public function testStddevAndVarianceArePopulationOnEveryAdapter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'stat_contract');
+
+        $stddev = $database->find('stat_contract', [Query::stddev('price', 'result')]);
+        $this->assertCount(1, $stddev);
+        $this->assertEqualsWithDelta(406.87456737949, $this->numericAttribute($stddev[0], 'result'), 0.5);
+        $this->assertNotEqualsWithDelta(431.55564852957, $this->numericAttribute($stddev[0], 'result'), 0.5);
+
+        $variance = $database->find('stat_contract', [Query::variance('price', 'result')]);
+        $this->assertCount(1, $variance);
+        $this->assertEqualsWithDelta(165546.91358025, $this->numericAttribute($variance[0], 'result'), 1.0);
+        $this->assertNotEqualsWithDelta(186240.27777778, $this->numericAttribute($variance[0], 'result'), 1.0);
+
+        $database->deleteCollection('stat_contract');
+    }
+
     public function testStddevPopOfPrice(): void
     {
         $database = static::getDatabase();

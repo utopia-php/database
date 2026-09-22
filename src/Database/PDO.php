@@ -30,6 +30,8 @@ class PDO
 {
     protected PhpPDO $pdo;
 
+    private ?string $hostname = null;
+
     /**
      * Create a new PDO wrapper instance.
      *
@@ -161,14 +163,18 @@ class PDO
      */
     public function getHostname(): string
     {
-        $parts = $this->parseDsn($this->dsn);
+        if ($this->hostname === null) {
+            $parts = $this->parseDsn($this->dsn);
 
-        /**
-         * @var string $host
-         */
-        $host = $parts['host'] ?? throw new Exception('No host found in DSN');
+            /**
+             * @var string $host
+             */
+            $host = $parts['host'] ?? throw new Exception('No host found in DSN');
 
-        return $host;
+            $this->hostname = $host;
+        }
+
+        return $this->hostname;
     }
 
     /**

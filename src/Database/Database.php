@@ -222,6 +222,8 @@ class Database
      */
     protected static array $filters = [];
 
+    protected static bool $defaultFiltersRegistered = false;
+
     /**
      * Process-lifetime cache of internal attribute definitions as typed Attribute objects.
      * Built once from {@see self::INTERNAL_ATTRIBUTES} (a class constant) and reused across calls.
@@ -349,12 +351,22 @@ class Database
         $this->setAuthorization(new Authorization());
         $this->documentTypes[self::METADATA] = Collection::class;
 
+        self::registerDefaultFilters();
+    }
+
+    protected static function registerDefaultFilters(): void
+    {
+        if (self::$defaultFiltersRegistered) {
+            return;
+        }
+        self::$defaultFiltersRegistered = true;
+
         self::addFilter(
             'json',
             /**
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
                 if (! is_array($value) && ! $value instanceof \stdClass) {
@@ -368,7 +380,7 @@ class Database
              *
              * @throws Exception
              */
-            function (mixed $value, mixed $document = null, mixed $database = null, string $attribute = '') {
+            static function (mixed $value, mixed $document = null, mixed $database = null, string $attribute = '') {
                 if (! is_string($value)) {
                     return $value;
                 }
@@ -407,7 +419,7 @@ class Database
             /**
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (is_null($value)) {
                     return;
                 }
@@ -426,7 +438,7 @@ class Database
             /**
              * @return string|null
              */
-            function (?string $value) {
+            static function (?string $value) {
                 return DateTime::formatTz($value);
             }
         );
@@ -436,7 +448,7 @@ class Database
             /**
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (! is_array($value)) {
                     return $value;
                 }
@@ -449,12 +461,12 @@ class Database
             /**
              * @return array|null
              */
-            function (?string $value) {
-                if ($value === null) {
+            static function (?string $value, mixed $document = null, ?Database $database = null) {
+                if ($value === null || $database === null) {
                     return null;
                 }
-                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
-                    return $this->adapter->decodePoint($value);
+                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                    return $database->adapter->decodePoint($value);
                 }
 
                 return null;
@@ -466,7 +478,7 @@ class Database
             /**
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (! is_array($value)) {
                     return $value;
                 }
@@ -479,12 +491,12 @@ class Database
             /**
              * @return array|null
              */
-            function (?string $value) {
-                if (is_null($value)) {
+            static function (?string $value, mixed $document = null, ?Database $database = null) {
+                if (is_null($value) || $database === null) {
                     return null;
                 }
-                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
-                    return $this->adapter->decodeLinestring($value);
+                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                    return $database->adapter->decodeLinestring($value);
                 }
 
                 return null;
@@ -496,7 +508,7 @@ class Database
             /**
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (! is_array($value)) {
                     return $value;
                 }
@@ -509,12 +521,12 @@ class Database
             /**
              * @return array|null
              */
-            function (?string $value) {
-                if (is_null($value)) {
+            static function (?string $value, mixed $document = null, ?Database $database = null) {
+                if (is_null($value) || $database === null) {
                     return null;
                 }
-                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
-                    return $this->adapter->decodePolygon($value);
+                if ($database->adapter->hasFeature(Feature\Spatial::class)) {
+                    return $database->adapter->decodePolygon($value);
                 }
 
                 return null;
@@ -526,7 +538,7 @@ class Database
             /**
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (! \is_array($value)) {
                     return $value;
                 }
@@ -545,7 +557,7 @@ class Database
             /**
              * @return array|null
              */
-            function (?string $value) {
+            static function (?string $value) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -560,7 +572,7 @@ class Database
             /**
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (! \is_array($value) && ! $value instanceof \stdClass) {
                     return $value;
                 }
@@ -570,7 +582,7 @@ class Database
             /**
              * @return array|null
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (is_null($value)) {
                     return;
                 }
@@ -1478,6 +1490,8 @@ class Database
      */
     public static function addFilter(string $name, callable $encode, callable $decode): void
     {
+        self::registerDefaultFilters();
+
         self::$filters[$name] = [
             'encode' => $encode,
             'decode' => $decode,
@@ -2772,7 +2786,7 @@ class Database
      *
      * @throws DatabaseException
      */
-    protected function encodeSpatialData(mixed $value, string $type): string
+    protected static function encodeSpatialData(mixed $value, string $type): string
     {
         $validator = new SpatialValidator($type);
         if (! $validator->isValid($value)) {

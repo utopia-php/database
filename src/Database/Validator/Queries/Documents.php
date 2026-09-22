@@ -10,6 +10,7 @@ use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\Limit;
 use Utopia\Database\Validator\Query\Offset;
 use Utopia\Database\Validator\Query\Order;
+use Utopia\Database\Validator\Query\Relationship;
 use Utopia\Database\Validator\Query\Select;
 
 class Documents extends IndexedQueries
@@ -22,6 +23,8 @@ class Documents extends IndexedQueries
      * @param \DateTime $minAllowedDate
      * @param \DateTime $maxAllowedDate
      * @param bool $supportForAttributes
+     * @param bool $supportUnsignedBigInt
+     * @param bool $supportForRelationship
      * @throws \Utopia\Database\Exception
      */
     public function __construct(
@@ -33,7 +36,8 @@ class Documents extends IndexedQueries
         \DateTime $minAllowedDate = new \DateTime('0000-01-01'),
         \DateTime $maxAllowedDate = new \DateTime('9999-12-31'),
         bool $supportForAttributes = true,
-        bool $supportUnsignedBigInt = true
+        bool $supportUnsignedBigInt = true,
+        bool $supportForRelationship = true
     ) {
         $attributes[] = new Document([
             '$id' => '$id',
@@ -76,6 +80,10 @@ class Documents extends IndexedQueries
             new Order($attributes, $supportForAttributes),
             new Select($attributes, $supportForAttributes),
         ];
+
+        if ($supportForRelationship) {
+            $validators[] = new Relationship($attributes, $maxUIDLength, $supportForAttributes);
+        }
 
         parent::__construct($attributes, $indexes, $validators);
     }

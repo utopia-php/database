@@ -1740,4 +1740,44 @@ trait AggregationTests
 
         $database->deleteCollection($collection);
     }
+
+    public function testNumericAggregatesRejectAttributesThatAreNotNumbers(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'numeric_aggregate_operands';
+        $this->createProducts($database, $collection);
+
+        $rejected = [
+            'sum' => Query::sum('category', 'result'),
+            'avg' => Query::avg('name', 'result'),
+            'stddev' => Query::stddev('category', 'result'),
+            'variance' => Query::variance('category', 'result'),
+            'bitAnd' => Query::bitAnd('name', 'result'),
+            'bitOr' => Query::bitOr('category', 'result'),
+        ];
+        foreach ($rejected as $method => $query) {
+            $this->assertRejectedAsQueryShape(
+                fn () => $database->find($collection, [$query]),
+                'Invalid query: Aggregate '.$method.' requires a numeric attribute that is not an array: '.$query->getAttribute(),
+            );
+        }
+
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, [Query::bitXor('rating', 'result')]),
+            'Invalid query: Aggregate bitXor requires an integer attribute that is not an array: rating',
+        );
+
+        $results = $database->find($collection, [Query::min('category', 'first'), Query::max('name', 'last'), Query::countDistinct('category', 'categories')]);
+        $this->assertSame('books', $results[0]->getAttribute('first'));
+        $this->assertSame('Textbook', $results[0]->getAttribute('last'));
+        $this->assertSame(3, $this->intAttribute($results[0], 'categories'));
+
+        $database->deleteCollection($collection);
+    }
 }

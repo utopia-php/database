@@ -6,11 +6,17 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Profiler\QueryProfiler;
@@ -67,7 +73,6 @@ class ReadWritePoolTest extends TestCase
             'getSchemaIndexes',
             'getBuilder',
             'getSchema',
-            'rawQuery',
             'getColumnType',
             'decodePoint',
             'decodeLinestring',
@@ -371,6 +376,115 @@ class ReadWritePoolTest extends TestCase
         $this->pool->delegate('rawMutation', ['UPDATE t SET a = 1', []]);
     }
 
+    public function testReadAfterTransactionalWriteRoutesToWritePool(): void
+    {
+        $this->writeAdapter->method('withTransaction')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback(),
+        );
+        $this->writeAdapter->method('createDocument')->willReturn(new Document());
+        $this->writeAdapter->expects($this->once())->method('find')->willReturn([]);
+        $this->readAdapter->expects($this->never())->method('find');
+
+        $this->pool->withTransaction(fn (): Document => $this->pool->createDocument(new Document(), new Document()));
+
+        $this->pool->find(new Document());
+    }
+
+    public function testStickinessRunsFromTheCommitRatherThanTheWrite(): void
+    {
+        $this->pool->setStickyDuration(200);
+
+        $this->writeAdapter->method('withTransaction')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback(),
+        );
+        $this->writeAdapter->method('createDocument')->willReturn(new Document());
+        $this->writeAdapter->expects($this->once())->method('find')->willReturn([]);
+        $this->readAdapter->expects($this->never())->method('find');
+
+        $this->pool->withTransaction(function (): void {
+            $this->pool->createDocument(new Document(), new Document());
+            \usleep(250_000);
+        });
+
+        $this->pool->find(new Document());
+    }
+
+    public function testStickinessRunsFromTheEndOfAWrite(): void
+    {
+        $this->pool->setStickyDuration(200);
+
+        $this->writeAdapter->method('createDocument')->willReturnCallback(static function (): Document {
+            \usleep(250_000);
+
+            return new Document();
+        });
+        $this->writeAdapter->expects($this->once())->method('find')->willReturn([]);
+        $this->readAdapter->expects($this->never())->method('find');
+
+        $this->pool->createDocument(new Document(), new Document());
+
+        $this->pool->find(new Document());
+    }
+
+    public function testGetDocumentForUpdateRoutesToWritePool(): void
+    {
+        $this->writeAdapter->expects($this->exactly(3))->method('getDocument')->willReturn(new Document());
+        $this->readAdapter->expects($this->never())->method('getDocument');
+
+        $this->pool->setSticky(false);
+        $this->pool->getDocument(new Document(), 'id', [], true);
+        $this->pool->getDocument(new Document(), 'id', forUpdate: true);
+        $this->pool->delegate('getDocument', ['collection' => new Document(), 'id' => 'id', 'forUpdate' => true]);
+    }
+
+    public function testGetDocumentWithoutLockRoutesToReadPool(): void
+    {
+        $this->readAdapter->expects($this->once())->method('getDocument')->willReturn(new Document());
+        $this->writeAdapter->expects($this->never())->method('getDocument');
+
+        $this->pool->getDocument(new Document(), 'id', [], false);
+    }
+
+    public function testRawQueryRoutesToWritePool(): void
+    {
+        $this->writeAdapter->expects($this->once())->method('rawQuery')->willReturn([]);
+        $this->readAdapter->expects($this->never())->method('rawQuery');
+
+        $this->pool->setSticky(false);
+        $this->pool->rawQuery('UPDATE posts SET title = ?', ['draft']);
+    }
+
+    public function testDocumentWrittenThroughDatabaseIsReadBackFromThePrimary(): void
+    {
+        $primary = new Memory();
+        $replica = new Memory();
+        $this->createSchema($primary);
+        $this->createSchema($replica);
+
+        $database = $this->createReplicatedDatabase($primary, $replica);
+        $database->createDocument('posts', new Document(['$id' => 'post']));
+
+        $this->assertFalse(
+            $database->getDocument('posts', 'post')->isEmpty(),
+            'A read straight after a committed write was served by a replica that has not received the row',
+        );
+    }
+
+    public function testLockingReadThroughDatabaseIsServedByThePrimary(): void
+    {
+        $primary = new Memory();
+        $replica = new Memory();
+        $this->createSchema($primary)->createDocument('posts', new Document(['$id' => 'post']));
+        $this->createSchema($replica);
+
+        $database = $this->createReplicatedDatabase($primary, $replica);
+
+        $this->assertFalse(
+            $database->getDocument('posts', 'post', forUpdate: true)->isEmpty(),
+            'A locking read was served by a replica, where the lock protects nothing',
+        );
+    }
+
     public function testReplicaDoesNotKeepTheProfilerAfterARead(): void
     {
         $replica = new ProfilerProbeAdapter();
@@ -383,6 +497,39 @@ class ReadWritePoolTest extends TestCase
 
         $this->assertSame($profiler, $replica->profiled, 'The replica must profile the read it served');
         $this->assertNull($replica->getProfiler(), 'The replica kept the profiler of the handle that borrowed it');
+    }
+
+    private function createSchema(Adapter $adapter): Database
+    {
+        $database = new Database($adapter, new Cache(new NoCache()));
+        $database
+            ->setDatabase('replication')
+            ->setNamespace('replication')
+            ->setAuthorization(new Authorization());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'posts',
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+
+        return $database;
+    }
+
+    private function createReplicatedDatabase(Adapter $primary, Adapter $replica): Database
+    {
+        $pool = new ReadWritePool($this->createConnections($primary), $this->createConnections($replica));
+
+        $database = new Database($pool, new Cache(new NoCache()));
+        $database
+            ->setDatabase('replication')
+            ->setNamespace('replication')
+            ->setAuthorization(new Authorization());
+
+        return $database;
     }
 
     /**
@@ -421,7 +568,6 @@ class ReadWritePoolTest extends TestCase
             'decodeLinestring', 'decodePolygon' => [],
             'getBuilder' => $this->createStub(\Utopia\Query\Builder::class),
             'getSchema' => $this->createStub(\Utopia\Query\Schema::class),
-            'rawQuery' => [],
             'getColumnType' => 'VARCHAR',
             default => null,
         };
@@ -455,7 +601,6 @@ class ReadWritePoolTest extends TestCase
             'supports' => [\Utopia\Database\Capability::Index],
             'hasFeature' => [Feature\Spatial::class],
             'getSchemaAttributes', 'getSchemaIndexes', 'getBuilder' => ['collection'],
-            'rawQuery' => ['SELECT 1', []],
             'getColumnType' => ['string', 255, true, false, false],
             'decodePoint', 'decodeLinestring', 'decodePolygon' => ['wkb'],
             default => [],

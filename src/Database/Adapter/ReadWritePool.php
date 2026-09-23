@@ -18,7 +18,6 @@ class ReadWritePool extends Pool
         'getSchemaIndexes',
         'getBuilder',
         'getSchema',
-        'rawQuery',
         'getColumnType',
         'decodePoint',
         'decodeLinestring',
@@ -90,41 +89,65 @@ class ReadWritePool extends Pool
         return $this->borrowAndInvoke($method, $args);
     }
 
+    #[\Override]
+    public function withTransaction(callable $callback): mixed
+    {
+        try {
+            return parent::withTransaction($callback);
+        } finally {
+            $this->stick();
+        }
+    }
+
     /**
      * @param  array<mixed>  $args
      * @param  class-string|null  $feature
      */
+    #[\Override]
     protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
     {
-        if ($this->pinnedAdapter !== null) {
-            $adapter = $this->pinnedAdapter;
-            $this->syncBorrowedAdapter($adapter);
-
-            return $this->invokeDelegated($adapter, $method, $args, $feature);
+        if (! $this->isReadOperation($method, $args)) {
+            try {
+                return parent::borrowAndInvoke($method, $args, $feature);
+            } finally {
+                $this->stick();
+            }
         }
 
-        if ($this->isReadOperation($method) && ! $this->isSticky()) {
-            return $this->readPool->use(function (Adapter $adapter) use ($method, $args, $feature) {
-                try {
-                    $this->syncBorrowedAdapter($adapter);
-
-                    return $this->invokeDelegated($adapter, $method, $args, $feature);
-                } finally {
-                    $this->releaseBorrowedAdapter($adapter);
-                }
-            });
+        if ($this->pin() !== null || $this->isSticky()) {
+            return parent::borrowAndInvoke($method, $args, $feature);
         }
 
-        if (! $this->isReadOperation($method)) {
-            $this->lastWriteTimestamp = \microtime(true);
-        }
+        return $this->readPool->use(function (Adapter $adapter) use ($method, $args, $feature) {
+            try {
+                $this->syncBorrowedAdapter($adapter);
 
-        return parent::borrowAndInvoke($method, $args, $feature);
+                return $this->invokeDelegated($adapter, $method, $args, $feature);
+            } finally {
+                $this->releaseBorrowedAdapter($adapter);
+            }
+        });
     }
 
-    private function isReadOperation(string $method): bool
+    /**
+     * @param  array<mixed>  $args
+     */
+    private function isReadOperation(string $method, array $args): bool
     {
-        return \in_array($method, self::READ_METHODS, true);
+        return \in_array($method, self::READ_METHODS, true) && ! $this->locksRow($method, $args);
+    }
+
+    /**
+     * @param  array<mixed>  $args
+     */
+    private function locksRow(string $method, array $args): bool
+    {
+        return $method === 'getDocument' && ($args[3] ?? $args['forUpdate'] ?? false) === true;
+    }
+
+    private function stick(): void
+    {
+        $this->lastWriteTimestamp = \microtime(true);
     }
 
     private function isSticky(): bool

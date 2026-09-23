@@ -781,7 +781,7 @@ class Redis extends Adapter implements
         $docKey = $this->docKey($col, $id, $tenant);
         $idxKey = $this->idxKey($col, $tenant);
         $seqKey = $this->seqKey($col, $tenant);
-        $permDocKey = $this->permDocKey($col, $id);
+        $permDocKey = $this->permDocKey($col, $id, $tenant);
 
         return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): Document {
             if ((bool) $redis->exists($docKey)) {
@@ -1072,7 +1072,7 @@ class Redis extends Adapter implements
                         'docKey' => $docKey,
                     ]);
 
-                    $this->clearPermissions($col, $id);
+                    $this->clearPermissions($col, $id, $tenant);
                     $this->writePermissions($col, $id, $mergedDocument);
 
                     $results[] = $mergedDocument;
@@ -1106,7 +1106,7 @@ class Redis extends Adapter implements
                         'id' => $id,
                         'docKey' => $docKey,
                         'idxKey' => $idxKey,
-                        'permDocKey' => $this->permDocKey($col, $id),
+                        'permDocKey' => $this->permDocKey($col, $id, $tenant),
                     ]);
 
                     $results[] = $document;
@@ -1617,19 +1617,18 @@ class Redis extends Adapter implements
         return $tenant === null ? '_' : (string) $tenant;
     }
 
-    private function tenantBucket(): ?string
+    private function tenantBucket(int|string|null $tenant = null): ?string
     {
         if (! $this->getSharedTables()) {
             return null;
         }
-        $tenant = $this->getTenant();
 
-        return $tenant === null ? '_' : (string) $tenant;
+        return $this->bucketFor($tenant);
     }
 
-    private function permKey(string $collection, string $letter, string $role): string
+    private function permKey(string $collection, string $letter, string $role, int|string|null $tenant = null): string
     {
-        $bucket = $this->tenantBucket();
+        $bucket = $this->tenantBucket($tenant);
         if ($bucket !== null) {
             return $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.$collection.self::SEP.$letter.self::SEP.$role;
         }
@@ -1637,10 +1636,10 @@ class Redis extends Adapter implements
         return $this->ns().self::SEP.'perm'.self::SEP.$collection.self::SEP.$letter.self::SEP.$role;
     }
 
-    private function permDocKey(string $collection, string $id): string
+    private function permDocKey(string $collection, string $id, int|string|null $tenant = null): string
     {
         $id = \strtolower($id);
-        $bucket = $this->tenantBucket();
+        $bucket = $this->tenantBucket($tenant);
         if ($bucket !== null) {
             return $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.'doc'.self::SEP.$collection.self::SEP.$id;
         }
@@ -1685,6 +1684,7 @@ class Redis extends Adapter implements
     private function writePermissions(string $collection, string $id, Document $document): void
     {
         $id = \strtolower($id);
+        $tenant = $document->getTenant();
 
         $byRole = [];
         foreach ([PermissionType::Create, PermissionType::Read, PermissionType::Update, PermissionType::Delete] as $type) {
@@ -1697,7 +1697,7 @@ class Redis extends Adapter implements
             return;
         }
 
-        $hashKey = $this->permDocKey($collection, $id);
+        $hashKey = $this->permDocKey($collection, $id, $tenant);
         $hashFields = [];
         $writes = [];
         foreach ($byRole as $role => $letters) {
@@ -1705,14 +1705,14 @@ class Redis extends Adapter implements
             \sort($unique);
             $hashFields[$role] = \implode(',', $unique);
             foreach ($unique as $letter) {
-                $writes[] = [$role, $letter];
+                $writes[] = [$role, $letter, $this->permKey($collection, $letter, $role, $tenant)];
             }
         }
 
         $this->client->multi(\Redis::PIPELINE);
         try {
-            foreach ($writes as [$role, $letter]) {
-                $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+            foreach ($writes as [, , $setKey]) {
+                $this->client->sAdd($setKey, $id);
             }
             $this->client->hMSet($hashKey, $hashFields);
             $this->client->exec();
@@ -1725,20 +1725,22 @@ class Redis extends Adapter implements
             throw $e;
         }
 
-        foreach ($writes as [$role, $letter]) {
+        foreach ($writes as [$role, $letter, $setKey]) {
             $this->journal('createPerm', [
                 'collection' => $collection,
                 'id' => $id,
                 'role' => $role,
                 'letter' => $letter,
+                'permKey' => $setKey,
+                'permDocKey' => $hashKey,
             ]);
         }
     }
 
-    private function clearPermissions(string $collection, string $id): void
+    private function clearPermissions(string $collection, string $id, int|string|null $tenant = null): void
     {
         $id = \strtolower($id);
-        $hashKey = $this->permDocKey($collection, $id);
+        $hashKey = $this->permDocKey($collection, $id, $tenant);
         /** @var array<string, string>|false $hash */
         $hash = $this->client->hGetAll($hashKey);
         if ($hash === false || $hash === []) {
@@ -1751,14 +1753,14 @@ class Redis extends Adapter implements
                 continue;
             }
             foreach (\explode(',', $letterCsv) as $letter) {
-                $removals[] = [$role, $letter];
+                $removals[] = [$role, $letter, $this->permKey($collection, $letter, $role, $tenant)];
             }
         }
 
         $this->client->multi(\Redis::PIPELINE);
         try {
-            foreach ($removals as [$role, $letter]) {
-                $this->client->sRem($this->permKey($collection, $letter, $role), $id);
+            foreach ($removals as [, , $setKey]) {
+                $this->client->sRem($setKey, $id);
             }
             $this->client->del($hashKey);
             $this->client->exec();
@@ -1771,13 +1773,15 @@ class Redis extends Adapter implements
             throw $e;
         }
 
-        foreach ($removals as [$role, $letter]) {
+        foreach ($removals as [$role, $letter, $setKey]) {
             $this->journal('deletePerm', [
                 'collection' => $collection,
                 'id' => $id,
                 'role' => $role,
                 'letter' => $letter,
                 'previous' => $hash[$role] ?? '',
+                'permKey' => $setKey,
+                'permDocKey' => $hashKey,
             ]);
         }
     }
@@ -1958,8 +1962,10 @@ class Redis extends Adapter implements
                     $letter = $this->payloadStringOr($payload, 'letter', '');
                     $role = $this->payloadStringOr($payload, 'role', '');
                     $id = $this->payloadStringOr($payload, 'id', '');
-                    $this->client->sRem($this->permKey($collection, $letter, $role), $id);
-                    $this->client->hDel($this->permDocKey($collection, $id), $role);
+                    $setKey = $this->payloadString($payload, 'permKey') ?? $this->permKey($collection, $letter, $role);
+                    $hashKey = $this->payloadString($payload, 'permDocKey') ?? $this->permDocKey($collection, $id);
+                    $this->client->sRem($setKey, $id);
+                    $this->client->hDel($hashKey, $role);
                     break;
 
                 case 'deletePerm':
@@ -1967,10 +1973,12 @@ class Redis extends Adapter implements
                     $letter = $this->payloadStringOr($payload, 'letter', '');
                     $role = $this->payloadStringOr($payload, 'role', '');
                     $id = $this->payloadStringOr($payload, 'id', '');
-                    $this->client->sAdd($this->permKey($collection, $letter, $role), $id);
+                    $setKey = $this->payloadString($payload, 'permKey') ?? $this->permKey($collection, $letter, $role);
+                    $hashKey = $this->payloadString($payload, 'permDocKey') ?? $this->permDocKey($collection, $id);
+                    $this->client->sAdd($setKey, $id);
                     $previous = $this->payloadString($payload, 'previous');
                     if ($previous !== null && $previous !== '') {
-                        $this->client->hSet($this->permDocKey($collection, $id), $role, $previous);
+                        $this->client->hSet($hashKey, $role, $previous);
                     }
                     break;
 

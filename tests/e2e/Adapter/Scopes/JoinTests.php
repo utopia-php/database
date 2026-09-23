@@ -6108,6 +6108,57 @@ trait JoinTests
         $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
     }
 
+    public function testFullOuterJoinDistinctReturnsAValueBothSidesHoldOnce(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
+        $join = Query::fullOuterJoin($joined, 'link', 'link', '=', 'b');
+
+        $all = $this->joinedCategories($database->find($main, [$join, Query::distinct(), Query::select(['b.category'])]));
+        \sort($all);
+        $this->assertSame([null, 'p', 'q'], $all);
+
+        $this->assertSame(['q'], $this->joinedCategories($database->find($main, [
+            $join,
+            Query::isNotNull('b.category'),
+            Query::distinct(),
+            Query::select(['b.category']),
+            Query::orderAsc('b.category'),
+            Query::limit(1),
+            Query::offset(1),
+        ])));
+
+        $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
+    }
+
+    public function testFullOuterJoinDistinctOrderedByAnUnselectedAttributeIsRejectedWhereEmulated(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || $database->getAdapter() instanceof Postgres) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
+
+        $message = $this->assertJoinQueryRejected(fn () => $database->find($main, [
+            Query::fullOuterJoin($joined, 'link', 'link', '=', 'b'),
+            Query::distinct(),
+            Query::select(['b.category']),
+            Query::orderAsc('score'),
+        ]), 'find');
+        $this->assertSame('A distinct() query over a full outer join can only be ordered by a selected attribute on this database, and score is not selected', $message);
+
+        $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
+    }
+
     public function testFullOuterJoinUnaliasedAggregatesKeepTheNamesTheEngineGivesThem(): void
     {
         $database = static::getDatabase();
@@ -6149,6 +6200,15 @@ trait JoinTests
             ],
             $rows,
         ));
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<mixed>
+     */
+    private function joinedCategories(array $rows): array
+    {
+        return \array_values(\array_map(static fn (Document $row): mixed => $row->getAttribute('b.category'), $rows));
     }
 
     /**

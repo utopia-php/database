@@ -7,7 +7,13 @@ use Tests\E2E\Adapter\Base;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\PDO;
 
 class SQLiteTest extends Base
@@ -70,6 +76,50 @@ class SQLiteTest extends Base
         self::$pdo = $pdo;
 
         return self::$database = $database;
+    }
+
+    public function testIndexNamesUseTheFilteredTenant(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'tenantIndexNames';
+
+        $database->withTenant('acme.1', function () use ($database, $collection): void {
+            $database->createCollection(new Collection(id: $collection, attributes: [
+                Attribute::string(key: 'email', size: 64, required: true),
+            ], permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ], documentSecurity: false));
+
+            $index = Index::unique(key: 'email', attributes: ['email']);
+            $database->createIndex($collection, $index);
+
+            $this->assertTrue($database->getAdapter()->createIndex($collection, $index), 'Creating an existing index must be a no-op');
+            $this->assertSame([$database->getNamespace().'_acme1_'.$collection.'_email'], $this->emailIndexes($database, $collection));
+
+            $this->assertTrue($database->deleteIndex($collection, 'email'));
+            $this->assertSame([], $this->emailIndexes($database, $collection), 'The index deleteIndex() reported as dropped must be gone');
+
+            $database->createDocument($collection, new Document(['email' => 'user@example.com']));
+            $database->createDocument($collection, new Document(['email' => 'user@example.com']));
+
+            $this->assertSame(2, $database->count($collection), 'A deleted unique index must stop rejecting duplicates');
+        });
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function emailIndexes(Database $database, string $collection): array
+    {
+        $names = [];
+        foreach ($database->getSchemaIndexes($collection) as $index) {
+            if (\str_ends_with($index->getId(), '_email')) {
+                $names[] = $index->getId();
+            }
+        }
+
+        return $names;
     }
 
     protected function deleteColumn(string $collection, string $column): bool

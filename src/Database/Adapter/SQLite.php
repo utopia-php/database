@@ -1629,7 +1629,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $attributes[$key] = "`{$attribute}` {$postfix}";
         }
 
-        $key = "`{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}`";
+        $key = "`{$this->getNamespace()}_{$this->getTenantSegment()}_{$collection}_{$id}`";
         $attributes = implode(', ', $attributes);
 
         if ($this->sharedTables) {

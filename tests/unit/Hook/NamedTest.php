@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
+use Swoole\Runtime;
 use Tests\Unit\Event\FailingLifecycle;
 use Tests\Unit\Event\HookFixture;
 use Tests\Unit\Event\NamedRecordingLifecycle;
@@ -180,24 +181,30 @@ final class NamedTest extends TestCase
         $audits = new NamedRecordingLifecycle('audits');
         $database->addHook($audits);
 
-        run(static function () use ($database): void {
-            $entered = new Channel(1);
-            $released = new Channel(1);
+        $hookFlags = Runtime::getHookFlags();
 
-            Coroutine::create(static function () use ($database, $entered, $released): void {
-                $database->silent(static function () use ($database, $entered, $released): void {
-                    $database->getCollection(HookFixture::COLLECTION);
-                    $entered->push(true);
-                    $released->pop();
-                }, ['audits']);
-            });
+        try {
+            run(static function () use ($database): void {
+                $entered = new Channel(1);
+                $released = new Channel(1);
 
-            Coroutine::create(static function () use ($database, $entered, $released): void {
-                $entered->pop();
-                $database->listCollections();
-                $released->push(true);
+                Coroutine::create(static function () use ($database, $entered, $released): void {
+                    $database->silent(static function () use ($database, $entered, $released): void {
+                        $database->getCollection(HookFixture::COLLECTION);
+                        $entered->push(true);
+                        $released->pop();
+                    }, ['audits']);
+                });
+
+                Coroutine::create(static function () use ($database, $entered, $released): void {
+                    $entered->pop();
+                    $database->listCollections();
+                    $released->push(true);
+                });
             });
-        });
+        } finally {
+            Runtime::setHookFlags($hookFlags);
+        }
 
         $this->assertSame([Event::CollectionList], $audits->getEvents());
     }

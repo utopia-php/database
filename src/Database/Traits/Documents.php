@@ -169,12 +169,20 @@ trait Documents
     /**
      * Return a DocumentsValidator for the given collection, building it on
      * first request and caching the instance for subsequent calls. The cache
-     * is purged when the collection's schema changes.
+     * is purged when the collection's schema changes. Queries that join other
+     * collections get a fresh validator every time: the cache key describes
+     * only this collection, never the joined ones.
+     *
+     * @param  array<Document>  $joinedCollections
      */
-    protected function getDocumentsValidator(Document $collection): DocumentsValidator
+    protected function getDocumentsValidator(Document $collection, array $joinedCollections = []): DocumentsValidator
     {
         $supportForJoins = $this->adapter->supports(Capability::Joins);
         $supportForAggregations = $this->adapter->supports(Capability::Aggregations);
+
+        if ($joinedCollections !== []) {
+            return $this->createDocumentsValidator($collection, $supportForJoins, $supportForAggregations);
+        }
 
         $context = $this->getCollectionMetadataCacheKey($collection->getId());
         $key = $this->documentsValidatorCacheKey($collection, $context, $supportForJoins, $supportForAggregations);
@@ -183,12 +191,24 @@ trait Documents
             return $this->documentsValidatorCache[$key];
         }
 
+        $validator = $this->createDocumentsValidator($collection, $supportForJoins, $supportForAggregations);
+
+        if (\count($this->documentsValidatorCache) >= self::DOCUMENTS_VALIDATOR_CACHE_LIMIT) {
+            $this->documentsValidatorCache = [];
+        }
+        $this->documentsValidatorCache[$key] = $validator;
+
+        return $validator;
+    }
+
+    private function createDocumentsValidator(Document $collection, bool $supportForJoins, bool $supportForAggregations): DocumentsValidator
+    {
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $indexes */
         $indexes = $collection->getAttribute('indexes', []);
 
-        $validator = new DocumentsValidator(
+        return new DocumentsValidator(
             $attributes,
             $indexes,
             $this->adapter->getIdAttributeType(),
@@ -201,13 +221,6 @@ trait Documents
             $supportForJoins,
             $supportForAggregations,
         );
-
-        if (\count($this->documentsValidatorCache) >= self::DOCUMENTS_VALIDATOR_CACHE_LIMIT) {
-            $this->documentsValidatorCache = [];
-        }
-        $this->documentsValidatorCache[$key] = $validator;
-
-        return $validator;
     }
 
     /**

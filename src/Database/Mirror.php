@@ -80,10 +80,12 @@ class Mirror extends Database
      * source's cache and inherits its invalidation. Mirror's own mutator
      * overrides bypass the inherited traits, so its local
      * `documentsValidatorCache` would otherwise go stale on schema changes.
+     *
+     * @param  array<Document>  $joinedCollections
      */
-    protected function getDocumentsValidator(Document $collection): Validator\Queries\Documents
+    protected function getDocumentsValidator(Document $collection, array $joinedCollections = []): Validator\Queries\Documents
     {
-        return $this->source->getDocumentsValidator($collection);
+        return $this->source->getDocumentsValidator($collection, $joinedCollections);
     }
 
     /**

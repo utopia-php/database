@@ -10,7 +10,7 @@
         "database"
     ],
     "license": "MIT",
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "prefer-stable": true,
     "autoload": {
         "psr-4": {
@@ -50,13 +50,13 @@
         "ext-mongodb": "*",
         "ext-mbstring": "*",
         "ext-redis": "*",
-        "utopia-php/validators": "^1.0",
-        "utopia-php/console": "^0.1 || ^0.2",
-        "utopia-php/cache": "^4.0 || ^5.0",
+        "utopia-php/validators": "1.*",
+        "utopia-php/console": "0.1.* || 0.2.*",
+        "utopia-php/cache": "4.* || 5.*",
         "utopia-php/pools": "2.*",
         "utopia-php/mongo": "1.*",
         "utopia-php/query": "0.6.*",
-        "utopia-php/async": "^0.1"
+        "utopia-php/async": "0.1.*"
     },
     "require-dev": {
         "fakerphp/faker": "1.23.*",
@@ -75,16 +75,6 @@
         "ext-pdo": "Needed to support MariaDB, MySQL or SQLite Database Adapter",
         "mongodb/mongodb": "Needed to support MongoDB Database Adapter"
     },
-    "repositories": [
-        {
-            "type": "vcs",
-            "url": "https://github.com/utopia-php/async.git"
-        },
-        {
-            "type": "vcs",
-            "url": "https://github.com/utopia-php/query.git"
-        }
-    ],
     "config": {
         "allow-plugins": {
             "php-http/discovery": false,

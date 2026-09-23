@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "edeb6776cfe6af39a6a0d52475de4ee5",
+    "content-hash": "7d9f5d9ccf5988b2c535a50a947bec98",
     "packages": [
         {
             "name": "brick/math",
@@ -2134,63 +2134,7 @@
                     "Utopia\\Async\\": "src/"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "Utopia\\Tests\\": "tests/"
-                }
-            },
-            "scripts": {
-                "test-unit": [
-                    "vendor/bin/phpunit tests/Unit --exclude-group no-swoole"
-                ],
-                "test-promise-sync": [
-                    "vendor/bin/phpunit tests/E2e/Promise/SyncTest.php"
-                ],
-                "test-promise-swoole": [
-                    "vendor/bin/phpunit tests/E2e/Promise/Swoole"
-                ],
-                "test-promise-amp": [
-                    "vendor/bin/phpunit tests/E2e/Promise/Amp"
-                ],
-                "test-promise-react": [
-                    "vendor/bin/phpunit tests/E2e/Promise/React"
-                ],
-                "test-parallel-sync": [
-                    "vendor/bin/phpunit tests/E2e/Parallel/Sync"
-                ],
-                "test-parallel-swoole-thread": [
-                    "vendor/bin/phpunit tests/E2e/Parallel/Swoole/ThreadTest.php"
-                ],
-                "test-parallel-swoole-process": [
-                    "vendor/bin/phpunit tests/E2e/Parallel/Swoole/ProcessTest.php"
-                ],
-                "test-parallel-amp": [
-                    "vendor/bin/phpunit tests/E2e/Parallel/Amp"
-                ],
-                "test-parallel-react": [
-                    "vendor/bin/phpunit tests/E2e/Parallel/React"
-                ],
-                "test-parallel-ext": [
-                    "php -n -d extension=parallel.so -d extension=sockets.so vendor/bin/phpunit tests/E2e/Parallel/Parallel"
-                ],
-                "test-e2e": [
-                    "vendor/bin/phpunit tests/E2e --exclude-group ext-parallel"
-                ],
-                "test": [
-                    "@test-unit",
-                    "@test-e2e",
-                    "@test-parallel-ext"
-                ],
-                "lint": [
-                    "vendor/bin/pint"
-                ],
-                "format": [
-                    "php -d memory_limit=4G vendor/bin/pint"
-                ],
-                "check": [
-                    "vendor/bin/phpstan analyse src tests --level=max --memory-limit=4G"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -2202,8 +2146,8 @@
             ],
             "description": "High-performance concurrent + parallel library with Promise and Parallel execution support for PHP.",
             "support": {
-                "source": "https://github.com/utopia-php/async/tree/0.1.1",
-                "issues": "https://github.com/utopia-php/async/issues"
+                "issues": "https://github.com/utopia-php/async/issues",
+                "source": "https://github.com/utopia-php/async/tree/0.1.1"
             },
             "time": "2026-06-08T05:10:34+00:00"
         },
@@ -2521,38 +2465,7 @@
                     "Utopia\\Query\\": "src/Query"
                 }
             },
-            "autoload-dev": {
-                "psr-4": {
-                    "Tests\\Query\\": "tests/Query",
-                    "Tests\\Integration\\": "tests/Integration"
-                }
-            },
-            "scripts": {
-                "test": [
-                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance"
-                ],
-                "test:coverage": [
-                    "vendor/bin/paratest --testsuite Query --processes=auto --exclude-group=performance --coverage-php coverage/unit.cov"
-                ],
-                "test:performance": [
-                    "vendor/bin/phpunit --testsuite Query --group=performance"
-                ],
-                "test:integration": [
-                    "vendor/bin/phpunit --testsuite Integration"
-                ],
-                "test:integration:coverage": [
-                    "vendor/bin/phpunit --testsuite Integration --coverage-php coverage/integration.cov"
-                ],
-                "lint": [
-                    "php -d memory_limit=2G ./vendor/bin/pint --test"
-                ],
-                "format": [
-                    "php -d memory_limit=2G ./vendor/bin/pint"
-                ],
-                "check": [
-                    "./vendor/bin/phpstan analyse --level max src tests --memory-limit 2G"
-                ]
-            },
+            "notification-url": "https://packagist.org/downloads/",
             "license": [
                 "MIT"
             ],
@@ -2565,8 +2478,8 @@
                 "utopia"
             ],
             "support": {
-                "source": "https://github.com/utopia-php/query/tree/0.6.1",
-                "issues": "https://github.com/utopia-php/query/issues"
+                "issues": "https://github.com/utopia-php/query/issues",
+                "source": "https://github.com/utopia-php/query/tree/0.6.1"
             },
             "time": "2026-09-21T05:06:19+00:00"
         },
@@ -5506,7 +5419,7 @@
         }
     ],
     "aliases": [],
-    "minimum-stability": "dev",
+    "minimum-stability": "stable",
     "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,

@@ -413,10 +413,33 @@ class Database
      */
     protected static array $filters = [];
 
+    protected static bool $defaultFiltersRegistered = false;
+
+    protected static int $filtersVersion = 0;
+
+    /**
+     * @var array<array<string, mixed>>|null
+     */
+    private static ?array $tenantlessInternalAttributes = null;
+
     /**
      * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     protected array $instanceFilters = [];
+
+    /**
+     * @var array<string, string>
+     */
+    private array $filterSignatures = [];
+
+    private string $filterSignaturesEncoded = '';
+
+    private int $filterSignaturesVersion = -1;
+
+    /**
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
+     */
+    private array $filterSignaturesSource = [];
 
     /**
      * @var array<string, array<string, callable>>
@@ -525,13 +548,30 @@ class Database
 
         $this->setAuthorization(new Authorization());
 
+        self::registerDefaultFilters();
+    }
+
+    /**
+     * Registers the built-in filters on first touch of the registry, so an
+     * explicit addFilter() always wins regardless of whether it ran before or
+     * after the first instance. The flag is set first: addFilter() calls back
+     * into this, and the guard is what terminates that recursion.
+     */
+    private static function registerDefaultFilters(): void
+    {
+        if (self::$defaultFiltersRegistered) {
+            return;
+        }
+
+        self::$defaultFiltersRegistered = true;
+
         self::addFilter(
             'json',
             /**
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 $value = ($value instanceof Document) ? $value->getArrayCopy() : $value;
 
                 if (!is_array($value) && !$value instanceof \stdClass) {
@@ -545,7 +585,7 @@ class Database
              * @return mixed
              * @throws Exception
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!is_string($value)) {
                     return $value;
                 }
@@ -555,7 +595,7 @@ class Database
                 if (array_key_exists('$id', $value)) {
                     return new Document($value);
                 } else {
-                    $value = array_map(function ($item) {
+                    $value = array_map(static function ($item) {
                         if (is_array($item) && array_key_exists('$id', $item)) { // if `$id` exists, create a Document instance
                             return new Document($item);
                         }
@@ -573,7 +613,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (is_null($value)) {
                     return;
                 }
@@ -589,7 +629,7 @@ class Database
              * @param string|null $value
              * @return string|null
              */
-            function (?string $value) {
+            static function (?string $value) {
                 return DateTime::formatTz($value);
             }
         );
@@ -598,27 +638,31 @@ class Database
             Database::VAR_POINT,
             /**
              * @param mixed $value
+             * @param Document $document
+             * @param Database $database
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (!is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, Database::VAR_POINT);
+                    return $database->encodeSpatialData($value, Database::VAR_POINT);
                 } catch (\Throwable) {
                     return $value;
                 }
             },
             /**
              * @param string|null $value
+             * @param Document $document
+             * @param Database $database
              * @return array|null
              */
-            function (?string $value) {
+            static function (?string $value, Document $document, Database $database) {
                 if ($value === null) {
                     return null;
                 }
-                return $this->adapter->decodePoint($value);
+                return $database->adapter->decodePoint($value);
             }
         );
 
@@ -626,27 +670,31 @@ class Database
             Database::VAR_LINESTRING,
             /**
              * @param mixed $value
+             * @param Document $document
+             * @param Database $database
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (!is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, Database::VAR_LINESTRING);
+                    return $database->encodeSpatialData($value, Database::VAR_LINESTRING);
                 } catch (\Throwable) {
                     return $value;
                 }
             },
             /**
              * @param string|null $value
+             * @param Document $document
+             * @param Database $database
              * @return array|null
              */
-            function (?string $value) {
+            static function (?string $value, Document $document, Database $database) {
                 if (is_null($value)) {
                     return null;
                 }
-                return $this->adapter->decodeLinestring($value);
+                return $database->adapter->decodeLinestring($value);
             }
         );
 
@@ -654,27 +702,31 @@ class Database
             Database::VAR_POLYGON,
             /**
              * @param mixed $value
+             * @param Document $document
+             * @param Database $database
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value, Document $document, Database $database) {
                 if (!is_array($value)) {
                     return $value;
                 }
                 try {
-                    return self::encodeSpatialData($value, Database::VAR_POLYGON);
+                    return $database->encodeSpatialData($value, Database::VAR_POLYGON);
                 } catch (\Throwable) {
                     return $value;
                 }
             },
             /**
              * @param string|null $value
+             * @param Document $document
+             * @param Database $database
              * @return array|null
              */
-            function (?string $value) {
+            static function (?string $value, Document $document, Database $database) {
                 if (is_null($value)) {
                     return null;
                 }
-                return $this->adapter->decodePolygon($value);
+                return $database->adapter->decodePolygon($value);
             }
         );
 
@@ -684,7 +736,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!\is_array($value)) {
                     return $value;
                 }
@@ -703,7 +755,7 @@ class Database
              * @param string|null $value
              * @return mixed
              */
-            function (?string $value) {
+            static function (?string $value) {
                 if (is_null($value)) {
                     return null;
                 }
@@ -721,7 +773,7 @@ class Database
              * @param mixed $value
              * @return mixed
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (!\is_array($value) && !$value instanceof \stdClass) {
                     return $value;
                 }
@@ -732,7 +784,7 @@ class Database
              * @param mixed $value
              * @return array|null
              */
-            function (mixed $value) {
+            static function (mixed $value) {
                 if (is_null($value)) {
                     return;
                 }
@@ -8882,7 +8934,7 @@ class Database
                     $this->unmasked(fn () => $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side));
                     break;
                 case Database::RELATION_MUTATE_SET_NULL:
-                    $this->unmasked(fn () => $this->deleteSetNull($collection, $relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side));
+                    $this->unmasked(fn () => $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side));
                     break;
                 case Database::RELATION_MUTATE_CASCADE:
                     foreach ($this->relationshipDeleteStack as $processedRelationship) {
@@ -9013,10 +9065,32 @@ class Database
     }
 
     /**
+     * Find every document in $relatedCollection whose $twoWayKey points at $document.
+     *
+     * Deletes can start from a document fetched without its relationships populated -
+     * deleteDocuments() passes the caller's queries straight to find(), and a select
+     * query turns relationship population off - so the relationship value carried on
+     * the document cannot be trusted here.
+     *
+     * Permissions are skipped: a referencing document the caller cannot read still has
+     * to have its foreign key cleared, or it is left pointing at a deleted row.
+     *
+     * @return array<Document>
+     * @throws DatabaseException
+     */
+    private function findReferencingDocuments(Document $relatedCollection, Document $document, string $twoWayKey): array
+    {
+        return $this->authorization->skip(fn () => $this->find($relatedCollection->getId(), [
+            Query::select(['$id']),
+            Query::equal($twoWayKey, [$document->getId()]),
+            Query::limit(PHP_INT_MAX)
+        ]));
+    }
+
+    /**
      * @param Document $collection
      * @param Document $relatedCollection
      * @param Document $document
-     * @param mixed $value
      * @param string $relationType
      * @param bool $twoWay
      * @param string $twoWayKey
@@ -9028,7 +9102,7 @@ class Database
      * @throws RestrictedException
      * @throws StructureException
      */
-    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, mixed $value, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, string $relationType, bool $twoWay, string $twoWayKey, string $side): void
     {
         switch ($relationType) {
             case Database::RELATION_ONE_TO_ONE:
@@ -9037,18 +9111,11 @@ class Database
                 }
 
                 // Shouldn't need read or update permission to delete
-                $this->authorization->skip(function () use ($document, $value, $relatedCollection, $twoWay, $twoWayKey, $side) {
-                    if (!$twoWay && $side === Database::RELATION_SIDE_CHILD) {
-                        $related = $this->findOne($relatedCollection->getId(), [
-                            Query::select(['$id']),
-                            Query::equal($twoWayKey, [$document->getId()])
-                        ]);
-                    } else {
-                        if (empty($value)) {
-                            return;
-                        }
-                        $related = $this->getDocument($relatedCollection->getId(), $value->getId(), [Query::select(['$id'])]);
-                    }
+                $this->authorization->skip(function () use ($document, $relatedCollection, $twoWayKey) {
+                    $related = $this->findOne($relatedCollection->getId(), [
+                        Query::select(['$id']),
+                        Query::equal($twoWayKey, [$document->getId()])
+                    ]);
 
                     if ($related->isEmpty()) {
                         return;
@@ -9068,7 +9135,10 @@ class Database
                 if ($side === Database::RELATION_SIDE_CHILD) {
                     break;
                 }
-                foreach ($value as $relation) {
+
+                $relations = $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey);
+
+                foreach ($relations as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
@@ -9086,15 +9156,9 @@ class Database
                     break;
                 }
 
-                if (!$twoWay) {
-                    $value = $this->find($relatedCollection->getId(), [
-                        Query::select(['$id']),
-                        Query::equal($twoWayKey, [$document->getId()]),
-                        Query::limit(PHP_INT_MAX)
-                    ]);
-                }
+                $relations = $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey);
 
-                foreach ($value as $relation) {
+                foreach ($relations as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
                         $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
@@ -10258,11 +10322,15 @@ class Database
      */
     public static function addFilter(string $name, callable $encode, callable $decode): void
     {
+        self::registerDefaultFilters();
+
         self::$filters[$name] = [
             'encode' => $encode,
             'decode' => $decode,
             'signature' => self::computeCallableSignature($encode) . ':' . self::computeCallableSignature($decode),
         ];
+
+        self::$filtersVersion++;
     }
 
     /**
@@ -10884,15 +10952,14 @@ class Database
      */
     public function getInternalAttributes(): array
     {
-        $attributes = self::INTERNAL_ATTRIBUTES;
-
-        if (!$this->adapter->getSharedTables()) {
-            $attributes = \array_filter(Database::INTERNAL_ATTRIBUTES, function ($attribute) {
-                return $attribute['$id'] !== '$tenant';
-            });
+        if ($this->adapter->getSharedTables()) {
+            return self::INTERNAL_ATTRIBUTES;
         }
 
-        return $attributes;
+        return self::$tenantlessInternalAttributes ??= \array_values(\array_filter(
+            self::INTERNAL_ATTRIBUTES,
+            fn (array $attribute): bool => $attribute['$id'] !== '$tenant',
+        ));
     }
 
     /**
@@ -10963,11 +11030,10 @@ class Database
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
-            $payload = \json_encode([
-                'selects' => $sortedSelects,
-                'relationships' => $this->resolveRelationships,
-                'filters' => $this->getActiveFilterSignatures(),
-            ]) ?: '';
+            $payload = ($this->resolveRelationships ? '1' : '0')
+                . ':' . $this->getFilterSignatureKey()
+                . ':' . ($sortedSelects === [] ? '' : (\json_encode($sortedSelects) ?: ''));
+
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
 
@@ -11109,33 +11175,60 @@ class Database
      */
     private function getActiveFilterSignatures(): array
     {
-        $filterSignatures = [];
         if (!$this->filter) {
-            return $filterSignatures;
+            return [];
         }
 
-        $disabled = $this->disabledFilters ?? [];
+        $this->refreshFilterSignatures();
+
+        return $this->disabledFilters
+            ? \array_diff_key($this->filterSignatures, $this->disabledFilters)
+            : $this->filterSignatures;
+    }
+
+    private function refreshFilterSignatures(): void
+    {
+        if (
+            $this->filterSignaturesVersion === self::$filtersVersion
+            && $this->filterSignaturesSource === $this->instanceFilters
+        ) {
+            return;
+        }
+
+        $signatures = [];
 
         foreach (self::$filters as $name => $callbacks) {
-            if (isset($disabled[$name])) {
-                continue;
-            }
             if (\array_key_exists($name, $this->instanceFilters)) {
                 continue;
             }
-            $filterSignatures[$name] = $callbacks['signature'];
+            $signatures[$name] = $callbacks['signature'];
         }
 
         foreach ($this->instanceFilters as $name => $callbacks) {
-            if (isset($disabled[$name])) {
-                continue;
-            }
-            $filterSignatures[$name] = $callbacks['signature'];
+            $signatures[$name] = $callbacks['signature'];
         }
 
-        \ksort($filterSignatures);
+        \ksort($signatures);
 
-        return $filterSignatures;
+        $this->filterSignatures = $signatures;
+        $this->filterSignaturesEncoded = \json_encode($signatures) ?: '';
+        $this->filterSignaturesVersion = self::$filtersVersion;
+        $this->filterSignaturesSource = $this->instanceFilters;
+    }
+
+    private function getFilterSignatureKey(): string
+    {
+        if (!$this->filter) {
+            return '';
+        }
+
+        if ($this->disabledFilters) {
+            return \json_encode($this->getActiveFilterSignatures()) ?: '';
+        }
+
+        $this->refreshFilterSignatures();
+
+        return $this->filterSignaturesEncoded;
     }
 
     private static function computeCallableSignature(callable $callable): string

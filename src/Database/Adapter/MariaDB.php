@@ -1625,6 +1625,18 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === '42S22' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1054) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1116) {
+            return new QueryException('Too many tables in a join', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1191) {
+            return new QueryException('Searching requires a fulltext index on the searched attributes', $e->getCode(), $e);
+        }
+
         return $e;
     }
 

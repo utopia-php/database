@@ -4,12 +4,14 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1882,5 +1884,110 @@ trait AggregationTests
         $this->assertSame(5, $this->intAttribute($grouped[1], 'odd_bits'));
 
         $database->deleteCollection($collection);
+    }
+
+    public function testUnknownColumnsAreAttributeNotFound(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || $adapter->hasFeature(SQLite::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'unknown_column';
+        $this->createScores($database, $collection);
+
+        $this->assertAttributeNotFound(fn () => $database->skipValidation(
+            fn () => $database->find($collection, [Query::equal('no_such_attribute', ['x'])]),
+        ));
+
+        $this->deleteColumn($collection, 'score');
+        $this->assertAttributeNotFound(fn () => $database->find($collection, [Query::greaterThan('score', 1)]));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testSearchWithoutAFulltextIndexIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'search_unindexed';
+        $this->createScores($database, $collection);
+
+        $search = [Query::search('name', 'alpha')];
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, $search),
+            'Searching by attribute "name" requires a fulltext index.',
+        );
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->skipValidation(fn () => $database->find($collection, $search)),
+            'Searching requires a fulltext index on the searched attributes',
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testMoreTablesThanTheEngineCanJoinIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'join_tables';
+        $this->createScores($database, $collection);
+
+        $joins = \array_map(fn (int $index): Query => Query::crossJoin($collection, 'joined'.$index), \range(1, 61));
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, $joins),
+            'Too many joins: at most 8 are allowed',
+        );
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->skipValidation(fn () => $database->find($collection, [...$joins, Query::limit(1)])),
+            'Too many tables in a join',
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    private function createScores(Database $database, string $collection): void
+    {
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 20, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'score', required: true));
+
+        foreach ([['alpha', 3], ['alpha', 3], ['beta', 1], ['gamma', 2]] as [$name, $score]) {
+            $database->createDocument($collection, new Document([
+                'name' => $name,
+                'score' => $score,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+    }
+
+    private function assertAttributeNotFound(callable $call): void
+    {
+        $error = null;
+        try {
+            $call();
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(NotFoundException::class, $error, $error === null ? 'the unknown column was accepted' : $error::class.': '.$error->getMessage());
+        $this->assertSame('Attribute not found', $error->getMessage());
     }
 }

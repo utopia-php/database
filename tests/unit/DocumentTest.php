@@ -623,4 +623,140 @@ class DocumentTest extends TestCase
         $copy['values'][0] = 0;
         $this->assertSame(1, $document->getArray('values')[0]);
     }
+
+    public function testArrayAccessPermissionWriteRefreshesRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::user('old'))]]);
+        $this->assertSame(['user:old'], $document->getRead());
+
+        $document[Document::PERMISSIONS] = [Permission::read(Role::any())];
+
+        $this->assertSame(['any'], $document->getRead());
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+    }
+
+    public function testUnsetPermissionsClearsRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+        $this->assertSame(['any'], $document->getRead());
+
+        unset($document[Document::PERMISSIONS]);
+
+        $this->assertSame([], $document->getRead());
+        $this->assertSame([], $document->getPermissions());
+    }
+
+    public function testExchangeArrayRefreshesRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+        $this->assertSame(['any'], $document->getRead());
+
+        $document->exchangeArray([Document::PERMISSIONS => [Permission::read(Role::user('new'))]]);
+
+        $this->assertSame(['user:new'], $document->getRead());
+    }
+
+    public function testReferenceWriteToPermissionsRefreshesRoles(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::user('old'))]]);
+        $this->assertSame(['user:old'], $document->getRead());
+
+        $permissions = &$document[Document::PERMISSIONS];
+        $this->assertIsArray($permissions);
+        $permissions[] = Permission::update(Role::any());
+        unset($permissions);
+
+        $this->assertSame(['user:old'], $document->getRead());
+        $this->assertSame(['any'], $document->getUpdate());
+    }
+
+    public function testGetPermissionsNormalisesArrayAccessWrites(): void
+    {
+        $document = new Document();
+        $document[Document::PERMISSIONS] = [
+            5 => Permission::read(Role::any()),
+            9 => Permission::read(Role::any()),
+            12 => Permission::update(Role::user('editor')),
+        ];
+
+        $this->assertSame(
+            [Permission::read(Role::any()), Permission::update(Role::user('editor'))],
+            $document->getPermissions(),
+        );
+        $this->assertSame('["read(\"any\")","update(\"user:editor\")"]', \json_encode($document->getPermissions()));
+        $this->assertSame(['user:editor'], $document->getUpdate());
+    }
+
+    public function testConstructorRejectsNonStringPermissions(): void
+    {
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage('Every permission must be of type string');
+
+        new Document([Document::PERMISSIONS => [123, Permission::read(Role::any())]]);
+    }
+
+    public function testConstructorDeduplicatesPermissions(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [
+            2 => Permission::read(Role::any()),
+            4 => Permission::read(Role::any()),
+            6 => Permission::delete(Role::user('owner')),
+        ]]);
+
+        $this->assertSame(
+            [Permission::read(Role::any()), Permission::delete(Role::user('owner'))],
+            $document->getAttribute(Document::PERMISSIONS),
+        );
+    }
+
+    public function testSetAttributeRejectsNonStringPermissions(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+
+        $writes = [
+            [SetType::Assign, [Permission::update(Role::any()), 123]],
+            [SetType::Append, 123],
+        ];
+
+        foreach ($writes as [$type, $value]) {
+            try {
+                $document->setAttribute(Document::PERMISSIONS, $value, $type);
+                $this->fail('A non-string permission was accepted');
+            } catch (StructureException $error) {
+                $this->assertSame('Every permission must be of type string', $error->getMessage());
+            }
+        }
+
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+        $this->assertSame(['any'], $document->getRead());
+    }
+
+    public function testSetAttributeRejectsPermissionsThatAreNotAnArray(): void
+    {
+        $document = new Document([Document::PERMISSIONS => [Permission::read(Role::any())]]);
+
+        try {
+            $document->setAttribute(Document::PERMISSIONS, Permission::update(Role::any()));
+            $this->fail('A permissions value that is not an array was accepted');
+        } catch (StructureException $error) {
+            $this->assertSame(Document::PERMISSIONS.' must be of type array', $error->getMessage());
+        }
+
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+
+        $document->setAttribute(Document::PERMISSIONS, null);
+
+        $this->assertSame([], $document->getPermissions());
+    }
+
+    public function testFromRowFiltersNonStringPermissionsFromStoredRows(): void
+    {
+        $document = Document::fromRow([
+            Document::ID => 'legacy',
+            Document::PERMISSIONS => [123, Permission::read(Role::any()), null, Permission::read(Role::any())],
+        ]);
+
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+        $this->assertSame(['any'], $document->getRead());
+    }
 }

@@ -38,7 +38,12 @@ class Document extends ArrayObject
     /** @var array<string, true>|null */
     private static ?array $internalKeySet = null;
 
-    /** @var array<string, list<string>>|null */
+    /**
+     * Keyed on the stored value it was parsed from: a write through any path (ArrayAccess, a reference,
+     * exchangeArray(), unset) invalidates it without intercepting every write to the document.
+     *
+     * @var array{source: array<mixed>, permissions: list<string>, roles: array<string, list<string>>}|null
+     */
     private ?array $parsedPermissions = null;
 
     /**
@@ -71,18 +76,8 @@ class Document extends ArrayObject
             throw new StructureException(self::ID.' must be of type string');
         }
 
-        if (array_key_exists(self::PERMISSIONS, $input) && ! is_array($input[self::PERMISSIONS])) {
-            throw new StructureException(self::PERMISSIONS.' must be of type array');
-        }
-
-        if (array_key_exists(self::PERMISSIONS, $input) && is_array($input[self::PERMISSIONS])) {
-            $permissions = [];
-            foreach ($input[self::PERMISSIONS] as $permission) {
-                if (\is_string($permission)) {
-                    $permissions[] = $permission;
-                }
-            }
-            $input[self::PERMISSIONS] = \array_values(\array_unique($permissions));
+        if (array_key_exists(self::PERMISSIONS, $input)) {
+            $input[self::PERMISSIONS] = self::normalizePermissions($input[self::PERMISSIONS]);
         }
 
         foreach ($input as $key => $value) {
@@ -218,13 +213,13 @@ class Document extends ArrayObject
     /**
      * Get all unique permissions assigned to this document.
      *
-     * @return array<string>
+     * @return list<string>
+     *
+     * @throws StructureException When the stored permissions are not an array of strings
      */
     public function getPermissions(): array
     {
-        /** @var array<string> $permissions */
-        $permissions = $this->getAttribute(self::PERMISSIONS, []);
-        return $permissions;
+        return $this->parsePermissions()['permissions'];
     }
 
     /**
@@ -285,26 +280,69 @@ class Document extends ArrayObject
      * Get roles for a specific permission type from this document's permissions.
      *
      * @param PermissionType $type The permission type.
-     * @return array<string>
+     * @return list<string>
+     *
+     * @throws StructureException When the stored permissions are not an array of strings
      */
     public function getPermissionsByType(PermissionType $type): array
     {
-        if ($this->parsedPermissions === null) {
-            $this->parsedPermissions = [];
-            foreach ($this->getPermissions() as $permission) {
-                foreach (PermissionType::cases() as $permissionType) {
-                    $t = $permissionType->value;
-                    if (\str_starts_with($permission, $t)) {
-                        $this->parsedPermissions[$t][] = \str_replace([$t.'(', ')', '"', ' '], '', $permission);
-                        break;
-                    }
+        return $this->parsePermissions()['roles'][$type->value] ?? [];
+    }
+
+    /**
+     * @return array{source: array<mixed>, permissions: list<string>, roles: array<string, list<string>>}
+     *
+     * @throws StructureException
+     */
+    private function parsePermissions(): array
+    {
+        $source = $this->getAttribute(self::PERMISSIONS, []);
+
+        if ($this->parsedPermissions !== null && $this->parsedPermissions['source'] === $source) {
+            return $this->parsedPermissions;
+        }
+
+        $permissions = self::normalizePermissions($source);
+
+        $roles = [];
+        foreach ($permissions as $permission) {
+            foreach (PermissionType::cases() as $type) {
+                if (\str_starts_with($permission, $type->value)) {
+                    $roles[$type->value][] = \str_replace([$type->value.'(', ')', '"', ' '], '', $permission);
+                    break;
                 }
             }
-            foreach ($this->parsedPermissions as &$roles) {
-                $roles = \array_values(\array_unique($roles));
-            }
         }
-        return $this->parsedPermissions[$type->value] ?? [];
+
+        return $this->parsedPermissions = [
+            'source' => $source,
+            'permissions' => $permissions,
+            'roles' => \array_map(static fn (array $names): array => \array_values(\array_unique($names)), $roles),
+        ];
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @phpstan-assert array<mixed> $permissions
+     *
+     * @throws StructureException
+     */
+    private static function normalizePermissions(mixed $permissions): array
+    {
+        if (! \is_array($permissions)) {
+            throw new StructureException(self::PERMISSIONS.' must be of type array');
+        }
+
+        $strings = [];
+        foreach ($permissions as $permission) {
+            if (! \is_string($permission)) {
+                throw new StructureException('Every permission must be of type string');
+            }
+            $strings[] = $permission;
+        }
+
+        return \array_values(\array_unique($strings));
     }
 
     /**
@@ -449,34 +487,24 @@ class Document extends ArrayObject
      * Set Attribute.
      *
      * Method for setting a specific field attribute
+     *
+     * @throws StructureException When $permissions is set to something other than null or an array of strings
      */
     public function setAttribute(string $key, mixed $value, SetType $type = SetType::Assign): static
     {
-        // Fast path for the dominant Assign case — skip the match dispatch
-        // and the type-comparison branches that only matter for Append/Prepend.
-        if ($type === SetType::Assign) {
-            $this[$key] = $value;
-        } else {
-            $this[$key] = (! isset($this[$key]) || ! \is_array($this[$key])) ? [] : $this[$key];
-
-            match ($type) {
-                SetType::Append => $this[$key] = [...(array) $this[$key], $value],
-                SetType::Prepend => $this[$key] = [$value, ...(array) $this[$key]],
+        if ($type !== SetType::Assign) {
+            $current = $this->getArray($key);
+            $value = match ($type) {
+                SetType::Append => [...$current, $value],
+                SetType::Prepend => [$value, ...$current],
             };
         }
 
-        if ($key === self::PERMISSIONS) {
-            if (\is_array($this[$key])) {
-                $permissions = [];
-                foreach ($this[$key] as $permission) {
-                    if (\is_string($permission)) {
-                        $permissions[] = $permission;
-                    }
-                }
-                $this[$key] = \array_values(\array_unique($permissions));
-            }
-            $this->parsedPermissions = null;
+        if ($key === self::PERMISSIONS && $value !== null) {
+            $value = self::normalizePermissions($value);
         }
+
+        $this[$key] = $value;
 
         return $this;
     }

@@ -311,6 +311,14 @@ class Mirror extends Database
     }
 
     /**
+     * Lifecycle hooks are registered on the source (see addLifecycleHook()).
+     */
+    protected function triggerPropagatingHooks(Event $event, mixed $data = null): void
+    {
+        $this->source->triggerPropagatingHooks($event, $data);
+    }
+
+    /**
      * Silences the source, where lifecycle hooks are registered, and the mirror itself,
      * where decorators are.
      *

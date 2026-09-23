@@ -204,6 +204,7 @@ class Permissions extends Interceptor
             $old = $change->getOld();
             $document = $change->getNew();
             $metadata = $this->documentMetadata($document);
+            $tenantScope = $this->tenantScope($metadata, $context);
 
             $current = [];
             foreach (self::PERM_TYPES as $type) {
@@ -215,6 +216,7 @@ class Permissions extends Interceptor
                 if (! empty($toRemove)) {
                     $removeConditions[] = Query::and([
                         Query::equal(Storage::PERM_DOCUMENT, [$document->getId()]),
+                        ...$tenantScope,
                         Query::equal(Storage::PERM_TYPE, [$type->value]),
                         Query::equal(Storage::PERM_PERMISSION, \array_values($toRemove)),
                     ]);
@@ -236,7 +238,7 @@ class Permissions extends Interceptor
         }
 
         if (! empty($removeConditions)) {
-            $removeBuilder = ($context->newBuilder)(Storage::permissionsTable($collection));
+            $removeBuilder = ($context->createBuilder)()->from(($context->getTableRaw)(Storage::permissionsTable($collection)));
             $removeBuilder->filter([Query::or($removeConditions)]);
             $deleteResult = $removeBuilder->delete();
             $deleteStmt = ($context->executeResult)($deleteResult, Event::PermissionsDelete);
@@ -248,6 +250,26 @@ class Permissions extends Interceptor
             $addStmt = ($context->executeResult)($addResult, Event::PermissionsCreate);
             ($context->execute)($addStmt);
         }
+    }
+
+    /**
+     * An upsert batch can hold documents of several tenants, none of them the adapter's, so its
+     * removals cannot take newBuilder()'s filter on the adapter's tenant: each one is scoped to
+     * the tenant decorateRow() stores its own document's rows under instead.
+     *
+     * @param  array<string, mixed>  $metadata
+     * @return list<Query>
+     */
+    private function tenantScope(array $metadata, WriteContext $context): array
+    {
+        $row = ($context->decorateRow)([], $metadata);
+        if (! \array_key_exists(Storage::TENANT, $row)) {
+            return [];
+        }
+
+        $tenant = $row[Storage::TENANT];
+
+        return [Query::equal(Storage::TENANT, [\is_int($tenant) || \is_string($tenant) ? $tenant : null])];
     }
 
     /**

@@ -1170,7 +1170,7 @@ class Memory extends Adapter implements Feature\Relationships
             $row = $this->projectRow($row, $selections);
         }
 
-        return new Document($row);
+        return Document::fromStorage($row);
     }
 
     /**
@@ -1495,7 +1495,7 @@ class Memory extends Adapter implements Feature\Relationships
             $resolvedAttrs = $this->applyOperators($attrs, $existingRow);
 
             $merged = ! empty($resolvedAttrs)
-                ? new Document(\array_merge(
+                ? Document::fromStorage(\array_merge(
                     $this->rowToDocument($existingRow),
                     $resolvedAttrs,
                     [Document::ID => $uid]
@@ -1743,7 +1743,7 @@ class Memory extends Adapter implements Feature\Relationships
         $selections = $this->extractSelections($queries);
         $results = [];
         foreach ($rows as $row) {
-            $results[] = new Document($this->rowToDocument($row, $selections, $key));
+            $results[] = Document::fromStorage($this->rowToDocument($row, $selections, $key));
         }
 
         if ($cursorDirection === CursorDirection::Before) {

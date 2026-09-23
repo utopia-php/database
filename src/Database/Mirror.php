@@ -6,6 +6,8 @@ use DateTime;
 use Throwable;
 use Utopia\Async\Promise;
 use Utopia\Cache\Cache;
+use Utopia\Database\Cache\Invalidator;
+use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit;
 use Utopia\Database\Helpers\ID;
@@ -220,6 +222,18 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
+    public function setQueryCache(?QueryCache $queryCache): static
+    {
+        parent::setQueryCache($queryCache);
+        $this->source->setQueryCache($queryCache);
+        $this->destination?->setQueryCache($queryCache);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function setDropUnknownAttributes(bool $drop): static
     {
         $this->delegate(__FUNCTION__, \func_get_args());
@@ -300,14 +314,35 @@ class Mirror extends Database
      */
     public function addLifecycleHook(Lifecycle $hook): static
     {
+        if ($hook instanceof Invalidator) {
+            parent::addHook($hook);
+        }
+
         $this->source->addHook($hook);
 
         return $this;
     }
 
+    /**
+     * Invalidates the mirror's own query cache, then lets the source invalidate its own and run
+     * the lifecycle hooks, which are registered there (see addLifecycleHook()).
+     */
     protected function trigger(Event $event, mixed $data = null): void
     {
+        parent::trigger($event, $data);
         $this->source->trigger($event, $data);
+    }
+
+    /**
+     * Also invalidates a query cache the source holds that is not the mirror's own.
+     */
+    protected function invalidate(Event $event, mixed $data = null): void
+    {
+        parent::invalidate($event, $data);
+
+        if ($this->source->getQueryCache() !== $this->queryCache) {
+            $this->source->invalidate($event, $data);
+        }
     }
 
     /**

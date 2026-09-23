@@ -1637,6 +1637,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             return new QueryException('Searching requires a fulltext index on the searched attributes', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3065) {
+            return new QueryException('A distinct() query can only be ordered by a selected attribute on this database', $e->getCode(), $e);
+        }
+
         return $e;
     }
 

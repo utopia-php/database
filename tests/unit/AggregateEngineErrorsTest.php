@@ -35,6 +35,8 @@ final class AggregateEngineErrorsTest extends TestCase
 {
     private const string COLLECTION = 'readings';
 
+    private const string DISTINCT_ORDER = 'A distinct() query can only be ordered by a selected attribute on this database';
+
     private const string ALIAS_TOO_LONG = 'Invalid query: Aggregate alias is too long: at most 63 characters are allowed';
 
     private function database(): Database
@@ -167,6 +169,18 @@ final class AggregateEngineErrorsTest extends TestCase
             'MySQL too many tables' => [new MySQL(new stdClass()), $tooManyTables, QueryException::class, 'Too many tables in a join'],
             'MariaDB no fulltext index' => [new MariaDB(new stdClass()), $noFulltextIndex, QueryException::class, 'Searching requires a fulltext index on the searched attributes'],
             'MySQL no fulltext index' => [new MySQL(new stdClass()), $noFulltextIndex, QueryException::class, 'Searching requires a fulltext index on the searched attributes'],
+            'MySQL distinct ordered by an unselected column' => [
+                new MySQL(new stdClass()),
+                self::engineError('HY000', 3065, "SQLSTATE[HY000]: General error: 3065 Expression #1 of ORDER BY clause is not in SELECT list, references column 'utopiaTests.ns_distinct_order.score' which is not in SELECT list; this is incompatible with DISTINCT"),
+                QueryException::class,
+                self::DISTINCT_ORDER,
+            ],
+            'Postgres distinct ordered by an unselected column' => [
+                new Postgres(new stdClass()),
+                self::engineError('42P10', 7, "SQLSTATE[42P10]: Invalid column reference: 7 ERROR:  for SELECT DISTINCT, ORDER BY expressions must appear in select list\nLINE 1: ...\"table_main\" ORDER BY \"table_main\".\"score\" ASC"),
+                QueryException::class,
+                self::DISTINCT_ORDER,
+            ],
         ];
     }
 
@@ -218,6 +232,13 @@ final class AggregateEngineErrorsTest extends TestCase
             $message,
             fn () => $this->database()->find(self::COLLECTION, $queries),
         );
+    }
+
+    public function testPostgresLeavesTheOnConflictInvalidColumnReferenceUnmapped(): void
+    {
+        $error = self::engineError('42P10', 7, 'SQLSTATE[42P10]: Invalid column reference: 7 ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification');
+
+        $this->assertSame($error, $this->process(new Postgres(new stdClass()), $error));
     }
 
     private static function engineError(string $state, int $code, string $message): PDOException

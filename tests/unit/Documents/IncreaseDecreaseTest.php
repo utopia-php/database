@@ -4,6 +4,7 @@ namespace Tests\Unit\Documents;
 
 use DateTime;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
@@ -221,12 +222,11 @@ class IncreaseDecreaseTest extends TestCase
         $this->assertSame(12.5, $result->getAttribute('score'));
     }
 
-    public function testIncreaseAcceptsFloatBigIntegerBigSerialAndLegacyMetadata(): void
+    public function testIncreaseAcceptsFloatBigIntegerAndLegacyMetadata(): void
     {
         $types = [
             'float' => ColumnType::Float,
             'biginteger' => ColumnType::BigInteger,
-            'bigserial' => ColumnType::BigSerial,
             'legacy' => 'bigint',
         ];
         $doc = new Document([
@@ -235,7 +235,6 @@ class IncreaseDecreaseTest extends TestCase
             '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'float' => 5,
             'biginteger' => 5,
-            'bigserial' => 5,
             'legacy' => 5,
         ]);
         $attributes = [];
@@ -249,6 +248,50 @@ class IncreaseDecreaseTest extends TestCase
 
             $this->assertSame(6, $result->getAttribute($key), $key);
         }
+    }
+
+    /**
+     * @return array<string, array{ColumnType}>
+     */
+    public static function serialTypes(): array
+    {
+        return [
+            'serial' => [ColumnType::Serial],
+            'bigserial' => [ColumnType::BigSerial],
+            'smallserial' => [ColumnType::SmallSerial],
+        ];
+    }
+
+    #[DataProvider('serialTypes')]
+    public function testIncreaseRejectsSerialColumns(ColumnType $type): void
+    {
+        $this->setupCollectionWithDocument('testCol', $this->sequenceDocument(), [
+            $this->numericAttribute('sequence', $type),
+        ]);
+
+        $this->expectException(TypeException::class);
+        $this->database->increaseDocumentAttribute('testCol', 'doc1', 'sequence');
+    }
+
+    #[DataProvider('serialTypes')]
+    public function testDecreaseRejectsSerialColumns(ColumnType $type): void
+    {
+        $this->setupCollectionWithDocument('testCol', $this->sequenceDocument(), [
+            $this->numericAttribute('sequence', $type),
+        ]);
+
+        $this->expectException(TypeException::class);
+        $this->database->decreaseDocumentAttribute('testCol', 'doc1', 'sequence');
+    }
+
+    private function sequenceDocument(): Document
+    {
+        return new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'sequence' => 5,
+        ]);
     }
 
     public function testIncreaseRejectsBigIntegerOverflow(): void

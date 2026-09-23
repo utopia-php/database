@@ -1536,7 +1536,6 @@ class OperatorValidationTest extends TestCase
             ColumnType::Float,
             ColumnType::Double,
             ColumnType::BigInteger,
-            ColumnType::BigSerial,
         ] as $type) {
             $validator = $this->makeValidator([
                 new Attribute(key: 'value', type: $type),

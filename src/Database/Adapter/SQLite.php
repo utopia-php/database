@@ -2367,9 +2367,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();
             }
 
-            if ($this->sharedTables) {
-                $currentRegularAttributes[Storage::TENANT] = $document->getTenant();
-            }
+            $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $this->documentMetadata($document));
 
             foreach (\array_keys($currentRegularAttributes) as $colName) {
                 $allColumnNames[$colName] = true;

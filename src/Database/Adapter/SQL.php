@@ -1009,6 +1009,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if (empty($changes)) {
             return $changes;
         }
+
+        $this->syncWriteHooks();
+
         try {
             $spatialAttributes = $this->getSpatialAttributes($collection);
 
@@ -3423,9 +3426,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $currentRegularAttributes[Storage::SEQUENCE] = $document->getSequence();
             }
 
-            if ($this->sharedTables) {
-                $currentRegularAttributes[Storage::TENANT] = $document->getTenant();
-            }
+            $currentRegularAttributes = $this->decorateRow($currentRegularAttributes, $this->documentMetadata($document));
 
             foreach (\array_keys($currentRegularAttributes) as $colName) {
                 $allColumnNames[$colName] = true;

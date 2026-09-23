@@ -7,6 +7,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
+use Utopia\Database\Change;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -15,9 +16,12 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Tenancy;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait PermissionTests
@@ -70,6 +74,118 @@ trait PermissionTests
         } finally {
             $database->setTenant($tenant);
         }
+    }
+
+    public function testUpsertedPermissionsAreStoredUnderTheTenant(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $database->getSharedTables() || ! $adapter instanceof SQL) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'upsertPermsTenant';
+        $reader = Role::user('upsertReader');
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: true,
+        ));
+
+        // An adapter that has not written yet, like every one a pool lends out, holds no tenant hook.
+        $adapter->removeWriteHook(Tenancy::class);
+
+        $database->upsertDocuments($collection, [new Document([
+            '$id' => 'upserted',
+            'title' => 'upserted',
+            '$permissions' => [Permission::read($reader)],
+        ])]);
+
+        $authorization = $database->getAuthorization();
+
+        $stored = $authorization->skip(static function () use ($adapter, $collection): array {
+            $statement = $adapter->getBuilder(Storage::permissionsTable($collection))
+                ->select([Storage::PERM_TYPE, Storage::PERM_PERMISSION])
+                ->filter([Query::equal(Storage::PERM_DOCUMENT, ['upserted'])])
+                ->build();
+
+            return \array_map(
+                static fn (Document $row): array => $row->getArrayCopy(),
+                $adapter->rawQuery($statement->query, $statement->bindings),
+            );
+        });
+
+        $this->assertSame(
+            [[Storage::PERM_TYPE => PermissionType::Read->value, Storage::PERM_PERMISSION => $reader->toString()]],
+            $stored,
+            'An upsert must store its permission rows under the tenant, where the permission hook and filter look for them',
+        );
+
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole($reader->toString());
+
+        try {
+            $found = $database->find($collection);
+            $count = $database->count($collection);
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+
+        $this->assertSame(
+            ['upserted'],
+            \array_map(static fn (Document $document): string => $document->getId(), $found),
+            'A reader holding the document read permission must find an upserted document',
+        );
+        $this->assertSame(1, $count);
+    }
+
+    public function testAnAdapterUpsertStoresADocumentWithoutATenantUnderTheSelectedTenant(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $database->getSharedTables() || ! $adapter instanceof SQL) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'upsertRowTenant';
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        $adapter->upsertDocuments($database->getCollection($collection), '', [
+            new Change(new Document(), new Document([
+                '$id' => 'upserted',
+                'title' => 'upserted',
+                '$permissions' => [Permission::read(Role::any())],
+            ])),
+        ]);
+
+        $this->assertSame(
+            'upserted',
+            $database->getDocument($collection, 'upserted')->getAttribute('title'),
+            'A document without a tenant is stored under the selected tenant, as createDocuments() stores it',
+        );
     }
 
     private static string $collSecurityCollection = '';

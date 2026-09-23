@@ -9,7 +9,8 @@ use Utopia\Query\Hook\Join\Filter as JoinFilter;
 use Utopia\Query\Hook\Join\Placement;
 
 /**
- * The tenant conditions a right or full outer join needs inside ON.
+ * The tenant conditions a right or full outer join needs inside ON: the main table's and the joined
+ * table's own. OuterJoinChainFilter adds those of the tables joined before it.
  *
  * These joins pair rows before the WHERE tenant filters run, so a row whose only match lies outside
  * the tenant would be paired with it and then dropped by WHERE: it vanishes instead of surviving

@@ -13,6 +13,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -55,6 +56,32 @@ final class JoinTenancyTest extends TestCase
      * that carry no tenant at all.
      */
     private const int TENANTLESS = 3;
+
+    private const string EXTRAS = 'extras';
+
+    private const string EXTRA = 'extra';
+
+    private const string REJECTED = 'rejected';
+
+    /**
+     * Each joined collection's numeric attribute.
+     */
+    private const array NUMBERS = [
+        self::BOOKS => 'pages',
+        self::REVIEWS => 'stars',
+        self::EXTRAS => 'weight',
+    ];
+
+    /**
+     * Only tenant two and the tenantless rows have extras, so tenant one's cross join with them
+     * is empty and every review it right-joins afterwards must come back unmatched.
+     *
+     * @var array<int, array<string, array<string, string|int>>>
+     */
+    private const array EXTRA_ROWS = [
+        self::SECOND => ['x1' => ['authorId' => 'a1', 'weight' => 5]],
+        self::TENANTLESS => ['x9' => ['authorId' => 'a2', 'weight' => 9]],
+    ];
 
     /**
      * Tenant one's book "b2" belongs to an author only tenant two has and its "b3" to the
@@ -323,6 +350,69 @@ final class JoinTenancyTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function fullOuterJoinModes(): iterable
+    {
+        yield 'emulated full outer join' => [false];
+        yield 'native full outer join' => [true];
+    }
+
+    /**
+     * Every chain of two joins, the second joined on the main table or on the first join: a right
+     * or full outer join that follows a right, full outer or cross join must not pair its rows with
+     * another tenant's rows of the earlier table, or they vanish instead of coming back unmatched.
+     * Under shared tables a chain combining a full outer join with a right join is rejected.
+     */
+    #[DataProvider('fullOuterJoinModes')]
+    public function testEveryChainOfTwoJoinsReadsWhatADedicatedDatabaseReads(bool $nativeFullOuterJoin): void
+    {
+        $shared = $this->sharedWithExtras($nativeFullOuterJoin);
+
+        foreach ([self::FIRST, self::SECOND] as $tenant) {
+            $dedicated = $this->dedicated($nativeFullOuterJoin, documentSecurity: false, tenant: $tenant);
+            $this->extras($dedicated, self::EXTRA_ROWS[$tenant] ?? []);
+            $shared->setTenant($tenant);
+
+            $expected = [];
+            $actual = [];
+            foreach (self::twoJoinChains() as $label => $joins) {
+                $expected[$label] = $this->combinesFullOuterAndRightJoins($joins)
+                    ? self::REJECTED
+                    : $this->joinedChain($dedicated, $joins);
+                $actual[$label] = $this->readChain($shared, $joins);
+            }
+
+            $this->assertSame($expected, $actual, "Tenant {$tenant} must read through every chain what its own database would return");
+        }
+    }
+
+    #[DataProvider('fullOuterJoinModes')]
+    public function testAFullOuterJoinCombinedWithARightJoinIsRejectedUnderSharedTables(bool $nativeFullOuterJoin): void
+    {
+        $database = $this->shared($nativeFullOuterJoin, documentSecurity: false);
+        $database->setTenant(self::FIRST);
+
+        foreach ([
+            'a right join after a full outer join' => [$this->book(Method::FullOuterJoin), $this->review(Method::RightJoin)],
+            'a full outer join after a right join' => [$this->book(Method::RightJoin), $this->review(Method::FullOuterJoin)],
+        ] as $label => $joins) {
+            foreach ([
+                'find' => fn () => $database->find(self::AUTHORS, $joins),
+                'count' => fn () => $database->count(self::AUTHORS, $joins),
+                'sum' => fn () => $database->sum(self::AUTHORS, self::STARS, $joins),
+            ] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail("{$read} with {$label} must be rejected under shared tables");
+                } catch (QueryException $exception) {
+                    $this->assertStringContainsString('full outer join', $exception->getMessage());
+                }
+            }
+        }
+    }
+
+    /**
      * @return array<string, array{bool, bool}>
      */
     private static function configurations(): array
@@ -493,5 +583,167 @@ final class JoinTenancyTest extends TestCase
         \usort($rows, static fn (array $left, array $right): int => \json_encode($left) <=> \json_encode($right));
 
         return $rows;
+    }
+
+    /**
+     * The shared tables of shared(), plus extras only tenant two and the tenantless rows have.
+     */
+    private function sharedWithExtras(bool $nativeFullOuterJoin): Database
+    {
+        $pdo = new PDO('sqlite::memory:');
+        $database = $this->database($pdo, $nativeFullOuterJoin, documentSecurity: false, sharedTables: true);
+        $this->extras($database, []);
+
+        foreach (self::ROWS as $tenant => $collections) {
+            $database->setTenant($tenant);
+            $this->write($database, [...$collections, self::EXTRAS => self::EXTRA_ROWS[$tenant] ?? []]);
+        }
+
+        foreach ([self::AUTHORS, self::BOOKS, self::REVIEWS, self::EXTRAS] as $collection) {
+            foreach ([$collection, Storage::permissionsTable($collection)] as $table) {
+                $pdo->exec('UPDATE '.self::NAMESPACE.'_'.$table.' SET '.Storage::TENANT.' = NULL WHERE '.Storage::TENANT.' = '.self::TENANTLESS);
+            }
+        }
+
+        return $database;
+    }
+
+    /**
+     * @param array<string, array<string, string|int>> $rows
+     */
+    private function extras(Database $database, array $rows): void
+    {
+        $database->createCollection(new Collection(
+            id: self::EXTRAS,
+            attributes: [
+                Attribute::string(key: 'authorId', size: 64, required: true),
+                Attribute::integer(key: 'weight', required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+        $this->write($database, [self::EXTRAS => $rows]);
+    }
+
+    /**
+     * @return array<string, list<Query>>
+     */
+    private static function twoJoinChains(): array
+    {
+        $chains = [];
+        foreach ([Method::Join, Method::LeftJoin, Method::RightJoin, Method::FullOuterJoin, Method::CrossJoin] as $first) {
+            [$collection, $alias] = $first === Method::CrossJoin ? [self::EXTRAS, self::EXTRA] : [self::BOOKS, self::BOOK];
+            foreach ([Method::Join, Method::LeftJoin, Method::RightJoin, Method::FullOuterJoin] as $second) {
+                foreach (['$id' => self::AUTHORS, $alias.'.authorId' => $alias] as $on => $target) {
+                    $chains["{$first->value} {$collection}, {$second->value} reviews on {$target}"] = [
+                        self::joinOn($first, $collection, $alias, '$id'),
+                        self::joinOn($second, self::REVIEWS, self::REVIEW, $on),
+                    ];
+                }
+            }
+        }
+
+        return $chains;
+    }
+
+    private static function joinOn(Method $method, string $collection, string $alias, string $on): Query
+    {
+        return match ($method) {
+            Method::Join => Query::join($collection, $on, 'authorId', '=', $alias),
+            Method::LeftJoin => Query::leftJoin($collection, $on, 'authorId', '=', $alias),
+            Method::RightJoin => Query::rightJoin($collection, $on, 'authorId', '=', $alias),
+            Method::FullOuterJoin => Query::fullOuterJoin($collection, $on, 'authorId', '=', $alias),
+            Method::CrossJoin => Query::crossJoin($collection, $alias),
+            default => throw new \InvalidArgumentException("{$method->value} is not a join this test covers"),
+        };
+    }
+
+    /**
+     * @param list<Query> $joins
+     */
+    private function combinesFullOuterAndRightJoins(array $joins): bool
+    {
+        $methods = \array_map(static fn (Query $join): Method => $join->getMethod(), $joins);
+
+        return \in_array(Method::FullOuterJoin, $methods, true) && \in_array(Method::RightJoin, $methods, true);
+    }
+
+    /**
+     * The rows as [author name, then each join's number], their count and the sum of the last
+     * join's number, as find(), count() and sum() return them, or REJECTED when refused.
+     *
+     * @param list<Query> $joins
+     * @return array{rows: list<array<int, string|int|null>>, count: int, sum: int|float}|string
+     */
+    private function readChain(Database $database, array $joins): array|string
+    {
+        $copies = static fn (): array => \array_map(static fn (Query $join): Query => clone $join, $joins);
+        $numbers = $this->numbers($joins);
+
+        try {
+            return [
+                'rows' => $this->chainRows($database, $copies(), $numbers),
+                'count' => $database->count(self::AUTHORS, $copies()),
+                'sum' => $database->sum(self::AUTHORS, $numbers[\count($numbers) - 1], $copies()),
+            ];
+        } catch (QueryException) {
+            return self::REJECTED;
+        }
+    }
+
+    /**
+     * What readChain() must return, taken from a dedicated database's rows alone: nothing
+     * filters its joins, so its count and sum follow from its rows. A chain the adapter refuses
+     * outright is refused here too.
+     *
+     * @param list<Query> $joins
+     * @return array{rows: list<array<int, string|int|null>>, count: int, sum: int}|string
+     */
+    private function joinedChain(Database $dedicated, array $joins): array|string
+    {
+        try {
+            $rows = $this->chainRows(
+                $dedicated,
+                \array_map(static fn (Query $join): Query => clone $join, $joins),
+                $this->numbers($joins),
+            );
+        } catch (QueryException) {
+            return self::REJECTED;
+        }
+
+        return [
+            'rows' => $rows,
+            'count' => \count($rows),
+            'sum' => \array_sum(\array_map(static fn (array $row): int => (int) $row[\count($row) - 1], $rows)),
+        ];
+    }
+
+    /**
+     * @param list<Query> $joins
+     * @return list<string>
+     */
+    private function numbers(array $joins): array
+    {
+        return \array_map(
+            static fn (Query $join): string => $join->getJoinAlias().'.'.self::NUMBERS[$join->getAttribute()],
+            $joins,
+        );
+    }
+
+    /**
+     * @param list<Query> $joins
+     * @param list<string> $numbers
+     * @return list<array<int, string|int|null>>
+     */
+    private function chainRows(Database $database, array $joins, array $numbers): array
+    {
+        return $this->sorted(\array_map(function (Document $document) use ($numbers): array {
+            $row = [$this->author($document)];
+            foreach ($numbers as $number) {
+                $row[] = $this->integer($document, $number);
+            }
+
+            return $row;
+        }, $database->find(self::AUTHORS, [...$joins, Query::select(['name', ...$numbers]), Query::limit(100)])));
     }
 }

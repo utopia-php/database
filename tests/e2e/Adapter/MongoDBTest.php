@@ -13,6 +13,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Mongo\Client;
 
 class MongoDBTest extends Base
@@ -191,6 +192,35 @@ class MongoDBTest extends Base
             $database->getDocument($collection, 'alice')->getAttribute('name'),
             'A reader denied the document must not leave a negative cache entry for a reader who may see it',
         ));
+    }
+
+    public function testListCollectionsReturnsOnlyReadableDefinitions(): void
+    {
+        $database = $this->getDatabase();
+        $definitions = ['adminDefinition', 'listedDefinition', 'unlistedDefinition'];
+
+        $database->createCollection(new Collection(id: 'listedDefinition', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: 'adminDefinition', permissions: [Permission::read(Role::user('admin'))]));
+        $database->createCollection(new Collection(id: 'unlistedDefinition', permissions: [Permission::create(Role::any())]));
+
+        $listed = fn (): array => \array_values(\array_intersect(
+            $definitions,
+            \array_map(fn (Collection $collection) => $collection->getId(), $database->listCollections(100)),
+        ));
+        $queries = [Query::equal('$id', $definitions)];
+
+        $this->actAs('bob', function () use ($database, $listed, $queries): void {
+            $this->assertSame(['listedDefinition'], $listed());
+            $this->assertCount(1, $database->find(Database::METADATA, $queries));
+            $this->assertSame(1, $database->count(Database::METADATA, $queries), 'count() and find() must agree on the metadata collection');
+        });
+
+        $this->actAs('admin', function () use ($database, $listed, $queries): void {
+            $this->assertSame(['adminDefinition', 'listedDefinition'], $listed());
+            $this->assertSame(2, $database->count(Database::METADATA, $queries));
+        });
+
+        $this->assertSame($definitions, $database->getAuthorization()->skip($listed));
     }
 
     protected function deleteColumn(string $collection, string $column): bool

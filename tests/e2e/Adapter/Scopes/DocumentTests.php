@@ -5553,8 +5553,9 @@ trait DocumentTests
 
         $this->assertFalse($document->isEmpty());
         $this->assertIsString($document->getAttribute('string'));
-        $this->assertNotEmpty($document->getAttribute('string'));
+        $this->assertSame('text📝', $document->getAttribute('string'));
         $this->assertIsInt($document->getAttribute('integer_signed'));
+        $this->assertSame(-Database::MAX_INT, $document->getAttribute('integer_signed'));
         $this->assertArrayNotHasKey('float', $document->getAttributes());
         $this->assertArrayNotHasKey('boolean', $document->getAttributes());
         $this->assertArrayNotHasKey('colors', $document->getAttributes());

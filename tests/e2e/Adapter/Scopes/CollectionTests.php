@@ -1050,7 +1050,7 @@ trait CollectionTests
         $this->getDatabase()->getAuthorization()->skip(function () {
             $database = $this->getDatabase();
 
-            $events = [
+            $expected = [
                 Event::DatabaseCreate,
                 Event::DatabaseList,
                 Event::CollectionCreate,
@@ -1087,19 +1087,14 @@ trait CollectionTests
                 Event::AttributeDelete,
                 Event::CollectionDelete,
                 Event::DatabaseDelete,
-                Event::DocumentPurge,
-                Event::DocumentsDelete,
-                Event::DocumentPurge,
-                Event::AttributeDelete,
-                Event::CollectionDelete,
-                Event::DatabaseDelete,
             ];
 
             $supportsSchemas = $this->getDatabase()->getAdapter()->supports(Capability::Schemas);
             if (! $supportsSchemas) {
-                \array_shift($events);
+                \array_shift($expected);
             }
-            $database->addHook(new EventRecorder($events, $this));
+            $recorder = new EventRecorder('test');
+            $database->addHook($recorder);
 
             if ($supportsSchemas) {
                 $database->setDatabase('hellodb');
@@ -1129,6 +1124,9 @@ trait CollectionTests
                 ],
             ]));
 
+            $silenced = new EventRecorder('should-not-execute');
+            $database->addHook($silenced);
+
             $database->silent(function () use ($database, $collectionId, $document) {
                 $database->updateDocument($collectionId, 'doc1', $document->setAttribute('attr1', 15));
                 $database->getDocument($collectionId, 'doc1');
@@ -1138,7 +1136,9 @@ trait CollectionTests
                 $database->sum($collectionId, 'attr1');
                 $database->increaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
                 $database->decreaseDocumentAttribute($collectionId, $document->getId(), 'attr1');
-            });
+            }, ['should-not-execute']);
+
+            $this->assertSame([], $silenced->stop());
 
             $database->createDocuments($collectionId, [
                 new Document([
@@ -1160,6 +1160,30 @@ trait CollectionTests
             $database->deleteAttribute($collectionId, 'attr1');
             $database->deleteCollection($collectionId);
             $database->delete('hellodb');
+
+            $this->assertSame($expected, $recorder->stop());
+        });
+    }
+
+    public function testSilentNamedListeners(): void
+    {
+        $this->getDatabase()->getAuthorization()->skip(function () {
+            $database = $this->getDatabase();
+            $collectionId = ID::unique();
+
+            $replaced = new EventRecorder('audits');
+            $replacement = new EventRecorder('audits');
+            $usage = new EventRecorder('usage');
+            $database->addHook($replaced)->addHook($usage);
+
+            $database->silent(fn () => $database->createCollection(new Collection(id: $collectionId)), ['audits']);
+            $database->silent(fn () => $database->getCollection($collectionId));
+            $database->addHook($replacement);
+            $database->deleteCollection($collectionId);
+
+            $this->assertSame([], $replaced->stop());
+            $this->assertSame([Event::CollectionDelete], $replacement->stop());
+            $this->assertSame([Event::CollectionCreate, Event::CollectionDelete], $usage->stop());
         });
     }
 

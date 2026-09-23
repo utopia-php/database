@@ -3412,9 +3412,15 @@ class Database
             // again inside the $permissions JSON, so a rename has to repoint both.
             // There is no stable column id to hang permissions off: this method
             // rewrites the attribute's '$id' and 'key' together, so the key is the
-            // only handle there is. The lookup is skipped entirely when no
-            // permission is scoped to this column, which is the common case.
-            if (!\is_null($newKey) && $newKey !== $id && $collectionDoc->getAttribute('columnSecurity', false)) {
+            // only handle there is.
+            //
+            // Deliberately not gated on columnSecurity. Disabling the flag leaves
+            // scoped grants in storage, dormant, so gating here would let a rename
+            // slip past them -- and re-enabling would then point them at a key that
+            // no longer exists, or at whatever column later took that name. The
+            // adapter's first query finds nothing when no grant is scoped to this
+            // column, which is the common case and costs one lookup.
+            if (!\is_null($newKey) && $newKey !== $id) {
                 $this->repointCollectionColumnPermissions($collectionDoc, $id, $newKey);
 
                 foreach ($this->adapter->renameColumnPermissions($collectionDoc, $id, $newKey) as $documentId) {
@@ -3570,13 +3576,13 @@ class Database
         }
 
         // Permissions name their column by key, so grants left behind would be
-        // inherited by any column later created under the same name.
-        if ($collection->getAttribute('columnSecurity', false)) {
-            $this->repointCollectionColumnPermissions($collection, $id, null);
+        // inherited by any column later created under the same name. Runs whatever
+        // columnSecurity says: disabling it keeps scoped grants in storage rather
+        // than deleting them, so they still have to be cleaned up here.
+        $this->repointCollectionColumnPermissions($collection, $id, null);
 
-            foreach ($this->adapter->deleteColumnPermissions($collection, $id) as $documentId) {
-                $this->purgeCachedDocument($collection->getId(), $documentId);
-            }
+        foreach ($this->adapter->deleteColumnPermissions($collection, $id) as $documentId) {
+            $this->purgeCachedDocument($collection->getId(), $documentId);
         }
 
         $this->updateMetadata(
@@ -3717,12 +3723,12 @@ class Database
         // migration updateAttribute() runs for its own rename. Left alone, the grants
         // stay attached to the old key: the caller loses the renamed column, and a
         // column later created under the old name inherits authority it never earned.
-        if ($collection->getAttribute('columnSecurity', false)) {
-            $this->repointCollectionColumnPermissions($collection, $old, $new);
+        // Not gated on columnSecurity, for the same reason: the flag controls
+        // enforcement, not storage, so grants outlive it and still need moving.
+        $this->repointCollectionColumnPermissions($collection, $old, $new);
 
-            foreach ($this->adapter->renameColumnPermissions($collection, $old, $new) as $documentId) {
-                $this->purgeCachedDocument($collection->getId(), $documentId);
-            }
+        foreach ($this->adapter->renameColumnPermissions($collection, $old, $new) as $documentId) {
+            $this->purgeCachedDocument($collection->getId(), $documentId);
         }
 
         $collection->setAttribute('attributes', $attributes);

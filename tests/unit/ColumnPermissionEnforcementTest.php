@@ -245,6 +245,42 @@ class ColumnPermissionEnforcementTest extends TestCase
         $this->assertNull($document->getAttribute('salary'), 'stale grant authorized a recreated column');
     }
 
+    /**
+     * The flag controls enforcement, not storage: disabling it leaves scoped grants in
+     * place, dormant. So the rename and delete migrations must run regardless -- gating
+     * them on the flag lets a rename slip past a grant, and re-enabling would then
+     * point it at a key that no longer exists, or at whatever column took that name.
+     */
+    public function testGrantMigrationsRunWhileColumnSecurityIsDisabled(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createCollection('dormant', documentSecurity: true, columnSecurity: true, permissions: []);
+            $this->database->createAttribute('dormant', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $this->database->createDocument('dormant', new Document([
+                '$id' => 'r1',
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'salary' => 5,
+            ]));
+
+            // grants stay in storage while the flag is off
+            $this->database->updateCollection('dormant', [], true, false);
+            $this->database->renameAttribute('dormant', 'salary', 'pay');
+
+            $this->database->updateCollection('dormant', [], true, true);
+            $this->database->createAttribute('dormant', 'salary', Database::VAR_INTEGER, 8, false);
+            $this->database->updateDocument('dormant', 'r1', new Document(['salary' => 999]));
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        $document = $this->database->getDocument('dormant', 'r1');
+
+        $this->assertSame(5, $document->getAttribute('pay'), 'grant did not follow the rename');
+        $this->assertNull($document->getAttribute('salary'), 'stale grant authorized a recreated column');
+    }
+
     public function testUpdateOfGrantedColumnIsAllowed(): void
     {
         $this->authorization->cleanRoles();

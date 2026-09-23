@@ -464,8 +464,11 @@ trait Documents
         $document = $skipAuth ? $this->authorization->skip($getDocument) : $getDocument();
 
         if ($document->isEmpty()) {
+            // The marker is shared by every reader, so a miss observed with authorization
+            // enabled only proves absence once an unfiltered read agrees: an adapter may have
+            // filtered the row out by the caller's permissions.
             $missing = true;
-            if ($cacheable && empty($relationships) && $documentSecurity && ! $skipAuth) {
+            if ($cacheable && empty($relationships) && ! $skipAuth) {
                 $missing = $this->authorization->skip($getDocument)->isEmpty();
             }
 

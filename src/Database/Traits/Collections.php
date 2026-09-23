@@ -47,8 +47,8 @@ trait Collections
     {
         $id = $collection->id;
         $name = $collection->name !== '' ? $collection->name : $collection->id;
-        $attributes = $collection->attributes;
-        $indexes = $collection->indexes;
+        $attributes = \array_map(static fn (Attribute $attribute): Attribute => clone $attribute, $collection->attributes);
+        $indexes = \array_map(static fn (Index $index): Index => clone $index, $collection->indexes);
         $permissions = $collection->permissions ?? [Permission::create(Role::any())];
         $documentSecurity = $collection->documentSecurity;
         $metadata = $collection->metadata;

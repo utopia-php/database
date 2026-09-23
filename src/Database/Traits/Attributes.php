@@ -49,6 +49,7 @@ trait Attributes
      */
     public function createAttribute(string $collection, Attribute $attribute): bool
     {
+        $attribute = clone $attribute;
         $id = $attribute->key;
         $type = $attribute->type;
         $size = $attribute->size;
@@ -209,6 +210,8 @@ trait Attributes
         if (empty($attributes)) {
             throw new DatabaseException('No attributes to create');
         }
+
+        $attributes = \array_map(static fn (Attribute $attribute): Attribute => clone $attribute, $attributes);
 
         $collection = $this->silent(fn () => $this->getCollection($collection));
 

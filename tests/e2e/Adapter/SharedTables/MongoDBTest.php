@@ -80,33 +80,13 @@ class MongoDBTest extends Base
     /**
      * @throws Exception
      */
-    public function test_create_exists_delete(): void
+    public function testCreateExistsDelete(): void
     {
         // Mongo creates databases on the fly, so exists would always pass. So we override this test to remove the exists check.
-        $this->assertSame(true, $this->getDatabase()->create());
-        $this->assertEquals(true, $this->getDatabase()->delete($this->testDatabase));
-        $this->assertEquals(true, $this->getDatabase()->create());
-        $this->assertEquals($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
-    }
-
-    public function test_rename_attribute(): void
-    {
-        $this->markTestSkipped('Not supported by MongoDB adapter');
-    }
-
-    public function test_rename_attribute_existing(): void
-    {
-        $this->markTestSkipped('Not supported by MongoDB adapter');
-    }
-
-    public function test_update_attribute_structure(): void
-    {
-        $this->markTestSkipped('Not supported by MongoDB adapter');
-    }
-
-    public function test_keywords(): void
-    {
-        $this->markTestSkipped('Not supported by MongoDB adapter');
+        $this->assertTrue($this->getDatabase()->create());
+        $this->assertTrue($this->getDatabase()->delete($this->testDatabase));
+        $this->assertTrue($this->getDatabase()->create());
+        $this->assertSame($this->getDatabase(), $this->getDatabase()->setDatabase($this->testDatabase));
     }
 
     public function testSkipDuplicatesKeepsEachTenantsSequence(): void

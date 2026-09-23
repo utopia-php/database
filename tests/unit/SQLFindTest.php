@@ -187,7 +187,7 @@ final class SQLFindTest extends TestCase
                 '_createdAt' => '2020-01-01 00:00:00.000',
                 '_updatedAt' => '2020-01-01 00:00:00.000',
                 'name' => 'Alice',
-                'foj_ord_0' => 1,
+                '$foj_ord_0' => 1,
             ],
         ]);
         $statement->method('closeCursor')->willReturn(true);
@@ -202,7 +202,7 @@ final class SQLFindTest extends TestCase
 
         $this->assertSame(1, \count($results));
         $this->assertSame('doc1', $results[0]->getId());
-        $this->assertSame(false, $results[0]->isSet('foj_ord_0'));
+        $this->assertSame(false, $results[0]->isSet('$foj_ord_0'));
     }
 
     public function testEmulatesFullOuterJoinRemapsQualifiedUnionColumns(): void
@@ -219,7 +219,7 @@ final class SQLFindTest extends TestCase
                 'table_main.name' => 'Alice',
                 'orders._uid' => 'order1',
                 'orders._permissions' => '["read"]',
-                'foj_ord_0' => 1,
+                '$foj_ord_0' => 1,
             ],
         ]);
         $statement->method('closeCursor')->willReturn(true);
@@ -239,7 +239,7 @@ final class SQLFindTest extends TestCase
         $this->assertSame('doc1', $results[0]->getId());
         $this->assertSame('1', $results[0]->getSequence());
         $this->assertSame('Alice', $results[0]->getAttribute('name'));
-        $this->assertSame(false, $results[0]->isSet('foj_ord_0'));
+        $this->assertSame(false, $results[0]->isSet('$foj_ord_0'));
         $this->assertSame(false, $results[0]->isSet('table_main._uid'));
         $this->assertSame('order1', $results[0]->getAttribute('orders.$id'));
         $this->assertSame(['read'], $results[0]->getAttribute('orders.$permissions'));
@@ -576,7 +576,7 @@ final class SQLFindTest extends TestCase
             $sql,
         );
 
-        $aliasMatches = \preg_match_all('/`foj_ord_\d+`/', $afterUnion);
+        $aliasMatches = \preg_match_all('/`\$foj_ord_\d+`/', $afterUnion);
         $positionalMatches = \preg_match_all('/ORDER BY\s+\d+/i', $afterUnion);
 
         $this->assertTrue(
@@ -589,8 +589,8 @@ final class SQLFindTest extends TestCase
             $this->assertNotFalse($orderByPosition);
             $selectSql = \substr($sql, 0, $unionPosition + $orderByPosition);
             for ($index = 0; $index < $expectedTerms; $index++) {
-                $this->assertStringContainsString('foj_ord_'.$index, $selectSql, $sql);
-                $this->assertStringContainsString('`foj_ord_'.$index.'`', $afterUnion, $sql);
+                $this->assertStringContainsString('$foj_ord_'.$index, $selectSql, $sql);
+                $this->assertStringContainsString('`$foj_ord_'.$index.'`', $afterUnion, $sql);
             }
         }
 

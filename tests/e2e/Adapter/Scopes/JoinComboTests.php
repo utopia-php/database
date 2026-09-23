@@ -766,9 +766,7 @@ trait JoinComboTests
 
             $ids = \array_map(static fn (Document $document): string => $document->getId(), $results);
             $this->assertContains('hm1', $ids);
-            if (! $database->getSharedTables()) {
-                $this->assertContains('', $ids);
-            }
+            $this->assertContains('', $ids);
             $this->assertSame(false, \in_array('hm2', $ids, true));
             $this->assertSame(false, \in_array('hm3', $ids, true));
             $this->assertSame(false, \in_array('hc-hidden', $ids, true));

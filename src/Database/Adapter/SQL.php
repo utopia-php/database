@@ -23,7 +23,6 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\JoinChain;
 use Utopia\Database\Hook\OuterJoinChainFilter;
 use Utopia\Database\Hook\OuterJoinPermissionFilter;
@@ -262,18 +261,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function getFloatPrecision(float $value): string
     {
         return sprintf('%.'.$this->floatPrecision.'F', $value);
-    }
-
-    /**
-     * Build conditions threading `$name` to per-query builders so adapter
-     * overrides (SQLite FTS5 routing) can resolve auxiliary tables.
-     *
-     * @param array<Query> $queries
-     * @param array<string,mixed> $binds
-     */
-    protected function getSQLConditionsForCollection(string $name, array $queries, array &$binds, string $separator = 'AND'): string
-    {
-        return $this->getSQLConditions($queries, $binds, $separator, $name);
     }
 
     /**
@@ -6130,224 +6117,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return 'RANDOM()';
     }
 
-    /**
-     * Get SQL Operator
-     *
-     * @throws Exception
-     */
-    protected function getSQLOperator(Method $method): string
-    {
-        return match ($method) {
-            Method::Equal => '=',
-            Method::NotEqual => '!=',
-            Method::LessThan => '<',
-            Method::LessThanEqual => '<=',
-            Method::GreaterThan => '>',
-            Method::GreaterThanEqual => '>=',
-            Method::IsNull => 'IS NULL',
-            Method::IsNotNull => 'IS NOT NULL',
-            Method::StartsWith,
-            Method::EndsWith,
-            Method::Contains,
-            Method::ContainsAny,
-            Method::ContainsAll,
-            Method::NotStartsWith,
-            Method::NotEndsWith,
-            Method::NotContains => $this->getLikeOperator(),
-            Method::Regex => $this->getRegexOperator(),
-            Method::VectorDot,
-            Method::VectorCosine,
-            Method::VectorEuclidean => throw new DatabaseException('Vector queries are not supported by this database'),
-            Method::Exists,
-            Method::NotExists => throw new DatabaseException('Exists queries are not supported by this database'),
-            default => throw new DatabaseException('Unknown method: '.$method->value),
-        };
-    }
-
-    /**
-     * Handle spatial queries. Adapters that support spatial types should override this.
-     *
-     * @param  array<string, mixed>  $binds
-     *
-     * @throws DatabaseException
-     */
-    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
-    {
-        throw new DatabaseException('Spatial queries not supported');
-    }
-
-    /**
-     * Handle distance-based spatial queries. Adapters that support spatial types should override this.
-     *
-     * @param  array<string, mixed>  $binds
-     *
-     * @throws DatabaseException
-     */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
-    {
-        throw new DatabaseException('Spatial queries not supported');
-    }
-
-    /**
-     * @param  array<string, mixed>  $binds
-     * @param  ?string  $forCollection  Filtered collection id (for FTS5 routing).
-     *
-     * @throws Exception
-     */
-    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
-    {
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-
-        $attribute = $query->getAttribute();
-        $attribute = $this->filter($attribute);
-        $attribute = $this->quote($attribute);
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
-        $placeholder = ID::unique();
-
-        if ($query->isSpatialAttribute()) {
-            if (! ($this instanceof Feature\Spatial)) {
-                throw new QueryException('Spatial queries not supported');
-            }
-
-            return $this->handleSpatialQueries($query, $binds, $attribute, $query->getAttributeType(), $alias, $placeholder);
-        }
-
-        switch ($query->getMethod()) {
-            case Method::Or:
-            case Method::And:
-                $conditions = [];
-                /** @var iterable<Query> $nestedQueries */
-                $nestedQueries = $query->getValue();
-                foreach ($nestedQueries as $q) {
-                    $conditions[] = $this->getSQLCondition($q, $binds, $forCollection);
-                }
-
-                $method = strtoupper($query->getMethod()->value);
-
-                return empty($conditions) ? '' : ' ' . $method . ' (' . implode(' AND ', $conditions) . ')';
-
-            case Method::Search:
-                $searchVal = $query->getValue();
-                $fulltextValue = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
-                if ($fulltextValue === '') {
-                    return '0 = 1';
-                }
-                $binds[":{$placeholder}_0"] = $fulltextValue;
-
-                return "MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE)";
-
-            case Method::NotSearch:
-                $notSearchVal = $query->getValue();
-                $fulltextValue = $this->getFulltextValue(\is_string($notSearchVal) ? $notSearchVal : '');
-                if ($fulltextValue === '') {
-                    return '1 = 1';
-                }
-                $binds[":{$placeholder}_0"] = $fulltextValue;
-
-                return "NOT (MATCH({$alias}.{$attribute}) AGAINST (:{$placeholder}_0 IN BOOLEAN MODE))";
-
-            case Method::Between:
-                $binds[":{$placeholder}_0"] = $query->getValues()[0];
-                $binds[":{$placeholder}_1"] = $query->getValues()[1];
-
-                return "{$alias}.{$attribute} BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
-
-            case Method::NotBetween:
-                $binds[":{$placeholder}_0"] = $query->getValues()[0];
-                $binds[":{$placeholder}_1"] = $query->getValues()[1];
-
-                return "{$alias}.{$attribute} NOT BETWEEN :{$placeholder}_0 AND :{$placeholder}_1";
-
-            case Method::IsNull:
-            case Method::IsNotNull:
-
-                return "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())}";
-            case Method::ContainsAll:
-                if ($query->onArray()) {
-                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
-
-                    return "JSON_CONTAINS({$alias}.{$attribute}, :{$placeholder}_0)";
-                }
-                // no break
-            case Method::Contains:
-            case Method::ContainsAny:
-            case Method::NotContains:
-                if ($this->supports(Capability::JSONOverlaps) && $query->onArray()) {
-                    $binds[":{$placeholder}_0"] = json_encode($query->getValues());
-                    $isNot = $query->getMethod() === Method::NotContains;
-
-                    return $isNot
-                        ? "NOT (JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0))"
-                        : "JSON_OVERLAPS({$alias}.{$attribute}, :{$placeholder}_0)";
-                }
-                // no break
-            default:
-                $conditions = [];
-                $isNotQuery = in_array($query->getMethod(), [
-                    Method::NotStartsWith,
-                    Method::NotEndsWith,
-                    Method::NotContains,
-                ]);
-
-                foreach ($query->getValues() as $key => $value) {
-                    $strValue = \is_string($value) ? $value : '';
-                    $value = match ($query->getMethod()) {
-                        Method::StartsWith => $this->escapeWildcards($strValue) . '%',
-                        Method::NotStartsWith => $this->escapeWildcards($strValue) . '%',
-                        Method::EndsWith => '%' . $this->escapeWildcards($strValue),
-                        Method::NotEndsWith => '%' . $this->escapeWildcards($strValue),
-                        Method::Contains, Method::ContainsAny => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($strValue) . '%',
-                        Method::NotContains => ($query->onArray()) ? \json_encode($value) : '%' . $this->escapeWildcards($strValue) . '%',
-                        default => $value
-                    };
-
-                    $binds[":{$placeholder}_{$key}"] = $value;
-                    if ($isNotQuery) {
-                        $conditions[] = "{$alias}.{$attribute} NOT {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
-                    } else {
-                        $conditions[] = "{$alias}.{$attribute} {$this->getSQLOperator($query->getMethod())} :{$placeholder}_{$key}";
-                    }
-                }
-
-                $separator = $isNotQuery ? ' AND ' : ' OR ';
-
-                return empty($conditions) ? '' : '(' . implode($separator, $conditions) . ')';
-        }
-    }
-
-    /**
-     * Build a combined SQL WHERE clause from multiple query objects.
-     *
-     * @param  array<Query>  $queries
-     * @param  array<string, mixed>  $binds
-     * @param  string  $separator  The logical operator joining conditions (AND/OR)
-     * @param  ?string  $forCollection  See {@see getSQLCondition}.
-     * @return string
-     *
-     * @throws Exception
-     */
-    public function getSQLConditions(array $queries, array &$binds, string $separator = 'AND', ?string $forCollection = null): string
-    {
-        $conditions = [];
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Method::Select) {
-                continue;
-            }
-
-            if ($query->isNested()) {
-                /** @var array<Query> $nestedQueries */
-                $nestedQueries = $query->getValues();
-                $conditions[] = $this->getSQLConditions($nestedQueries, $binds, strtoupper($query->getMethod()->value), $forCollection);
-            } else {
-                $conditions[] = $this->getSQLCondition($query, $binds, $forCollection);
-            }
-        }
-
-        $tmp = implode(' '.$separator.' ', $conditions);
-
-        return empty($tmp) ? '' : '('.$tmp.')';
-    }
-
     protected function getFulltextValue(string $value): string
     {
         $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
@@ -6369,16 +6138,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $value;
-    }
-
-    /**
-     * Get vector distance calculation for ORDER BY clause (named binds - legacy).
-     *
-     * @param  array<string, mixed>  $binds
-     */
-    protected function getVectorDistanceOrder(Query $query, array &$binds, string $alias): ?string
-    {
-        return null;
     }
 
     /**

@@ -14,11 +14,9 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
-use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\MySQL as MySQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
-use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 
 /**
@@ -94,42 +92,6 @@ class MySQL extends MariaDB
         }
 
         return $size;
-    }
-
-    /**
-     * Handle distance spatial queries
-     *
-     * @param  array<string, mixed>  $binds
-     */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
-    {
-        /** @var array<mixed> $distanceParams */
-        $distanceParams = $query->getValues()[0];
-        $geomArray = \is_array($distanceParams[0]) ? $distanceParams[0] : [];
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($geomArray);
-        $binds[":{$placeholder}_1"] = $distanceParams[1];
-
-        $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
-
-        $operator = match ($query->getMethod()) {
-            Method::DistanceEqual => '=',
-            Method::DistanceNotEqual => '!=',
-            Method::DistanceGreaterThan => '>',
-            Method::DistanceLessThan => '<',
-            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
-        };
-
-        if ($useMeters) {
-            $attr = "ST_SRID({$alias}.{$attribute}, ".Database::DEFAULT_SRID.')';
-            $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
-
-            return "ST_Distance({$attr}, {$geom}, 'metre') {$operator} :{$placeholder}_1";
-        }
-        // need to use srid 0 because of geometric distance
-        $attr = "ST_SRID({$alias}.{$attribute}, ". 0 .')';
-        $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", 0);
-
-        return "ST_Distance({$attr}, {$geom}) {$operator} :{$placeholder}_1";
     }
 
     protected function processException(PDOException $e): Exception

@@ -24,13 +24,13 @@ final class PermissionJoinFilterTest extends TestCase
         $this->assertNull($hook->filterJoin('j1', JoinType::Left));
     }
 
-    public function testInnerJoinPlacesPermissionInWhereClause(): void
+    public function testInnerJoinPlacesPermissionInOnClause(): void
     {
         $hook = new PermissionJoinFilter($this->permissionFilter(), 'j0');
         $result = $hook->filterJoin('j0', JoinType::Inner);
 
         $this->assertNotNull($result);
-        $this->assertSame(Placement::Where, $result->placement);
+        $this->assertSame(Placement::On, $result->placement);
     }
 
     public function testRightJoinPlacesPermissionInWhereClause(): void

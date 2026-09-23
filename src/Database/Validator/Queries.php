@@ -430,8 +430,10 @@ class Queries extends Validator
     }
 
     /**
-     * Hand each having and aggregate validator the aggregates and groupBy attributes of this query
-     * set, and each having validator the filter rules, replacing those of the previous one.
+     * Hand each having, aggregate and select validator the aggregates and groupBy attributes of this
+     * query set, and each having validator the filter rules, replacing those of the previous one.
+     * Without an aggregate or having validator an aggregate is itself an invalid query, so the select
+     * validators are left alone.
      *
      * @param  list<Query>  $queries
      */
@@ -440,6 +442,7 @@ class Queries extends Validator
         $filter = null;
         $having = [];
         $aggregates = [];
+        $selects = [];
         foreach ($this->validators as $validator) {
             if ($validator instanceof Filter) {
                 $filter ??= $validator;
@@ -447,6 +450,8 @@ class Queries extends Validator
                 $having[] = $validator;
             } elseif ($validator instanceof Aggregate) {
                 $aggregates[] = $validator;
+            } elseif ($validator instanceof Select) {
+                $selects[] = $validator;
             }
         }
 
@@ -472,6 +477,11 @@ class Queries extends Validator
         }
 
         foreach ($aggregates as $validator) {
+            $validator->setAggregations($aggregations);
+            $validator->setGroupBy($groupBy);
+        }
+
+        foreach ($selects as $validator) {
             $validator->setAggregations($aggregations);
             $validator->setGroupBy($groupBy);
         }

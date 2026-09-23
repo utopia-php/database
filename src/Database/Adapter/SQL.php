@@ -4503,6 +4503,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($hasAggregation) {
+            // An aggregation returns only its groups and aggregates: a select the validators accept names a group,
+            // which is selected below, or a wildcard, so no select reaches the statement.
+            $queries = \array_values(\array_filter($queries, static fn (BaseQuery $query): bool => $query->getMethod() !== Method::Select));
+
             foreach ($queries as $query) {
                 if ($query->getMethod() === Method::GroupBy) {
                     // Each group is selected as the GROUP BY clause names it once applyFindFilters() maps it.
@@ -4937,8 +4941,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     /**
      * The columns an aggregation over an emulated full outer join reads — aggregated attributes, groups,
-     * selections, having conditions and order attributes — keyed by table-qualified column, each with the
-     * column both halves project it as.
+     * having conditions and order attributes — keyed by table-qualified column, each with the column both
+     * halves project it as. A select reads none: configureFindBuilder() leaves it out of an aggregation.
      *
      * @param  array<BaseQuery>  $queries  The aggregation's queries, as configureFindBuilder() left them
      * @param  array<string>  $orderAttributes
@@ -4960,13 +4964,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                         $queries[] = $condition;
                     }
                 }
-            } elseif ($method === Method::GroupBy || $method === Method::Select) {
+            } elseif ($method === Method::GroupBy) {
                 foreach ($query->getValues() as $column) {
                     if (\is_string($column)) {
                         $references[] = $column;
                     }
                 }
-            } else {
+            } elseif ($method !== Method::Select) {
                 $references[] = $query->getAttribute();
             }
         }

@@ -2,13 +2,16 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 
 /**
- * Validates select query methods ensuring referenced attributes exist in the schema and are not duplicated.
+ * Validates select query methods ensuring referenced attributes exist in the schema, are not duplicated and, in an
+ * aggregation query, are grouped.
  */
 class Select extends Base
 {
@@ -20,6 +23,25 @@ class Select extends Base
     protected array $schema = [];
 
     /**
+     * The relationship attributes of the collection.
+     *
+     * @var array<int|string, true>
+     */
+    private array $relationships = [];
+
+    /**
+     * Whether the query set holds an aggregate.
+     */
+    private bool $aggregates = false;
+
+    /**
+     * The attributes the query set groups by.
+     *
+     * @var list<string>
+     */
+    private array $groupBy = [];
+
+    /**
      * @param  array<Document>  $attributes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      */
@@ -29,6 +51,35 @@ class Select extends Base
             /** @var string $attrKey */
             $attrKey = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
             $this->schema[$attrKey] = true;
+
+            if (Attribute::isRelationship($attribute)) {
+                $this->relationships[$attrKey] = true;
+            }
+        }
+    }
+
+    /**
+     * The aggregates of the query set. With one, or with a groupBy, the query returns a row per
+     * group, so a select can name only an attribute the query groups by.
+     *
+     * @param  array<BaseQuery>  $aggregations
+     */
+    public function setAggregations(array $aggregations): void
+    {
+        $this->aggregates = $aggregations !== [];
+    }
+
+    /**
+     * @param  array<mixed>  $attributes  the groupBy attributes of the query set
+     */
+    public function setGroupBy(array $attributes): void
+    {
+        $this->groupBy = [];
+
+        foreach ($attributes as $attribute) {
+            if (\is_string($attribute) && $attribute !== '') {
+                $this->groupBy[] = $attribute;
+            }
         }
     }
 
@@ -98,6 +149,10 @@ class Select extends Base
                     continue;
                 }
 
+                if ($this->isAggregation() && isset($this->joinAliases[$alias])) {
+                    return $this->rejectUngrouped($attribute);
+                }
+
                 // For relationships, just validate the top level.
                 // Will validate each nested level during the recursive calls.
                 $attribute = $alias;
@@ -115,7 +170,77 @@ class Select extends Base
             }
         }
 
+        return ! $this->isAggregation() || $this->isGroupedSelection($attributes);
+    }
+
+    /**
+     * Whether the query set aggregates: with an aggregate or a groupBy it returns a row per group.
+     */
+    private function isAggregation(): bool
+    {
+        return $this->aggregates || $this->groupBy !== [];
+    }
+
+    /**
+     * An aggregation query returns only its groups and aggregates, so every selected attribute has
+     * to be one it groups by. `*` and relationship wildcards at any depth add nothing to those rows,
+     * and are accepted. Sets the message when an attribute is not grouped.
+     *
+     * @param  list<string>  $attributes
+     */
+    private function isGroupedSelection(array $attributes): bool
+    {
+        $groups = [];
+        foreach ($this->groupBy as $group) {
+            $groups[$this->column($group)] = true;
+        }
+
+        foreach ($attributes as $attribute) {
+            if ($attribute !== '*' && ! $this->isRelationshipWildcard($attribute) && ! isset($groups[$this->column($attribute)])) {
+                return $this->rejectUngrouped($attribute);
+            }
+        }
+
         return true;
+    }
+
+    private function rejectUngrouped(string $attribute): false
+    {
+        $this->message = 'Cannot select "'.$attribute.'": an aggregation query can only select the attributes it groups by';
+
+        return false;
+    }
+
+    /**
+     * A wildcard under a relationship of the collection: `key.*`, or a nested `key.related.*`.
+     * Under a join alias a wildcard names the joined collection's columns instead.
+     */
+    private function isRelationshipWildcard(string $attribute): bool
+    {
+        $key = \strstr($attribute, '.', true);
+
+        return $key !== false
+            && \str_ends_with($attribute, '.*')
+            && isset($this->relationships[$key])
+            && ! isset($this->joinAliases[$key]);
+    }
+
+    /**
+     * The column an attribute names: a bare name the collection does not declare is the column of
+     * the one join that declares it, any other name is its own.
+     */
+    private function column(string $attribute): string
+    {
+        if (\str_contains($attribute, '.') || $this->acceptsMainAttribute($attribute)) {
+            return $attribute;
+        }
+
+        $declaring = \array_values(\array_filter(
+            $this->joins,
+            static fn (JoinedCollection $join): bool => isset($join->attributes[$attribute]),
+        ));
+
+        return \count($declaring) === 1 ? $declaring[0]->alias.'.'.$attribute : $attribute;
     }
 
     protected function acceptsMainAttribute(string $attribute): bool

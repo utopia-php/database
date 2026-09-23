@@ -87,10 +87,8 @@ class PoolTest extends Base
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            // Hack to get adapter PDO reference
             $class = new ReflectionClass($adapter);
             $property = $class->getProperty('pdo');
-            $property->setAccessible(true);
             $pdo = $property->getValue($adapter);
             assert($pdo instanceof PDO);
             $pdo->exec($sql);
@@ -105,10 +103,8 @@ class PoolTest extends Base
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            // Hack to get adapter PDO reference
             $class = new ReflectionClass($adapter);
             $property = $class->getProperty('pdo');
-            $property->setAccessible(true);
             $pdo = $property->getValue($adapter);
             assert($pdo instanceof PDO);
             $pdo->exec($sql);
@@ -127,7 +123,6 @@ class PoolTest extends Base
         self::$pool->use(function (Adapter $adapter) use ($sql, $binds) {
             $class = new ReflectionClass($adapter);
             $property = $class->getProperty('pdo');
-            $property->setAccessible(true);
             $pdo = $property->getValue($adapter);
             assert($pdo instanceof PDO);
             $stmt = $pdo->prepare($sql);

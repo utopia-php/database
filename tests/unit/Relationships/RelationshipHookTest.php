@@ -15,6 +15,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -26,6 +27,8 @@ use Utopia\Query\Schema\ForeignKeyAction;
 
 final class RelationshipHookTest extends TestCase
 {
+    private const ADMIN = 'user:admin';
+
     /**
      * @return iterable<string, array{Closure(): Adapter}>
      */
@@ -127,6 +130,114 @@ final class RelationshipHookTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]
+    public function testOneToManyCascadeRollsBackWhenAChildCannotBeDeleted(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('child', new Document(['$id' => 'deletable', 'parent' => 'parent1', '$permissions' => [Permission::delete(Role::any())]]));
+        $database->createDocument('child', new Document(['$id' => 'protected', 'parent' => 'parent1', '$permissions' => [Permission::delete(Role::user('admin'))]]));
+
+        $this->assertDeleteRejected($database, 'parent', 'parent1');
+
+        $this->assertFalse($database->getDocument('parent', 'parent1')->isEmpty());
+        $this->assertSame(['deletable', 'protected'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+
+        $database->getAuthorization()->addRole(self::ADMIN);
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+        $this->assertSame([], $this->ids($database, 'child'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testManyToOneCascadeRollsBackWhenAChildCannotBeDeleted(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::manyToOne(collection: 'child', relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: ForeignKeyAction::Cascade),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('child', new Document(['$id' => 'deletable', 'parent' => 'parent1', '$permissions' => [Permission::delete(Role::any())]]));
+        $database->createDocument('child', new Document(['$id' => 'protected', 'parent' => 'parent1', '$permissions' => [Permission::delete(Role::user('admin'))]]));
+
+        $this->assertDeleteRejected($database, 'parent', 'parent1');
+
+        $this->assertFalse($database->getDocument('parent', 'parent1')->isEmpty());
+        $this->assertSame(['deletable', 'protected'], $this->ids($database, 'child'));
+
+        $database->getAuthorization()->addRole(self::ADMIN);
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+        $this->assertSame([], $this->ids($database, 'child'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testManyToManyCascadeRollsBackWhenARelatedDocumentCannotBeDeleted(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        $database->createDocument('child', new Document(['$id' => 'deletable', '$permissions' => [Permission::delete(Role::any())]]));
+        $database->createDocument('child', new Document(['$id' => 'protected', '$permissions' => [Permission::delete(Role::user('admin'))]]));
+        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['deletable', 'protected']]));
+
+        $this->assertDeleteRejected($database, 'parent', 'parent1');
+
+        $this->assertSame(['deletable', 'protected'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame(['deletable', 'protected'], $this->ids($database, 'child'));
+
+        $database->getAuthorization()->addRole(self::ADMIN);
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+        $this->assertSame([], $this->ids($database, 'child'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCascadeSkipsARelatedDocumentThatIsAlreadyGone(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        foreach (['child1', 'child2', 'child3'] as $id) {
+            $database->createDocument('child', new Document(['$id' => $id, '$permissions' => [Permission::delete(Role::any())]]));
+        }
+        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1', 'child2', 'child3']]));
+
+        $database->skipRelationships(fn () => $database->deleteDocument('child', 'child2'));
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+        $this->assertSame([], $this->ids($database, 'child'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
     public function testCascadeRetriedAfterAFailedCascadeStillDeletesTheChildren(Closure $adapter): void
     {
         $database = $this->database($adapter);
@@ -192,6 +303,16 @@ final class RelationshipHookTest extends TestCase
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ];
+    }
+
+    private function assertDeleteRejected(Database $database, string $collection, string $id): void
+    {
+        try {
+            $database->deleteDocument($collection, $id);
+            $this->fail('Cascading into a document the caller may not delete must be rejected');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame('Missing "delete" permission for role "user:admin". Only "["any"]" scopes are allowed and "["user:admin"]" was given.', $exception->getMessage());
+        }
     }
 
     /**

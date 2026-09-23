@@ -14,6 +14,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Helpers\ID;
@@ -4031,5 +4032,81 @@ trait RelationshipTests
 
         $database->deleteCollection($parents);
         $database->deleteCollection($children);
+    }
+
+    public function testCascadeDeleteRollsBackWhenARelatedDocumentCannotBeDeleted(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $database->createCollection(new Collection(id: $parents, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $children, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createRelationship(Relationship::oneToMany(
+            collection: $parents,
+            relatedCollection: $children,
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::Cascade,
+        ));
+
+        $database->createDocument($parents, new Document(['$id' => 'parent1']));
+        $database->createDocument($children, new Document([
+            '$id' => 'deletable',
+            'parent' => 'parent1',
+            '$permissions' => [Permission::read(Role::any()), Permission::delete(Role::any())],
+        ]));
+        $database->createDocument($children, new Document([
+            '$id' => 'protected',
+            'parent' => 'parent1',
+            '$permissions' => [Permission::read(Role::any()), Permission::delete(Role::user('cascadeAdmin'))],
+        ]));
+
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            try {
+                $database->deleteDocument($parents, 'parent1');
+                $this->fail('Cascading into a child the caller may not delete must be rejected');
+            } catch (AuthorizationException $exception) {
+                $this->assertSame('Missing "delete" permission for role "user:cascadeAdmin". Only "["any"]" scopes are allowed and "["user:cascadeAdmin"]" was given.', $exception->getMessage());
+            }
+
+            $children1 = \array_map(fn (Document $child) => $child->getId(), $database->getDocument($parents, 'parent1')->getDocuments('children'));
+            \sort($children1);
+            $this->assertSame(['deletable', 'protected'], $children1);
+
+            $authorization->addRole(Role::user('cascadeAdmin')->toString());
+
+            $this->assertTrue($database->deleteDocument($parents, 'parent1'));
+            $this->assertSame([], $database->find($children));
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
     }
 }

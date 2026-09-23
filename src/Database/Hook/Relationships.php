@@ -2125,12 +2125,34 @@ class Relationships implements Hook
     }
 
     /**
+     * Delete the related documents with the given IDs.
+     *
+     * deleteDocuments() leaves out every document the caller may not delete,
+     * so a chunk that comes back short is finished one document at a time
+     * through deleteDocument(): it throws AuthorizationException for such a
+     * document, which rolls back the delete that started the cascade, and
+     * skips a document that is already gone.
+     *
      * @param  array<string>  $ids
      */
     private function deleteRelatedDocuments(string $collection, array $ids): void
     {
         foreach (\array_chunk(\array_values(\array_unique($ids)), $this->relationQueryChunkSize()) as $chunk) {
-            $this->db->deleteDocuments($collection, [Query::equal(Document::ID, $chunk)]);
+            $deleted = $this->db->deleteDocuments($collection, [Query::equal(Document::ID, $chunk)]);
+
+            if ($deleted === \count($chunk)) {
+                continue;
+            }
+
+            $remaining = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->find($collection, [
+                Query::select([Document::ID]),
+                Query::equal(Document::ID, $chunk),
+                Query::limit(\count($chunk)),
+            ])));
+
+            foreach ($remaining as $related) {
+                $this->db->deleteDocument($collection, $related->getId());
+            }
         }
     }
 

@@ -90,6 +90,12 @@ class PostgresTest extends Base
         $database = $this->getDatabase();
         $collection = 'database_507f1f77bcf86cd799439012_collection_507f1f77bcf86cd799439013';
 
+        $this->assertGreaterThan(
+            Postgres::MAX_IDENTIFIER_NAME,
+            \strlen($database->getNamespace().'_'.$collection),
+            'The fixture must exceed the Postgres identifier limit, or this test no longer covers long table names'
+        );
+
         $database->createCollection(new Collection(id: $collection, attributes: [
             Attribute::string(key: 'name', size: 128, required: true),
         ], permissions: [

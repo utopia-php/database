@@ -14,6 +14,7 @@ use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
@@ -2011,6 +2012,96 @@ trait ManyToManyTests
 
         $database->deleteCollection('tags');
         $database->deleteCollection('articles');
+    }
+
+    public function testManyToManyRelationshipWithArrayOperators(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::Operators)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: 'operator_library'));
+        $database->createCollection(new Collection(id: 'operator_book'));
+
+        $database->createAttribute('operator_library', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('operator_book', Attribute::string(key: 'title', required: true));
+
+        $database->createRelationship(Relationship::manyToMany(
+            collection: 'operator_library',
+            relatedCollection: 'operator_book',
+            twoWay: true,
+            key: 'books',
+            twoWayKey: 'libraries',
+        ));
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        foreach (['book1' => 'Book 1', 'book2' => 'Book 2', 'book3' => 'Book 3', 'book4' => 'Book 4'] as $id => $title) {
+            $database->createDocument('operator_book', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'title' => $title,
+            ]));
+        }
+
+        $library = $database->createDocument('operator_library', new Document([
+            '$id' => 'library1',
+            '$permissions' => $permissions,
+            'name' => 'Library 1',
+            'books' => ['book1'],
+        ]));
+
+        $this->assertCount(1, $library->getDocuments('books'));
+        $this->assertSame('book1', $library->getDocuments('books')[0]->getId());
+
+        $relatedIds = function (string $collection, string $id, string $key) use ($database): array {
+            $ids = \array_map(
+                fn (Document $related): string => $related->getId(),
+                $database->getDocument($collection, $id)->getDocuments($key),
+            );
+            \sort($ids);
+
+            return $ids;
+        };
+
+        $database->updateDocument('operator_library', 'library1', new Document([
+            'books' => Operator::arrayAppend(['book2']),
+        ]));
+        $this->assertSame(['book1', 'book2'], $relatedIds('operator_library', 'library1', 'books'));
+
+        $database->updateDocument('operator_library', 'library1', new Document([
+            'books' => Operator::arrayAppend(['book3', 'book4']),
+        ]));
+        $this->assertSame(['book1', 'book2', 'book3', 'book4'], $relatedIds('operator_library', 'library1', 'books'));
+
+        $database->updateDocument('operator_library', 'library1', new Document([
+            'books' => Operator::arrayRemove('book2'),
+        ]));
+        $this->assertSame(['book1', 'book3', 'book4'], $relatedIds('operator_library', 'library1', 'books'));
+
+        $database->updateDocument('operator_library', 'library1', new Document([
+            'books' => Operator::arrayRemove(['book3', 'book4']),
+        ]));
+        $this->assertSame(['book1'], $relatedIds('operator_library', 'library1', 'books'));
+        $this->assertSame([], $relatedIds('operator_book', 'book3', 'libraries'));
+        $this->assertSame([], $relatedIds('operator_book', 'book4', 'libraries'));
+
+        $database->updateDocument('operator_library', 'library1', new Document([
+            'books' => Operator::arrayPrepend(['book2']),
+        ]));
+        $this->assertSame(['book1', 'book2'], $relatedIds('operator_library', 'library1', 'books'));
+        $this->assertSame(['library1'], $relatedIds('operator_book', 'book2', 'libraries'));
+
+        $database->deleteCollection('operator_library');
+        $database->deleteCollection('operator_book');
     }
 
     /**

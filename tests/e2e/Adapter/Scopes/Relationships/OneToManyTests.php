@@ -14,6 +14,7 @@ use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
@@ -2503,6 +2504,79 @@ trait OneToManyTests
 
         $database->deleteCollection($libraries);
         $database->deleteCollection($booksLib);
+    }
+
+    public function testOneToManyRelationshipWithArrayOperators(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::Operators)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: 'operator_author'));
+        $database->createCollection(new Collection(id: 'operator_article'));
+
+        $database->createAttribute('operator_author', Attribute::string(key: 'name', required: true));
+        $database->createAttribute('operator_article', Attribute::string(key: 'title', required: true));
+
+        $database->createRelationship(Relationship::oneToMany(
+            collection: 'operator_author',
+            relatedCollection: 'operator_article',
+            twoWay: true,
+            key: 'articles',
+            twoWayKey: 'author',
+        ));
+
+        $permissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        foreach (['article1' => 'Article 1', 'article2' => 'Article 2', 'article3' => 'Article 3'] as $id => $title) {
+            $database->createDocument('operator_article', new Document([
+                '$id' => $id,
+                '$permissions' => $permissions,
+                'title' => $title,
+            ]));
+        }
+
+        $database->createDocument('operator_author', new Document([
+            '$id' => 'author1',
+            '$permissions' => $permissions,
+            'name' => 'Author 1',
+            'articles' => ['article1'],
+        ]));
+
+        $articleIds = function () use ($database): array {
+            $ids = \array_map(
+                fn (Document $article): string => $article->getId(),
+                $database->getDocument('operator_author', 'author1')->getDocuments('articles'),
+            );
+            \sort($ids);
+
+            return $ids;
+        };
+
+        $this->assertSame(['article1'], $articleIds());
+
+        $database->updateDocument('operator_author', 'author1', new Document([
+            'articles' => Operator::arrayAppend(['article2']),
+        ]));
+        $this->assertSame(['article1', 'article2'], $articleIds());
+
+        $database->updateDocument('operator_author', 'author1', new Document([
+            'articles' => Operator::arrayRemove('article1'),
+        ]));
+        $this->assertSame(['article2'], $articleIds());
+        $this->assertNull($database->getDocument('operator_article', 'article1')->getAttribute('author'));
+        $this->assertSame('author1', $database->getDocument('operator_article', 'article2')->getDocument('author')->getId());
+
+        $database->deleteCollection('operator_author');
+        $database->deleteCollection('operator_article');
     }
 
     /**

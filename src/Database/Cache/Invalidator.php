@@ -29,18 +29,39 @@ class Invalidator implements Lifecycle
     }
 
     /**
+     * With $tenantPerDocument, each document's collections are keyed under the tenant it is stored
+     * under: its own, or the scope's when it has none.
+     *
      * @return array<string, string> Tokens by the collection key they invalidate
      */
-    public function tokens(Event $event, mixed $data, ?Scope $scope = null): array
+    public function tokens(Event $event, mixed $data, ?Scope $scope = null, bool $tenantPerDocument = false): array
     {
         if (! $this->isMutation($event)) {
             return [];
         }
 
+        $scope ??= $this->scope;
+        if (! $tenantPerDocument) {
+            return $this->scopedTokens($event, $data, $scope);
+        }
+
+        $scopes = [];
+        $targets = [];
+        foreach (\is_array($data) ? $data : [$data] as $target) {
+            $tenant = $target instanceof Document ? $target->getTenant() ?? $scope->tenant : $scope->tenant;
+            $key = \serialize($tenant);
+            $scopes[$key] ??= new Scope(
+                hostname: $scope->hostname,
+                database: $scope->database,
+                namespace: $scope->namespace,
+                tenant: $tenant,
+            );
+            $targets[$key][] = $target;
+        }
+
         $tokens = [];
-        foreach (\array_keys($this->extractCollections($event, $data)) as $collection) {
-            $key = $this->queryCache->getCollectionKey($scope ?? $this->scope, (string) $collection);
-            $tokens[$key] = \bin2hex(\random_bytes(16));
+        foreach ($scopes as $key => $tenantScope) {
+            $tokens += $this->scopedTokens($event, $targets[$key], $tenantScope);
         }
 
         return $tokens;
@@ -104,6 +125,33 @@ class Invalidator implements Lifecycle
     }
 
     /**
+     * Only an attribute event's relationship options name a related collection: a written
+     * document's own `options` attribute is data.
+     */
+    private function isAttributeMutation(Event $event): bool
+    {
+        return \in_array($event, [
+            Event::AttributeCreate,
+            Event::AttributesCreate,
+            Event::AttributeUpdate,
+            Event::AttributeDelete,
+        ], true);
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function scopedTokens(Event $event, mixed $data, Scope $scope): array
+    {
+        $tokens = [];
+        foreach (\array_keys($this->extractCollections($event, $data)) as $collection) {
+            $tokens[$this->queryCache->getCollectionKey($scope, (string) $collection)] = \bin2hex(\random_bytes(16));
+        }
+
+        return $tokens;
+    }
+
+    /**
      * @return array<string, true>
      */
     private function extractCollections(Event $event, mixed $data): array
@@ -136,6 +184,10 @@ class Invalidator implements Lifecycle
 
             if ($collection !== '') {
                 $collections[$collection] = true;
+            }
+
+            if (! $this->isAttributeMutation($event)) {
+                return $collections;
             }
 
             $options = $data->getAttribute('options', []);

@@ -168,6 +168,8 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             Capability::QueryContains,
             Capability::Hostname,
             Capability::UpsertOnUniqueIndex,
+            Capability::StatisticalAggregates,
+            Capability::BitwiseAggregates,
         ];
 
         if (! $this->emulateMySQL) {

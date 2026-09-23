@@ -58,6 +58,8 @@ enum Capability
     case Vectors;
     case Joins;
     case Aggregations;
+    case StatisticalAggregates;
+    case BitwiseAggregates;
     case Subqueries;
     case CTEs;
     case WindowFunctions;

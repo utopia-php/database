@@ -200,6 +200,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             Capability::DefinedAttributes,
             Capability::Joins,
             Capability::Aggregations,
+            Capability::StatisticalAggregates,
+            Capability::BitwiseAggregates,
         ]);
     }
 

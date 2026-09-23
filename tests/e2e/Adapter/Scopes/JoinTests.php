@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -5833,6 +5834,129 @@ trait JoinTests
             $this->assertSame('b1', $rows[0]->getAttribute('ord.$id'), $label);
             $this->assertSame(1, $this->scoreOf($rows[0], 'ord.score'), $label);
             $this->assertSame('first-secret', $rows[0]->getAttribute('ord.secret'), $label);
+        }
+
+        $this->cleanupAggCollections($database, $this->aliasCollections());
+    }
+
+    public function testFullOuterJoinThenRightJoinReturnsUnmatchedRowsOnce(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $first, $second] = $this->createAliasCollections($database);
+        $database->createDocument($second, new Document([
+            '$id' => 'c3',
+            'mainId' => 'zz',
+            'score' => 30,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        foreach ([
+            'on the main collection' => [
+                Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
+                Query::rightJoin($second, '$id', 'mainId', '=', 'c'),
+            ],
+            'on the full outer joined collection' => [
+                Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
+                Query::rightJoin($second, 'b.mainId', 'mainId', '=', 'c'),
+            ],
+        ] as $label => $joins) {
+            $rows = $database->find($main, [...$joins, Query::select(['name', 'b.score', 'c.score'])]);
+            $values = \array_map(
+                fn (Document $row): string => (string) \json_encode([
+                    $row->getAttribute('name'),
+                    $this->scoreOf($row, 'b.score'),
+                    $this->scoreOf($row, 'c.score'),
+                ]),
+                $rows,
+            );
+            \sort($values);
+
+            $this->assertSame(['["m1",1,10]', '[null,null,30]'], $values, $label);
+            $this->assertSame(2, $database->count($main, $joins), $label);
+            $this->assertEquals(40, $database->sum($main, 'c.score', $joins), $label);
+        }
+
+        $this->cleanupAggCollections($database, $this->aliasCollections());
+    }
+
+    public function testRightJoinOnAnUnmatchedFullOuterJoinRowIsPairedNotDuplicated(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $first, $second] = $this->createAliasCollections($database);
+        $database->createDocument($first, new Document([
+            '$id' => 'b2',
+            'mainId' => 'zz',
+            'score' => 2,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        foreach (['c2' => 'zz', 'c3' => 'nobody'] as $id => $mainId) {
+            $database->createDocument($second, new Document([
+                '$id' => $id,
+                'mainId' => $mainId,
+                'score' => 20,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $joins = [
+            Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
+            Query::rightJoin($second, 'b.mainId', 'mainId', '=', 'c'),
+        ];
+        $rows = $database->find($main, [...$joins, Query::select(['$id', 'b.$id', 'c.$id'])]);
+        $values = \array_map(
+            static fn (Document $row): string => (string) \json_encode([
+                $row->getId() !== '' ? $row->getId() : null,
+                $row->getAttribute('b.$id'),
+                $row->getAttribute('c.$id'),
+            ]),
+            $rows,
+        );
+        \sort($values);
+
+        $this->assertSame(['["m1","b1","c1"]', '[null,"b2","c2"]', '[null,null,"c3"]'], $values);
+        $this->assertSame(3, $database->count($main, $joins));
+
+        $this->cleanupAggCollections($database, $this->aliasCollections());
+    }
+
+    public function testTwoFullOuterJoinsRunOnlyWhereTheEngineHasThem(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $first, $second] = $this->createAliasCollections($database);
+        $joins = [
+            Query::fullOuterJoin($first, '$id', 'mainId', '=', 'b'),
+            Query::fullOuterJoin($second, 'b.mainId', 'mainId', '=', 'c'),
+        ];
+
+        if ($database->getAdapter() instanceof Postgres) {
+            $rows = $database->find($main, [...$joins, Query::select(['$id', 'b.$id', 'c.$id'])]);
+            $this->assertCount(1, $rows);
+            $this->assertSame('m1', $rows[0]->getId());
+            $this->assertSame('b1', $rows[0]->getAttribute('b.$id'));
+            $this->assertSame('c1', $rows[0]->getAttribute('c.$id'));
+            $this->assertSame(1, $database->count($main, $joins));
+        } else {
+            $message = $this->assertJoinQueryRejected(fn () => $database->find($main, $joins), 'find');
+            $this->assertSame('A query can hold only one full outer join on this database', $message);
+            $this->assertJoinQueryRejected(fn () => $database->count($main, $joins), 'count');
         }
 
         $this->cleanupAggCollections($database, $this->aliasCollections());

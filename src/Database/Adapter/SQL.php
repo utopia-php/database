@@ -1763,7 +1763,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $innerBuilder->filter($otherQueries);
 
         // Permission subquery
-        if ($this->authorization->getStatus()) {
+        if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
             $innerBuilder->addHook($this->newPermissionHook($name, $roles));
         }
 
@@ -1855,7 +1855,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $innerBuilder->filter($otherQueries);
 
         // Permission subquery
-        if ($this->authorization->getStatus()) {
+        if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
             $innerBuilder->addHook($this->newPermissionHook($name, $roles));
         }
 
@@ -4492,7 +4492,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if ($this->authorization->getStatus()) {
             $hasJoins = ! empty($joinTablePrefixes);
-            if ((bool) $collection->getAttribute('documentSecurity', false)) {
+            if ($this->filtersPerDocument($collection)) {
                 $docCol = $hasJoins ? $alias.'.'.Storage::UID : Storage::UID;
                 $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
                 if ($preservingOuter) {
@@ -4570,6 +4570,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $queries;
+    }
+
+    private function filtersPerDocument(Document $collection): bool
+    {
+        return (bool) $collection->getAttribute('documentSecurity', false)
+            || $collection->getId() === Database::METADATA;
     }
 
     /**

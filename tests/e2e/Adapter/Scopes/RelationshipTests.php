@@ -23,6 +23,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 trait RelationshipTests
@@ -3386,7 +3387,7 @@ trait RelationshipTests
 
         // covers on relationship polygon attribute (point inside polygon)
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::contains('supplier.deliveryArea', [[-74.0, 40.75]]),
+            new Query(Method::Contains, 'supplier.deliveryArea', [[-74.0, 40.75]]),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());
@@ -3394,7 +3395,7 @@ trait RelationshipTests
         // covers on relationship linestring attribute
         // Note: ST_Contains on linestrings is implementation-dependent (some DBs require exact point-on-line)
         $restaurants = $database->find('restaurantsSpatial', [
-            Query::contains('supplier.deliveryRoute', [[-74.0060, 40.7128]]),
+            new Query(Method::Contains, 'supplier.deliveryRoute', [[-74.0060, 40.7128]]),
         ]);
         // Verify query executes (result count depends on DB spatial implementation)
         $this->assertGreaterThanOrEqual(0, count($restaurants));
@@ -3466,7 +3467,7 @@ trait RelationshipTests
         // Multiple spatial queries combined
         $restaurants = $database->find('restaurantsSpatial', [
             Query::distanceLessThan('supplier.warehouseLocation', [-74.0060, 40.7128], 1.0),
-            Query::contains('supplier.deliveryArea', [[-74.0, 40.75]]),
+            new Query(Method::Contains, 'supplier.deliveryArea', [[-74.0, 40.75]]),
         ]);
         $this->assertCount(1, $restaurants);
         $this->assertEquals('rest1', $restaurants[0]->getId());

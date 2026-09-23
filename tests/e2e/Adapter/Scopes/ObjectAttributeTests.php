@@ -18,6 +18,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\Order;
 
@@ -672,14 +673,14 @@ trait ObjectAttributeTests
 
         // Test 4: Query with contains on indexed JSONB column
         $results = $database->find($collectionId, [
-            Query::contains('data', [['tags' => 'php']]),
+            new Query(Method::Contains, 'data', [['tags' => 'php']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('gin1', $results[0]->getId());
 
         // Test 5: Verify Object index improves performance for containment queries
         $results = $database->find($collectionId, [
-            Query::contains('data', [['tags' => 'kotlin']]),
+            new Query(Method::Contains, 'data', [['tags' => 'kotlin']]),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('gin2', $results[0]->getId());
@@ -1220,7 +1221,7 @@ trait ObjectAttributeTests
 
         // 3) Contains on nested array inside metadata
         $results = $database->find($collectionId, [
-            Query::contains('metadata', [[
+            new Query(Method::Contains, 'metadata', [[
                 'tags' => 'ml',
             ]]),
         ]);
@@ -1428,7 +1429,7 @@ trait ObjectAttributeTests
 
         // Contains on nested country (as text)
         $results = $database->find($collectionId, [
-            Query::contains('profile.user.info.country', ['US']),
+            Query::containsString('profile.user.info.country', ['US']),
         ]);
         $this->assertCount(1, $results);
         $this->assertEquals('d2', $results[0]->getId());

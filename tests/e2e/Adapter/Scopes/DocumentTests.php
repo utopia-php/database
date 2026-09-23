@@ -33,6 +33,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\SetType;
 use Utopia\Query\CursorDirection;
+use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -1701,7 +1702,7 @@ trait DocumentTests
         $this->initMoviesFixture();
 
         $documents = $database->find($this->getMoviesCollection(), [
-            Query::contains('genres', ['comics']),
+            new Query(Method::Contains, 'genres', ['comics']),
         ]);
 
         $this->assertEquals(2, count($documents));
@@ -1710,20 +1711,20 @@ trait DocumentTests
          * Array contains OR condition
          */
         $documents = $database->find($this->getMoviesCollection(), [
-            Query::contains('genres', ['comics', 'kids']),
+            new Query(Method::Contains, 'genres', ['comics', 'kids']),
         ]);
 
         $this->assertEquals(4, count($documents));
 
         $documents = $database->find($this->getMoviesCollection(), [
-            Query::contains('genres', ['non-existent']),
+            new Query(Method::Contains, 'genres', ['non-existent']),
         ]);
 
         $this->assertEquals(0, count($documents));
 
         try {
             $database->find($this->getMoviesCollection(), [
-                Query::contains('price', [10.5]),
+                new Query(Method::Contains, 'price', [10.5]),
             ]);
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {

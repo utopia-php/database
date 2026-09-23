@@ -29,6 +29,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Datetime as DatetimeValidator;
 use Utopia\Database\Validator\Structure;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\Order;
 use Utopia\Validator\Range;
@@ -1691,7 +1692,7 @@ trait AttributeTests
 
             try {
                 $database->find($collection, [
-                    Query::contains('age', [10]),
+                    new Query(Method::Contains, 'age', [10]),
                 ]);
                 $this->fail('Failed to throw exception');
             } catch (Throwable $e) {
@@ -1704,28 +1705,28 @@ trait AttributeTests
             $this->assertCount(1, $documents);
 
             $documents = $database->find($collection, [
-                Query::contains('tv_show', ['love']),
+                Query::containsString('tv_show', ['love']),
             ]);
             $this->assertCount(1, $documents);
 
             $documents = $database->find($collection, [
-                Query::contains('names', ['Jake', 'Joe']),
+                new Query(Method::Contains, 'names', ['Jake', 'Joe']),
             ]);
             $this->assertCount(1, $documents);
 
             $documents = $database->find($collection, [
-                Query::contains('numbers', [-1, 0, 999]),
+                new Query(Method::Contains, 'numbers', [-1, 0, 999]),
             ]);
             $this->assertCount(1, $documents);
 
             $documents = $database->find($collection, [
-                Query::contains('booleans', [false, true]),
+                new Query(Method::Contains, 'booleans', [false, true]),
             ]);
             $this->assertCount(1, $documents);
 
             // Regular like query on primitive json string data
             $documents = $database->find($collection, [
-                Query::contains('pref', ['Joe']),
+                Query::containsString('pref', ['Joe']),
             ]);
             $this->assertCount(1, $documents);
 

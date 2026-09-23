@@ -63,8 +63,6 @@ class GroupBy extends Base
                 && ! isset($this->schema[$column])
                 && ! $this->isJoinedAttribute($column)
             ) {
-                $this->message = 'Attribute not found in schema: '.$column;
-
                 return false;
             }
         }

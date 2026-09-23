@@ -3,6 +3,8 @@
 namespace Utopia\Database\Validator;
 
 use Throwable;
+use Utopia\Database\Attribute;
+use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Base;
@@ -30,6 +32,11 @@ class Queries extends Validator
     protected int $length;
 
     /**
+     * @var array<string, Document>
+     */
+    protected array $joinedCollections = [];
+
+    /**
      * Queries constructor
      *
      * @param  array<Base>  $validators
@@ -48,6 +55,26 @@ class Queries extends Validator
     public function getDescription(): string
     {
         return $this->message;
+    }
+
+    /**
+     * The collections the query sets may join. A bare aggregate or groupBy attribute resolves
+     * through the one join whose collection declares it; a join whose collection is not given
+     * declares nothing.
+     *
+     * @param  array<Document>  $collections
+     */
+    public function setJoinedCollections(array $collections): void
+    {
+        $this->joinedCollections = [];
+        foreach ($collections as $collection) {
+            $this->joinedCollections[$collection->getId()] = $collection;
+        }
+    }
+
+    protected function getJoinedCollection(string $id): ?Document
+    {
+        return $this->joinedCollections[$id] ?? null;
     }
 
     /**
@@ -134,14 +161,16 @@ class Queries extends Validator
         }
 
         if ($hasJoins) {
-            // A join widens the attribute space past this collection's schema, and the
-            // joined collection's attributes are not available here. Aggregating or
-            // grouping by one of them is legitimate, so the schema check stands down —
-            // but only for a bare name; an alias-qualified one still has to name an
-            // alias this query set declared (see JoinedAttributes::isJoinedAttribute).
+            $joinedAttributes = [];
+            foreach ($parsedQueries as $parsedQuery) {
+                if ($parsedQuery->getMethod()->isJoin()) {
+                    $joinedAttributes[] = $this->joinedAttributes($parsedQuery->getAttribute());
+                }
+            }
+
             foreach ($this->validators as $validator) {
                 if ($validator instanceof Aggregate || $validator instanceof GroupBy) {
-                    $validator->allowJoinedAttributes();
+                    $validator->allowJoinedAttributes($joinedAttributes);
                 }
             }
         }
@@ -308,6 +337,27 @@ class Queries extends Validator
         }
 
         return true;
+    }
+
+    /**
+     * The attributes a joined collection declares. Relationship attributes are left out: only some
+     * sides of a relationship have a column.
+     *
+     * @return array<string, true>
+     */
+    private function joinedAttributes(string $collection): array
+    {
+        /** @var array<Attribute|Document> $definitions */
+        $definitions = $this->getJoinedCollection($collection)?->getAttribute('attributes', []) ?? [];
+
+        $attributes = [];
+        foreach ($definitions as $definition) {
+            if (! Attribute::isRelationship($definition)) {
+                $attributes[$definition->getId()] = true;
+            }
+        }
+
+        return $attributes;
     }
 
     /**

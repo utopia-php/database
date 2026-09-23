@@ -88,8 +88,6 @@ class Aggregate extends Base
             && ! isset($this->schema[$attribute])
             && ! $this->isJoinedAttribute($attribute)
         ) {
-            $this->message = 'Attribute not found in schema: '.$attribute;
-
             return false;
         }
 

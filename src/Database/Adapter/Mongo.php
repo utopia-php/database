@@ -206,11 +206,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     protected function syncReadHooks(): void
     {
-        $this->readHooks = [];
-
-        if ($this->hasPermissionHook()) {
-            $this->readHooks[] = new MongoPermissionFilter($this->authorization);
-        }
+        $this->readHooks = [new MongoPermissionFilter($this->authorization)];
     }
 
     /**

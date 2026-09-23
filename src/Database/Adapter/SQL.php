@@ -72,6 +72,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 {
     private const string FOJ_ORDER_ALIAS_PREFIX = 'foj_ord_';
 
+    /**
+     * Where the rows of an emulated full outer join come from: a main-side row it paired with no
+     * joined row, a main-side row paired with a joined row, a joined row it paired with no main-side
+     * row. Every right join after the full outer join adds a bit of its own for its unmatched rows.
+     */
+    private const int UNPAIRED_MAIN_ROWS = 1;
+
+    private const int PAIRED_ROWS = 2;
+
+    private const int UNPAIRED_JOINED_ROWS = 4;
+
     protected object $pdo;
 
     /**
@@ -1403,11 +1414,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         };
 
         if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
-            $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
-            $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
-            $rightQueries[] = BaseQuery::isNull($alias.'.'.Storage::UID);
+            [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
+            $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
-            $left = $this->newBuilder($name, $alias, false);
+            $left = $this->newBuilder($name, $alias, $leftPreserving);
             $leftProjected = $this->configureFindBuilder(
                 $left,
                 $collectionDoc,
@@ -1420,7 +1430,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 $forPermission,
-                false,
+                $leftPreserving,
             );
             $this->applyFullOuterJoinOrderProjection(
                 $left,
@@ -1861,11 +1871,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
-            $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
-            $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
-            $rightQueries[] = BaseQuery::isNull($alias.'.'.Storage::UID);
+            [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
+            $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
-            $left = $this->newBuilder($name, $alias, false);
+            $left = $this->newBuilder($name, $alias, $leftPreserving);
             $left->selectRaw($selectRaw);
             $this->applyFindFilters(
                 $left,
@@ -1877,7 +1886,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 PermissionType::Read,
-                false,
+                $leftPreserving,
             );
 
             $right = $this->newBuilder($name, $alias, true);
@@ -4057,6 +4066,199 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         foreach ($queries as $query) {
             if ($query->getMethod() === Method::FullOuterJoin) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Split a query set with a full outer join the engine cannot run into the two halves of a flat
+     * UNION ALL, every table staying at the top level of FROM where later ON and WHERE conditions
+     * reach it. The first half runs the full outer join as a left join and keeps every row holding a
+     * main-side row; the second runs it as a right join and keeps only the joined table's unmatched rows.
+     *
+     * A later right join runs in both halves, so its unmatched rows are kept by one half only: the one
+     * whose rows alone decide what the right join matches — the first when its ON reaches a table joined
+     * before the full outer join, the second when it reaches the full outer joined table. A chain neither
+     * half can decide alone, or with a second full outer join, is rejected.
+     *
+     * @param  array<BaseQuery>  $queries  With the join columns remapJoinQueries() qualified
+     * @return array{0: array<BaseQuery>, 1: array<BaseQuery>}
+     *
+     * @throws QueryException
+     */
+    private function emulateFullOuterJoin(array $queries, string $alias): array
+    {
+        $fullJoinAlias = null;
+        $joinedAliases = [$alias];
+        $mainSideAliases = [];
+        $reach = [];
+        $firstHalfRows = self::UNPAIRED_MAIN_ROWS | self::PAIRED_ROWS;
+        $secondHalfRows = self::PAIRED_ROWS | self::UNPAIRED_JOINED_ROWS;
+        $presentRows = $firstHalfRows | $secondHalfRows;
+        $nextRows = self::UNPAIRED_JOINED_ROWS << 1;
+        $firstHalfExclusions = [];
+        $secondHalfInclusions = [];
+
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (! $method->isJoin()) {
+                continue;
+            }
+
+            $joinAlias = $query->getJoinAlias();
+
+            if ($method === Method::FullOuterJoin) {
+                if ($fullJoinAlias !== null) {
+                    throw new QueryException('A query can hold only one full outer join on this database');
+                }
+
+                $fullJoinAlias = $joinAlias;
+                $mainSideAliases = $joinedAliases;
+                foreach ($mainSideAliases as $mainSideAlias) {
+                    $reach[$mainSideAlias] = self::UNPAIRED_MAIN_ROWS | self::PAIRED_ROWS;
+                }
+                $reach[$joinAlias] = self::PAIRED_ROWS | self::UNPAIRED_JOINED_ROWS;
+                $joinedAliases[] = $joinAlias;
+
+                continue;
+            }
+
+            if ($fullJoinAlias === null) {
+                $joinedAliases[] = $joinAlias;
+
+                continue;
+            }
+
+            $rows = $presentRows;
+            foreach ($this->joinConditionAliases($query) as $conditionAlias) {
+                $rows &= $reach[$conditionAlias] ?? $presentRows;
+            }
+
+            if ($method === Method::RightJoin) {
+                $unmatchedRows = $nextRows;
+                $nextRows <<= 1;
+
+                if (($rows & ~$firstHalfRows) === 0) {
+                    $firstHalfRows |= $unmatchedRows;
+                } elseif (($rows & ~$secondHalfRows) === 0) {
+                    $secondHalfRows |= $unmatchedRows;
+                    $firstHalfExclusions[] = $this->anyOf([
+                        ...\array_map(static fn (string $joined): BaseQuery => BaseQuery::isNotNull($joined.'.'.Storage::UID), $joinedAliases),
+                        BaseQuery::isNull($joinAlias.'.'.Storage::UID),
+                    ]);
+                    $between = \array_slice($joinedAliases, \count($mainSideAliases) + 1);
+                    $secondHalfInclusions[] = $this->allOf([
+                        ...\array_map(static fn (string $joined): BaseQuery => BaseQuery::isNull($joined.'.'.Storage::UID), $between),
+                        BaseQuery::isNotNull($joinAlias.'.'.Storage::UID),
+                    ]);
+                } else {
+                    throw new QueryException('A right join after a full outer join has to join on a table joined before it, or on the full outer joined table');
+                }
+
+                $rows |= $unmatchedRows;
+                $presentRows |= $unmatchedRows;
+            } elseif ($method === Method::CrossJoin || $method === Method::NaturalJoin) {
+                $rows = $presentRows;
+            }
+
+            $reach[$joinAlias] = $rows;
+            $joinedAliases[] = $joinAlias;
+        }
+
+        if ($fullJoinAlias === null) {
+            throw new DatabaseException('The query holds no full outer join to emulate');
+        }
+
+        $firstHalf = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
+        \array_push($firstHalf, ...$firstHalfExclusions);
+
+        $secondHalf = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
+        foreach ($mainSideAliases as $mainSideAlias) {
+            $secondHalf[] = BaseQuery::isNull($mainSideAlias.'.'.Storage::UID);
+        }
+        $secondHalf[] = $this->anyOf([
+            BaseQuery::isNotNull($fullJoinAlias.'.'.Storage::UID),
+            ...$secondHalfInclusions,
+        ]);
+
+        return [$firstHalf, $secondHalf];
+    }
+
+    /**
+     * The aliases whose columns a join's ON compares, other than the join's own.
+     *
+     * @return list<string>
+     */
+    private function joinConditionAliases(BaseQuery $join): array
+    {
+        $method = $join->getMethod();
+        if ($method === Method::CrossJoin || $method === Method::NaturalJoin) {
+            return [];
+        }
+
+        $columns = [];
+        if ($join->isNestedJoin()) {
+            foreach ($join->getJoinOnQueries() as $condition) {
+                if ($condition->getMethod() === Method::On) {
+                    $values = $condition->getValues();
+                    $columns[] = $values[0] ?? null;
+                    $columns[] = $values[2] ?? null;
+                }
+            }
+        } else {
+            $values = $join->getValues();
+            $columns[] = $values[0] ?? null;
+            $columns[] = $values[2] ?? null;
+        }
+
+        $joinAlias = $join->getJoinAlias();
+        $aliases = [];
+        foreach ($columns as $column) {
+            if (! \is_string($column)) {
+                continue;
+            }
+
+            $dot = \strpos($column, '.');
+            if ($dot === false) {
+                continue;
+            }
+
+            $conditionAlias = \substr($column, 0, $dot);
+            if ($conditionAlias !== $joinAlias) {
+                $aliases[] = $conditionAlias;
+            }
+        }
+
+        return $aliases;
+    }
+
+    /**
+     * @param  non-empty-list<BaseQuery>  $conditions
+     */
+    private function anyOf(array $conditions): BaseQuery
+    {
+        return \count($conditions) === 1 ? $conditions[0] : BaseQuery::or($conditions);
+    }
+
+    /**
+     * @param  non-empty-list<BaseQuery>  $conditions
+     */
+    private function allOf(array $conditions): BaseQuery
+    {
+        return \count($conditions) === 1 ? $conditions[0] : BaseQuery::and($conditions);
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     */
+    private function keepsUnmatchedRows(array $queries): bool
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
                 return true;
             }
         }

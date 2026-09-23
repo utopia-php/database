@@ -8,6 +8,7 @@ use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\GroupBy;
+use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
@@ -162,6 +163,10 @@ class Queries extends Validator
                     $validator->allowJoinAliases($joinAliases);
                 }
             }
+        }
+
+        if (! $this->isValidJoinCount($parsedQueries)) {
+            return false;
         }
 
         // Same pass: nested and/or children must keep the join aliases collected above.
@@ -339,5 +344,28 @@ class Queries extends Validator
             : 'Too many queries in '.$group->value.': at most '.$this->length.' are allowed';
 
         return false;
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    private function isValidJoinCount(array $queries): bool
+    {
+        $count = 0;
+        foreach ($queries as $query) {
+            if ($query->getMethod()->isJoin()) {
+                $count++;
+            }
+        }
+
+        foreach ($this->validators as $validator) {
+            if ($validator instanceof Join && ! $validator->isValidCount($count)) {
+                $this->message = $validator->getDescription();
+
+                return false;
+            }
+        }
+
+        return true;
     }
 }

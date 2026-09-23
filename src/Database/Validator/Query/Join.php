@@ -20,6 +20,22 @@ class Join extends Base
         return self::METHOD_TYPE_JOIN;
     }
 
+    public const int MAX_PER_QUERY = 8;
+
+    /**
+     * Validate how many joins one query set declares.
+     */
+    public function isValidCount(int $count): bool
+    {
+        if ($count > self::MAX_PER_QUERY) {
+            $this->message = 'Too many joins: at most '.self::MAX_PER_QUERY.' are allowed';
+
+            return false;
+        }
+
+        return true;
+    }
+
     /**
      * Validate a join query names a table, and that any ON conditions are well formed.
      */

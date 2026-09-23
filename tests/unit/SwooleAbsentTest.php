@@ -47,7 +47,7 @@ class SwooleAbsentTest extends TestCase
         $this->assertStringContainsString('silent=ok', $output, $output);
         $this->assertStringContainsString('deleted=3', $output, $output);
         $this->assertStringContainsString('remaining=0', $output, $output);
-        $this->assertStringContainsString('lostDetected=5', $output, $output);
+        $this->assertStringContainsString('lostDetected=12/12', $output, $output);
         $this->assertStringContainsString('unrelatedDetected=0', $output, $output);
     }
 
@@ -66,7 +66,7 @@ class SwooleAbsentTest extends TestCase
 
         $this->assertSame(0, $status, "Fixture exited {$status} with the swoole library disabled:" . PHP_EOL . $output);
 
-        $this->assertStringContainsString('lostDetected=5', $output, $output);
+        $this->assertStringContainsString('lostDetected=12/12', $output, $output);
         $this->assertStringContainsString('unrelatedDetected=0', $output, $output);
     }
 }

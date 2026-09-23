@@ -50,16 +50,28 @@ $deleted = $database->deleteDocuments('logs', [Query::limit(10)]);
 
 echo 'deleted=' . $deleted . PHP_EOL;
 echo 'remaining=' . \count($database->find('logs', [Query::limit(10)])) . PHP_EOL;
+$idle = new PDOException('SQLSTATE[HY000]: General error: 4031');
+$idle->errorInfo = ['HY000', 4031, 'The client was disconnected by the server because of inactivity.'];
+
+$errors = [
+    new RuntimeException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away'),
+    new RuntimeException('Lost connection to MySQL server during query'),
+    new RuntimeException('SQLSTATE[08006] server closed the connection unexpectedly'),
+    new RuntimeException('Max connect timeout reached'),
+    new RuntimeException('Communication link failure'),
+    new RuntimeException('SQLSTATE[HY000]: General error: 4031 The client was disconnected by the server because of inactivity. See wait_timeout and interactive_timeout for configuring this behavior.'),
+    new RuntimeException('SQLSTATE[HY000]: General error: 7 SSL SYSCALL error: EOF detected'),
+    new RuntimeException("Error reading result set's header"),
+    new RuntimeException('fwrite(): Send of 1024 bytes failed with errno=32 Broken pipe'),
+    new RuntimeException('Connection lost while reading the response'),
+    new RuntimeException('The database server went away'),
+    $idle,
+];
+
 $lost = 0;
-foreach ([
-    'SQLSTATE[HY000]: General error: 2006 MySQL server has gone away',
-    'Lost connection to MySQL server during query',
-    'SQLSTATE[08006] server closed the connection unexpectedly',
-    'Max connect timeout reached',
-    'Communication link failure',
-] as $message) {
-    $lost += Connection::hasError(new RuntimeException($message)) ? 1 : 0;
+foreach ($errors as $error) {
+    $lost += Connection::hasError($error) ? 1 : 0;
 }
 
-echo 'lostDetected=' . $lost . PHP_EOL;
+echo 'lostDetected=' . $lost . '/' . \count($errors) . PHP_EOL;
 echo 'unrelatedDetected=' . (Connection::hasError(new RuntimeException('syntax error near FROM')) ? '1' : '0') . PHP_EOL;

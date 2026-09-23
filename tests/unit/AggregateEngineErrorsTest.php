@@ -35,6 +35,8 @@ final class AggregateEngineErrorsTest extends TestCase
 {
     private const string COLLECTION = 'readings';
 
+    private const string ALIAS_TOO_LONG = 'Invalid query: Aggregate alias is too long: at most 63 characters are allowed';
+
     private function database(): Database
     {
         $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
@@ -179,6 +181,43 @@ final class AggregateEngineErrorsTest extends TestCase
         $this->assertInstanceOf($expected, $processed);
         $this->assertSame($message, $processed->getMessage());
         $this->assertSame($error, $processed->getPrevious());
+    }
+
+    public function testAnAggregateAliasOfSixtyThreeCharactersIsAccepted(): void
+    {
+        $alias = \str_repeat('a', 63);
+
+        $results = $this->database()->find(self::COLLECTION, [Query::sum('value', $alias)]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame([$alias => 14], $results[0]->getArrayCopy());
+    }
+
+    /**
+     * @return array<string, array{0: list<Query>, 1: string}>
+     */
+    public static function rejectedAliasProvider(): array
+    {
+        return [
+            'sixty-four characters' => [[Query::sum('value', \str_repeat('a', 64))], self::ALIAS_TOO_LONG],
+            'sixty-four characters per group' => [[Query::count('*', \str_repeat('a', 64)), Query::groupBy(['sensor'])], self::ALIAS_TOO_LONG],
+            'three hundred characters' => [[Query::max('value', \str_repeat('a', 300))], self::ALIAS_TOO_LONG],
+            'an invalid character' => [[Query::sum('value', 'bad-alias')], 'Invalid query: Invalid aggregate alias'],
+            'a leading digit' => [[Query::sum('value', '1abc')], 'Invalid query: Invalid aggregate alias'],
+        ];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('rejectedAliasProvider')]
+    public function testFindRejectsAnInvalidAggregateAlias(array $queries, string $message): void
+    {
+        $this->assertFailsWith(
+            QueryException::class,
+            $message,
+            fn () => $this->database()->find(self::COLLECTION, $queries),
+        );
     }
 
     private static function engineError(string $state, int $code, string $message): PDOException

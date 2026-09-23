@@ -16,6 +16,8 @@ class Aggregate extends Base
 {
     use JoinedAttributes;
 
+    public const int MAX_ALIAS_LENGTH = 63;
+
     private const ALIAS_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/';
 
     private const array NUMERIC_METHODS = [
@@ -99,6 +101,12 @@ class Aggregate extends Base
 
         if ($alias !== null && (! \is_string($alias) || \preg_match(self::ALIAS_PATTERN, $alias) !== 1)) {
             $this->message = 'Invalid aggregate alias';
+
+            return false;
+        }
+
+        if (\is_string($alias) && \strlen($alias) > self::MAX_ALIAS_LENGTH) {
+            $this->message = 'Aggregate alias is too long: at most '.self::MAX_ALIAS_LENGTH.' characters are allowed';
 
             return false;
         }

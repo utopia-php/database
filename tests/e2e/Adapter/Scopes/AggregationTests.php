@@ -1959,6 +1959,52 @@ trait AggregationTests
         $database->deleteCollection($collection);
     }
 
+    public function testAggregateAliasesAreLimitedToSixtyThreeCharacters(): void
+    {
+        $database = static::getDatabase();
+
+        $collection = 'alias_length';
+        $this->createProducts($database, $collection);
+
+        $longest = \str_repeat('a', 63);
+        $tooLong = \str_repeat('a', 64);
+
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, [Query::sum('price', $tooLong)]),
+            'Invalid query: Aggregate alias is too long: at most 63 characters are allowed',
+        );
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, [Query::count('*', $tooLong), Query::groupBy(['category'])]),
+            'Invalid query: Aggregate alias is too long: at most 63 characters are allowed',
+        );
+
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $database->deleteCollection($collection);
+
+            return;
+        }
+
+        $total = $database->find($collection, [Query::sum('price', $longest)]);
+        $this->assertCount(1, $total);
+        $this->assertSame([$longest], \array_keys($total[0]->getArrayCopy()));
+        $this->assertSame(2785, $this->intAttribute($total[0], $longest));
+
+        if ($database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+            $grouped = $database->find($collection, [Query::bitOr('price', $longest), Query::groupBy(['category']), Query::orderAsc('category')]);
+            $this->assertSame(
+                [['books', 63], ['clothing', 126], ['electronics', 2036]],
+                \array_map(fn (Document $row): array => [$row->getAttribute('category'), $this->intAttribute($row, $longest)], $grouped),
+            );
+
+            $none = $database->find($collection, [Query::equal('category', ['nonexistent']), Query::bitAnd('price', $longest)]);
+            $this->assertCount(1, $none);
+            $this->assertSame([$longest], \array_keys($none[0]->getArrayCopy()));
+            $this->assertNull($none[0]->getAttribute($longest));
+        }
+
+        $database->deleteCollection($collection);
+    }
+
     private function createScores(Database $database, string $collection): void
     {
         if ($database->exists($database->getDatabase(), $collection)) {

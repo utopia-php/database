@@ -1424,6 +1424,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             );
             $this->applyFullOuterJoinOrderProjection(
                 $left,
+                $collectionDoc,
                 $alias,
                 $orderAttributes,
                 $orderTypes,
@@ -1456,6 +1457,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             );
             $this->applyFullOuterJoinOrderProjection(
                 $right,
+                $collectionDoc,
                 $alias,
                 $orderAttributes,
                 $orderTypes,
@@ -3750,18 +3752,35 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * The projection of a join without a select: every column of the main table, and under each join
+     * alias the joined collection's `$id` and the attributes the Database layer handed over for it.
+     * A joined table's internal columns are returned only when a select names them.
+     *
      * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
-     * @return list<string>
      */
-    private function starProjection(array $joinTablePrefixes, string $alias): array
+    private function applyJoinProjection(SQLBuilder $builder, Document $collection, array $joinTablePrefixes, string $alias): void
     {
-        $columns = [];
-        foreach ($joinTablePrefixes as $join) {
-            $columns[] = $this->filter($join['alias']).'.*';
-        }
-        $columns[] = $this->filter($alias).'.*';
+        $builder->select([$this->filter($alias).'.*']);
 
-        return $columns;
+        $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
+        $selections = [];
+        foreach ($joinTablePrefixes as $join) {
+            $selections[] = $join['alias'].'.'.Document::ID;
+
+            $attributes = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? []) : [];
+            foreach (\is_array($attributes) ? $attributes : [] as $attribute) {
+                if (\is_string($attribute) && $attribute !== '') {
+                    $selections[] = $join['alias'].'.'.$attribute;
+                }
+            }
+        }
+
+        $this->applySelectionProjection(
+            $builder,
+            $selections,
+            includeInternal: false,
+            joinAliases: \array_column($joinTablePrefixes, 'alias'),
+        );
     }
 
     /**
@@ -4103,7 +4122,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 );
                 $hasSelectionProjection = true;
             } elseif (! empty($joinTablePrefixes)) {
-                $builder->select($this->starProjection($joinTablePrefixes, $alias));
+                $this->applyJoinProjection($builder, $collection, $joinTablePrefixes, $alias);
+                $hasSelectionProjection = true;
             }
         }
 
@@ -4335,6 +4355,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     private function applyFullOuterJoinOrderProjection(
         SQLBuilder $builder,
+        Document $collection,
         string $alias,
         array $orderAttributes,
         array $orderTypes,
@@ -4355,11 +4376,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if (! $hasSelectionProjection) {
-            $builder->select(
-                empty($joinTablePrefixes)
-                    ? ['*']
-                    : $this->starProjection($joinTablePrefixes, $alias)
-            );
+            if (empty($joinTablePrefixes)) {
+                $builder->select(['*']);
+            } else {
+                $this->applyJoinProjection($builder, $collection, $joinTablePrefixes, $alias);
+            }
         }
 
         $joinAliases = \array_column($joinTablePrefixes, 'alias');
@@ -4643,23 +4664,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     private function remapRow(array &$row): void
     {
-        $identityColumns = [
-            Storage::UID => true,
-            Storage::SEQUENCE => true,
-            Storage::PERMISSIONS => true,
-            Storage::CREATED_AT => true,
-            Storage::UPDATED_AT => true,
-            Storage::COLLECTION => true,
-            Storage::TENANT => true,
-            Document::ID => true,
-            Document::SEQUENCE => true,
-            Document::PERMISSIONS => true,
-            Document::CREATED_AT => true,
-            Document::UPDATED_AT => true,
-            Document::COLLECTION => true,
-            Document::TENANT => true,
-        ];
-
         foreach (\array_keys($row) as $key) {
             if (\is_int($key)) {
                 unset($row[$key]);
@@ -4681,10 +4685,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $bare = \trim(\substr($key, $separator + 1), '`"');
             $public = Storage::attribute($bare);
             $dotted = $prefix.'.'.$public;
-            $identity = isset($identityColumns[$bare]);
-            $mainAlias = $prefix === Query::DEFAULT_ALIAS;
 
-            if ($bare !== '' && ! \array_key_exists($bare, $row) && (! $identity || $mainAlias)) {
+            if ($prefix === Query::DEFAULT_ALIAS && $bare !== '' && ! \array_key_exists($bare, $row)) {
                 $row[$bare] = $row[$key];
             }
 

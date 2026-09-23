@@ -27,6 +27,33 @@ class Attribute extends Document
     private const string PERSISTED_BIG_INTEGER = 'bigint';
 
     /**
+     * The column types an attribute can be stored as. Object, spatial and vector attributes also need
+     * the adapter to support them.
+     *
+     * @var list<ColumnType>
+     */
+    public const array TYPES = [
+        ColumnType::String,
+        ColumnType::Varchar,
+        ColumnType::Text,
+        ColumnType::MediumText,
+        ColumnType::LongText,
+        ColumnType::Integer,
+        ColumnType::BigInteger,
+        ColumnType::Float,
+        ColumnType::Double,
+        ColumnType::Boolean,
+        ColumnType::Datetime,
+        ColumnType::Id,
+        ColumnType::Relationship,
+        ColumnType::Object,
+        ColumnType::Point,
+        ColumnType::Linestring,
+        ColumnType::Polygon,
+        ColumnType::Vector,
+    ];
+
+    /**
      * @param  array<string, mixed>  $formatOptions
      * @param  array<string>  $filters
      * @param  array<string, mixed>|null  $options
@@ -45,7 +72,7 @@ class Attribute extends Document
         ?string $status = null,
         ?array $options = null,
     ) {
-        if (\in_array($type, [ColumnType::BigInteger, ColumnType::BigSerial], true)) {
+        if ($type === ColumnType::BigInteger) {
             $size = 0;
         }
 
@@ -1268,6 +1295,35 @@ class Attribute extends Document
         }
 
         return $type === self::PERSISTED_BIG_INTEGER ? ColumnType::BigInteger : ColumnType::tryFrom($type);
+    }
+
+    /**
+     * The types in {@see self::TYPES} that the given capabilities make available, in table order.
+     *
+     * @return list<ColumnType>
+     */
+    public static function availableTypes(bool $objects, bool $spatial, bool $vectors): array
+    {
+        return \array_values(\array_filter(
+            self::TYPES,
+            fn (ColumnType $type): bool => match (true) {
+                $type === ColumnType::Object => $objects,
+                self::isSpatialType($type) => $spatial,
+                $type === ColumnType::Vector => $vectors,
+                default => true,
+            },
+        ));
+    }
+
+    public static function isSpatialType(ColumnType|string $type): bool
+    {
+        $type = self::tryNormalizeType($type);
+
+        return \in_array($type, [
+            ColumnType::Point,
+            ColumnType::Linestring,
+            ColumnType::Polygon,
+        ], true);
     }
 
     public static function isNumericType(ColumnType|string $type): bool

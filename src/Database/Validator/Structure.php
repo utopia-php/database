@@ -362,7 +362,7 @@ class Structure extends Validator
             // BIGINT accepts both PHP int and numeric strings.
             // If the numeric string is within PHP's int range, normalize it to an int
             // so downstream code gets a numeric value without precision loss.
-            if (\in_array($columnType, [ColumnType::BigInteger, ColumnType::BigSerial], true) && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
+            if ($columnType === ColumnType::BigInteger && \is_string($value) && BigInt::fitsPhpInt($value, $signed)) {
                 $normalized = (int)$value;
                 $document->setAttribute($key, $normalized);
                 $value = $normalized;
@@ -409,7 +409,6 @@ class Structure extends Validator
                     break;
 
                 case ColumnType::BigInteger:
-                case ColumnType::BigSerial:
                     $validators[] = new BigInt($signed, $this->supportUnsignedBigInt);
                     break;
 

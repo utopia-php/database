@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Change;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -108,6 +109,27 @@ final class MongoFilterScopeTest extends TestCase
             $this->assertSame(
                 ['$in' => ['read("any")', 'read("users")', 'read("user:bob")']],
                 $filters[Storage::PERMISSIONS] ?? null,
+            );
+        }
+    }
+
+    public function testMetadataReadsFilterDefinitionsByReadPermission(): void
+    {
+        $adapter = $this->createAdapter();
+        $metadata = new Document(['$id' => Database::METADATA]);
+
+        $adapter->find($metadata);
+        $adapter->count($metadata);
+        $adapter->sum($metadata, 'count');
+
+        $reads = [...($this->filters['find'] ?? []), ...($this->filters['aggregate'] ?? [])];
+        $this->assertCount(3, $reads);
+        foreach ($reads as $filters) {
+            $this->assertSame(['$in' => [self::TENANT, null]], $filters[Storage::TENANT] ?? null);
+            $this->assertSame(
+                ['$in' => ['read("any")', 'read("users")', 'read("user:bob")']],
+                $filters[Storage::PERMISSIONS] ?? null,
+                'Collection definitions are listed under their own read permissions',
             );
         }
     }

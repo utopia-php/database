@@ -14,6 +14,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Mongo\Client;
 
 class MongoDBTest extends Base
@@ -145,6 +146,40 @@ class MongoDBTest extends Base
             }
         } finally {
             $database->setTenant($tenant)->setTenantPerDocument($tenantPerDocument);
+        }
+    }
+
+    public function testPooledDefinitionsAreListedUnderTheirReadPermissions(): void
+    {
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $tenant = $database->getTenant();
+        $roles = $authorization->getRoles();
+
+        try {
+            $database->setTenant(null);
+            $database->createCollection(new Collection(id: 'pooledDefinition', permissions: [Permission::read(Role::any())]));
+            $database->createCollection(new Collection(id: 'pooledAdminDefinition', permissions: [Permission::read(Role::user('admin'))]));
+
+            $database->setTenant(1);
+            $database->createCollection(new Collection(id: 'ownedDefinition', permissions: [Permission::read(Role::any())]));
+
+            $database->setTenant(990);
+            $authorization->cleanRoles();
+            $authorization->addRole(Role::any()->toString());
+            $queries = [Query::equal('$id', ['pooledDefinition', 'pooledAdminDefinition', 'ownedDefinition'])];
+
+            $this->assertSame(
+                ['pooledDefinition'],
+                \array_map(fn (Document $definition) => $definition->getId(), $database->find(Database::METADATA, $queries)),
+            );
+            $this->assertSame(1, $database->count(Database::METADATA, $queries));
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+            $database->setTenant($tenant);
         }
     }
 

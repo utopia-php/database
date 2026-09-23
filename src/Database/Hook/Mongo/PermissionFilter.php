@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Hook\Mongo;
 
-use Utopia\Database\Database;
 use Utopia\Database\Hook\Read;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Storage;
@@ -38,10 +37,6 @@ class PermissionFilter implements Read
     public function applyFilters(array $filters, string $collection, PermissionType $forPermission): array
     {
         if (! $this->authorization->getStatus()) {
-            return $filters;
-        }
-
-        if ($collection === Database::METADATA) {
             return $filters;
         }
 

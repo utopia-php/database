@@ -311,11 +311,14 @@ class Mirror extends Database
     }
 
     /**
+     * Silences the source, where lifecycle hooks are registered, and the mirror itself,
+     * where decorators are.
+     *
      * {@inheritdoc}
      */
-    public function silent(callable $callback): mixed
+    public function silent(callable $callback, ?array $listeners = null): mixed
     {
-        return $this->source->silent($callback);
+        return parent::silent(fn () => $this->source->silent($callback, $listeners), $listeners);
     }
 
     /**

@@ -19,6 +19,7 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\Named;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Profiler\QueryProfiler;
@@ -274,6 +275,9 @@ class Database
 
     /** @var array<int, int> Lifecycle silence depth by coroutine id. */
     protected array $silencedEvents = [];
+
+    /** @var array<int, array<string, true>> Names of the silenced lifecycle hooks by coroutine id. */
+    protected array $silencedListeners = [];
 
     /** @var array<int, array<string, string>> Pending query-cache tombstones by coroutine id. */
     protected array $queryCacheMutations = [];
@@ -1357,7 +1361,8 @@ class Database
      * Register a hook into the database pipeline.
      *
      * Dispatches by type:
-     * - {@see Hook\Lifecycle} — fire-and-forget side effects (auditing, logging)
+     * - {@see Hook\Lifecycle} — side effects on database events (auditing, logging); a
+     *   {@see Named} one replaces the lifecycle hook registered under its name
      * - {@see Hook\Decorator} — document transformation on read/write results
      * - {@see Hook\Relationships} — relationship resolution and mutation
      * - {@see Hook\Write} — row-level write interception (permissions, tenant)
@@ -1373,7 +1378,7 @@ class Database
                 ));
                 $this->queryCacheInvalidator = $hook;
             } else {
-                $this->lifecycleHooks[] = $hook;
+                $this->registerLifecycleHook($hook);
             }
         }
 
@@ -1394,6 +1399,21 @@ class Database
         }
 
         return $this;
+    }
+
+    private function registerLifecycleHook(Lifecycle $hook): void
+    {
+        if ($hook instanceof Named) {
+            foreach ($this->lifecycleHooks as $index => $registered) {
+                if ($registered instanceof Named && $registered->getName() === $hook->getName()) {
+                    $this->lifecycleHooks[$index] = $hook;
+
+                    return;
+                }
+            }
+        }
+
+        $this->lifecycleHooks[] = $hook;
     }
 
     /**
@@ -1443,15 +1463,22 @@ class Database
     }
 
     /**
-     * Silence lifecycle hooks for calls inside the callback.
+     * Silence lifecycle hooks for calls inside the callback: every hook, or only the
+     * {@see Named} hooks listed. A nested silence never narrows the one around it, and
+     * silences are scoped to the calling coroutine.
      *
      * @template T
      *
      * @param  callable(): T  $callback
+     * @param  array<string>|null  $listeners  Names of the hooks to silence; null silences every hook
      * @return T
      */
-    public function silent(callable $callback): mixed
+    public function silent(callable $callback, ?array $listeners = null): mixed
     {
+        if ($listeners !== null) {
+            return $this->silenceListeners($callback, $listeners);
+        }
+
         $context = $this->getEventContext();
         $this->silencedEvents[$context] = ($this->silencedEvents[$context] ?? 0) + 1;
 
@@ -1463,6 +1490,30 @@ class Database
                 unset($this->silencedEvents[$context]);
             } else {
                 $this->silencedEvents[$context] = $depth;
+            }
+        }
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @param  array<string>  $listeners
+     * @return T
+     */
+    private function silenceListeners(callable $callback, array $listeners): mixed
+    {
+        $context = $this->getEventContext();
+        $previous = $this->silencedListeners[$context] ?? [];
+        $this->silencedListeners[$context] = $previous + \array_fill_keys($listeners, true);
+
+        try {
+            return $callback();
+        } finally {
+            if ($previous === []) {
+                unset($this->silencedListeners[$context]);
+            } else {
+                $this->silencedListeners[$context] = $previous;
             }
         }
     }
@@ -2668,18 +2719,33 @@ class Database
      */
     protected function triggerHooks(Event $event, mixed $data = null): void
     {
-
-        if ($this->areEventsSilenced()) {
-            return;
-        }
-
-        foreach ($this->lifecycleHooks as $hook) {
+        foreach ($this->getActiveLifecycleHooks() as $hook) {
             try {
                 $hook->handle($event, $data);
             } catch (Throwable) {
                 // Lifecycle hooks must not break business logic
             }
         }
+    }
+
+    /**
+     * @return array<Lifecycle>
+     */
+    private function getActiveLifecycleHooks(): array
+    {
+        if ($this->areEventsSilenced()) {
+            return [];
+        }
+
+        $silenced = $this->silencedListeners[$this->getEventContext()] ?? [];
+        if ($silenced === []) {
+            return $this->lifecycleHooks;
+        }
+
+        return \array_filter(
+            $this->lifecycleHooks,
+            static fn (Lifecycle $hook): bool => ! $hook instanceof Named || ! isset($silenced[$hook->getName()]),
+        );
     }
 
     /**

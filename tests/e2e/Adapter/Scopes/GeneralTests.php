@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use PDOException;
 use Redis;
+use RedisException;
 use ReflectionProperty;
 use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
@@ -28,6 +29,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Mirror;
 use Utopia\Database\PDO;
 use Utopia\Database\Query;
 
@@ -469,38 +471,76 @@ trait GeneralTests
         $collection = 'cacheFallback_'.uniqid();
 
         $database->createCollection(new Collection(id: $collection, attributes: [
-            Attribute::string(key: 'title', size: 128, required: true),
+            Attribute::string(key: 'string', size: 767, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
         ]));
 
         $database->createDocument($collection, new Document([
             '$id' => 'doc1',
-            'title' => 'hello',
+            'string' => 'text📝',
         ]));
 
-        $this->assertCount(1, $database->find($collection));
+        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['string']));
+        $this->assertCount(1, $database->find($collection, [Query::equal('string', ['text📝'])]));
 
-        $brokenRedis = $this->createStub(\Redis::class);
-        $brokenRedis->method('get')->willThrowException(new \RedisException('gone'));
-        $brokenRedis->method('set')->willThrowException(new \RedisException('gone'));
-        $brokenRedis->method('del')->willThrowException(new \RedisException('gone'));
-        $brokenRedis->method('expire')->willThrowException(new \RedisException('gone'));
+        // Stopping the shared Redis container would also fail every test paratest runs alongside this one,
+        // so the outage is a client whose every command fails the way a lost server does.
+        $unreachable = $this->createStub(Redis::class);
+        foreach (['hGet', 'hSet', 'hKeys', 'eval', 'evalSha', 'flushDB', 'dbSize', 'ping'] as $command) {
+            $unreachable->method($command)->willThrowException(new RedisException('Redis server redis:6379 went away'));
+        }
 
-        $brokenAdapter = new \Utopia\Cache\Adapter\Redis($brokenRedis);
-        $brokenAdapter->setMaxRetries(0);
-        $originalCache = $database->getCache();
-        $database->setCache(new \Utopia\Cache\Cache($brokenAdapter));
+        $original = $database->getCache();
+        $destination = $database instanceof Mirror ? $database->getDestination() : null;
+        $destinationCache = $destination?->getCache();
 
-        $doc = $database->getDocument($collection, 'doc1');
-        $this->assertFalse($doc->isEmpty());
-        $this->assertEquals('hello', $doc->getAttribute('title'));
+        $database->setCache(new Cache((new RedisAdapter($unreachable))->setMaxRetries(0)));
 
-        $results = $database->find($collection);
-        $this->assertCount(1, $results);
+        try {
+            $this->assertCount(1, $database->find($collection, [Query::equal('string', ['text📝'])]));
+            $this->assertSame('text📝', $database->getDocument($collection, 'doc1')->getAttribute('string'));
 
-        $database->setCache($originalCache);
+            try {
+                $database->updateDocument($collection, 'doc1', new Document([
+                    'string' => 'text📝 updated',
+                ]));
+                $this->fail('Updating a document must fail while its cache entry cannot be invalidated');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(RedisException::class, $e);
+                $this->assertSame('Redis server redis:6379 went away', $e->getMessage());
+            }
+
+            try {
+                $database->deleteDocument($collection, 'doc1');
+                $this->fail('Deleting a document must fail while its cache entry cannot be invalidated');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(RedisException::class, $e);
+                $this->assertSame('Redis server redis:6379 went away', $e->getMessage());
+            }
+
+            $this->assertSame('text📝', $database->getDocument($collection, 'doc1')->getAttribute('string'));
+        } finally {
+            $database->setCache($original);
+            if ($destination !== null && $destinationCache !== null) {
+                $destination->setCache($destinationCache);
+            }
+        }
+
+        $this->assertCount(1, $database->find($collection, [Query::equal('string', ['text📝'])]));
+
+        $updated = $database->updateDocument($collection, 'doc1', new Document([
+            'string' => 'text📝 updated',
+        ]));
+        $this->assertSame('text📝 updated', $updated->getAttribute('string'));
+        $this->assertSame('text📝 updated', $database->getDocument($collection, 'doc1')->getAttribute('string'));
+
+        $this->assertTrue($database->deleteDocument($collection, 'doc1'));
+        $this->assertTrue($database->getDocument($collection, 'doc1')->isEmpty());
+
         $database->deleteCollection($collection);
     }
 

@@ -39,7 +39,6 @@ use Utopia\Query\Schema\ColumnType;
  */
 class Database
 {
-    use Traits\Async;
     use Traits\Attributes;
     use Traits\Collections;
     use Traits\Databases;

@@ -350,11 +350,17 @@ trait Attributes
             Document::COLLECTION => self::METADATA,
         ]));
 
-        $this->triggerHooks(Event::AttributesCreate, \array_map(
+        $createdAttributes = \array_map(
             static fn (Attribute $attribute): Document => $attribute->toDocument()
                 ->setAttribute(Document::COLLECTION, $collection->getId()),
             $attributeModels,
-        ));
+        );
+
+        foreach ($createdAttributes as $createdAttribute) {
+            $this->triggerHooks(Event::AttributeCreate, $createdAttribute);
+        }
+
+        $this->triggerHooks(Event::AttributesCreate, $createdAttributes);
 
         return true;
     }

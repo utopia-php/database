@@ -539,6 +539,46 @@ trait CollectionTests
         }
     }
 
+    public function testLabels(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $reader = Role::label('reader')->toString();
+
+        $database->createCollection(new Collection(id: 'labels_test'));
+        $this->assertTrue($database->createAttribute('labels_test', Attribute::string(key: 'attr1', size: 10)));
+
+        $database->createDocument('labels_test', new Document([
+            '$id' => 'doc1',
+            'attr1' => 'value1',
+            '$permissions' => [
+                Permission::read(Role::label('reader')),
+            ],
+        ]));
+
+        $withoutLabel = $database->find('labels_test');
+        $this->assertSame([], $withoutLabel);
+        $this->assertTrue($database->getDocument('labels_test', 'doc1')->isEmpty());
+
+        $authorization->addRole($reader);
+
+        try {
+            $withLabel = $database->find('labels_test');
+            $this->assertCount(1, $withLabel);
+            $this->assertSame('doc1', $withLabel[0]->getId());
+            $this->assertSame('value1', $database->getDocument('labels_test', 'doc1')->getAttribute('attr1'));
+        } finally {
+            $authorization->removeRole($reader);
+        }
+
+        $labelRemoved = $database->find('labels_test');
+        $this->assertSame([], $labelRemoved);
+        $this->assertTrue($database->getDocument('labels_test', 'doc1')->isEmpty());
+
+        $database->deleteCollection('labels_test');
+    }
+
     public function testDeleteCollectionDeletesRelationships(): void
     {
         /** @var Database $database */

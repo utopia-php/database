@@ -4821,6 +4821,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
+        // Over the derived table a bare name that is also an aggregate alias names the aggregate, so an
+        // aggregate over a main-table attribute of that name reads it qualified, as the halves project it.
+        $mainAttributes = [];
+        /** @var array<Document> $collectionAttributes */
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+        foreach ($collectionAttributes as $attribute) {
+            $mainAttributes[$attribute->getId()] = true;
+        }
+        foreach ($aggregationQueries as $index => $query) {
+            $attribute = $query->getAttribute();
+            if ($query->getMethod()->isAggregate() && isset($aggregateAliases[$attribute], $mainAttributes[$attribute])) {
+                $aggregationQueries[$index] = (clone $query)->setAttribute($alias.'.'.$attribute);
+            }
+        }
+
         $joinAliases = \array_column($joinTablePrefixes, 'alias');
         $aggregation = $this->createBuilder();
         // The halves carry every tenant and permission condition of the read. The aggregation reads only

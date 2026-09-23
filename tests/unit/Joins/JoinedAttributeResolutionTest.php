@@ -3,7 +3,9 @@
 namespace Tests\Unit\Joins;
 
 use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\NativeFullOuterJoinSQLite;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -31,7 +33,86 @@ final class JoinedAttributeResolutionTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $this->useDatabase(new SQLite(new PDO('sqlite::memory:')));
+    }
+
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function fullOuterJoinModes(): iterable
+    {
+        yield 'emulated full outer join' => [false];
+        yield 'native full outer join' => [true];
+    }
+
+    /**
+     * The same rule holds over a full outer join, whose aggregation runs once over both halves of the
+     * emulation on engines without one: an order without a customer counts towards the joined
+     * attribute and a customer attribute stays on the main table.
+     */
+    #[DataProvider('fullOuterJoinModes')]
+    public function testBareAttributesResolveTheSameWayOverAFullOuterJoin(bool $native): void
+    {
+        if ($native) {
+            $this->useDatabase(new NativeFullOuterJoinSQLite(new PDO('sqlite::memory:')));
+        }
+        $this->createDocument('orders', 'stray', ['customerId' => 'ghost', 'amount' => 9, 'status' => 'lost', 'memo' => 'no customer']);
+        $purchases = Query::fullOuterJoin('orders', '$id', 'customerId', '=', 'purchase');
+
+        foreach ([true, false] as $validate) {
+            $mode = $validate ? 'validated' : 'unvalidated';
+
+            $totals = $this->findCustomers($validate, [$purchases, Query::sum('amount', 'total'), Query::sum('visits', 'visits'), Query::count('$id', 'customers'), Query::count('*', 'rows')]);
+            $this->assertCount(1, $totals, $mode);
+            $this->assertSame(166, $totals[0]->getAttribute('total'), $mode.': a bare joined attribute sums every order, the one without a customer included');
+            $this->assertSame(4, $totals[0]->getAttribute('visits'), $mode.': a bare main attribute stays on the main table, even aggregated under its own name');
+            $this->assertSame(3, $totals[0]->getAttribute('customers'), $mode.': $id counts the rows that have a customer');
+            $this->assertSame(4, $totals[0]->getAttribute('rows'), $mode);
+
+            $byStatus = [];
+            foreach ($this->findCustomers($validate, [$purchases, Query::sum('amount', 'total'), Query::groupBy(['status'])]) as $group) {
+                $status = $group->getAttribute('status');
+                $this->assertIsString($status, $mode);
+                $byStatus[$status] = $group->getAttribute('total');
+            }
+            \ksort($byStatus);
+            $this->assertSame(['lost' => 9, 'open' => 50, 'paid' => 107], $byStatus, $mode.': a bare groupBy attribute groups by the join that declares it');
+
+            foreach ([
+                'Attribute "amount" is ambiguous across joins; qualify it with a join alias' => [
+                    Query::fullOuterJoin('orders', '$id', 'customerId', '=', 'alpha'),
+                    Query::join('refunds', '$id', 'customerId', '=', 'beta'),
+                    Query::sum('amount', 'total'),
+                ],
+                'Attribute not found in schema: also_anything' => [
+                    $purchases,
+                    Query::sum('also_anything', 'total'),
+                ],
+            ] as $message => $queries) {
+                try {
+                    $this->findCustomers($validate, $queries);
+                    $this->fail("{$mode}: a bare attribute that cannot be resolved was bound: {$message}");
+                } catch (QueryException $error) {
+                    $this->assertStringEndsWith($message, $error->getMessage(), $mode);
+                }
+            }
+        }
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @return array<Document>
+     */
+    private function findCustomers(bool $validate, array $queries): array
+    {
+        return $validate
+            ? $this->database->find('customers', $queries)
+            : $this->database->skipValidation(fn (): array => $this->database->find('customers', $queries));
+    }
+
+    private function useDatabase(SQLite $adapter): void
+    {
+        $this->database = new Database($adapter, new Cache(new NoCache()));
         $this->database
             ->setDatabase('joined_attributes')
             ->setNamespace('joined_attributes_'.\uniqid())

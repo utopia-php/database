@@ -14,6 +14,7 @@ use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -722,11 +723,25 @@ class Database
     }
 
     /**
-     * Get a utopia-php/query Builder for a collection, pre-configured with
-     * attribute mapping, tenant filtering, and permission hooks.
+     * Get a utopia-php/query Builder over a collection's table, for statements the document API
+     * cannot express. Its statements run as written: they check no permissions, read past and never
+     * purge the document and query caches (purgeCachedDocument() what they change), keep no `_perms`
+     * rows, validate nothing and run no hooks or events, so a Mirror does not replicate them. It is
+     * therefore only handed out, and its statements only run, while authorization is disabled:
+     * inside getAuthorization()->skip().
+     *
+     * Skipping authorization lifts permissions, never tenancy: under shared tables every statement
+     * stays within the tenant selected when the builder was handed out (see SQL::getBuilder() for
+     * what that covers). Another tenant's rows are read by selecting that tenant, with setTenant()
+     * or withTenant().
+     *
+     * @throws AuthorizationException While authorization is enabled
+     * @throws DatabaseException When the adapter has no query builder
      */
     public function from(string $collection): \Utopia\Query\Builder
     {
+        $this->requireSkippedAuthorization();
+
         if (! $this->adapter->hasFeature(Feature\QueryBuilder::class)) {
             throw new DatabaseException('Query builder is not supported by this adapter');
         }
@@ -753,10 +768,16 @@ class Database
     }
 
     /**
-     * @return array<Document>|int
+     * Run a statement as written, with everything from() says it bypasses; a builder runs its SELECT.
+     *
+     * @return array<Document>|int The rows a read returns, or how many rows a write changed
+     * @throws AuthorizationException While authorization is enabled
+     * @throws DatabaseException When the adapter cannot run raw statements
      */
     public function execute(\Utopia\Query\Builder|\Utopia\Query\Builder\Statement $query): array|int
     {
+        $this->requireSkippedAuthorization();
+
         if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
@@ -768,6 +789,16 @@ class Database
         }
 
         return $this->adapter->rawMutation($result->query, $result->bindings);
+    }
+
+    /**
+     * @throws AuthorizationException
+     */
+    private function requireSkippedAuthorization(): void
+    {
+        if ($this->authorization->getStatus()) {
+            throw new AuthorizationException('The query builder bypasses permissions, caches and events: build and run it inside getAuthorization()->skip()');
+        }
     }
 
     public function setTypeRegistry(?TypeRegistry $typeRegistry): static

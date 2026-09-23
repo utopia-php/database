@@ -106,6 +106,26 @@ final class QueryShapeDatabaseTest extends TestCase
                 [Query::sum('amount', 'total'), Query::groupBy(['status']), Query::having([Query::or([Query::greaterThan('total', 10), Query::lessThan('total', 1)])])],
                 'Invalid query: Aggregate alias "total" can only be compared at the top level of having',
             ],
+            'sum of a string attribute' => [
+                [Query::sum('status', 'total')],
+                'Invalid query: Aggregate sum requires a numeric attribute that is not an array: status',
+            ],
+            'standard deviation of a string attribute' => [
+                [Query::stddev('status', 'spread')],
+                'Invalid query: Aggregate stddev requires a numeric attribute that is not an array: status',
+            ],
+            'average of a boolean attribute' => [
+                [Query::avg('paid', 'mean')],
+                'Invalid query: Aggregate avg requires a numeric attribute that is not an array: paid',
+            ],
+            'bitwise and of a double attribute' => [
+                [Query::bitAnd('rating', 'bits')],
+                'Invalid query: Aggregate bitAnd requires an integer attribute that is not an array: rating',
+            ],
+            'minimum of every row' => [
+                [Query::min('*', 'least')],
+                'Invalid query: Only count can aggregate "*"',
+            ],
         ];
     }
 

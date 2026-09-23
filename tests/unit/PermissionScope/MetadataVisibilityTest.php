@@ -26,6 +26,31 @@ use Utopia\Database\Validator\Authorization;
  */
 final class MetadataVisibilityTest extends TestCase
 {
+    public function testListCollectionsReturnsOnlyReadableDefinitions(): void
+    {
+        $database = $this->database();
+        $database->create();
+        $database->createCollection(new Collection(id: 'public', permissions: [Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: 'private', permissions: [Permission::read(Role::user('admin'))]));
+        $database->createCollection(new Collection(id: 'unlisted', permissions: [Permission::create(Role::any())]));
+
+        $authorization = $database->getAuthorization();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        $this->assertSame(['public'], $this->ids($database->listCollections()));
+        $this->assertSame(['public'], $this->ids($database->find(Database::METADATA)));
+        $this->assertSame(1, $database->count(Database::METADATA), 'count() and find() must agree on the metadata collection');
+
+        $authorization->addRole(Role::user('admin')->toString());
+
+        $this->assertSame(['private', 'public'], $this->ids($database->listCollections()));
+        $this->assertSame(2, $database->count(Database::METADATA));
+
+        $everything = $authorization->skip(fn (): array => $database->listCollections());
+        $this->assertSame(['private', 'public', 'unlisted'], $this->ids($everything));
+    }
+
     public function testTenantlessDefinitionsStayReadableFromEveryTenantOfASharedPool(): void
     {
         $database = $this->database();

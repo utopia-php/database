@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\GroupBy;
@@ -163,6 +164,51 @@ final class JoinedColumnTest extends TestCase
             Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.nothing', ['x'])]),
         ]));
         $this->assertSame('Invalid query: Attribute not found in schema: note.nothing', $validator->getDescription());
+    }
+
+    public function testDocumentQueriesCheckJoinConditionsAgainstTheJoinedCollection(): void
+    {
+        $validator = new DocumentQueries($this->attributes());
+        $validator->setJoinedCollections([$this->notes()]);
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('notes', 'note', [
+                Query::on('$id', 'customerId'),
+                Query::or([Query::equal('note.body', ['x']), Query::equal('note.$id', ['y'])]),
+                Query::greaterThan('$sequence', 1),
+            ]),
+            Query::select(['name', 'note.body', 'note.$permissions']),
+        ]), $validator->getDescription());
+
+        foreach ([
+            'an unknown joined column' => [Query::equal('note.nothing', ['x']), 'Invalid query: Attribute not found in schema: note.nothing'],
+            'the joined permissions' => [Query::equal('note.$permissions', ['x']), 'Invalid query: Attribute not found in schema: note.$permissions'],
+            'a value the main attribute cannot hold' => [Query::equal('visits', ['many']), 'Invalid query: Query value is invalid for attribute "visits"'],
+            'an unknown column in a logical group' => [Query::or([Query::equal('note.body', ['x']), Query::equal('note.nothing', ['y'])]), 'Invalid query: Attribute not found in schema: note.nothing'],
+        ] as $label => [$condition, $message]) {
+            $this->assertFalse($validator->isValid([
+                Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), $condition]),
+            ]), $label);
+            $this->assertSame($message, $validator->getDescription(), $label);
+        }
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]),
+            Query::select(['note.nothing']),
+        ]));
+        $this->assertSame('Invalid query: Attribute not found in schema: note.nothing', $validator->getDescription());
+    }
+
+    public function testDocumentQueriesKeepRejectingTopLevelFilters(): void
+    {
+        $validator = new DocumentQueries($this->attributes());
+        $validator->setJoinedCollections([$this->notes()]);
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]),
+            Query::equal('note.body', ['x']),
+        ]));
+        $this->assertSame('Invalid query method: equal', $validator->getDescription());
     }
 
     private static function join(): Query

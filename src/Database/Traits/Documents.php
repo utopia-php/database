@@ -347,7 +347,20 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = new DocumentValidator($attributes, $this->adapter->supports(Capability::DefinedAttributes));
+            $joinedCollections = $this->resolveJoinedCollections($queries);
+            $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
+            $validator = $joinedCollections === []
+                ? new DocumentValidator($attributes, $supportForAttributes)
+                : new DocumentValidator(
+                    attributes: $attributes,
+                    supportForAttributes: $supportForAttributes,
+                    idAttributeType: $this->adapter->getIdAttributeType(),
+                    maxValuesCount: $this->maxQueryValues,
+                    minAllowedDate: $this->adapter->getMinDateTime(),
+                    maxAllowedDate: $this->adapter->getMaxDateTime(),
+                    supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+                );
+            $validator->setJoinedCollections($joinedCollections);
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
             }

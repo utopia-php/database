@@ -66,7 +66,8 @@ class PermissionFilter implements Filter, JoinFilter
             throw new InvalidArgumentException('Invalid permissions table name: '.$permTable);
         }
 
-        $quotedPermTable = $this->quoteTableIdentifier($permTable);
+        $quotedPermTable = AllowNullColumn::quote($permTable, $this->quoteChar);
+        $quotedDocumentColumn = AllowNullColumn::quote($this->documentColumn, $this->quoteChar);
 
         $rolePlaceholders = \implode(', ', \array_fill(0, \count($this->roles), '?'));
 
@@ -92,7 +93,7 @@ class PermissionFilter implements Filter, JoinFilter
         }
 
         return new Condition(
-            "{$this->documentColumn} IN (SELECT DISTINCT {$this->permDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permRoleColumn} IN ({$rolePlaceholders}) AND {$this->permTypeColumn} = ?{$columnClause}{$subFilterClause})",
+            "{$quotedDocumentColumn} IN (SELECT DISTINCT {$this->permDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permRoleColumn} IN ({$rolePlaceholders}) AND {$this->permTypeColumn} = ?{$columnClause}{$subFilterClause})",
             [...$this->roles, $this->type, ...$columnBindings, ...$subFilterBindings],
         );
     }
@@ -105,14 +106,5 @@ class PermissionFilter implements Filter, JoinFilter
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
         return null;
-    }
-
-    private function quoteTableIdentifier(string $table): string
-    {
-        $q = $this->quoteChar;
-        $parts = \explode('.', $table);
-        $quoted = \array_map(fn (string $part): string => $q.\str_replace($q, $q.$q, $part).$q, $parts);
-
-        return \implode('.', $quoted);
     }
 }

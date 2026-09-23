@@ -4518,7 +4518,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $preserving = $chain->hasPreservingOuterJoin();
 
         if ($this->sharedTables && $preserving) {
-            $tenantFilter = new TenantFilter($this->tenant);
+            $tenantFilter = new TenantFilter($this->tenant, quoteChar: $this->getIdentifierQuoteChar());
             $tenantConditions = [];
             foreach ($joinTablePrefixes as $join) {
                 $tenantConditions[$join['alias']] = $tenantFilter->joined($join['alias']);

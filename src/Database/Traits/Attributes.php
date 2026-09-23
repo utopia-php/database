@@ -383,7 +383,7 @@ trait Attributes
         ?array $schemaAttributes = null
     ): Attribute {
         $type = Attribute::normalizeType($type)->value;
-        if ($type === ColumnType::BigInteger->value || $type === ColumnType::BigSerial->value) {
+        if ($type === ColumnType::BigInteger->value) {
             $size = 0;
         }
 
@@ -505,7 +505,6 @@ trait Attributes
                 }
                 break;
             case ColumnType::BigInteger:
-            case ColumnType::BigSerial:
                 if (! (new BigInt($signed, $this->adapter->supports(Capability::UnsignedBigInt)))->isValid($default)) {
                     throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
                 }
@@ -517,7 +516,6 @@ trait Attributes
                 }
                 break;
             case ColumnType::Datetime:
-            case ColumnType::Timestamp:
                 if ($defaultType !== ColumnType::String->value) {
                     throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
                 }
@@ -529,28 +527,39 @@ trait Attributes
                 }
                 break;
             default:
-                $supportedTypes = [
-                    ColumnType::String->value,
-                    ColumnType::Varchar->value,
-                    ColumnType::Text->value,
-                    ColumnType::MediumText->value,
-                    ColumnType::LongText->value,
-                    ColumnType::Integer->value,
-                    ColumnType::BigInteger->value,
-                    ColumnType::Float->value,
-                    ColumnType::Double->value,
-                    ColumnType::Boolean->value,
-                    ColumnType::Datetime->value,
-                    ColumnType::Relationship->value,
-                ];
-                if ($this->adapter->supports(Capability::Vectors)) {
-                    $supportedTypes[] = ColumnType::Vector->value;
-                }
-                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
-                    \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
-                }
-                throw new DatabaseException('Unknown attribute type: '.$type->value.'. Must be one of '.implode(', ', $supportedTypes));
+                throw \in_array($type, Attribute::TYPES, true)
+                    ? new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value)
+                    : $this->unknownType($type->value);
         }
+    }
+
+    private function unknownType(string $type): DatabaseException
+    {
+        $availableTypes = Attribute::availableTypes(
+            objects: $this->adapter->supports(Capability::Objects),
+            spatial: $this->adapter->hasFeature(Feature\Spatial::class),
+            vectors: $this->adapter->supports(Capability::Vectors),
+        );
+
+        return new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.\implode(', ', \array_map(
+            fn (ColumnType $available): string => $available->value,
+            $availableTypes,
+        )));
+    }
+
+    private function typeValidator(): AttributeValidator
+    {
+        return new AttributeValidator(
+            attributes: [],
+            maxStringLength: $this->adapter->getLimitForString(),
+            maxVarcharLength: $this->adapter->getMaxVarcharLength(),
+            maxIntLength: $this->adapter->getLimitForInt(),
+            maxBigIntLength: $this->adapter->getLimitForBigInt(),
+            supportForVectors: $this->adapter->supports(Capability::Vectors),
+            supportForSpatialAttributes: $this->adapter->hasFeature(Feature\Spatial::class),
+            supportForObject: $this->adapter->supports(Capability::Objects),
+            supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+        );
     }
 
     /**
@@ -799,7 +808,7 @@ trait Attributes
             $filters = \is_array($rawFilters) ? $rawFilters : null;
         }
 
-        if ($type === ColumnType::BigInteger->value || $type === ColumnType::BigSerial->value) {
+        if ($type === ColumnType::BigInteger->value) {
             $size = 0;
         }
 
@@ -845,8 +854,8 @@ trait Attributes
                     throw new DatabaseException('Max size allowed for int is: '.number_format($limit));
                 }
                 break;
+            case ColumnType::Id->value:
             case ColumnType::BigInteger->value:
-            case ColumnType::BigSerial->value:
                 break;
             case ColumnType::Float->value:
             case ColumnType::Double->value:
@@ -907,28 +916,10 @@ trait Attributes
                     }
                 }
                 break;
+            case ColumnType::Relationship->value:
+                throw new DatabaseException('Cannot update relationship as an attribute');
             default:
-                $supportedTypes = [
-                    ColumnType::String->value,
-                    ColumnType::Varchar->value,
-                    ColumnType::Text->value,
-                    ColumnType::MediumText->value,
-                    ColumnType::LongText->value,
-                    ColumnType::Integer->value,
-                    ColumnType::BigInteger->value,
-                    ColumnType::Float->value,
-                    ColumnType::Double->value,
-                    ColumnType::Boolean->value,
-                    ColumnType::Datetime->value,
-                    ColumnType::Relationship->value,
-                ];
-                if ($this->adapter->supports(Capability::Vectors)) {
-                    $supportedTypes[] = ColumnType::Vector->value;
-                }
-                if ($this->adapter->hasFeature(Feature\Spatial::class)) {
-                    \array_push($supportedTypes, ...[ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value]);
-                }
-                throw new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.implode(', ', $supportedTypes));
+                throw $this->unknownType($type);
         }
 
         /** Ensure required filters for the attribute are passed */

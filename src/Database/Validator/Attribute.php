@@ -148,10 +148,10 @@ class Attribute extends Validator
         if (! $this->checkFormat($attr)) {
             return false;
         }
-        if (! $this->checkAttributeLimits($attr)) {
+        if (! $this->checkType($attr)) {
             return false;
         }
-        if (! $this->checkType($attr)) {
+        if (! $this->checkAttributeLimits($attr)) {
             return false;
         }
         if (! $this->checkDefaultValue($attr)) {
@@ -337,8 +337,6 @@ class Attribute extends Validator
                 break;
 
             case ColumnType::Integer:
-            case ColumnType::Serial:
-            case ColumnType::SmallSerial:
                 $limit = ($signed) ? $this->maxIntLength / 2 : $this->maxIntLength;
                 if ($size > $limit) {
                     $this->message = 'Max size allowed for int is: '.number_format($limit);
@@ -347,12 +345,10 @@ class Attribute extends Validator
                 break;
 
             case ColumnType::BigInteger:
-            case ColumnType::BigSerial:
             case ColumnType::Float:
             case ColumnType::Double:
             case ColumnType::Boolean:
             case ColumnType::Datetime:
-            case ColumnType::Timestamp:
             case ColumnType::Relationship:
                 break;
 
@@ -426,30 +422,15 @@ class Attribute extends Validator
                 break;
 
             default:
-                $supportedTypes = [
-                    ColumnType::String->value,
-                    ColumnType::Varchar->value,
-                    ColumnType::Text->value,
-                    ColumnType::MediumText->value,
-                    ColumnType::LongText->value,
-                    ColumnType::Integer->value,
-                    ColumnType::BigInteger->value,
-                    ColumnType::Float->value,
-                    ColumnType::Double->value,
-                    ColumnType::Boolean->value,
-                    ColumnType::Datetime->value,
-                    ColumnType::Relationship->value,
-                ];
-                if ($this->supportForVectors) {
-                    $supportedTypes[] = ColumnType::Vector->value;
-                }
-                if ($this->supportForSpatialAttributes) {
-                    \array_push($supportedTypes, ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value);
-                }
-                if ($this->supportForObject) {
-                    $supportedTypes[] = ColumnType::Object->value;
-                }
-                $this->message = 'Unknown attribute type: '.$type->value.'. Must be one of '.implode(', ', $supportedTypes);
+                $availableTypes = AttributeVO::availableTypes(
+                    objects: $this->supportForObject,
+                    spatial: $this->supportForSpatialAttributes,
+                    vectors: $this->supportForVectors,
+                );
+                $this->message = 'Unknown attribute type: '.$type->value.'. Must be one of '.\implode(', ', \array_map(
+                    fn (ColumnType $available): string => $available->value,
+                    $availableTypes,
+                ));
                 throw new DatabaseException($this->message);
         }
 

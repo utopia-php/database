@@ -63,6 +63,11 @@ trait Collections
             }
         }
 
+        $typeValidator = $this->typeValidator();
+        foreach ($attributes as $attribute) {
+            $typeValidator->checkType($attribute);
+        }
+
         if ($this->validate) {
             $validator = new Permissions();
             if (! $validator->isValid($permissions)) {
@@ -177,18 +182,6 @@ trait Collections
                 $this->adapter->getAttributeWidth($collection) > $this->adapter->getDocumentSizeLimit()
             ) {
                 throw new LimitException('Document size limit of '.$this->adapter->getDocumentSizeLimit().' exceeded. Cannot create collection.');
-            }
-        }
-
-        if ($this->validate) {
-            $supportsSpatial = $this->adapter->hasFeature(Feature\Spatial::class);
-            foreach ($attributes as $attribute) {
-                if (
-                    \in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)
-                    && ! $supportsSpatial
-                ) {
-                    throw new DatabaseException('Spatial attributes are not supported');
-                }
             }
         }
 

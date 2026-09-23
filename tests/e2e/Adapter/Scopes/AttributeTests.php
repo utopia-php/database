@@ -543,6 +543,65 @@ trait AttributeTests
         ]));
     }
 
+    public function testUnstorableColumnTypesAreRejectedUpFront(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'unstorable_column_types';
+        $database->createCollection(new Collection(id: $collection));
+
+        foreach ([ColumnType::Json, ColumnType::Timestamp, ColumnType::BigSerial] as $type) {
+            $message = 'Unknown attribute type: '.$type->value.'.';
+            $inline = $collection.'_'.$type->value;
+
+            try {
+                $database->createAttribute($collection, new Attribute(key: 'value', type: $type));
+                $this->fail('Expected createAttribute() to reject '.$type->value);
+            } catch (DatabaseException $error) {
+                $this->assertStringContainsString($message, $error->getMessage());
+            }
+
+            try {
+                $database->createCollection(new Collection(id: $inline, attributes: [new Attribute(key: 'value', type: $type)]));
+                $this->fail('Expected createCollection() to reject '.$type->value);
+            } catch (DatabaseException $error) {
+                $this->assertStringContainsString($message, $error->getMessage());
+            }
+
+            $this->assertTrue($database->getCollection($inline)->isEmpty());
+        }
+
+        $this->assertSame([], $database->getCollection($collection)->attributes);
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testIdAttributeCanBeUpdated(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'id_attribute_update';
+        $database->createCollection(new Collection(id: $collection));
+        $this->assertTrue($database->createAttribute($collection, Attribute::id(key: 'reference')));
+        $database->createDocument($collection, new Document([
+            '$id' => 'one',
+            '$permissions' => [Permission::read(Role::any())],
+            'reference' => '7',
+        ]));
+
+        $updated = $database->updateAttribute($collection, 'reference', newKey: 'target');
+
+        $this->assertSame('target', $updated->getAttribute('key'));
+        $type = $updated->getAttribute('type');
+        $this->assertTrue($type instanceof ColumnType || \is_string($type));
+        $this->assertSame(ColumnType::Id, Attribute::normalizeType($type));
+        $this->assertSame('7', $database->getDocument($collection, 'one')->getAttribute('target'));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testRequiredOnlyChangeKeepsDatetimeColumnsWritable(): void
     {
         /** @var Database $database */

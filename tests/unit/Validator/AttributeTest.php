@@ -99,20 +99,6 @@ class AttributeTest extends TestCase
         ));
     }
 
-    public function testBigSerialUsesBigIntegerValidation(): void
-    {
-        $validator = new Attribute(attributes: []);
-        $attribute = new AttributeVO(
-            key: 'sequence',
-            type: ColumnType::BigSerial,
-            size: 999,
-            default: PHP_INT_MAX,
-        );
-
-        $this->assertTrue($validator->isValid($attribute));
-        $this->assertSame(0, $attribute->size);
-    }
-
     public function test_duplicate_attribute_id(): void
     {
         $validator = new Attribute(

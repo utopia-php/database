@@ -1917,7 +1917,6 @@ class Database
         $boolType = ColumnType::Boolean->value;
         $intType = ColumnType::Integer->value;
         $bigIntType = ColumnType::BigInteger->value;
-        $bigSerialType = ColumnType::BigSerial->value;
         $floatType = ColumnType::Float->value;
         $doubleType = ColumnType::Double->value;
 
@@ -1941,7 +1940,6 @@ class Database
                 || $typeKey === $boolType
                 || $typeKey === $intType
                 || $typeKey === $bigIntType
-                || $typeKey === $bigSerialType
                 || $typeKey === $floatType
                 || $typeKey === $doubleType;
             if (! $needsCast) {
@@ -1970,8 +1968,7 @@ class Database
                     ColumnType::Id->value => (string) $node,
                     ColumnType::Boolean->value => (bool) $node,
                     ColumnType::Integer->value => (int) $node,
-                    ColumnType::BigInteger->value,
-                    ColumnType::BigSerial->value => $this->castBigInteger($node, $signed),
+                    ColumnType::BigInteger->value => $this->castBigInteger($node, $signed),
                     ColumnType::Float->value,
                     ColumnType::Double->value => (float) $node,
                     default => $node,

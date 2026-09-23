@@ -18,7 +18,7 @@ class SpatialFilterTest extends TestCase
      */
     private function createDatabase(array $point): Database
     {
-        $adapter = $this->createMock(MariaDB::class);
+        $adapter = $this->createStub(MariaDB::class);
         $adapter->method('hasFeature')->willReturnCallback(
             static fn (string $feature): bool => $feature === Spatial::class,
         );

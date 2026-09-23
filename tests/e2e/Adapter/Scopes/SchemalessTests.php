@@ -8,9 +8,11 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -34,6 +36,13 @@ trait SchemalessTests
         $this->assertInstanceOf(Document::class, $value);
 
         return $value;
+    }
+
+    private function assertSameInstant(string $expected, string $actual): void
+    {
+        $parsed = date_create($actual);
+        $this->assertInstanceOf(\DateTime::class, $parsed, "\"{$actual}\" must parse as a datetime");
+        $this->assertSame((new \DateTime($expected))->getTimestamp(), $parsed->getTimestamp());
     }
 
     public function testSchemalessDocumentOperation(): void
@@ -836,6 +845,111 @@ trait SchemalessTests
 
         $database->deleteCollection($col);
         $database->getAuthorization()->cleanRoles();
+    }
+
+    public function testSchemalessInternalAttributes(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionId = uniqid('sl_internal_full');
+        $database->createCollection(new Collection(id: $collectionId));
+
+        try {
+            $document = $database->createDocument($collectionId, new Document([
+                '$id' => 'i1',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                'name' => 'alpha',
+            ]));
+
+            $this->assertSame('i1', $document->getId());
+            $this->assertSame($collectionId, $document->getCollection());
+            $this->assertNotEmpty($document->getSequence());
+            $this->assertNotEmpty($document->getAttribute('$createdAt'));
+            $this->assertNotEmpty($document->getAttribute('$updatedAt'));
+            $permissions = $document->getPermissions();
+            $this->assertGreaterThanOrEqual(1, count($permissions));
+            $this->assertContains(Permission::read(Role::any()), $permissions);
+            $this->assertContains(Permission::update(Role::any()), $permissions);
+            $this->assertContains(Permission::delete(Role::any()), $permissions);
+
+            $internalAttributes = ['$id', '$sequence', '$collection', '$createdAt', '$updatedAt', '$permissions'];
+
+            $selected = $database->getDocument($collectionId, 'i1', [
+                Query::select(['name', ...$internalAttributes]),
+            ]);
+            $this->assertSame('alpha', $selected->getAttribute('name'));
+            foreach ($internalAttributes as $attribute) {
+                $this->assertArrayHasKey($attribute, $selected);
+            }
+
+            $found = $database->find($collectionId, [
+                Query::equal('$id', ['i1']),
+                Query::select($internalAttributes),
+            ]);
+            $this->assertCount(1, $found);
+            foreach ($internalAttributes as $attribute) {
+                $this->assertArrayHasKey($attribute, $found[0]);
+            }
+
+            $bySequence = $database->find($collectionId, [Query::equal('$sequence', [$document->getSequence()])]);
+            $this->assertCount(1, $bySequence);
+            $this->assertSame('i1', $bySequence[0]->getId());
+
+            $createdAtBefore = $document->getAttribute('$createdAt');
+            $updatedAtBefore = $document->getAttribute('$updatedAt');
+            $updated = $database->updateDocument($collectionId, 'i1', new Document(['name' => 'beta']));
+            $this->assertSame('beta', $updated->getAttribute('name'));
+            $this->assertSame($createdAtBefore, $updated->getAttribute('$createdAt'));
+            $this->assertNotSame($updatedAtBefore, $updated->getAttribute('$updatedAt'));
+
+            $changed = $database->updateDocument($collectionId, 'i1', new Document(['$id' => 'i1-new']));
+            $this->assertSame('i1-new', $changed->getId());
+            $this->assertSame('i1-new', $database->getDocument($collectionId, 'i1-new')->getId());
+            $this->assertTrue($database->getDocument($collectionId, 'i1')->isEmpty(), 'The renamed document must no longer be readable by its old $id');
+
+            try {
+                $database->updateDocument($collectionId, 'i1-new', new Document(['$permissions' => 'invalid']));
+                $this->fail('Failed to throw exception');
+            } catch (\Throwable $exception) {
+                $this->assertInstanceOf(StructureException::class, $exception);
+            }
+
+            $database->setPreserveDates(true);
+            $customCreated = '2000-01-01T00:00:00.000+00:00';
+            $customUpdated = '2000-01-02T00:00:00.000+00:00';
+            $preserved = $database->createDocument($collectionId, new Document([
+                '$id' => 'i2',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                '$createdAt' => $customCreated,
+                '$updatedAt' => $customUpdated,
+                'v' => 1,
+            ]));
+            $this->assertSame($customCreated, $preserved->getAttribute('$createdAt'));
+            $this->assertSame($customUpdated, $preserved->getAttribute('$updatedAt'));
+
+            $newUpdated = '2000-01-03T00:00:00.000+00:00';
+            $preservedUpdate = $database->updateDocument($collectionId, 'i2', new Document([
+                'v' => 2,
+                '$updatedAt' => $newUpdated,
+            ]));
+            $this->assertSame($customCreated, $preservedUpdate->getAttribute('$createdAt'));
+            $this->assertSame($newUpdated, $preservedUpdate->getAttribute('$updatedAt'));
+        } finally {
+            $database->setPreserveDates(false);
+            $database->deleteCollection($collectionId);
+        }
     }
 
     public function testSchemalessDates(): void
@@ -2183,6 +2297,78 @@ trait SchemalessTests
         $database->deleteCollection($col2);
     }
 
+    public function testSchemalessTTLIndexDuplicatePrevention(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionId = uniqid('sl_ttl_dup');
+        $database->createCollection(new Collection(id: $collectionId));
+
+        $assertRejected = function (callable $create, string $case): void {
+            try {
+                $create();
+                $this->fail("Expected exception for {$case}");
+            } catch (DatabaseException $exception) {
+                $this->assertStringContainsString('There can be only one TTL index in a collection', $exception->getMessage(), $case);
+            }
+        };
+
+        $indexIds = fn (): array => array_map(fn (Index $index) => $index->getId(), $database->getCollection($collectionId)->indexes);
+
+        try {
+            $this->assertTrue(
+                $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_expires', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600))
+            );
+
+            $assertRejected(
+                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_expires_duplicate', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200)),
+                'a second TTL index on the same attribute',
+            );
+            $assertRejected(
+                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 86400)),
+                'a second TTL index on another attribute',
+            );
+
+            $this->assertSame(['idx_ttl_expires'], $indexIds());
+
+            $assertRejected(
+                fn () => $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted_duplicate', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 172800)),
+                'a second TTL index after earlier rejections',
+            );
+
+            $this->assertTrue($database->deleteIndex($collectionId, 'idx_ttl_expires'));
+
+            $this->assertTrue(
+                $database->createIndex($collectionId, Index::ttl(key: 'idx_ttl_deleted', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 1800))
+            );
+
+            $this->assertSame(['idx_ttl_deleted'], $indexIds());
+
+            $collectionWithTwoTTLIndexes = uniqid('sl_ttl_dup_collection');
+            $assertRejected(
+                fn () => $database->createCollection(new Collection(
+                    id: $collectionWithTwoTTLIndexes,
+                    attributes: [Attribute::datetime(key: 'expiresAt', signed: false, filters: ['datetime'])],
+                    indexes: [
+                        Index::ttl(key: 'idx_ttl_1', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 3600),
+                        Index::ttl(key: 'idx_ttl_2', attributes: ['expiresAt'], orders: [Order::Asc], ttl: 7200),
+                    ],
+                )),
+                'two TTL indexes in createCollection',
+            );
+            $this->assertTrue($database->getCollection($collectionWithTwoTTLIndexes)->isEmpty(), 'A rejected collection must not be created');
+        } finally {
+            $database->deleteCollection($collectionId);
+        }
+    }
+
     public function testSchemalessDatetimeCreationAndFetching(): void
     {
         /** @var Database $database */
@@ -2594,13 +2780,13 @@ trait SchemalessTests
         $this->assertGreaterThanOrEqual(20, strlen($datetime1));
         $this->assertLessThanOrEqual(40, strlen($datetime1));
         // Verify it's a valid datetime by parsing
-        $parsed1 = new \DateTime($datetime1);
+        $this->assertSameInstant('2024-01-15T10:30:00.000+00:00', $datetime1);
 
         $doc2 = $database->getDocument($col, 'doc2');
         $this->assertEquals('doc2', $doc2->getId());
         $this->assertEquals('just a regular string', $doc2->getAttribute('str'));
         $datetime2 = $this->asString($doc2->getAttribute('datetime'));
-        $parsed2 = new \DateTime($datetime2);
+        $this->assertSameInstant('2024-02-20T14:45:30.123Z', $datetime2);
 
         $doc3 = $database->getDocument($col, 'doc3');
         $this->assertEquals('doc3', $doc3->getId());
@@ -2617,7 +2803,7 @@ trait SchemalessTests
         $this->assertEquals('doc4', $doc4->getId());
         $this->assertEquals('another string value', $doc4->getAttribute('str'));
         $datetime4 = $this->asString($doc4->getAttribute('datetime'));
-        $parsed4 = new \DateTime($datetime4);
+        $this->assertSameInstant('2024-12-31T23:59:59.999+00:00', $datetime4);
 
         $doc5 = $database->getDocument($col, 'doc5');
         $this->assertEquals('doc5', $doc5->getId());
@@ -2626,7 +2812,7 @@ trait SchemalessTests
         $this->assertGreaterThanOrEqual(20, strlen($str5));
         $this->assertLessThanOrEqual(40, strlen($str5));
         $datetime5 = $this->asString($doc5->getAttribute('datetime'));
-        $parsed5 = new \DateTime($datetime5);
+        $this->assertSameInstant('2024-06-15T12:00:00.000Z', $datetime5);
 
         // Verify all documents are present using simple find
         $allDocs = $database->find($col);
@@ -2731,7 +2917,7 @@ trait SchemalessTests
         $docDatetimeFuture = $database->getDocument($col, 'doc_datetime_future');
         $this->assertFalse($docDatetimeFuture->isEmpty());
         $expiresAt2 = $this->asString($docDatetimeFuture->getAttribute('expiresAt'));
-        $parsed2 = new \DateTime($expiresAt2);
+        $this->assertSameInstant($futureTime->format(\DateTime::ATOM), $expiresAt2);
 
         // Verify documents with random strings remain as strings
         $docStringRandom = $database->getDocument($col, 'doc_string_random');

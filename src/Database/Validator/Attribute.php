@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator;
 
+use stdClass;
 use Utopia\Database\Attribute as AttributeVO;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -17,6 +18,16 @@ use ValueError;
  */
 class Attribute extends Validator
 {
+    private const string JSON_FILTER = 'json';
+
+    private const array STRING_TYPES = [
+        ColumnType::String,
+        ColumnType::Varchar,
+        ColumnType::Text,
+        ColumnType::MediumText,
+        ColumnType::LongText,
+    ];
+
     protected string $message = 'Invalid attribute';
 
     /**
@@ -465,25 +476,48 @@ class Attribute extends Validator
             throw new DatabaseException($this->message);
         }
 
-        // Reject array defaults for non-array attributes. Vectors, spatial types,
-        // objects, and json-filtered strings store structured values as arrays.
-        if (
-            \is_array($default)
-            && ! $attribute->array
-            && ! \in_array($type, [ColumnType::Vector, ColumnType::Object, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)
-            && ! \in_array('json', $attribute->filters, true)
-        ) {
-            $this->message = 'Cannot set an array default value for a non-array attribute';
-            throw new DatabaseException($this->message);
+        if ($this->isJsonDocumentDefault($attribute)) {
+            $this->checkJsonEncodable($attribute);
+
+            return true;
         }
 
-        if (\in_array('json', $attribute->filters, true)) {
-            return true;
+        // Vectors, spatial types and objects store their values as arrays.
+        if (\is_array($default) && ! $attribute->array && ! \in_array($type, [ColumnType::Vector, ColumnType::Object, ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+            $this->message = 'Cannot set an array default value for a non-array attribute';
+            throw new DatabaseException($this->message);
         }
 
         $this->validateDefaultTypes($type, $default, $signed);
 
         return true;
+    }
+
+    /**
+     * The json filter writes arrays, stdClass objects and documents to a string column as their
+     * JSON encoding, so such a default is checked for encodability rather than against the column type.
+     */
+    private function isJsonDocumentDefault(AttributeVO $attribute): bool
+    {
+        $default = $attribute->default;
+
+        return \in_array(self::JSON_FILTER, $attribute->filters, true)
+            && ! $attribute->array
+            && \in_array($attribute->type, self::STRING_TYPES, true)
+            && (\is_array($default) || $default instanceof stdClass || $default instanceof Document);
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private function checkJsonEncodable(AttributeVO $attribute): void
+    {
+        $default = $attribute->default;
+
+        if (\json_encode($default instanceof Document ? $default->getArrayCopy() : $default) === false) {
+            $this->message = 'Default value of json attribute "'.$attribute->key.'" is not JSON-encodable: '.\json_last_error_msg();
+            throw new DatabaseException($this->message);
+        }
     }
 
     /**

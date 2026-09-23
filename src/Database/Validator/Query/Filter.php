@@ -81,6 +81,12 @@ class Filter extends Base
             $column = \substr($attribute, $dot + 1);
 
             if ($this->isJoinColumnReference($alias, $column)) {
+                if (isset($this->joinsByAlias[$alias]->encrypted[$column])) {
+                    $this->message = 'Cannot query encrypted attribute: '.$attribute;
+
+                    return false;
+                }
+
                 return ! $this->supportForAttributes || $this->isJoinedColumn($alias, $column);
             }
 

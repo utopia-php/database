@@ -44,6 +44,8 @@ use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Query\Aggregate;
+use Utopia\Database\Validator\Query\JoinedCollection;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -220,6 +222,7 @@ trait Documents
             $this->adapter->supports(Capability::UnsignedBigInt),
             $supportForJoins,
             $supportForAggregations,
+            $this->adapter->getSharedTables(),
         );
     }
 
@@ -240,7 +243,7 @@ trait Documents
             'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
         ]));
 
-        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.'::'.$fingerprint;
+        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.$fingerprint;
     }
 
     /**
@@ -350,7 +353,7 @@ trait Documents
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
             $validator = $joinedCollections === []
-                ? new DocumentValidator($attributes, $supportForAttributes)
+                ? new DocumentValidator($attributes, $supportForAttributes, sharedTables: $this->adapter->getSharedTables())
                 : new DocumentValidator(
                     attributes: $attributes,
                     supportForAttributes: $supportForAttributes,
@@ -359,6 +362,7 @@ trait Documents
                     minAllowedDate: $this->adapter->getMinDateTime(),
                     maxAllowedDate: $this->adapter->getMaxDateTime(),
                     supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
+                    sharedTables: $this->adapter->getSharedTables(),
                 );
             $validator->setJoinedCollections($joinedCollections);
             if (! $validator->isValid($queries)) {
@@ -3596,6 +3600,7 @@ trait Documents
 
         if ($this->validate) {
             $this->validateDocumentsQueries($collection, $queries);
+            $this->validateSumAttribute($collection, $attribute, $queries);
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3624,6 +3629,35 @@ trait Documents
         $this->trigger(Event::DocumentSum, $sum);
 
         return $sum;
+    }
+
+    /**
+     * sum() adds up what a sum aggregate adds up: a numeric attribute that is not an array, of the
+     * main collection or, under a join alias, of the collection that join reads.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException
+     */
+    private function validateSumAttribute(Document $collection, string $attribute, array $queries): void
+    {
+        /** @var array<Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        $validator = new Aggregate($attributes, $this->adapter->supports(Capability::DefinedAttributes), $this->adapter->getSharedTables());
+
+        if (\str_contains($attribute, '.')) {
+            $joins = [];
+            foreach ($queries as $query) {
+                if ($query->getMethod()->isJoin() && $query->getJoinAlias() !== '') {
+                    $joins[] = JoinedCollection::of($query->getJoinAlias(), $this->silent(fn () => $this->getCollection($query->getAttribute())));
+                }
+            }
+            $validator->allowJoins($joins);
+        }
+
+        if (! $validator->isValid(Query::sum($attribute))) {
+            throw new QueryException('Invalid query: '.$validator->getDescription());
+        }
     }
 
     /**

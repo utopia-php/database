@@ -2125,6 +2125,33 @@ trait AggregationTests
         $this->cleanupAggCollections($database, [$main, $joined]);
     }
 
+    public function testAggregateAliasNamingAnotherResultColumnIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'alias_result_columns';
+        $this->createProducts($database, $collection);
+
+        foreach ([
+            'Invalid query: Aggregate alias "category" is the name the groupBy attribute "category" is returned under' => [Query::count('*', 'category'), Query::groupBy(['category'])],
+            'Invalid query: Aggregate alias "total" is given to more than one aggregate' => [Query::count('*', 'total'), Query::sum('price', 'total')],
+        ] as $message => $queries) {
+            $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $queries), $message);
+        }
+
+        $results = $database->find($collection, [Query::count('*', 'products'), Query::sum('price', 'total'), Query::groupBy(['category']), Query::orderAsc('category')]);
+        $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $row): mixed => $row->getAttribute('category'), $results));
+        $this->assertSame([3, 3, 3], \array_map(fn (Document $row): int => $this->intAttribute($row, 'products'), $results));
+        $this->assertSame([85, 200, 2500], \array_map(fn (Document $row): int => $this->intAttribute($row, 'total'), $results));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testBitwiseAggregateUnderALongAliasLeavesAnotherAggregateItsValue(): void
     {
         $database = static::getDatabase();

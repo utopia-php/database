@@ -27,6 +27,7 @@ class Documents extends IndexedQueries
     /**
      * @param  array<Document>  $attributes
      * @param  array<Document>  $indexes
+     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      *
      * @throws \Utopia\Database\Exception
      */
@@ -42,6 +43,7 @@ class Documents extends IndexedQueries
         bool $supportUnsignedBigInt = true,
         bool $supportForJoins = false,
         bool $supportForAggregations = false,
+        bool $sharedTables = false,
     ) {
         $attributes[] = new Document([
             Document::ID => Document::ID,
@@ -82,18 +84,18 @@ class Documents extends IndexedQueries
                 $supportUnsignedBigInt
             ),
             new Order($attributes, $supportForAttributes),
-            new Select($attributes, $supportForAttributes),
+            new Select($attributes, $supportForAttributes, $sharedTables),
         ];
 
         if ($supportForJoins) {
-            $validators[] = new Join();
+            $validators[] = new Join($attributes, $supportForAttributes);
         }
 
         if ($supportForAggregations) {
             \array_push(
                 $validators,
-                new Aggregate($attributes, $supportForAttributes),
-                new GroupBy($attributes, $supportForAttributes),
+                new Aggregate($attributes, $supportForAttributes, $sharedTables),
+                new GroupBy($attributes, $supportForAttributes, $sharedTables),
                 new Having(),
                 new Distinct(),
             );

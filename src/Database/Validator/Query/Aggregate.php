@@ -3,10 +3,11 @@
 namespace Utopia\Database\Validator\Query;
 
 use Utopia\Database\Attribute;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 
 /**
@@ -50,9 +51,24 @@ class Aggregate extends Base
     protected array $numeric = [];
 
     /**
-     * @param  array<Document>  $attributes
+     * How many aggregates of the query set carry each alias.
+     *
+     * @var array<string, int>
      */
-    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
+    protected array $aliases = [];
+
+    /**
+     * The attribute each group of the query set is returned under, keyed by the name it takes.
+     *
+     * @var array<string, string>
+     */
+    protected array $groups = [];
+
+    /**
+     * @param  array<Document>  $attributes
+     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
+     */
+    public function __construct(array $attributes = [], protected bool $supportForAttributes = true, bool $sharedTables = false)
     {
         foreach ($attributes as $attribute) {
             $key = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
@@ -62,11 +78,49 @@ class Aggregate extends Base
             }
         }
 
-        foreach (Database::internalAttributes() as $attribute) {
-            $this->schema[$attribute->key] = true;
-        }
+        $this->schema += self::internalColumns($sharedTables);
 
         $this->numeric = self::numericTypes($attributes);
+    }
+
+    /**
+     * The aggregates of the query set: an alias names one column of the result, so no two of them
+     * can share it.
+     *
+     * @param  array<BaseQuery>  $aggregations
+     */
+    public function setAggregations(array $aggregations): void
+    {
+        $this->aliases = [];
+
+        foreach ($aggregations as $aggregation) {
+            $alias = $aggregation->getValue('');
+            if (\is_string($alias) && $alias !== '') {
+                $this->aliases[$alias] = ($this->aliases[$alias] ?? 0) + 1;
+            }
+        }
+    }
+
+    /**
+     * The attributes the query set groups by. Each group comes back under its column's name, the
+     * attribute's own name or, for an internal attribute, its column, so an alias cannot take it.
+     *
+     * @param  array<mixed>  $attributes
+     */
+    public function setGroupBy(array $attributes): void
+    {
+        $this->groups = [];
+
+        foreach ($attributes as $attribute) {
+            if (! \is_string($attribute) || $attribute === '') {
+                continue;
+            }
+
+            $dot = \strpos($attribute, '.');
+            $name = $dot === false ? $attribute : \substr($attribute, $dot + 1);
+            $this->groups[$name] ??= $attribute;
+            $this->groups[Storage::column($name)] ??= $attribute;
+        }
     }
 
     public function getMethodType(): string
@@ -107,6 +161,18 @@ class Aggregate extends Base
 
         if (\is_string($alias) && \strlen($alias) > self::MAX_ALIAS_LENGTH) {
             $this->message = 'Aggregate alias is too long: at most '.self::MAX_ALIAS_LENGTH.' characters are allowed';
+
+            return false;
+        }
+
+        if (\is_string($alias) && ($this->aliases[$alias] ?? 0) > 1) {
+            $this->message = 'Aggregate alias "'.$alias.'" is given to more than one aggregate';
+
+            return false;
+        }
+
+        if (\is_string($alias) && isset($this->groups[$alias])) {
+            $this->message = 'Aggregate alias "'.$alias.'" is the name the groupBy attribute "'.$this->groups[$alias].'" is returned under';
 
             return false;
         }

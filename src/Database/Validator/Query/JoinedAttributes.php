@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 
 /**
@@ -168,6 +169,24 @@ trait JoinedAttributes
         return \str_starts_with($column, '$')
             && $column !== Document::COLLECTION
             && $this->acceptsMainAttribute($column);
+    }
+
+    /**
+     * The internal attributes a table holds a column for: every one but `$collection`, which a read
+     * derives from the collection it reads, and `$tenant` only under shared tables.
+     *
+     * @return array<string, true>
+     */
+    protected static function internalColumns(bool $sharedTables): array
+    {
+        $columns = [];
+        foreach (Database::internalAttributes() as $attribute) {
+            if ($attribute->key !== Document::COLLECTION && ($sharedTables || $attribute->key !== Document::TENANT)) {
+                $columns[$attribute->key] = true;
+            }
+        }
+
+        return $columns;
     }
 
     abstract protected function isAllowedJoinColumn(string $column): bool;

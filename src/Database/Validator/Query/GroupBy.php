@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Validator\Query;
 
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 
@@ -20,8 +19,9 @@ class GroupBy extends Base
 
     /**
      * @param  array<Document>  $attributes
+     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      */
-    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
+    public function __construct(array $attributes = [], protected bool $supportForAttributes = true, bool $sharedTables = false)
     {
         foreach ($attributes as $attribute) {
             $key = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
@@ -31,9 +31,7 @@ class GroupBy extends Base
             }
         }
 
-        foreach (Database::internalAttributes() as $attribute) {
-            $this->schema[$attribute->key] = true;
-        }
+        $this->schema += self::internalColumns($sharedTables);
     }
 
     public function getMethodType(): string

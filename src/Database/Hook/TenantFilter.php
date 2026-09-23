@@ -27,7 +27,10 @@ class TenantFilter implements Filter, JoinFilter
      *                                                     tenant's rows rather than every tenant's
      * @param string $metadataCollection The metadata collection name; metadata tables allow NULL tenants
      * @param string $collection The actual collection/table name being queried (not the alias)
-     * @param string $allowNullColumn When set, unmatched outer-join rows keep a NULL tenant
+     * @param string $allowNullColumn When set, rows where this column is NULL also pass: the rows an
+     *                                outer join produced without a main-table match. It must be a
+     *                                NOT NULL column such as `_uid`, never `_tenant`, or a stored row
+     *                                that has no tenant would pass as if it were missing
      */
     public function __construct(
         int|string|null|array $tenant,
@@ -80,23 +83,37 @@ class TenantFilter implements Filter, JoinFilter
         return AllowNullColumn::wrap($condition, $this->allowNullColumn, $this->quoteChar);
     }
 
+    /**
+     * A condition in ON only limits what the joined table matches; one in WHERE runs after every
+     * join. When the query has a join that keeps unmatched rows - the main table is then relaxed
+     * through $allowNullColumn - a table filtered in WHERE may be missing from a row, and only a
+     * missing row may pass, never a stored row without a tenant: `_uid` is NOT NULL.
+     */
     public function filterJoin(string $table, JoinType $joinType): ?JoinCondition
     {
-        $condition = new Condition("{$table}.".Storage::TENANT." IN ({$this->placeholders()})", $this->tenants);
+        $placement = match ($joinType) {
+            JoinType::Left, JoinType::Inner => Placement::On,
+            default => Placement::Where,
+        };
 
-        if ($joinType === JoinType::FullOuter) {
+        $condition = $this->joined($table);
+
+        if ($placement === Placement::Where && ($joinType === JoinType::FullOuter || $this->allowNullColumn !== '')) {
             $condition = AllowNullColumn::wrap(
                 $condition,
-                $table.'.'.Storage::TENANT,
+                $table.'.'.Storage::UID,
                 $this->quoteChar,
             );
         }
 
-        $placement = match ($joinType) {
-            JoinType::Left => Placement::On,
-            default => Placement::Where,
-        };
-
         return new JoinCondition($condition, $placement);
+    }
+
+    /**
+     * The tenant condition of a joined table, before an outer join places or relaxes it.
+     */
+    public function joined(string $table): Condition
+    {
+        return new Condition("{$table}.".Storage::TENANT." IN ({$this->placeholders()})", $this->tenants);
     }
 }

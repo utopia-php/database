@@ -5744,4 +5744,102 @@ trait JoinTests
 
         $this->cleanupAggCollections($database, $cols);
     }
+
+    public function testJoinAliasesNeverCollide(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $first, $second] = $this->createAliasCollections($database);
+
+        $declaredFirst = $database->find($main, [
+            Query::join($first, '$id', 'mainId', '=', 'j1'),
+            Query::join($second, '$id', 'mainId'),
+            Query::select(['name', 'j1.score']),
+        ]);
+        $this->assertCount(1, $declaredFirst);
+        $this->assertSame(1, $this->scoreOf($declaredFirst[0], 'j1.score'));
+
+        $declaredLater = $database->find($main, [
+            Query::join($first, '$id', 'mainId'),
+            Query::join($second, '$id', 'mainId', '=', 'j0'),
+            Query::select(['name', 'j0.score']),
+        ]);
+        $this->assertCount(1, $declaredLater);
+        $this->assertSame(10, $this->scoreOf($declaredLater[0], 'j0.score'));
+
+        foreach ([
+            'the same alias twice' => [
+                Query::join($first, '$id', 'mainId', '=', 'x'),
+                Query::join($second, '$id', 'mainId', '=', 'x'),
+            ],
+            'the main collection alias' => [
+                Query::join($first, '$id', 'mainId', '=', Query::DEFAULT_ALIAS),
+            ],
+        ] as $label => $joins) {
+            $this->assertJoinQueryRejected(fn () => $database->find($main, $joins), "find with {$label}");
+            $this->assertJoinQueryRejected(fn () => $database->count($main, $joins), "count with {$label}");
+        }
+
+        $this->cleanupAggCollections($database, [$main, $first, $second]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function aliasCollections(): array
+    {
+        return ['jal_main', 'jal_first', 'jal_second'];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function createAliasCollections(Database $database): array
+    {
+        $collections = $this->aliasCollections();
+        [$main, $first, $second] = $collections;
+        $this->cleanupAggCollections($database, $collections);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $main, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($main, Attribute::string(key: 'name', size: 64, required: true));
+        foreach ([$first, $second] as $joined) {
+            $database->createCollection(new Collection(id: $joined, permissions: $permissions, documentSecurity: false));
+            $database->createAttribute($joined, Attribute::string(key: 'mainId', size: 64, required: true));
+            $database->createAttribute($joined, Attribute::integer(key: 'score', required: true));
+            $database->createAttribute($joined, Attribute::string(key: 'secret', size: 64, required: false));
+        }
+
+        $database->createDocument($main, new Document(['$id' => 'm1', 'name' => 'm1', '$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($first, new Document(['$id' => 'b1', 'mainId' => 'm1', 'score' => 1, 'secret' => 'first-secret', '$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($second, new Document(['$id' => 'c1', 'mainId' => 'm1', 'score' => 10, 'secret' => 'second-secret', '$permissions' => [Permission::read(Role::any())]]));
+
+        return $collections;
+    }
+
+    private function scoreOf(Document $document, string $key): ?int
+    {
+        $score = $document->getAttribute($key);
+
+        return \is_numeric($score) ? (int) $score : null;
+    }
+
+    /**
+     * @param  callable(): mixed  $query
+     */
+    private function assertJoinQueryRejected(callable $query, string $label): string
+    {
+        try {
+            $query();
+        } catch (QueryException $exception) {
+            return $exception->getMessage();
+        }
+
+        $this->fail("Accepted {$label}");
+    }
 }

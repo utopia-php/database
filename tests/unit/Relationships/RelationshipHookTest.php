@@ -264,6 +264,112 @@ final class RelationshipHookTest extends TestCase
     /**
      * @param  Closure(): Adapter  $adapter
      */
+    #[DataProvider('adapters')]
+    public function testLinkingAChildWithoutUpdatePermissionIsRejected(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('child', new Document(['$id' => 'updatable', '$permissions' => [Permission::update(Role::any())]]));
+        $database->createDocument('child', new Document(['$id' => 'readonly', '$permissions' => [Permission::update(Role::user('admin'))]]));
+
+        try {
+            $database->updateDocument('parent', 'parent1', new Document(['children' => ['updatable', 'readonly']]));
+            $this->fail('Linking a child the caller may not update must be rejected');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame('Missing "update" permission for role "user:admin". Only "["any"]" scopes are allowed and "["user:admin"]" was given.', $exception->getMessage());
+        }
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+
+        $database->getAuthorization()->addRole(self::ADMIN);
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => ['updatable', 'readonly']]));
+        $this->assertSame(['readonly', 'updatable'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAChildThroughANestedUpdateWithoutUpdatePermissionIsRejected(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+        $database->createCollection(new Collection(id: 'grandparent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::oneToOne(collection: 'grandparent', relatedCollection: 'parent', key: 'parent', onDelete: ForeignKeyAction::SetNull));
+
+        $database->createDocument('child', new Document(['$id' => 'readonly', '$permissions' => [Permission::update(Role::user('admin'))]]));
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('grandparent', new Document(['$id' => 'grandparent1', 'parent' => 'parent1']));
+
+        try {
+            $database->updateDocument('grandparent', 'grandparent1', new Document(['parent' => new Document(['$id' => 'parent1', 'children' => ['readonly']])]));
+            $this->fail('Linking a child the caller may not update must be rejected');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame('Missing "update" permission for role "user:admin". Only "["any"]" scopes are allowed and "["user:admin"]" was given.', $exception->getMessage());
+        }
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testRelinkingAnUnchangedChildNeedsOnlyReadPermission(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+            false,
+        );
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1', 'name' => 'before']));
+        $database->createDocument('child', new Document(['$id' => 'child1', 'parent' => 'parent1']));
+
+        $parent = $database->updateDocument('parent', 'parent1', new Document(['name' => 'after', 'children' => ['child1']]));
+
+        $this->assertSame('after', $parent->getAttribute('name'));
+        $this->assertSame(['child1'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testRelinkingKeepsAnUnchangedChildTheCallerMayNotUpdate(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('child', new Document(['$id' => 'linked', 'parent' => 'parent1', '$permissions' => [Permission::update(Role::user('admin'))]]));
+        $database->createDocument('child', new Document(['$id' => 'added', '$permissions' => [Permission::update(Role::any())]]));
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => ['linked', 'added']]));
+
+        $this->assertSame(['added', 'linked'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     private function database(Closure $adapter): Database
     {
         $authorization = new Authorization();

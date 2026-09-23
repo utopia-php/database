@@ -4109,4 +4109,200 @@ trait RelationshipTests
             $database->deleteCollection($children);
         }
     }
+
+    public function testLinkingARelatedDocumentWithoutUpdatePermissionIsRejected(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $database->createCollection(new Collection(id: $parents, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $children, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createRelationship(Relationship::oneToMany(
+            collection: $parents,
+            relatedCollection: $children,
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument($parents, new Document(['$id' => 'parent1']));
+        $database->createDocument($children, new Document([
+            '$id' => 'updatable',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+        ]));
+        $database->createDocument($children, new Document([
+            '$id' => 'readonly',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::user('linkAdmin'))],
+        ]));
+
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            try {
+                $database->updateDocument($parents, 'parent1', new Document(['children' => ['updatable', 'readonly']]));
+                $this->fail('Linking a child the caller may not update must be rejected');
+            } catch (AuthorizationException $exception) {
+                $this->assertSame('Missing "update" permission for role "user:linkAdmin". Only "["any"]" scopes are allowed and "["user:linkAdmin"]" was given.', $exception->getMessage());
+            }
+
+            $this->assertSame([], $database->getDocument($parents, 'parent1')->getAttribute('children'));
+            $this->assertNull($database->getDocument($children, 'updatable')->getAttribute('parent'));
+
+            $authorization->addRole(Role::user('linkAdmin')->toString());
+
+            $database->updateDocument($parents, 'parent1', new Document(['children' => ['updatable', 'readonly']]));
+
+            $linked = \array_map(fn (Document $child) => $child->getId(), $database->getDocument($parents, 'parent1')->getDocuments('children'));
+            \sort($linked);
+            $this->assertSame(['readonly', 'updatable'], $linked);
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
+    }
+
+    public function testLinkingARelatedDocumentThroughANestedUpdateWithoutUpdatePermissionIsRejected(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $grandparents = ID::unique();
+        $parents = ID::unique();
+        $children = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection(new Collection(id: $grandparents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $parents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $children, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: $grandparents,
+            relatedCollection: $parents,
+            key: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+        $database->createRelationship(Relationship::oneToMany(
+            collection: $parents,
+            relatedCollection: $children,
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument($children, new Document([
+            '$id' => 'readonly',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::user('nestedLinkAdmin'))],
+        ]));
+        $database->createDocument($parents, new Document(['$id' => 'parent1']));
+        $database->createDocument($grandparents, new Document(['$id' => 'grandparent1', 'parent' => 'parent1']));
+
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            try {
+                $database->updateDocument($grandparents, 'grandparent1', new Document([
+                    'parent' => new Document(['$id' => 'parent1', 'children' => ['readonly']]),
+                ]));
+                $this->fail('Linking a child the caller may not update must be rejected');
+            } catch (AuthorizationException $exception) {
+                $this->assertSame('Missing "update" permission for role "user:nestedLinkAdmin". Only "["any"]" scopes are allowed and "["user:nestedLinkAdmin"]" was given.', $exception->getMessage());
+            }
+
+            $this->assertSame([], $database->getDocument($parents, 'parent1')->getAttribute('children'));
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+
+            $database->deleteCollection($grandparents);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
+    }
+
+    public function testRelinkingAnUnchangedRelatedDocumentNeedsOnlyReadPermission(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $database->createCollection(new Collection(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $children, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+        $database->createRelationship(Relationship::oneToMany(
+            collection: $parents,
+            relatedCollection: $children,
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument($parents, new Document(['$id' => 'parent1', 'name' => 'before']));
+        $database->createDocument($children, new Document(['$id' => 'child1', 'parent' => 'parent1']));
+
+        $parent = $database->updateDocument($parents, 'parent1', new Document(['name' => 'after', 'children' => ['child1']]));
+
+        $this->assertSame('after', $parent->getAttribute('name'));
+        $this->assertSame(['child1'], \array_map(fn (Document $child) => $child->getId(), $database->getDocument($parents, 'parent1')->getDocuments('children')));
+
+        $database->deleteCollection($parents);
+        $database->deleteCollection($children);
+    }
 }

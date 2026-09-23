@@ -7,6 +7,7 @@ use Utopia\Async\Promise;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
@@ -16,10 +17,12 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship as RelationshipVO;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Query\Hook;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -527,29 +530,22 @@ class Relationships implements Hook
                             }
 
                             if (! empty($stringRelations)) {
-                                $existingIds = [];
+                                $unlinkedIds = [];
                                 foreach (\array_chunk($stringRelations, $this->relationQueryChunkSize()) as $chunk) {
-                                    $existing = $this->db->skipRelationships(
+                                    $unlinked = $this->db->skipRelationships(
                                         fn () => $this->db->find($relatedCollection->getId(), [
                                             Query::select([Document::ID]),
                                             Query::equal(Document::ID, $chunk),
+                                            $this->notReferencing($twoWayKey, $document->getId()),
                                             Query::limit(\count($chunk)),
                                         ])
                                     );
-                                    foreach ($existing as $doc) {
-                                        $existingIds[] = $doc->getId();
+                                    foreach ($unlinked as $related) {
+                                        $unlinkedIds[] = $related->getId();
                                     }
                                 }
 
-                                if (! empty($existingIds)) {
-                                    foreach (\array_chunk($existingIds, $this->relationQueryChunkSize()) as $chunk) {
-                                        $this->db->skipRelationships(fn () => $this->db->updateDocuments(
-                                            $relatedCollection->getId(),
-                                            new Document([$twoWayKey => $document->getId()]),
-                                            [Query::equal(Document::ID, $chunk)],
-                                        ));
-                                    }
-                                }
+                                $this->linkRelatedDocuments($relatedCollection, $twoWayKey, $document->getId(), $unlinkedIds);
                             }
 
                             foreach ($documentRelations as $relation) {
@@ -2154,6 +2150,81 @@ class Relationships implements Hook
                 $this->db->deleteDocument($collection, $related->getId());
             }
         }
+    }
+
+    /**
+     * Point $twoWayKey on the related documents with the given IDs at $documentId.
+     *
+     * updateDocuments() leaves out every document the caller may not update,
+     * so a chunk that comes back short is finished one document at a time
+     * through linkRelatedDocument().
+     *
+     * @param  array<string>  $ids
+     */
+    private function linkRelatedDocuments(Document $collection, string $twoWayKey, string $documentId, array $ids): void
+    {
+        foreach (\array_chunk(\array_values(\array_unique($ids)), $this->relationQueryChunkSize()) as $chunk) {
+            $linked = $this->db->skipRelationships(fn () => $this->db->updateDocuments(
+                $collection->getId(),
+                new Document([$twoWayKey => $documentId]),
+                [Query::equal(Document::ID, $chunk)],
+            ));
+
+            if ($linked === \count($chunk)) {
+                continue;
+            }
+
+            $unlinked = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->find($collection->getId(), [
+                Query::select([Document::ID]),
+                Query::equal(Document::ID, $chunk),
+                $this->notReferencing($twoWayKey, $documentId),
+                Query::limit(\count($chunk)),
+            ])));
+
+            foreach ($unlinked as $related) {
+                $this->linkRelatedDocument($collection, $related->getId(), $twoWayKey, $documentId);
+            }
+        }
+    }
+
+    /**
+     * Link one related document that updateDocuments() left out. A document that is already gone
+     * or already linked is skipped.
+     *
+     * @throws AuthorizationException
+     */
+    private function linkRelatedDocument(Document $collection, string $id, string $twoWayKey, string $documentId): void
+    {
+        $authorization = $this->db->getAuthorization();
+
+        $related = $authorization->skip(fn () => $this->db->skipRelationships(
+            fn () => $this->db->getDocument($collection->getId(), $id, forUpdate: true)
+        ));
+
+        if ($related->isEmpty() || $related->getAttribute($twoWayKey) === $documentId) {
+            return;
+        }
+
+        if (! $authorization->isValid(new Input(PermissionType::Update, [
+            ...$collection->getUpdate(),
+            ...($collection->getAttribute('documentSecurity', false) ? $related->getUpdate() : []),
+        ]))) {
+            throw new AuthorizationException($authorization->getDescription());
+        }
+
+        $this->db->skipRelationships(fn () => $this->db->updateDocument(
+            $collection->getId(),
+            $id,
+            new Document([$twoWayKey => $documentId]),
+        ));
+    }
+
+    private function notReferencing(string $twoWayKey, string $documentId): Query
+    {
+        return Query::or([
+            Query::isNull($twoWayKey),
+            Query::notEqual($twoWayKey, $documentId),
+        ]);
     }
 
     /**

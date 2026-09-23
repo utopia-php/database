@@ -362,7 +362,6 @@ final class JoinTenancyTest extends TestCase
      * Every chain of two joins, the second joined on the main table or on the first join: a right
      * or full outer join that follows a right, full outer or cross join must not pair its rows with
      * another tenant's rows of the earlier table, or they vanish instead of coming back unmatched.
-     * Under shared tables a chain combining a full outer join with a right join is rejected.
      */
     #[DataProvider('fullOuterJoinModes')]
     public function testEveryChainOfTwoJoinsReadsWhatADedicatedDatabaseReads(bool $nativeFullOuterJoin): void
@@ -377,9 +376,7 @@ final class JoinTenancyTest extends TestCase
             $expected = [];
             $actual = [];
             foreach (self::twoJoinChains() as $label => $joins) {
-                $expected[$label] = $this->combinesFullOuterAndRightJoins($joins)
-                    ? self::REJECTED
-                    : $this->joinedChain($dedicated, $joins);
+                $expected[$label] = $this->joinedChain($dedicated, $joins);
                 $actual[$label] = $this->readChain($shared, $joins);
             }
 
@@ -387,27 +384,27 @@ final class JoinTenancyTest extends TestCase
         }
     }
 
+    /**
+     * A full outer join combined with a right join reads through find(), count() and sum() what the
+     * tenant's own database reads, emulated and native.
+     */
     #[DataProvider('fullOuterJoinModes')]
-    public function testAFullOuterJoinCombinedWithARightJoinIsRejectedUnderSharedTables(bool $nativeFullOuterJoin): void
+    public function testAFullOuterJoinCombinedWithARightJoinReadsWhatADedicatedDatabaseReads(bool $nativeFullOuterJoin): void
     {
-        $database = $this->shared($nativeFullOuterJoin, documentSecurity: false);
-        $database->setTenant(self::FIRST);
+        $shared = $this->shared($nativeFullOuterJoin, documentSecurity: false);
 
-        foreach ([
-            'a right join after a full outer join' => [$this->book(Method::FullOuterJoin), $this->review(Method::RightJoin)],
-            'a full outer join after a right join' => [$this->book(Method::RightJoin), $this->review(Method::FullOuterJoin)],
-        ] as $label => $joins) {
+        foreach ([self::FIRST, self::SECOND] as $tenant) {
+            $dedicated = $this->dedicated($nativeFullOuterJoin, documentSecurity: false, tenant: $tenant);
+            $shared->setTenant($tenant);
+
             foreach ([
-                'find' => fn () => $database->find(self::AUTHORS, $joins),
-                'count' => fn () => $database->count(self::AUTHORS, $joins),
-                'sum' => fn () => $database->sum(self::AUTHORS, self::STARS, $joins),
-            ] as $read => $call) {
-                try {
-                    $call();
-                    $this->fail("{$read} with {$label} must be rejected under shared tables");
-                } catch (QueryException $exception) {
-                    $this->assertStringContainsString('full outer join', $exception->getMessage());
-                }
+                'a right join after a full outer join' => [$this->book(Method::FullOuterJoin), $this->review(Method::RightJoin)],
+                'a full outer join after a right join' => [$this->book(Method::RightJoin), $this->review(Method::FullOuterJoin)],
+            ] as $label => $joins) {
+                $expected = $this->joinedChain($dedicated, $joins);
+
+                $this->assertNotSame(self::REJECTED, $expected, "A dedicated database must read {$label}");
+                $this->assertSame($expected, $this->readChain($shared, $joins), "Tenant {$tenant} must read {$label} as its own database would");
             }
         }
     }
@@ -656,16 +653,6 @@ final class JoinTenancyTest extends TestCase
             Method::CrossJoin => Query::crossJoin($collection, $alias),
             default => throw new \InvalidArgumentException("{$method->value} is not a join this test covers"),
         };
-    }
-
-    /**
-     * @param list<Query> $joins
-     */
-    private function combinesFullOuterAndRightJoins(array $joins): bool
-    {
-        $methods = \array_map(static fn (Query $join): Method => $join->getMethod(), $joins);
-
-        return \in_array(Method::FullOuterJoin, $methods, true) && \in_array(Method::RightJoin, $methods, true);
     }
 
     /**

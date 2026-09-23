@@ -2729,6 +2729,19 @@ class Database
     }
 
     /**
+     * Fire suppressible user lifecycle hooks and let the first hook exception reach the
+     * caller whatever the event's default. Document writes and purgeCachedDocument() fire
+     * Event::DocumentPurge through it; the schema changes that purge a collection fire it
+     * through triggerHooks(), isolated.
+     */
+    protected function triggerPropagatingHooks(Event $event, mixed $data = null): void
+    {
+        foreach ($this->getActiveLifecycleHooks() as $hook) {
+            $hook->handle($event, $data);
+        }
+    }
+
+    /**
      * @return array<Lifecycle>
      */
     private function getActiveLifecycleHooks(): array

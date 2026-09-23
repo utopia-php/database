@@ -1199,6 +1199,11 @@ trait Documents
 
         $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
+        $this->triggerDocumentPurge($collection->getId(), $id);
+        if ($document->getId() !== $id) {
+            $this->triggerDocumentPurge($collection->getId(), $document->getId());
+        }
+
         $hook = $this->relationshipHook;
         if ($hook !== null && ! $hook->isInBatchPopulation() && $hook->isEnabled()) {
             $documents = $this->silent(fn () => $hook->populateDocuments([$document], $collection, $hook->getFetchDepth()));
@@ -1436,6 +1441,8 @@ trait Documents
                     );
                 }
             });
+
+            $this->triggerDocumentPurges($collection->getId(), $batch);
 
             if ($hasOperators) {
                 $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
@@ -1837,6 +1844,8 @@ trait Documents
                 }
             );
 
+            $this->triggerDocumentPurges($collection->getId(), $batch);
+
             foreach ($batch as $index => $document) {
                 if (empty($document->getSequence()) && ! empty($chunk[$index]->getOld()->getSequence())) {
                     $document->setAttribute(Document::SEQUENCE, $chunk[$index]->getOld()->getSequence());
@@ -2081,6 +2090,8 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
+        $this->triggerDocumentPurge($collection->getId(), $id);
+
         $this->triggerHooks(Event::DocumentIncrease, $document);
 
         return $document;
@@ -2203,6 +2214,8 @@ trait Documents
             return $document->setAttribute($attribute, $result);
         });
 
+        $this->triggerDocumentPurge($collection->getId(), $id);
+
         $this->triggerHooks(Event::DocumentDecrease, $document);
 
         return $document;
@@ -2270,6 +2283,7 @@ trait Documents
         });
 
         if ($deleted) {
+            $this->triggerDocumentPurge($collection->getId(), $id);
             $this->triggerHooks(Event::DocumentDelete, $document);
         }
 
@@ -2422,6 +2436,8 @@ trait Documents
                     );
                 }
             });
+
+            $this->triggerDocumentPurges($collection->getId(), $batch);
 
             foreach ($batch as $index => $document) {
                 try {
@@ -2689,7 +2705,8 @@ trait Documents
     }
 
     /**
-     * Cleans a specific document from cache and triggers Event::DocumentPurge.
+     * Cleans a specific document from cache and triggers Event::DocumentPurge, whose
+     * lifecycle hook exceptions reach the caller.
      *
      * Note: Do not retry this method as it triggers events. Use purgeCachedDocumentInternal() with retry instead.
      *
@@ -2704,13 +2721,41 @@ trait Documents
         $result = $this->purgeCachedDocumentInternal($collectionId, $id);
 
         if ($id !== null) {
-            $this->trigger(Event::DocumentPurge, new Document([
+            $purged = new Document([
                 Document::ID => $id,
                 Document::COLLECTION => $collectionId,
-            ]));
+            ]);
+            $this->invalidate(Event::DocumentPurge, $purged);
+            $this->triggerPropagatingHooks(Event::DocumentPurge, $purged);
         }
 
         return $result;
+    }
+
+    /**
+     * Announce the purge of a written document once its mutation has returned: firing
+     * inside the mutation would repeat the event whenever the adapter retries the
+     * transaction.
+     */
+    private function triggerDocumentPurge(string $collectionId, string $id): void
+    {
+        $this->triggerPropagatingHooks(Event::DocumentPurge, new Document([
+            Document::ID => $id,
+            Document::COLLECTION => $collectionId,
+        ]));
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     */
+    private function triggerDocumentPurges(string $collectionId, array $documents): void
+    {
+        foreach ($documents as $document) {
+            $this->withDocumentTenant(
+                $document,
+                fn () => $this->triggerDocumentPurge($collectionId, $document->getId())
+            );
+        }
     }
 
     /**

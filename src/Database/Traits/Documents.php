@@ -3210,6 +3210,7 @@ trait Documents
             $cacheGeneration = '';
             if (
                 $this->queryCache !== null
+                && $collection->getId() !== self::METADATA
                 && $this->adapter->supports(Capability::Caching)
                 && ! $this->adapter->inTransaction()
                 && empty($joins)

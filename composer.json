@@ -80,5 +80,11 @@
             "php-http/discovery": false,
             "tbachert/spi": false
         }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-feat-query-lib": "8.0.x-dev",
+            "dev-main": "8.0.x-dev"
+        }
     }
 }

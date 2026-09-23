@@ -26,7 +26,6 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
-use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -3067,132 +3066,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * SQLite has no MATCH ... AGAINST. Route SEARCH/NOT_SEARCH through the
-     * collection's FTS5 virtual table; for LIKE-using comparisons append
-     * an explicit ESCAPE clause because SQLite — unlike MariaDB — does
-     * not honour `\` as a default escape and the inherited
-     * escapeWildcards() emits backslash escapes on every wildcard.
-     * Everything else falls through to the MariaDB implementation.
-     */
-    protected function getSQLCondition(Query $query, array &$binds, ?string $forCollection = null): string
-    {
-        $method = $query->getMethod();
-
-        $likeMethods = [
-            Method::StartsWith,
-            Method::NotStartsWith,
-            Method::EndsWith,
-            Method::NotEndsWith,
-            Method::Contains,
-            Method::ContainsAny,
-            Method::NotContains,
-        ];
-
-        if (\in_array($method, $likeMethods, true) && ! $query->isSpatialAttribute()) {
-            // Array CONTAINS via json_each — exact element match without
-            // LIKE substring false positives (`%2%` matching `[12, 200]`).
-            $arrayContainsMethods = [
-                Method::Contains,
-                Method::ContainsAny,
-                Method::NotContains,
-            ];
-            if ($query->onArray() && \in_array($method, $arrayContainsMethods, true)) {
-                return $this->buildArrayContainsCondition($query, $binds);
-            }
-
-            return $this->getLikeCondition($query, $binds);
-        }
-
-        if ($method !== Method::Search && $method !== Method::NotSearch) {
-            return parent::getSQLCondition($query, $binds, $forCollection);
-        }
-
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-        $attribute = $this->filter($query->getAttribute());
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
-        $placeholder = ID::unique();
-
-        $queryValue = $query->getValue();
-        $rawValue = \is_scalar($queryValue) ? (string) $queryValue : '';
-        $ftsValue = $this->getFTS5Value($rawValue);
-
-        if ($ftsValue === '') {
-            // Empty term — FTS5 syntax-errors on the empty string.
-            return $method === Method::Search ? '1 = 0' : '1 = 1';
-        }
-
-        $ftsTable = $forCollection === null
-            ? null
-            : $this->findFulltextTableForAttribute($forCollection, $attribute);
-
-        if ($ftsTable === null) {
-            // LIKE on the raw value — the FTS5-formatted form embeds
-            // `OR`/`*` that LIKE would treat as literal.
-            return $this->buildSearchLikeFallback($attribute, $rawValue, $alias, $placeholder, $method, $binds);
-        }
-
-        $binds[":{$placeholder}_0"] = $ftsValue;
-
-        $subquery = "{$alias}.{$this->quote(Storage::SEQUENCE)} IN (SELECT rowid FROM `{$ftsTable}` WHERE `{$ftsTable}` MATCH :{$placeholder}_0)";
-
-        return $method === Method::Search ? $subquery : "NOT ({$subquery})";
-    }
-
-    /**
-     * SEARCH fallback to LIKE when no FTS5 table covers the attribute.
-     *
-     * @param array<string,mixed> $binds
-     */
-    private function buildSearchLikeFallback(
-        string $attribute,
-        string $value,
-        string $alias,
-        string $placeholder,
-        Method $method,
-        array &$binds,
-    ): string {
-        $binds[":{$placeholder}_0"] = '%' . $this->escapeWildcards($value) . '%';
-        $sql = "{$alias}.{$this->quote($attribute)} LIKE :{$placeholder}_0 ESCAPE '\\'";
-
-        return $method === Method::Search ? $sql : "NOT ({$sql})";
-    }
-
-    /**
-     * Array CONTAINS / CONTAINS_ANY / NOT_CONTAINS via json_each. Exact
-     * element match — avoids the LIKE substring false positives where
-     * `%2%` matches `[12, 200]` and `%"apple"%` matches `["pineapple"]`.
-     *
-     * @param array<string,mixed> $binds
-     */
-    private function buildArrayContainsCondition(Query $query, array &$binds): string
-    {
-        $method = $query->getMethod();
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-
-        $attribute = $this->quote($this->filter($query->getAttribute()));
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
-        $placeholder = ID::unique();
-
-        $values = $query->getValues();
-        if (empty($values)) {
-            return '';
-        }
-
-        $params = [];
-        foreach ($values as $key => $value) {
-            $param = ":{$placeholder}_{$key}";
-            $binds[$param] = $value;
-            $params[] = $param;
-        }
-
-        $expression = "EXISTS (SELECT 1 FROM json_each({$alias}.{$attribute}) WHERE value IN ("
-            . \implode(', ', $params)
-            . '))';
-
-        return $method === Method::NotContains ? "NOT {$expression}" : $expression;
-    }
-
-    /**
      * FTS5 vtable on `$collection` that covers `$attribute`. Multi-column
      * indexes can't be addressed from a single attribute alone — the
      * lookup is via the cached attribute → table map.
@@ -3236,48 +3109,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
 
         return $map;
-    }
-
-    /**
-     * Compile STARTS_WITH / ENDS_WITH / CONTAINS (and NOT variants) into
-     * LIKE with an explicit ESCAPE clause — SQLite needs it to honour
-     * the backslash escapes escapeWildcards() inserts.
-     *
-     * @param array<string,mixed> $binds
-     */
-    protected function getLikeCondition(Query $query, array &$binds): string
-    {
-        $method = $query->getMethod();
-        $query->setAttribute($this->getInternalKeyForAttribute($query->getAttribute()));
-
-        $attribute = $this->quote($this->filter($query->getAttribute()));
-        $alias = $this->quote(Query::DEFAULT_ALIAS);
-        $placeholder = ID::unique();
-
-        $isNotQuery = \in_array($method, [
-            Method::NotStartsWith,
-            Method::NotEndsWith,
-            Method::NotContains,
-        ], true);
-
-        $conditions = [];
-        foreach ($query->getValues() as $key => $value) {
-            $strValue = \is_string($value) ? $value : '';
-            $bound = match ($method) {
-                Method::StartsWith, Method::NotStartsWith => $this->escapeWildcards($strValue) . '%',
-                Method::EndsWith, Method::NotEndsWith => '%' . $this->escapeWildcards($strValue),
-                Method::Contains, Method::ContainsAny, Method::NotContains => '%' . $this->escapeWildcards($strValue) . '%',
-                default => $value,
-            };
-
-            $binds[":{$placeholder}_{$key}"] = $bound;
-            $operator = $isNotQuery ? 'NOT LIKE' : 'LIKE';
-            $conditions[] = "{$alias}.{$attribute} {$operator} :{$placeholder}_{$key} ESCAPE '\\'";
-        }
-
-        $separator = $isNotQuery ? ' AND ' : ' OR ';
-
-        return empty($conditions) ? '' : '(' . \implode($separator, $conditions) . ')';
     }
 
     /**

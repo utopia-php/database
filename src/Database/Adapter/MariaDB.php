@@ -35,7 +35,6 @@ use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\MariaDB as MariaDBBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
-use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -1093,77 +1092,6 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $tenant = Storage::TENANT;
 
         return "IF({$tenant} = VALUES({$tenant}), {$quoted} + VALUES({$quoted}), {$quoted})";
-    }
-
-    /**
-     * Handle distance spatial queries
-     *
-     * @param  array<string, mixed>  $binds
-     */
-    protected function handleDistanceSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
-    {
-        /** @var array<mixed> $distanceParams */
-        $distanceParams = $query->getValues()[0];
-        /** @var array<mixed> $geomArray */
-        $geomArray = \is_array($distanceParams[0]) ? $distanceParams[0] : [];
-        $wkt = $this->convertArrayToWKT($geomArray);
-        $binds[":{$placeholder}_0"] = $wkt;
-        $binds[":{$placeholder}_1"] = $distanceParams[1];
-
-        $useMeters = isset($distanceParams[2]) && $distanceParams[2] === true;
-
-        $operator = match ($query->getMethod()) {
-            Method::DistanceEqual => '=',
-            Method::DistanceNotEqual => '!=',
-            Method::DistanceGreaterThan => '>',
-            Method::DistanceLessThan => '<',
-            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
-        };
-
-        if ($useMeters) {
-            $wktType = $this->getSpatialTypeFromWKT($wkt);
-            $attrType = strtolower($type);
-            if ($wktType != ColumnType::Point->value || $attrType != ColumnType::Point->value) {
-                throw new QueryException('Distance in meters is not supported between '.$attrType.' and '.$wktType);
-            }
-
-            return "ST_DISTANCE_SPHERE({$alias}.{$attribute}, ".$this->getSpatialGeomFromText(":{$placeholder}_0", null).', '.Database::EARTH_RADIUS.") {$operator} :{$placeholder}_1";
-        }
-
-        return "ST_Distance({$alias}.{$attribute}, ".$this->getSpatialGeomFromText(":{$placeholder}_0", null).") {$operator} :{$placeholder}_1";
-    }
-
-    /**
-     * Handle spatial queries
-     *
-     * @param  array<string, mixed>  $binds
-     */
-    protected function handleSpatialQueries(Query $query, array &$binds, string $attribute, string $type, string $alias, string $placeholder): string
-    {
-        /** @var array<mixed> $spatialGeomArr */
-        $spatialGeomArr = \is_array($query->getValues()[0]) ? $query->getValues()[0] : [];
-        $binds[":{$placeholder}_0"] = $this->convertArrayToWKT($spatialGeomArr);
-        $geom = $this->getSpatialGeomFromText(":{$placeholder}_0", null);
-
-        return match ($query->getMethod()) {
-            Method::Crosses => "ST_Crosses({$alias}.{$attribute}, {$geom})",
-            Method::NotCrosses => "NOT ST_Crosses({$alias}.{$attribute}, {$geom})",
-            Method::DistanceEqual,
-            Method::DistanceNotEqual,
-            Method::DistanceGreaterThan,
-            Method::DistanceLessThan => $this->handleDistanceSpatialQueries($query, $binds, $attribute, $type, $alias, $placeholder),
-            Method::Intersects => "ST_Intersects({$alias}.{$attribute}, {$geom})",
-            Method::NotIntersects => "NOT ST_Intersects({$alias}.{$attribute}, {$geom})",
-            Method::Overlaps => "ST_Overlaps({$alias}.{$attribute}, {$geom})",
-            Method::NotOverlaps => "NOT ST_Overlaps({$alias}.{$attribute}, {$geom})",
-            Method::Touches => "ST_Touches({$alias}.{$attribute}, {$geom})",
-            Method::NotTouches => "NOT ST_Touches({$alias}.{$attribute}, {$geom})",
-            Method::Equal => "ST_Equals({$alias}.{$attribute}, {$geom})",
-            Method::NotEqual => "NOT ST_Equals({$alias}.{$attribute}, {$geom})",
-            Method::Contains => "ST_Contains({$alias}.{$attribute}, {$geom})",
-            Method::NotContains => "NOT ST_Contains({$alias}.{$attribute}, {$geom})",
-            default => throw new DatabaseException('Unknown spatial query method: '.$query->getMethod()->value),
-        };
     }
 
     protected function createBuilder(): SQLBuilder

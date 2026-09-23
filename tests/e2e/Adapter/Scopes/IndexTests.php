@@ -371,6 +371,73 @@ trait IndexTests
         }
     }
 
+    public function testTrigramIndexValidation(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::TrigramIndex)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionId = 'trigram_validation_test';
+
+        try {
+            $database->createCollection(new Collection(id: $collectionId));
+
+            $database->createAttribute($collectionId, Attribute::string(key: 'name', size: 256));
+            $database->createAttribute($collectionId, Attribute::string(key: 'description', size: 412));
+            $database->createAttribute($collectionId, Attribute::integer(key: 'age', size: 8));
+
+            try {
+                $database->createIndex($collectionId, Index::trigram(key: 'trigram_invalid', attributes: ['age']));
+                $this->fail('Expected exception when creating trigram index on non-string attribute');
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString('Trigram index can only be created on string type attributes', $e->getMessage());
+            }
+
+            $this->assertTrue($database->createIndex($collectionId, Index::trigram(key: 'trigram_multi', attributes: ['name', 'description'])));
+
+            $indexes = \array_values(\array_filter(
+                $database->getCollection($collectionId)->indexes,
+                fn (Index $index) => $index->getId() === 'trigram_multi'
+            ));
+            $this->assertCount(1, $indexes);
+            $this->assertSame(IndexType::Trigram, $indexes[0]->type);
+            $this->assertSame(['name', 'description'], $indexes[0]->attributes);
+
+            try {
+                $database->createIndex($collectionId, Index::trigram(key: 'trigram_mixed', attributes: ['name', 'age']));
+                $this->fail('Expected exception when creating trigram index with mixed attribute types');
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString('Trigram index can only be created on string type attributes', $e->getMessage());
+            }
+
+            try {
+                $database->createIndex($collectionId, Index::trigram(key: 'trigram_order', attributes: ['name'], orders: [Order::Asc]));
+                $this->fail('Expected exception when creating trigram index with orders');
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $e->getMessage());
+            }
+
+            try {
+                $database->createIndex($collectionId, Index::trigram(key: 'trigram_length', attributes: ['name'], lengths: [128]));
+                $this->fail('Expected exception when creating trigram index with lengths');
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString('Trigram indexes do not support orders or lengths', $e->getMessage());
+            }
+
+            $this->assertSame(
+                ['trigram_multi'],
+                \array_map(fn (Index $index) => $index->getId(), $database->getCollection($collectionId)->indexes)
+            );
+        } finally {
+            $database->deleteCollection($collectionId);
+        }
+    }
+
     public function testTTLIndexes(): void
     {
         /** @var Database $database */
@@ -1002,6 +1069,14 @@ trait IndexTests
         $indexIds = array_map(fn (Index $index) => $index->getId(), $indexes);
         $this->assertContains('idx_ttl_expires', $indexIds);
         $this->assertNotContains('idx_ttl_deleted', $indexIds);
+
+        try {
+            $database->createIndex($collection, Index::ttl(key: 'idx_ttl_deleted_duplicate', attributes: ['deletedAt'], orders: [Order::Asc], ttl: 172800));
+            $this->fail('Expected exception for creating a second TTL index in a collection');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertStringContainsString('There can be only one TTL index in a collection', $e->getMessage());
+        }
 
         $this->assertTrue($database->deleteIndex($collection, 'idx_ttl_expires'));
 

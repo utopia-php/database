@@ -249,26 +249,26 @@ final class SQLGetDocumentTest extends TestCase
             '/WHERE\s+`_uid`\s*=\s*:_uid\s*$/',
             $sql
         );
-        $this->assertQualifiedJoinStars($sql);
+        $this->assertJoinProjection($sql);
     }
 
-    public function testJoinWithoutSelectProjectsQualifiedStars(): void
+    public function testJoinWithoutSelectLeavesJoinedInternalsOut(): void
     {
         $sql = $this->captureGetDocumentSql([
             Query::leftJoin('orders', '$id', 'customerId'),
         ]);
 
-        $this->assertQualifiedJoinStars($sql);
+        $this->assertJoinProjection($sql);
         $this->assertStringContainsString('LEFT JOIN', $sql);
     }
 
-    public function testJoinAliasWithoutSelectProjectsQualifiedStars(): void
+    public function testJoinAliasWithoutSelectLeavesJoinedInternalsOut(): void
     {
         $sql = $this->captureGetDocumentSql([
             Query::join('orders', '$id', 'customerId', '=', 'rev'),
         ]);
 
-        $this->assertQualifiedJoinStars($sql, joinAlias: 'rev');
+        $this->assertJoinProjection($sql, joinAlias: 'rev');
     }
 
     public function testGetDocumentFullOuterJoinUsesLeftJoinOnPostgres(): void
@@ -281,7 +281,7 @@ final class SQLGetDocumentTest extends TestCase
         $this->assertStringContainsString('LEFT JOIN', $sql);
         $this->assertStringNotContainsString('FULL OUTER JOIN', $sql);
         $this->assertStringNotContainsString('UNION ALL', $sql);
-        $this->assertQualifiedJoinStars($sql, '"');
+        $this->assertJoinProjection($sql, '"');
     }
 
     /**
@@ -328,10 +328,11 @@ final class SQLGetDocumentTest extends TestCase
         return $sql;
     }
 
-    private function assertQualifiedJoinStars(string $sql, string $quote = '`', string $joinAlias = 'j0'): void
+    private function assertJoinProjection(string $sql, string $quote = '`', string $joinAlias = 'j0'): void
     {
-        $this->assertStringContainsString($quote.$joinAlias.$quote.'.*', $sql);
         $this->assertStringContainsString($quote.'table_main'.$quote.'.*', $sql);
+        $this->assertStringContainsString($quote.$joinAlias.$quote.'.'.$quote.'_uid'.$quote.' AS '.$quote.$joinAlias.'._uid'.$quote, $sql);
+        $this->assertStringNotContainsString($quote.$joinAlias.$quote.'.*', $sql);
         $this->assertDoesNotMatchRegularExpression('/SELECT\s+\*(?:\s|,|$)/i', $sql);
         $this->assertDoesNotMatchRegularExpression('/FROM\s*\(\s*SELECT\s+\*/i', $sql);
     }

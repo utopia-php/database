@@ -3017,7 +3017,7 @@ trait JoinTests
         $this->assertCount(1, $results);
         $this->assertSame('c1', $results[0]->getId());
         $this->assertSame('Customer 1', $results[0]->getAttribute('name'));
-        $amount = $results[0]->getAttribute('amount');
+        $amount = $results[0]->getAttribute('ord.amount');
         $this->assertIsNumeric($amount);
         $this->assertSame(150, (int) $amount);
 
@@ -3075,10 +3075,10 @@ trait JoinTests
 
         $this->assertCount(1, $results);
         $this->assertSame('c1', $results[0]->getId());
-        $chainedAmount = $results[0]->getAttribute('amount');
+        $chainedAmount = $results[0]->getAttribute('ord.amount');
         $this->assertIsNumeric($chainedAmount);
         $this->assertSame(150, (int) $chainedAmount);
-        $this->assertSame('widget', $results[0]->getAttribute('sku'));
+        $this->assertSame('widget', $results[0]->getAttribute('itm.sku'));
 
         $this->cleanupAggCollections($database, $cols);
     }
@@ -3122,7 +3122,7 @@ trait JoinTests
 
         $this->assertCount(1, $results);
         $this->assertSame('Customer 1', $results[0]->getAttribute('name'));
-        $selectedAmount = $results[0]->getAttribute('amount');
+        $selectedAmount = $results[0]->getAttribute('ord.amount');
         $this->assertIsNumeric($selectedAmount);
         $this->assertSame(275, (int) $selectedAmount);
 
@@ -3296,12 +3296,12 @@ trait JoinTests
             ]);
 
             $this->assertSame(1, \count($results));
-            $this->assertSame('open-payload', $results[0]->getAttribute('payload'));
-            $this->assertSame('open-code', $results[0]->getAttribute('code'));
+            $this->assertSame('open-payload', $results[0]->getAttribute('visible.payload'));
+            $this->assertSame('open-code', $results[0]->getAttribute('hidden.code'));
 
             foreach ($results as $document) {
-                $this->assertNotSame('secret-payload', $document->getAttribute('payload'));
-                $this->assertNotSame('secret-code', $document->getAttribute('code'));
+                $this->assertNotSame('secret-payload', $document->getAttribute('visible.payload'));
+                $this->assertNotSame('secret-code', $document->getAttribute('hidden.code'));
             }
         } finally {
             $authorization->cleanRoles();
@@ -3371,7 +3371,7 @@ trait JoinTests
             $amounts = [];
             foreach ($results as $document) {
                 $this->assertNotSame('ord-secret', $document->getId());
-                $amount = $document->getAttribute('amount');
+                $amount = $document->getAttribute('j0.amount');
                 if (\is_numeric($amount)) {
                     $amount = (int) $amount;
                     $amounts[] = $amount;
@@ -3447,7 +3447,7 @@ trait JoinTests
             $amounts = [];
             foreach ($results as $document) {
                 $this->assertNotSame('ord-secret', $document->getId());
-                $amount = $document->getAttribute('amount');
+                $amount = $document->getAttribute('j0.amount');
                 if (\is_numeric($amount)) {
                     $amount = (int) $amount;
                     $amounts[] = $amount;
@@ -3557,7 +3557,7 @@ trait JoinTests
             foreach ($results as $document) {
                 $this->assertNotSame('r-other-tenant', $document->getId());
                 $this->assertNotSame('r-other-match', $document->getId());
-                $score = $document->getAttribute('score');
+                $score = $document->getAttribute('rev.score');
                 if (\is_numeric($score)) {
                     $score = (int) $score;
                     $scores[] = $score;
@@ -3623,7 +3623,7 @@ trait JoinTests
         ]);
 
         $this->assertSame(false, $document->isEmpty());
-        $score = $document->getAttribute('score');
+        $score = $document->getAttribute('j0.score');
         $this->assertIsNumeric($score);
         $this->assertSame(5, (int) $score);
 
@@ -3662,7 +3662,8 @@ trait JoinTests
         ]);
 
         $this->assertSame(false, $document->isEmpty());
-        $score = $document->getAttribute('score');
+        $this->assertArrayHasKey('j0.score', $document->getArrayCopy());
+        $score = $document->getAttribute('j0.score');
         $this->assertTrue($score === null || $score === '');
 
         $this->cleanupAggCollections($database, $cols);
@@ -3782,7 +3783,7 @@ trait JoinTests
         ]);
 
         $this->assertSame(false, $document->isEmpty());
-        $score = $document->getAttribute('score');
+        $score = $document->getAttribute('j0.score');
         $this->assertIsNumeric($score);
         $this->assertContains((int) $score, [5, 3]);
 
@@ -3828,7 +3829,7 @@ trait JoinTests
 
         $this->assertSame(false, $document->isEmpty());
         $this->assertSame('Product p1', $document->getAttribute('name'));
-        $score = $document->getAttribute('score');
+        $score = $document->getAttribute('rev.score');
         $this->assertIsNumeric($score);
         $this->assertSame(5, (int) $score);
 
@@ -3945,7 +3946,7 @@ trait JoinTests
 
         $this->assertSame(false, $document->isEmpty());
         $this->assertSame('p1', $document->getId());
-        $score = $document->getAttribute('score');
+        $score = $document->getAttribute('rev.score');
         $this->assertIsNumeric($score);
         $this->assertSame(5, (int) $score);
 
@@ -4044,7 +4045,8 @@ trait JoinTests
 
         $this->assertSame(false, $document->isEmpty());
         $this->assertSame('p2', $document->getId());
-        $score = $document->getAttribute('score');
+        $this->assertArrayHasKey('j0.score', $document->getArrayCopy());
+        $score = $document->getAttribute('j0.score');
         $this->assertTrue($score === null || $score === '');
 
         $this->cleanupAggCollections($database, $cols);
@@ -4095,7 +4097,7 @@ trait JoinTests
             $this->assertSame(false, $document->isEmpty());
             $this->assertSame('p1', $document->getId());
             $this->assertNotSame('r-secret', $document->getId());
-            $score = $document->getAttribute('score');
+            $score = $document->getAttribute('j0.score');
             if (\is_numeric($score)) {
                 $score = (int) $score;
                 $this->assertNotSame(999, $score);
@@ -4210,7 +4212,7 @@ trait JoinTests
 
         $identity = static function (Document $document): string {
             $name = $document->getAttribute('name');
-            $score = $document->getAttribute('score');
+            $score = $document->getAttribute('j0.score');
 
             return $document->getId().':'.(\is_scalar($name) ? (string) $name : '').':'.(\is_scalar($score) ? (string) $score : '');
         };
@@ -4660,7 +4662,7 @@ trait JoinTests
                     $unmatchedLeft = $document;
                 }
                 if ($document->getId() === '') {
-                    $score = $document->getAttribute('score');
+                    $score = $document->getAttribute('j0.score');
                     if (\is_numeric($score) && (int) $score === 7) {
                         $unmatchedRight = $document;
                     }
@@ -4785,7 +4787,7 @@ trait JoinTests
             $this->assertSame(false, $innerPublic->isEmpty());
             $this->assertSame('m2', $innerPublic->getId());
             $this->assertSecretJoinHidden($innerPublic, 'j-secret', 999);
-            $publicScore = $innerPublic->getAttribute('score');
+            $publicScore = $innerPublic->getAttribute('j0.score');
             $this->assertTrue(\is_numeric($publicScore));
             $this->assertSame(10, (int) $publicScore);
 
@@ -5564,14 +5566,10 @@ trait JoinTests
     {
         $this->assertNotSame($secretId, $document->getId());
 
-        $score = $document->getAttribute('score');
-        if (\is_numeric($score)) {
-            $this->assertNotSame($secretScore, (int) $score);
-        }
-
-        $amount = $document->getAttribute('amount');
-        if (\is_numeric($amount)) {
-            $this->assertNotSame($secretScore, (int) $amount);
+        foreach ([...$this->joinedValues($document, 'score'), ...$this->joinedValues($document, 'amount')] as $value) {
+            if (\is_numeric($value)) {
+                $this->assertNotSame($secretScore, (int) $value);
+            }
         }
 
         foreach ($document->getPermissions() as $permission) {
@@ -5648,8 +5646,11 @@ trait JoinTests
 
     private function assertNullishScore(Document $document): void
     {
-        $score = $document->getAttribute('score');
-        $this->assertTrue($score === null || $score === '');
+        $scores = $this->joinedValues($document, 'score');
+        $this->assertNotSame([], $scores);
+        foreach ($scores as $score) {
+            $this->assertTrue($score === null || $score === '');
+        }
     }
 
     /**
@@ -5660,13 +5661,31 @@ trait JoinTests
     {
         $scores = [];
         foreach ($documents as $document) {
-            $score = $document->getAttribute('score');
-            if (\is_numeric($score)) {
-                $scores[] = (int) $score;
+            foreach ($this->joinedValues($document, 'score') as $score) {
+                if (\is_numeric($score)) {
+                    $scores[] = (int) $score;
+                }
             }
         }
 
         return $scores;
+    }
+
+    /**
+     * An attribute's values under its bare name and under every join alias.
+     *
+     * @return list<mixed>
+     */
+    private function joinedValues(Document $document, string $attribute): array
+    {
+        $values = [];
+        foreach ($document->getArrayCopy() as $key => $value) {
+            if ($key === $attribute || \str_ends_with((string) $key, '.'.$attribute)) {
+                $values[] = $value;
+            }
+        }
+
+        return $values;
     }
 
     /**
@@ -5786,6 +5805,37 @@ trait JoinTests
         }
 
         $this->cleanupAggCollections($database, [$main, $first, $second]);
+    }
+
+    public function testJoinWithoutSelectReturnsJoinedAttributesUnderTheAlias(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $first] = $this->createAliasCollections($database);
+        $plain = \array_keys($database->getDocument($main, 'm1')->getArrayCopy());
+        $expected = [...$plain, 'ord.$id', 'ord.mainId', 'ord.score', 'ord.secret'];
+        \sort($expected);
+
+        foreach ([
+            'find' => $database->find($main, [Query::join($first, '$id', 'mainId', '=', 'ord')]),
+            'getDocument' => [$database->getDocument($main, 'm1', [Query::leftJoin($first, '$id', 'mainId', '=', 'ord')])],
+        ] as $label => $rows) {
+            $this->assertCount(1, $rows, $label);
+            $keys = \array_keys($rows[0]->getArrayCopy());
+            \sort($keys);
+            $this->assertSame($expected, $keys, $label);
+            $this->assertSame('m1', $rows[0]->getId(), $label);
+            $this->assertSame('b1', $rows[0]->getAttribute('ord.$id'), $label);
+            $this->assertSame(1, $this->scoreOf($rows[0], 'ord.score'), $label);
+            $this->assertSame('first-secret', $rows[0]->getAttribute('ord.secret'), $label);
+        }
+
+        $this->cleanupAggCollections($database, $this->aliasCollections());
     }
 
     public function testVectorSearchPagesByAJoinedAttributeWithACursor(): void

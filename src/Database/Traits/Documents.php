@@ -455,7 +455,7 @@ trait Documents
             && $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
 
         $getDocument = fn () => $this->adapter->getDocument(
-            $this->withJoinDocumentSecurity($collection, $joinDocumentSecurity),
+            $this->withJoinAttributes($this->withJoinDocumentSecurity($collection, $joinDocumentSecurity), $joins),
             $id,
             $queries,
             $forUpdate
@@ -3258,7 +3258,7 @@ trait Documents
             }
 
             if (! isset($results)) {
-                $adapterCollection = $this->withJoinDocumentSecurity($collection, $joinDocumentSecurity);
+                $adapterCollection = $this->withJoinAttributes($this->withJoinDocumentSecurity($collection, $joinDocumentSecurity), $joins);
 
                 // Inline the auth-skip toggle to avoid the per-find Closure
                 // allocation that authorization->skip() requires. Mirrors
@@ -3767,6 +3767,49 @@ trait Documents
 
         $adapterCollection = clone $collection;
         $adapterCollection->setAttribute('joinDocumentSecurity', $joinDocumentSecurity);
+
+        return $adapterCollection;
+    }
+
+    /**
+     * Maps each joined collection, as its join query names it, to the attributes a join without a
+     * select returns under the join's alias.
+     */
+    public const string JOIN_ATTRIBUTES = 'joinAttributes';
+
+    /**
+     * Relationship attributes are left out: only some sides of a relationship have a column, and a
+     * join does not populate related documents.
+     *
+     * @param  array<Query>  $joins
+     */
+    private function withJoinAttributes(Document $collection, array $joins): Document
+    {
+        if ($joins === []) {
+            return $collection;
+        }
+
+        $joinAttributes = [];
+        foreach ($joins as $join) {
+            $joinCollectionId = $join->getAttribute();
+            if (isset($joinAttributes[$joinCollectionId])) {
+                continue;
+            }
+
+            $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
+            /** @var array<Attribute|Document> $attributes */
+            $attributes = $joinCollection->getAttribute('attributes', []);
+            $keys = [];
+            foreach ($attributes as $attribute) {
+                if (! Attribute::isRelationship($attribute)) {
+                    $keys[] = $attribute->getId();
+                }
+            }
+            $joinAttributes[$joinCollectionId] = $keys;
+        }
+
+        $adapterCollection = clone $collection;
+        $adapterCollection->setAttribute(self::JOIN_ATTRIBUTES, $joinAttributes);
 
         return $adapterCollection;
     }

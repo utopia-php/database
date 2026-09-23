@@ -71,9 +71,9 @@ trait JoinComboTests
 
             $this->assertSame(1, \count($results));
             $this->assertComboSecretsHidden($results);
-            $this->assertSame('open-payload', $results[0]->getAttribute('payload'));
-            $this->assertNotSame('combo-secret-alpha', $results[0]->getAttribute('payload'));
-            $this->assertSame('c-open-token', $results[0]->getAttribute('secret'));
+            $this->assertSame('open-payload', $results[0]->getAttribute('visible.payload'));
+            $this->assertNotSame('combo-secret-alpha', $results[0]->getAttribute('visible.payload'));
+            $this->assertSame('c-open-token', $results[0]->getAttribute('c.secret'));
             $this->assertNotSame('c-combo-secret', $results[0]->getId());
         });
 
@@ -385,7 +385,7 @@ trait JoinComboTests
             $this->assertSame(false, $unmatched->isEmpty());
             $this->assertSame('m2', $unmatched->getId());
             $this->assertComboSecretHidden($unmatched);
-            $unmatchedScore = $unmatched->getAttribute('score');
+            $unmatchedScore = $unmatched->getAttribute('sec.score');
             $this->assertTrue(\is_numeric($unmatchedScore));
             $this->assertSame(313, (int) $unmatchedScore);
 
@@ -396,7 +396,7 @@ trait JoinComboTests
             $this->assertSame(false, $matched->isEmpty());
             $this->assertSame('m1', $matched->getId());
             $this->assertComboSecretHidden($matched);
-            $this->assertNotSame(777, $matched->getAttribute('score'));
+            $this->assertNotSame(777, $matched->getAttribute('sec.score'));
         });
 
         $this->cleanupAggCollections($database, $this->joinComboCollections());

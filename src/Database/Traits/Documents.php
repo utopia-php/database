@@ -2759,7 +2759,8 @@ trait Documents
     }
 
     /**
-     * Purge all cached query entries for a collection namespace.
+     * Purge every cached query result of a collection namespace: the find() query
+     * cache and the caller-owned withCache() region.
      */
     public function purgeCachedQueries(string $collection, ?string $namespace = null): bool
     {
@@ -2768,11 +2769,18 @@ trait Documents
         $epochKey = $this->getQueryCacheKey($collection, $namespace).'#epoch';
         $existing = $this->cache->load($epochKey, self::TTL);
 
-        if ($existing !== false && $existing !== null && ! $this->cache->purge($epochKey)) {
+        $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
+            && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+
+        try {
+            $this->queryCache?->invalidateCollection($this->getQueryCacheScope($namespace), $collection);
+        } catch (Exception $error) {
+            Console::warning('Warning: Failed to purge the query cache: '.$error->getMessage());
+
             return false;
         }
 
-        return $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+        return $rotated;
     }
 
     /**

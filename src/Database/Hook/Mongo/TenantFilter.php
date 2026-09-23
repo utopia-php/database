@@ -3,18 +3,18 @@
 namespace Utopia\Database\Hook\Mongo;
 
 use Closure;
-use Utopia\Database\Hook\Read;
 use Utopia\Database\Storage;
+use Utopia\Query\Hook;
 
 /**
- * MongoDB read hook that injects tenant isolation filters into queries for shared-table configurations.
+ * MongoDB hook that injects tenant isolation filters into queries and writes for shared-table configurations.
  *
  * Unlike SQL adapters which use separate TenantFilter (read) and Tenant (write) hooks,
  * MongoDB stores the tenant identifier as an embedded `_tenant` field directly on the document.
- * The Mongo adapter sets this field during document creation without a separate write hook.
- * Read filtering is sufficient because tenant isolation only requires query-time filtering.
+ * The Mongo adapter sets this field during document creation without a separate write hook,
+ * and scopes every read, update and delete filter with this hook.
  */
-class TenantFilter implements Read
+class TenantFilter implements Hook
 {
     /**
      * @param bool $sharedTables Whether shared tables mode is enabled
@@ -31,10 +31,9 @@ class TenantFilter implements Read
      *
      * @param array<string, mixed> $filters The current MongoDB filter array
      * @param string $collection The collection being queried
-     * @param string $forPermission The permission type (unused in tenant filtering)
      * @return array<string, mixed> The modified filter array with tenant constraints
      */
-    public function applyFilters(array $filters, string $collection, string $forPermission = 'read'): array
+    public function applyFilters(array $filters, string $collection): array
     {
         if (! $this->sharedTables) {
             return $filters;

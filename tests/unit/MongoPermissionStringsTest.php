@@ -70,7 +70,7 @@ class MongoPermissionStringsTest extends TestCase
             $authorization->addRole($role);
         }
 
-        $filters = (new PermissionFilter($authorization))->applyFilters([], 'documents', $type->value);
+        $filters = (new PermissionFilter($authorization))->applyFilters([], 'documents', $type);
         $permissionFilter = $filters[Storage::PERMISSIONS] ?? null;
         if (! \is_array($permissionFilter)) {
             return [];

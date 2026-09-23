@@ -4,6 +4,7 @@ namespace Utopia\Database\Hook\Mongo;
 
 use Utopia\Database\Database;
 use Utopia\Database\Hook\Read;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
@@ -31,10 +32,10 @@ class PermissionFilter implements Read
      *
      * @param array<string, mixed> $filters The current MongoDB filter array
      * @param string $collection The collection being queried
-     * @param string $forPermission The permission type to filter for (e.g. 'read')
+     * @param PermissionType $forPermission The permission type to filter for
      * @return array<string, mixed> The modified filter array with permission constraints
      */
-    public function applyFilters(array $filters, string $collection, string $forPermission = 'read'): array
+    public function applyFilters(array $filters, string $collection, PermissionType $forPermission): array
     {
         if (! $this->authorization->getStatus()) {
             return $filters;
@@ -46,7 +47,7 @@ class PermissionFilter implements Read
 
         $permissions = [];
         foreach ($this->authorization->getRoles() as $role) {
-            $permissions[] = $forPermission.'("'.$role.'")';
+            $permissions[] = $forPermission->value.'("'.$role.'")';
         }
 
         /** @var array<string, mixed> $permissionsFilter */

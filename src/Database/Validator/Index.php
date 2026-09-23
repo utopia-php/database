@@ -17,6 +17,14 @@ use Utopia\Validator;
  */
 class Index extends Validator
 {
+    private const array STRING_TYPES = [
+        ColumnType::String,
+        ColumnType::Varchar,
+        ColumnType::Text,
+        ColumnType::MediumText,
+        ColumnType::LongText,
+    ];
+
     protected string $message = 'Invalid index';
 
     /**
@@ -361,17 +369,10 @@ class Index extends Validator
         }
         if ($index->type === IndexType::Fulltext) {
             foreach ($index->attributes as $attributeName) {
-                $attribute = $this->attributes[\strtolower($attributeName)] ?? new AttributeVO();
-                $attributeType = $attribute->type;
-                $validFulltextTypes = [
-                    ColumnType::String,
-                    ColumnType::Varchar,
-                    ColumnType::Text,
-                    ColumnType::MediumText,
-                    ColumnType::LongText,
-                ];
-                if (! in_array($attributeType, $validFulltextTypes)) {
-                    $this->message = 'Attribute "'.$attribute->key.'" cannot be part of a fulltext index, must be of type string';
+                $attribute = $this->findAttribute($attributeName);
+                if (! $this->isStringAttribute($attribute)) {
+                    $key = $attribute === null ? $attributeName : $attribute->key;
+                    $this->message = 'Attribute "'.$key.'" cannot be part of a fulltext index, must be of type string';
 
                     return false;
                 }
@@ -395,9 +396,9 @@ class Index extends Validator
 
         $arrayAttributes = [];
         foreach ($index->attributes as $attributePosition => $attributeName) {
-            $attribute = $this->attributes[\strtolower($attributeName)] ?? new AttributeVO();
+            $attribute = $this->findAttribute($attributeName);
 
-            if ($attribute->array) {
+            if ($attribute !== null && $attribute->array) {
                 // Database::INDEX_UNIQUE Is not allowed! since mariaDB VS MySQL makes the unique Different on values
                 if ($index->type !== IndexType::Key) {
                     $this->message = '"'.ucfirst($index->type->value).'" index is forbidden on array attributes';
@@ -430,14 +431,9 @@ class Index extends Validator
 
                     return false;
                 }
-            } elseif (! in_array($attribute->type, [
-                ColumnType::String,
-                ColumnType::Varchar,
-                ColumnType::Text,
-                ColumnType::MediumText,
-                ColumnType::LongText,
-            ]) && ! empty($index->lengths[$attributePosition])) {
-                $this->message = 'Cannot set a length on "'.$attribute->type->value.'" attributes';
+            } elseif (! $this->isStringAttribute($attribute) && ! empty($index->lengths[$attributePosition])) {
+                $type = $attribute === null ? '' : $attribute->type->value;
+                $this->message = 'Cannot set a length on "'.$type.'" attributes';
 
                 return false;
             }
@@ -679,17 +675,8 @@ class Index extends Validator
             return false;
         }
 
-        $validStringTypes = [
-            ColumnType::String,
-            ColumnType::Varchar,
-            ColumnType::Text,
-            ColumnType::MediumText,
-            ColumnType::LongText,
-        ];
-
         foreach ($index->attributes as $attributeName) {
-            $attribute = $this->attributes[\strtolower($attributeName)] ?? new AttributeVO();
-            if (! in_array($attribute->type, $validStringTypes)) {
+            if (! $this->isStringAttribute($this->findAttribute($attributeName))) {
                 $this->message = 'Trigram index can only be created on string type attributes';
 
                 return false;
@@ -908,6 +895,21 @@ class Index extends Validator
         }
 
         return true;
+    }
+
+    /**
+     * Returns null for names outside the schema, such as a dotted path into an object attribute,
+     * so guards that only accept declared types reject them instead of treating them as a blank
+     * attribute of the default type.
+     */
+    private function findAttribute(string $name): ?AttributeVO
+    {
+        return $this->attributes[\strtolower($name)] ?? null;
+    }
+
+    private function isStringAttribute(?AttributeVO $attribute): bool
+    {
+        return $attribute !== null && \in_array($attribute->type, self::STRING_TYPES, true);
     }
 
     private function isDottedAttribute(string $attribute): bool

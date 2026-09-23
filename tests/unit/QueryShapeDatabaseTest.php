@@ -78,6 +78,34 @@ final class QueryShapeDatabaseTest extends TestCase
                 self::crossJoins(9),
                 'Too many joins: at most 8 are allowed',
             ],
+            'having an attribute outside the schema' => [
+                [Query::sum('amount', 'total'), Query::groupBy(['status']), Query::having([Query::equal('no_such_attribute', ['x'])])],
+                'Invalid query: Having can only compare an aggregate alias or a groupBy attribute: no_such_attribute',
+            ],
+            'having an attribute that is not grouped' => [
+                [Query::sum('amount', 'total'), Query::groupBy(['status']), Query::having([Query::equal('body', ['x'])])],
+                'Invalid query: Having can only compare an aggregate alias or a groupBy attribute: body',
+            ],
+            'having a search without a fulltext index' => [
+                [Query::count('*', 'rows'), Query::groupBy(['body']), Query::having([Query::search('body', 'order')])],
+                'Searching by attribute "body" requires a fulltext index.',
+            ],
+            'having more values than allowed' => [
+                [Query::count('*', 'rows'), Query::groupBy(['status']), Query::having([Query::equal('status', \array_map(fn (int $index): string => 'status'.$index, \range(1, 5001)))])],
+                'Invalid query: Query on attribute has greater than 5000 values: status',
+            ],
+            'having a value of the wrong type' => [
+                [Query::count('*', 'rows'), Query::groupBy(['paid']), Query::having([Query::greaterThan('paid', 'yes')])],
+                'Invalid query: Query value is invalid for attribute "paid"',
+            ],
+            'having a numeric alias compared with text' => [
+                [Query::sum('amount', 'total'), Query::groupBy(['status']), Query::having([Query::greaterThan('total', 'abc')])],
+                'Invalid query: Query value is invalid for aggregate alias "total"',
+            ],
+            'having an alias inside a logical group' => [
+                [Query::sum('amount', 'total'), Query::groupBy(['status']), Query::having([Query::or([Query::greaterThan('total', 10), Query::lessThan('total', 1)])])],
+                'Invalid query: Aggregate alias "total" can only be compared at the top level of having',
+            ],
         ];
     }
 

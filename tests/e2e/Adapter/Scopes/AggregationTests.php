@@ -1701,4 +1701,43 @@ trait AggregationTests
 
         $database->deleteCollection($collection);
     }
+
+    public function testHavingConditionsFollowTheFilterRules(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'having_filter_rules';
+        $this->createProducts($database, $collection);
+
+        $rejected = [
+            'Searching by attribute "name" requires a fulltext index.' => [Query::count('*', 'rows'), Query::groupBy(['name']), Query::having([Query::search('name', 'Laptop')])],
+            'Invalid query: Having can only compare an aggregate alias or a groupBy attribute: no_such_attribute' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::equal('no_such_attribute', ['x'])])],
+            'Invalid query: Having can only compare an aggregate alias or a groupBy attribute: name' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::equal('name', ['Laptop'])])],
+            'Invalid query: Aggregate alias "total" can only be compared at the top level of having' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::or([Query::greaterThan('total', 1000), Query::lessThan('total', 100)])])],
+            'Invalid query: Query value is invalid for aggregate alias "total"' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::greaterThan('total', 'abc')])],
+            'Invalid query: Query value is invalid for attribute "name"' => [Query::max('name', 'last'), Query::groupBy(['category']), Query::having([Query::greaterThan('last', 5)])],
+        ];
+        foreach ($rejected as $message => $queries) {
+            $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $queries), $message);
+        }
+
+        $results = $database->find($collection, [
+            Query::sum('price', 'total'),
+            Query::groupBy(['category']),
+            Query::having([
+                Query::greaterThan('total', 100),
+                Query::equal('category', ['electronics', 'books']),
+            ]),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertSame('electronics', $results[0]->getAttribute('category'));
+        $this->assertSame(2500, $this->intAttribute($results[0], 'total'));
+
+        $database->deleteCollection($collection);
+    }
 }

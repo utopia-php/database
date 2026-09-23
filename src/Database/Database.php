@@ -2832,7 +2832,9 @@ class Database
             return;
         }
 
-        $invalidator->invalidate($event, $data, $this->getQueryCacheScope());
+        $tokens = $this->getInvalidationTokens($event, $data);
+        $invalidator->block($tokens);
+        $invalidator->activate($tokens);
     }
 
     /**
@@ -2840,7 +2842,12 @@ class Database
      */
     protected function getInvalidationTokens(Event $event, mixed $data = null): array
     {
-        return $this->queryCacheInvalidator?->tokens($event, $data, $this->getQueryCacheScope()) ?? [];
+        return $this->queryCacheInvalidator?->tokens(
+            $event,
+            $data,
+            $this->getQueryCacheScope(),
+            $this->adapter->getSharedTables() && $this->adapter->getTenantPerDocument(),
+        ) ?? [];
     }
 
     /**

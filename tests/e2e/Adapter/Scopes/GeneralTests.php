@@ -13,6 +13,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Attribute;
+use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -394,6 +395,120 @@ trait GeneralTests
                 ->setTenant($tenant)
                 ->setNamespace($namespace)
                 ->setDatabase($schema);
+        }
+    }
+
+    public function testSharedTablesTenantPerDocumentUpsertRefreshesTheQueryCache(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (
+            ! $database->getSharedTables()
+            || ! $adapter->hasFeature(Feature\Upserts::class)
+            || ! $adapter->supports(Capability::Schemas)
+            || ! $adapter->supports(Capability::Caching)
+        ) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $tenantPerDocument = $database->getTenantPerDocument();
+        $tenant = $database->getTenant();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $queryCache = $database->getQueryCache();
+        $cacheSchema = 'queryCacheTenants_'.static::getTestToken();
+
+        if ($database->exists($cacheSchema)) {
+            $database->delete($cacheSchema);
+        }
+
+        try {
+            $database
+                ->setDatabase($cacheSchema)
+                ->setNamespace('')
+                ->setTenant(null)
+                ->create();
+            $database->createCollection(new Collection(
+                id: 'notes',
+                attributes: [Attribute::string(key: 'title', size: 64)],
+                permissions: [
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                documentSecurity: true,
+            ));
+            $database
+                ->setTenantPerDocument(true)
+                ->setQueryCache(new QueryCache($database->getCache(), ID::unique()));
+
+            foreach ([5, 6] as $documentTenant) {
+                $database->createDocument('notes', $this->queryCacheTenantNote($documentTenant, ['alice', 'bob'], 'draft'));
+            }
+            foreach (['alice', 'bob'] as $reader) {
+                $this->assertSame(['note' => 'draft'], $this->queryCacheTenantTitles($database, $reader, 5));
+            }
+
+            $database->upsertDocuments('notes', [$this->queryCacheTenantNote(5, ['alice'], 'final')]);
+
+            $this->assertSame(
+                [],
+                $this->queryCacheTenantTitles($database, 'bob', 5),
+                'An upsert with no tenant selected revoked bob on tenant 5\'s note, so the query cache must not keep serving it to him',
+            );
+            $this->assertSame(['note' => 'final'], $this->queryCacheTenantTitles($database, 'alice', 5));
+            $this->assertSame(['note' => 'draft'], $this->queryCacheTenantTitles($database, 'bob', 6));
+        } finally {
+            $database
+                ->setQueryCache($queryCache)
+                ->setTenantPerDocument($tenantPerDocument)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
+        }
+    }
+
+    /**
+     * @param  list<string>  $readers
+     */
+    private function queryCacheTenantNote(int $tenant, array $readers, string $title): Document
+    {
+        return new Document([
+            '$id' => 'note',
+            '$tenant' => $tenant,
+            'title' => $title,
+            '$permissions' => \array_map(
+                static fn (string $reader): string => Permission::read(Role::user($reader)),
+                $readers,
+            ),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed> Titles by document id
+     */
+    private function queryCacheTenantTitles(Database $database, string $reader, int $tenant): array
+    {
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::user($reader)->toString());
+
+        try {
+            $titles = [];
+            foreach ($database->withTenant($tenant, fn (): array => $database->find('notes', [Query::orderAsc('$id')])) as $document) {
+                $titles[$document->getId()] = $document->getAttribute('title');
+            }
+
+            return $titles;
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
         }
     }
 

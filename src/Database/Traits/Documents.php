@@ -739,8 +739,7 @@ trait Documents
 
         $document = $this->castingBefore($collection, $document);
 
-        $cacheTarget = $collection->getId() === self::METADATA ? $document : $collection->getId();
-        $document = $this->withMutation(Event::DocumentCreate, $cacheTarget, function () use ($collection, $document) {
+        $document = $this->withMutation(Event::DocumentCreate, $document, function () use ($collection, $document) {
             $hook = $this->relationshipHook;
             if ($hook?->isEnabled()) {
                 $document = $this->silent(fn () => $hook->afterDocumentCreate($collection, $document));
@@ -886,10 +885,9 @@ trait Documents
         }
 
         foreach (\array_chunk($documents, $batchSize) as $chunk) {
-            $cacheTarget = $collection->getId() === self::METADATA ? $chunk : $collection->getId();
             $insert = fn () => $this->withMutation(
                 Event::DocumentsCreate,
-                $cacheTarget,
+                $chunk,
                 function () use ($collection, $chunk): array {
                     $batch = $this->adapter->createDocuments($collection, $chunk);
 
@@ -1840,12 +1838,9 @@ trait Documents
                 }
             }
 
-            $cacheTarget = $collection->getId() === self::METADATA
-                ? \array_map(static fn (Change $change): Document => $change->getNew(), $chunk)
-                : $collection->getId();
             $batch = $this->withMutation(
                 Event::DocumentsUpsert,
-                $cacheTarget,
+                \array_map(static fn (Change $change): Document => $change->getNew(), $chunk),
                 function () use ($collection, $attribute, $chunk): array {
                     if (! $this->adapter->hasFeature(Feature\Upserts::class)) {
                         throw new DatabaseException('Adapter does not support upserts');

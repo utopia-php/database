@@ -1110,6 +1110,93 @@ trait RelationshipTests
         }
     }
 
+    public function testNoChangeUpdateDocumentWithRelationWithoutPermission(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        for ($level = 1; $level <= 5; $level++) {
+            $database->createCollection(new Collection(
+                id: "unchanged_level{$level}",
+                attributes: [Attribute::string(key: 'name', size: 100, signed: false)],
+                permissions: [
+                    Permission::read(Role::any()),
+                    Permission::create(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ));
+        }
+
+        for ($level = 1; $level < 5; $level++) {
+            $next = $level + 1;
+            $database->createRelationship(Relationship::oneToOne(
+                collection: "unchanged_level{$level}",
+                relatedCollection: "unchanged_level{$next}",
+                key: "level{$next}",
+            ));
+        }
+
+        $level1 = $database->createDocument('unchanged_level1', new Document([
+            '$id' => 'level1',
+            '$permissions' => [],
+            'name' => 'Level 1',
+            'level2' => [
+                '$id' => 'level2',
+                '$permissions' => [],
+                'name' => 'Level 2',
+                'level3' => [
+                    '$id' => 'level3',
+                    '$permissions' => [],
+                    'name' => 'Level 3',
+                    'level4' => [
+                        '$id' => 'level4',
+                        '$permissions' => [],
+                        'name' => 'Level 4',
+                        'level5' => [
+                            '$id' => 'level5',
+                            '$permissions' => [],
+                            'name' => 'Level 5',
+                        ],
+                    ],
+                ],
+            ],
+        ]));
+
+        $database->updateDocument('unchanged_level1', 'level1', new Document($level1->getArrayCopy()));
+        $this->assertEquals($level1, $database->getDocument('unchanged_level1', 'level1'));
+
+        try {
+            $database->updateDocument('unchanged_level1', 'level1', $level1->setAttribute('name', 'haha'));
+            $this->fail('Changing a document without update permission must be rejected');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame("No permissions provided for action 'update'", $exception->getMessage());
+        }
+
+        $level1->setAttribute('name', 'Level 1');
+        $database->updateCollection('unchanged_level3', [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ], false);
+
+        $level1->getDocument('level2')->getDocument('level3')->setAttribute('name', 'updated value');
+
+        $level1 = $database->updateDocument('unchanged_level1', 'level1', $level1);
+        $this->assertSame('updated value', $level1->getDocument('level2')->getDocument('level3')->getAttribute('name'));
+        $this->assertSame('updated value', $database->getDocument('unchanged_level3', 'level3')->getAttribute('name'));
+
+        for ($level = 1; $level <= 5; $level++) {
+            $database->deleteCollection("unchanged_level{$level}");
+        }
+    }
+
     public function testUpdateAttributeRenameRelationshipTwoWay(): void
     {
         /** @var Database $database */
@@ -1163,6 +1250,81 @@ trait RelationshipTests
         $docA = $database->getDocument('rnRsTestA', $docA->getId());
         $this->assertArrayHasKey('rnRsTestB_renamed_2', $docA->getAttributes());
         $this->assertEquals($docB->getId(), $docA->getDocument('rnRsTestB_renamed_2')->getId());
+    }
+
+    public function testNoInvalidKeysWithRelationships(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        foreach (['species', 'creatures', 'characteristics'] as $collection) {
+            $database->createCollection(new Collection(id: $collection));
+            $database->createAttribute($collection, Attribute::string(key: 'name', required: true));
+        }
+
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'species',
+            relatedCollection: 'creatures',
+            twoWay: true,
+            key: 'creature',
+            twoWayKey: 'species',
+        ));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'creatures',
+            relatedCollection: 'characteristics',
+            twoWay: true,
+            key: 'characteristic',
+            twoWayKey: 'creature',
+        ));
+
+        $species = $database->createDocument('species', new Document([
+            '$id' => ID::custom('1'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'Canine',
+            'creature' => [
+                '$id' => ID::custom('1'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'name' => 'Dog',
+                'characteristic' => [
+                    '$id' => ID::custom('1'),
+                    '$permissions' => [
+                        Permission::read(Role::any()),
+                        Permission::update(Role::any()),
+                    ],
+                    'name' => 'active',
+                ],
+            ],
+        ]));
+
+        $database->updateDocument('species', $species->getId(), new Document([
+            '$id' => ID::custom('1'),
+            '$collection' => 'species',
+            'creature' => [
+                '$id' => ID::custom('1'),
+                '$collection' => 'creatures',
+                'characteristic' => [
+                    '$id' => ID::custom('1'),
+                    'name' => 'active',
+                    '$collection' => 'characteristics',
+                ],
+            ],
+        ]));
+
+        $this->assertEquals($species, $database->getDocument('species', $species->getId()));
+
+        foreach (['species', 'creatures', 'characteristics'] as $collection) {
+            $database->deleteCollection($collection);
+        }
     }
 
     public function testSelectRelationshipAttributes(): void
@@ -1527,6 +1689,208 @@ trait RelationshipTests
         $this->assertEquals($permissions, $tree1->getDocument('lawn')->getPermissions());
         $this->assertEquals($permissions, $tree1->getDocuments('birds')[0]->getPermissions());
         $this->assertEquals($permissions, $tree1->getDocuments('birds')[1]->getPermissions());
+    }
+
+    public function testEnforceRelationshipPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $lawns = 'enforce_lawns';
+        $trees = 'enforce_trees';
+        $birds = 'enforce_birds';
+
+        foreach ([$lawns, $trees, $birds] as $collection) {
+            $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any())]));
+            $database->createAttribute($collection, Attribute::string(key: 'name', required: true));
+        }
+
+        $database->createRelationship(Relationship::oneToMany(
+            collection: $lawns,
+            relatedCollection: $trees,
+            twoWay: true,
+            key: 'trees',
+            twoWayKey: 'lawn',
+            onDelete: ForeignKeyAction::Cascade,
+        ));
+        $database->createRelationship(Relationship::manyToMany(
+            collection: $trees,
+            relatedCollection: $birds,
+            twoWay: true,
+            key: 'birds',
+            twoWayKey: 'trees',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument($lawns, new Document([
+            '$id' => 'lawn1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::read(Role::user('user1')),
+                Permission::update(Role::user('user1')),
+                Permission::delete(Role::user('user2')),
+            ],
+            'name' => 'Lawn 1',
+            'trees' => [
+                [
+                    '$id' => 'tree1',
+                    'name' => 'Tree 1',
+                    'birds' => [
+                        ['$id' => 'bird1', 'name' => 'Bird 1'],
+                        ['$id' => 'bird2', 'name' => 'Bird 2'],
+                    ],
+                ],
+            ],
+        ]));
+
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            $this->assertSame('Lawn 1', $database->getDocument($lawns, 'lawn1')->getAttribute('name'));
+
+            foreach ([$lawns => 'lawn1', $trees => 'tree1', $birds => 'bird1'] as $collection => $id) {
+                $document = $database->getDocument($collection, $id);
+
+                try {
+                    $database->updateDocument($collection, $id, $document->setAttribute('name', 'Updated'));
+                    $this->fail("Updating {$id} without the user:user1 role must be rejected");
+                } catch (AuthorizationException $exception) {
+                    $this->assertSame('Missing "update" permission for role "user:user1". Only "["any"]" scopes are allowed and "["user:user1"]" was given.', $exception->getMessage());
+                }
+
+                try {
+                    $database->deleteDocument($collection, $id);
+                    $this->fail("Deleting {$id} without the user:user2 role must be rejected");
+                } catch (AuthorizationException $exception) {
+                    $this->assertSame('Missing "delete" permission for role "user:user2". Only "["any"]" scopes are allowed and "["user:user2"]" was given.', $exception->getMessage());
+                }
+            }
+
+            $authorization->addRole(Role::user('user1')->toString());
+
+            $bird1 = $database->getDocument($birds, 'bird1');
+            $bird1 = $database->updateDocument($birds, 'bird1', $bird1->setAttribute('name', 'Bird 1 Updated'));
+            $this->assertSame('Bird 1 Updated', $bird1->getAttribute('name'));
+
+            $authorization->addRole(Role::user('user2')->toString());
+
+            $this->assertTrue($database->deleteDocument($birds, 'bird1'));
+            $tree1 = $database->getDocument($trees, 'tree1');
+            $this->assertCount(1, $tree1->getDocuments('birds'));
+            $this->assertSame('bird2', $tree1->getDocuments('birds')[0]->getId());
+
+            $tree1 = $database->updateDocument($trees, 'tree1', $tree1->setAttribute('name', 'Tree 1 Updated'));
+            $this->assertSame('Tree 1 Updated', $tree1->getAttribute('name'));
+
+            $this->assertTrue($database->deleteDocument($trees, 'tree1'));
+            $lawn1 = $database->getDocument($lawns, 'lawn1');
+            $this->assertSame('Lawn 1', $lawn1->getAttribute('name'));
+            $this->assertSame([], $lawn1->getAttribute('trees'));
+
+            $database->createDocument($lawns, new Document([
+                '$id' => 'lawn2',
+                'name' => 'Lawn 2',
+                'trees' => [
+                    [
+                        '$id' => 'tree2',
+                        'name' => 'Tree 2',
+                        'birds' => [
+                            ['$id' => 'bird3', 'name' => 'Bird 3'],
+                        ],
+                    ],
+                ],
+            ]));
+
+            foreach ([$lawns => 'lawn2', $trees => 'tree2', $birds => 'bird3'] as $collection => $id) {
+                $this->assertTrue($database->getDocument($collection, $id)->isEmpty(), "{$id} must not be readable without a read permission");
+                $this->assertFalse($authorization->skip(fn () => $database->getDocument($collection, $id))->isEmpty(), "{$id} must have been created");
+            }
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+
+            foreach ([$lawns, $trees, $birds] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    public function testCreateEmptyValueRelationship(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: 'null1'));
+        $database->createCollection(new Collection(id: 'null2'));
+
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            twoWay: true,
+        ));
+        $database->createRelationship(Relationship::oneToMany(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            twoWay: true,
+            key: 'null3',
+            twoWayKey: 'null4',
+        ));
+        $database->createRelationship(Relationship::manyToOne(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            twoWay: true,
+            key: 'null4',
+            twoWayKey: 'null5',
+        ));
+        $database->createRelationship(Relationship::manyToMany(
+            collection: 'null1',
+            relatedCollection: 'null2',
+            twoWay: true,
+            key: 'null6',
+            twoWayKey: 'null7',
+        ));
+
+        $cases = [
+            'oneToOne parent' => ['null1', 'null2', null],
+            'oneToOne child' => ['null2', 'null1', null],
+            'oneToMany parent' => ['null1', 'null3', []],
+            'oneToMany child' => ['null2', 'null4', null],
+            'manyToOne parent' => ['null1', 'null4', null],
+            'manyToOne child' => ['null2', 'null5', []],
+            'manyToMany parent' => ['null1', 'null6', []],
+            'manyToMany child' => ['null2', 'null7', []],
+        ];
+
+        foreach ($cases as $case => [$collection, $key, $expected]) {
+            $created = $database->createDocument($collection, new Document([
+                '$id' => ID::unique(),
+                $key => null,
+            ]));
+            $this->assertSame($expected, $created->getAttribute($key), "{$case}: created value");
+
+            $stored = $database->getAuthorization()->skip(fn () => $database->getDocument($collection, $created->getId()));
+            $this->assertSame($expected, $stored->getAttribute($key), "{$case}: stored value");
+        }
+
+        $database->deleteCollection('null1');
+        $database->deleteCollection('null2');
     }
 
     public function testUpdateDocumentsRelationships(): void

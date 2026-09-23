@@ -1083,6 +1083,12 @@ trait Attributes
             if (! $updated) {
                 throw new DatabaseException('Failed to update attribute');
             }
+        } elseif ($originalRequired && ! $required) {
+            // The alter above already applies the new nullability. A required-only change relaxes the
+            // column on its own instead, because the column rewrite re-casts datetime columns on Postgres.
+            if (! $this->adapter->relaxAttributeRequired($collection, $id)) {
+                throw new DatabaseException('Failed to update attribute');
+            }
         }
 
         $collectionDoc->setAttribute('attributes', $attributes);
@@ -1106,13 +1112,6 @@ trait Attributes
             operationDescription: "attribute update '{$id}'",
             silentRollback: true
         );
-
-        // An attribute that stops being required leaves the column alone on
-        // every other path, so the constraint it was created with outlives the
-        // definition that asked for it.
-        if ($originalRequired && ! $required) {
-            $this->adapter->relaxAttributeRequired($collection, $newKey ?? $id);
-        }
 
         if ($altering) {
             $this->withRetries(fn () => $this->purgeCachedCollection($collection));

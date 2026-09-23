@@ -543,6 +543,33 @@ trait AttributeTests
         ]));
     }
 
+    public function testRequiredOnlyChangeKeepsDatetimeColumnsWritable(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'datetime_required_relax';
+        $database->createCollection(new Collection(id: $collection));
+        $database->createAttribute($collection, Attribute::datetime(key: 'at', required: true));
+        $database->createDocument($collection, new Document([
+            '$id' => 'one',
+            '$permissions' => [Permission::read(Role::any())],
+            'at' => '2024-01-01T00:00:00.000+00:00',
+        ]));
+
+        $updated = $database->updateAttribute($collection, 'at', required: false);
+        $this->assertFalse($updated->getAttribute('required'));
+
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'two',
+            '$permissions' => [Permission::read(Role::any())],
+            'at' => null,
+        ]));
+        $this->assertNull($document->getAttribute('at'));
+
+        $database->deleteCollection($collection);
+    }
+
     public function testUpdateAttributeFilter(): void
     {
         $this->initFlowersFixture();

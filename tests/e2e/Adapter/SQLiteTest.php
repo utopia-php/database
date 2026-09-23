@@ -6,8 +6,14 @@ use Redis;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
+use Utopia\Database\Query;
 
 class SQLiteTest extends Base
 {
@@ -57,6 +63,45 @@ class SQLiteTest extends Base
         self::$pdo = $pdo;
 
         return self::$database = $database;
+    }
+
+    public function testPatternQueriesMatchWildcardCharactersLiterally(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'likeEscape';
+
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', size: 64, required: true),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        foreach (['a_b', 'axb', 'c%d', 'cxxd', 'e\\f', 'e\\\\f'] as $name) {
+            $database->createDocument($collection, new Document(['name' => $name]));
+        }
+
+        $cases = [
+            [Query::containsString('name', ['a_b']), ['a_b']],
+            [Query::containsAny('name', ['c%d', 'e\\f']), ['c%d', 'e\\f']],
+            [Query::containsAll('name', ['c%', '%d']), ['c%d']],
+            [Query::notContains('name', ['_', '\\']), ['axb', 'c%d', 'cxxd']],
+            [Query::startsWith('name', 'e\\f'), ['e\\f']],
+            [Query::endsWith('name', '_b'), ['a_b']],
+            [Query::notStartsWith('name', 'c%'), ['a_b', 'axb', 'cxxd', 'e\\f', 'e\\\\f']],
+            [Query::notEndsWith('name', '\\\\f'), ['a_b', 'axb', 'c%d', 'cxxd', 'e\\f']],
+        ];
+
+        foreach ($cases as [$query, $expected]) {
+            $names = \array_map(
+                fn (Document $document): mixed => $document->getAttribute('name'),
+                $database->find($collection, [$query]),
+            );
+            \sort($names);
+            \sort($expected);
+
+            $this->assertSame($expected, $names, $query->toString());
+        }
     }
 
     protected function deleteColumn(string $collection, string $column): bool

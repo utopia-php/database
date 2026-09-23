@@ -14,6 +14,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
 
 final class QueryCacheMetadataTest extends TestCase
 {
@@ -45,6 +46,7 @@ final class QueryCacheMetadataTest extends TestCase
             ->setNamespace('metadata_'.\uniqid())
             ->setSharedTables(true)
             ->setTenant(1);
+        $database->addHook(new Permissions());
         $database->create();
         $database->getAuthorization()->addRole(Role::any()->toString());
         $database->setQueryCache(new QueryCache(new Cache(new LeasableHashCache())));

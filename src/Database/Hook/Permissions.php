@@ -74,7 +74,7 @@ class Permissions extends Interceptor
         }
 
         $previousId = $context->lookupId;
-        if ($previousId !== null && $previousId !== '' && \strcasecmp($previousId, $document->getId()) !== 0) {
+        if ($previousId !== null && $previousId !== '' && $previousId !== $document->getId()) {
             $this->movePermissions($collection, $previousId, $document, $context);
 
             return;

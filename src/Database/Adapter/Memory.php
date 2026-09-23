@@ -1334,7 +1334,7 @@ class Memory extends Adapter implements Feature\Relationships
 
         $newId = $document->getId();
         $newKey = $this->documentKey($newId);
-        if ($newId !== $id && isset($this->data[$key]['documents'][$newKey])) {
+        if ($newKey !== $oldKey && isset($this->data[$key]['documents'][$newKey])) {
             throw new DuplicateException('Document already exists');
         }
 

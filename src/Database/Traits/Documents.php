@@ -943,10 +943,6 @@ trait Documents
             $document = \array_merge($old->getArrayCopy(), $document->getArrayCopy());
             $document[Document::COLLECTION] = $old->getAttribute(Document::COLLECTION); // Make sure user doesn't switch collection ID
             $document[Document::SEQUENCE] = $old->getSequence(); // Sequence is immutable, and adapters key the UPDATE on it
-            $incomingId = $document[Document::ID] ?? '';
-            if (\is_string($incomingId) && \strcasecmp($incomingId, $old->getId()) === 0) {
-                $document[Document::ID] = $old->getId();
-            }
             if ($document[Document::ID] !== $old->getId()) {
                 $skipPermissionsUpdate = false;
             }

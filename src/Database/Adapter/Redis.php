@@ -873,7 +873,7 @@ class Redis extends Adapter implements
             $newKey = $useNullTenant ? $this->docKey($col, $newId, '_') : $this->docKey($col, $newId);
             $effectiveIdxKey = $useNullTenant ? $this->idxKey($col, '_') : $idxKey;
 
-            if ($newId !== $id && (bool) $redis->exists($newKey)) {
+            if ($newKey !== $oldKey && (bool) $redis->exists($newKey)) {
                 throw new DuplicateException('Document already exists');
             }
 
@@ -1944,7 +1944,9 @@ class Redis extends Adapter implements
                     $newId = $this->payloadString($payload, 'newId');
                     if ($newId !== null && $newId !== $id) {
                         $newDocKey = $this->payloadString($payload, 'newDocKey') ?? $this->docKey($collection, $newId);
-                        $this->client->del($newDocKey);
+                        if ($newDocKey !== $docKey) {
+                            $this->client->del($newDocKey);
+                        }
                         $idxKey = $this->payloadString($payload, 'idxKey') ?? $this->idxKey($collection);
                         $this->client->sRem($idxKey, \strtolower($newId));
                         $this->client->sAdd($idxKey, \strtolower($id));

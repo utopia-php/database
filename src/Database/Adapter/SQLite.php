@@ -1313,7 +1313,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $builder = $this->newBuilder($name);
             $regularRow = [];
-            if (\strcasecmp($document->getId(), $id) !== 0) {
+            if ($document->getId() !== $id) {
                 $regularRow[Storage::UID] = $document->getId();
             }
 

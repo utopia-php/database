@@ -7629,10 +7629,11 @@ trait DocumentTests
             ->setAttribute('$permissions', Permission::create(Role::guests()), SetType::Append)
             ->setAttribute('$permissions', Permission::create(Role::guests()), SetType::Append);
 
-        $database->updateDocument($collection, 'caseSensitive', $stored);
+        $renamed = $database->updateDocument($collection, 'caseSensitive', $stored);
+        $this->assertSame('CaseSensitive', $renamed->getId());
 
-        $updated = $database->getDocument($collection, 'caseSensitive');
-        $this->assertSame('caseSensitive', $updated->getId());
+        $updated = $database->getDocument($collection, 'CaseSensitive');
+        $this->assertSame('CaseSensitive', $updated->getId());
         $this->assertContains('guests', $updated->getRead());
         $this->assertContains('guests', $updated->getCreate());
         $this->assertContains('any', $updated->getCreate());

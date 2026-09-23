@@ -724,7 +724,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
             $builder = $this->newBuilder($name);
             $regularRow = [];
-            if (\strcasecmp($document->getId(), $id) !== 0) {
+            if ($document->getId() !== $id) {
                 $regularRow[Storage::UID] = $document->getId();
             }
 

@@ -845,7 +845,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             $builder = $this->newBuilder($name);
             $row = [];
-            if (\strcasecmp($document->getId(), $id) !== 0) {
+            if ($document->getId() !== $id) {
                 $row[Storage::UID] = $document->getId();
             }
 

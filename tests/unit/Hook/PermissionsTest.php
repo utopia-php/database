@@ -245,7 +245,8 @@ final class PermissionsTest extends TestCase
 
         $adapter->updateDocument($collection, 'caseSensitive', $update, false);
 
-        $document = $adapter->getDocument($collection, 'caseSensitive');
+        $document = $adapter->getDocument($collection, 'CaseSensitive');
+        $this->assertSame('CaseSensitive', $document->getId());
         $this->assertSame(['any', 'guests'], $document->getCreate());
         $this->assertSame(['any', 'guests'], $document->getRead());
     }

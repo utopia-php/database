@@ -141,8 +141,7 @@ final class JoinChainVisibilityTest extends TestCase
         $expected = [];
         $actual = [];
         foreach (self::chains() as $label => $joins) {
-            $rejected = $sharedTables && $this->combinesFullOuterAndRightJoins($joins);
-            $expected[$label] = $rejected ? self::REJECTED : $this->joined($direct, $joins);
+            $expected[$label] = $this->joined($direct, $joins);
             $actual[$label] = $this->read($database, $joins);
         }
 
@@ -181,22 +180,22 @@ final class JoinChainVisibilityTest extends TestCase
         }
     }
 
-    public function testCombiningAFullOuterJoinWithARightJoinIsAllowedWithoutSharedTables(): void
+    public function testCombiningAFullOuterJoinWithARightJoinReadsWhatDirectReadsAllow(): void
     {
         foreach ([false, true] as $native) {
-            $database = $this->database($native, grantAuthors: false, grantJoined: false, sharedTables: false);
-            $this->seed($database, sharedTables: false);
+            foreach ([false, true] as $sharedTables) {
+                $database = $this->database($native, grantAuthors: false, grantJoined: false, sharedTables: $sharedTables);
+                $this->seed($database, $sharedTables);
 
-            $joins = [
-                $this->join(Method::FullOuterJoin, self::BOOKS, self::BOOK, '$id'),
-                $this->join(Method::RightJoin, self::REVIEWS, self::REVIEW, '$id'),
-            ];
+                $joins = [
+                    $this->join(Method::FullOuterJoin, self::BOOKS, self::BOOK, '$id'),
+                    $this->join(Method::RightJoin, self::REVIEWS, self::REVIEW, '$id'),
+                ];
+                $expected = $this->joined($this->directReads($database, $native), $joins);
 
-            $this->assertSame(
-                $this->joined($this->directReads($database, $native), $joins),
-                $this->read($database, $joins),
-                'Only shared tables reject the combination',
-            );
+                $this->assertNotSame(self::REJECTED, $expected, 'Direct reads must answer the combination');
+                $this->assertSame($expected, $this->read($database, $joins), 'The combination must read what direct reads allow, with and without shared tables');
+            }
         }
     }
 
@@ -237,16 +236,6 @@ final class JoinChainVisibilityTest extends TestCase
             Method::CrossJoin => Query::crossJoin($collection, $alias),
             default => throw new \InvalidArgumentException("{$method->value} is not a join this test covers"),
         };
-    }
-
-    /**
-     * @param list<Query> $joins
-     */
-    private function combinesFullOuterAndRightJoins(array $joins): bool
-    {
-        $methods = \array_map(static fn (Query $join): Method => $join->getMethod(), $joins);
-
-        return \in_array(Method::FullOuterJoin, $methods, true) && \in_array(Method::RightJoin, $methods, true);
     }
 
     private function database(bool $native, bool $grantAuthors, bool $grantJoined, bool $sharedTables): Database

@@ -7077,8 +7077,7 @@ trait JoinTests
      * Chains of joins over collections read per document return what the same joins return over
      * the documents direct reads return: an unreadable document neither hides a row an outer join
      * keeps nor pairs with it, so a review of an unreadable author comes back like a review of an
-     * author that does not exist. Under shared tables a full outer join cannot be combined with a
-     * right join.
+     * author that does not exist.
      */
     public function testJoinChainsReadWhatDirectReadsAllow(): void
     {
@@ -7109,13 +7108,8 @@ trait JoinTests
 
             $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $chains, $secured, $direct): void {
                 foreach ($chains as $label => $chain) {
-                    $methods = \array_column($chain, 0);
-                    $rejected = $database->getSharedTables()
-                        && \in_array(Method::FullOuterJoin, $methods, true)
-                        && \in_array(Method::RightJoin, $methods, true);
-
                     $this->assertSame(
-                        $rejected ? 'rejected' : $this->joinChainVisibilityRead($database, $direct, $chain),
+                        $this->joinChainVisibilityRead($database, $direct, $chain),
                         $this->joinChainVisibilityRead($database, $secured, $chain),
                         "{$label} must return what the same joins return over what direct reads return",
                     );
@@ -7129,7 +7123,8 @@ trait JoinTests
     /**
      * A right join that follows a cross join, or a right join its ON references, must not pair its
      * rows with another tenant's rows of the earlier table: they would vanish instead of coming back
-     * unmatched, and what a tenant reads would depend on another tenant's keys.
+     * unmatched, and what a tenant reads would depend on another tenant's keys. A full outer join
+     * combined with a right join reads what the tenant's own database reads too.
      */
     public function testSharedTablesJoinChainsKeepRowsOnlyAnotherTenantMatches(): void
     {
@@ -7170,6 +7165,22 @@ trait JoinTests
                     2 => [[null, null, 1]],
                 ],
             ],
+            'a full outer join, then a right join' => [
+                'joins' => [Query::fullOuterJoin($books, '$id', 'authorId', '=', 'book'), Query::rightJoin($reviews, '$id', 'authorId', '=', 'review')],
+                'numbers' => ['book.pages', 'review.stars'],
+                'rows' => [
+                    1 => [['one-a1', 11, 5], ['one-a2', null, 4], [null, null, 2], [null, null, 3]],
+                    2 => [['two-shared', null, 1]],
+                ],
+            ],
+            'a right join, then a full outer join on it' => [
+                'joins' => [Query::rightJoin($books, '$id', 'authorId', '=', 'book'), Query::fullOuterJoin($reviews, 'book.authorId', 'authorId', '=', 'review')],
+                'numbers' => ['book.pages', 'review.stars'],
+                'rows' => [
+                    1 => [['one-a1', 11, 5], [null, 12, 2], [null, 13, null], [null, null, 3], [null, null, 4]],
+                    2 => [['two-a1', 21, null], ['two-a2', 22, null], [null, null, 1]],
+                ],
+            ],
         ];
 
         try {
@@ -7189,25 +7200,11 @@ trait JoinTests
                         "Tenant {$selected} must read through {$label} what its own database would return",
                     );
                     $this->assertSame(\count($rows), $database->count($authors, $joins), "Tenant {$selected} must count through {$label} what its own database would count");
-                }
-            }
-
-            $database->setTenant(1);
-            foreach ([
-                'a full outer join, then a right join' => [Query::fullOuterJoin($books, '$id', 'authorId', '=', 'book'), Query::rightJoin($reviews, '$id', 'authorId', '=', 'review')],
-                'a right join, then a full outer join' => [Query::rightJoin($books, '$id', 'authorId', '=', 'book'), Query::fullOuterJoin($reviews, 'book.authorId', 'authorId', '=', 'review')],
-            ] as $label => $joins) {
-                foreach ([
-                    'find' => fn () => $database->find($authors, $joins),
-                    'count' => fn () => $database->count($authors, $joins),
-                    'sum' => fn () => $database->sum($authors, 'review.stars', $joins),
-                ] as $read => $call) {
-                    try {
-                        $call();
-                        $this->fail("{$read} through {$label} must be rejected under shared tables");
-                    } catch (QueryException $exception) {
-                        $this->assertStringContainsString('full outer join', $exception->getMessage());
-                    }
+                    $this->assertSame(
+                        \array_sum(\array_column($rows, 2)),
+                        (int) $database->sum($authors, $numbers[1], $joins),
+                        "Tenant {$selected} must sum through {$label} what its own database would sum",
+                    );
                 }
             }
         } finally {

@@ -50,7 +50,6 @@ use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
-use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
 use Utopia\Query\CursorDirection;
@@ -746,7 +745,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $alias,
                     $roles,
                     PermissionType::Read,
-                    false,
                 );
 
                 $right = $this->newBuilder($name, $alias, true);
@@ -762,7 +760,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $alias,
                     $roles,
                     PermissionType::Read,
-                    true,
                 );
 
                 $left->unionAll($right);
@@ -782,7 +779,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $alias,
                     $roles,
                     PermissionType::Read,
-                    $hasPreservingOuterJoin,
                 );
                 $builder->filter([BaseQuery::equal($alias.'.'.Storage::UID, [$id])]);
                 $builder->limit(1);
@@ -1468,7 +1464,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 $forPermission,
-                $leftPreserving,
             );
             $this->applyFullOuterJoinOrderProjection(
                 $left,
@@ -1501,7 +1496,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 $forPermission,
-                true,
             );
             $this->applyFullOuterJoinOrderProjection(
                 $right,
@@ -1542,7 +1536,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 $forPermission,
-                $hasPreservingOuterJoin,
             );
 
             $vectorDistance = null;
@@ -1928,7 +1921,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 PermissionType::Read,
-                $leftPreserving,
             );
 
             $right = $this->newBuilder($name, $alias, true);
@@ -1943,7 +1935,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $alias,
                 $roles,
                 PermissionType::Read,
-                true,
             );
 
             $left->unionAll($right);
@@ -1966,7 +1957,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $alias,
             $roles,
             PermissionType::Read,
-            $hasPreservingOuterJoin,
         );
 
         if (! \is_null($max)) {
@@ -4383,7 +4373,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         string $alias,
         array $roles,
         PermissionType $forPermission,
-        bool $preservingOuter,
     ): bool {
         $hasSelectionProjection = false;
         if (! $hasAggregation) {
@@ -4492,7 +4481,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $alias,
             $roles,
             $forPermission,
-            $preservingOuter,
         );
 
         return $hasSelectionProjection;
@@ -4514,7 +4502,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         string $alias,
         array $roles,
         PermissionType $forPermission,
-        bool $preservingOuter,
     ): void {
         $queries = $this->populationStatistics($queries);
         $this->remapDottedQueryAttributes($queries, $joinTablePrefixes, $collection);
@@ -4531,14 +4518,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $preserving = $chain->hasPreservingOuterJoin();
 
         if ($this->sharedTables && $preserving) {
-            // newBuilder() relaxes the main table's tenant condition only when told the read keeps rows
-            // without the main table ($preservingOuter). The first half of an emulated full outer join
-            // is built without it even when a right join keeps such rows, so it would drop them; the
-            // combination is refused on every adapter alike.
-            if (! $preservingOuter || ($chain->has(JoinType::FullOuter) && $chain->has(JoinType::Right))) {
-                throw new QueryException('A full outer join cannot be combined with a right join under shared tables');
-            }
-
             $tenantFilter = new TenantFilter($this->tenant);
             $tenantConditions = [];
             foreach ($joinTablePrefixes as $join) {
@@ -4828,7 +4807,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $alias,
             $roles,
             $forPermission,
-            true,
         ));
         $this->applyFindPage($aggregation, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
         $columns = $this->fullOuterJoinColumns($aggregationQueries, $orderAttributes, $orderTypes, $joinAliases, $aggregateAliases, $alias);
@@ -4844,7 +4822,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             foreach ($columns as $source => $column) {
                 $half->selectRaw($this->quoteOrderColumn($source, $alias).' AS '.$this->quote($column));
             }
-            $this->applyFindFilters($half, $collection, $halfQueries, $joinTablePrefixes, $adapterFilterQueries, $name, $alias, $roles, $forPermission, $preservingOuter);
+            $this->applyFindFilters($half, $collection, $halfQueries, $joinTablePrefixes, $adapterFilterQueries, $name, $alias, $roles, $forPermission);
             $this->applyFindCursor($half, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $resolveInternalKey);
             $halves[] = $half;
         }

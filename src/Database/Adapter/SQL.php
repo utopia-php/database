@@ -3406,6 +3406,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     protected function prepareStatement(string $sql, ?Event $event = null): DatabasePDOStatement|PDOStatementProxy|PDOStatement
     {
+        $sql = $this->comments().$sql;
+
         if ($event !== null) {
             $sql = $this->transformQuery($event, $sql);
         }
@@ -3421,6 +3423,33 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $statement;
+    }
+
+    private function comments(): string
+    {
+        $comments = '';
+        foreach ($this->metadata as $key => $value) {
+            $comments .= '/* '.$this->commentText($key).': '.$this->commentText($value).' */'."\n";
+        }
+
+        return $comments;
+    }
+
+    private function commentText(mixed $value): string
+    {
+        $text = match (true) {
+            \is_scalar($value), $value instanceof \Stringable => (string) $value,
+            default => \json_encode(
+                $value,
+                JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_PARTIAL_OUTPUT_ON_ERROR,
+            ) ?: \get_debug_type($value),
+        };
+
+        if (\preg_match('/[^\x20-\x7E]/', $text) !== 0) {
+            $text = \preg_replace('/[\p{Cc}\p{Zl}\p{Zp}]/u', ' ', \mb_scrub($text, 'UTF-8')) ?? '';
+        }
+
+        return \str_replace(['/*', '*/'], ['/ *', '* /'], $text);
     }
 
     protected function executeStatement(string $sql, Event $event): bool

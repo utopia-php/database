@@ -86,15 +86,15 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     public function getConnectionId(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('CONNECTION_ID()')->build();
-        $stmt = $this->getPDO()->query($result->query);
+        $statement = $this->prepareStatement($result->query);
 
-        if ($stmt === false) {
+        if (! $statement->execute()) {
             return '';
         }
 
-        $col = $stmt->fetchColumn();
+        $column = $statement->fetchColumn();
 
-        return \is_scalar($col) ? (string) $col : '';
+        return \is_scalar($column) ? (string) $column : '';
     }
 
     /**

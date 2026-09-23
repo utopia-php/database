@@ -101,13 +101,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     public function getConnectionId(): string
     {
         $result = $this->createBuilder()->fromNone()->selectRaw('pg_backend_pid()')->build();
-        $stmt = $this->getPDO()->query($result->query);
-        if ($stmt === false) {
+        $statement = $this->prepareStatement($result->query);
+        if (! $statement->execute()) {
             return '';
         }
-        $col = $stmt->fetchColumn();
+        $column = $statement->fetchColumn();
 
-        return \is_scalar($col) ? (string) $col : '';
+        return \is_scalar($column) ? (string) $column : '';
     }
 
     /**

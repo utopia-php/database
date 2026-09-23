@@ -178,15 +178,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         foreach ($indexes as $index) {
             $indexId = $this->filter($index->key);
             $indexType = $index->type;
-            $indexAttributes = $index->attributes;
+            $indexColumns = [];
 
-            $regularColumns = [];
-            $indexLengths = [];
-            $indexOrders = [];
-            $rawCastColumns = [];
-
-            foreach ($indexAttributes as $nested => $attribute) {
-                $indexLength = $index->lengths[$nested] ?? '';
+            foreach ($index->attributes as $nested => $attribute) {
                 $indexOrder = Index::direction($index->orders[$nested] ?? null);
 
                 if ($indexType === IndexType::Spatial && ! $this->supports(Capability::SpatialIndexOrder) && ! empty($indexOrder)) {
@@ -195,35 +189,19 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
                 $indexAttribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
-                if ($indexType === IndexType::Fulltext) {
-                    $indexOrder = '';
-                }
-
-                if (! empty($hash[$indexAttribute]->array) && $this->supports(Capability::CastIndexArray)) {
-                    $rawCastColumns[] = '(CAST(`'.$indexAttribute.'` AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
-                } else {
-                    $regularColumns[] = $indexAttribute;
-                    if (! empty($indexLength)) {
-                        $indexLengths[$indexAttribute] = (int) $indexLength;
-                    }
-                    if (! empty($indexOrder)) {
-                        $indexOrders[$indexAttribute] = $indexOrder;
-                    }
-                }
+                $indexColumns[] = $this->compileIndexColumn(
+                    $indexAttribute,
+                    ! empty($hash[$indexAttribute]->array),
+                    (int) ($index->lengths[$nested] ?? 0),
+                    $indexType === IndexType::Fulltext ? '' : $indexOrder,
+                );
             }
 
             if ($sharedTables && $indexType !== IndexType::Fulltext && $indexType !== IndexType::Spatial) {
-                \array_unshift($regularColumns, Storage::TENANT);
+                \array_unshift($indexColumns, $this->quote(Storage::TENANT));
             }
 
-            $table->addIndex(
-                $indexId,
-                $regularColumns,
-                $indexType,
-                $indexLengths,
-                $indexOrders,
-                rawColumns: $rawCastColumns,
-            );
+            $table->addIndex($indexId, [], $indexType, rawColumns: $indexColumns);
         }
 
         if ($sharedTables) {
@@ -457,9 +435,9 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             throw new NotFoundException('Collection not found');
         }
 
-        $rawAttrs = $collection->getAttribute('attributes', []);
+        $storedAttributes = $collection->getAttribute('attributes', []);
         /** @var array<int, array<string, mixed>> $collectionAttributes */
-        $collectionAttributes = \is_string($rawAttrs) ? (\json_decode($rawAttrs, true) ?? []) : [];
+        $collectionAttributes = \is_string($storedAttributes) ? (\json_decode($storedAttributes, true) ?? []) : [];
         $id = $this->filter($index->key);
         $type = $index->type;
         $attributes = $index->attributes;
@@ -469,41 +447,27 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $schema = $this->createSchemaBuilder();
         $tableName = $this->getSQLTableRaw($collection->getId());
 
-        // Build column lists, separating regular columns from raw CAST ARRAY expressions
-        $schemaColumns = [];
-        $schemaLengths = [];
-        $schemaOrders = [];
-        $rawExpressions = [];
-
-        foreach ($attributes as $i => $attr) {
+        $columns = [];
+        foreach ($attributes as $i => $key) {
             $attribute = null;
             foreach ($collectionAttributes as $collectionAttribute) {
-                $collAttrId = $collectionAttribute[Document::ID] ?? '';
-                if (\strtolower(\is_string($collAttrId) ? $collAttrId : '') === \strtolower($attr)) {
+                $attributeId = $collectionAttribute[Document::ID] ?? '';
+                if (\strtolower(\is_string($attributeId) ? $attributeId : '') === \strtolower($key)) {
                     $attribute = $collectionAttribute;
                     break;
                 }
             }
 
-            $attr = $this->filter($this->getInternalKeyForAttribute($attr));
-            $order = $type === IndexType::Fulltext ? '' : Index::direction($orders[$i] ?? null);
-            $length = empty($lengths[$i]) ? 0 : (int) $lengths[$i];
-
-            if ($this->supports(Capability::CastIndexArray) && ! empty($attribute['array'])) {
-                $rawExpressions[] = '(CAST(`'.$attr.'` AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
-            } else {
-                $schemaColumns[] = $attr;
-                if ($length > 0) {
-                    $schemaLengths[$attr] = $length;
-                }
-                if (! empty($order)) {
-                    $schemaOrders[$attr] = $order;
-                }
-            }
+            $columns[] = $this->compileIndexColumn(
+                $this->filter($this->getInternalKeyForAttribute($key)),
+                ! empty($attribute['array']),
+                (int) ($lengths[$i] ?? 0),
+                $type === IndexType::Fulltext ? '' : Index::direction($orders[$i] ?? null),
+            );
         }
 
         if ($this->sharedTables && $type !== IndexType::Fulltext && $type !== IndexType::Spatial) {
-            \array_unshift($schemaColumns, Storage::TENANT);
+            \array_unshift($columns, $this->quote(Storage::TENANT));
         }
 
         $unique = $type === IndexType::Unique;
@@ -517,12 +481,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $result = $schema->createIndex(
             $tableName,
             $id,
-            $schemaColumns,
+            [],
             unique: $unique,
             type: $schemaType,
-            lengths: $schemaLengths,
-            orders: $schemaOrders,
-            rawColumns: $rawExpressions,
+            rawColumns: $columns,
         );
         $sql = $result->query;
 
@@ -531,6 +493,27 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * Render one key part of an index. Parts are rendered in the caller's order and handed to the
+     * schema builder as raw columns, because it places raw columns after all named ones.
+     */
+    private function compileIndexColumn(string $column, bool $array, int $length, string $order): string
+    {
+        if ($array && $this->supports(Capability::CastIndexArray)) {
+            return '(CAST('.$this->quote($column).' AS char('.Database::MAX_ARRAY_INDEX_LENGTH.') ARRAY))';
+        }
+
+        $part = $this->quote($column);
+        if ($length > 0) {
+            $part .= '('.$length.')';
+        }
+        if ($order !== '') {
+            $part .= ' '.$order;
+        }
+
+        return $part;
     }
 
     /**

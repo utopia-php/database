@@ -645,28 +645,29 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $tableRaw = $this->getSQLTableRaw($collection);
         $schema = $this->createSchemaBuilder();
 
-        // Build column lists, separating regular columns from raw JSONB path expressions
-        $columnNames = [];
-        $columnOrders = [];
-        $rawExpressions = [];
+        $operatorClass = match ($type) {
+            IndexType::HnswEuclidean => 'vector_l2_ops',
+            IndexType::HnswCosine => 'vector_cosine_ops',
+            IndexType::HnswDot => 'vector_ip_ops',
+            IndexType::Trigram => 'gin_trgm_ops',
+            default => '',
+        };
 
-        foreach ($attributes as $i => $attr) {
+        $columns = [];
+        foreach ($attributes as $i => $attribute) {
+            $isNestedPath = isset($indexAttributeTypes[$attribute]) && \str_contains($attribute, '.') && $indexAttributeTypes[$attribute] === ColumnType::Object->value;
+            $column = $isNestedPath
+                ? $this->buildJsonbPath($attribute, true)
+                : $this->quote($this->filter($this->getInternalKeyForAttribute($attribute)));
             $order = $type === IndexType::Fulltext ? '' : Index::direction($orders[$i] ?? null);
-            $isNestedPath = isset($indexAttributeTypes[$attr]) && \str_contains($attr, '.') && $indexAttributeTypes[$attr] === ColumnType::Object->value;
 
-            if ($isNestedPath) {
-                $rawExpressions[] = $this->buildJsonbPath($attr, true).($order ? " {$order}" : '');
-            } else {
-                $attr = $this->filter($this->getInternalKeyForAttribute($attr));
-                $columnNames[] = $attr;
-                if (! empty($order)) {
-                    $columnOrders[$attr] = $order;
-                }
-            }
+            $columns[] = $column
+                .($operatorClass !== '' ? ' '.$operatorClass : '')
+                .($order !== '' ? ' '.$order : '');
         }
 
         if ($this->sharedTables && \in_array($type, [IndexType::Key, IndexType::Unique])) {
-            \array_unshift($columnNames, Storage::TENANT);
+            \array_unshift($columns, $this->quote(Storage::TENANT));
         }
 
         $unique = $type === IndexType::Unique;
@@ -681,25 +682,14 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             default => '',
         };
 
-        $operatorClass = match ($type) {
-            IndexType::HnswEuclidean => 'vector_l2_ops',
-            IndexType::HnswCosine => 'vector_cosine_ops',
-            IndexType::HnswDot => 'vector_ip_ops',
-            IndexType::Trigram => 'gin_trgm_ops',
-            default => '',
-        };
-
         $sql = $schema->createIndex(
             $tableRaw,
             $keyName,
-            $columnNames,
+            [],
             unique: $unique,
             method: $method,
-            operatorClass: $operatorClass,
-            orders: $columnOrders,
-            rawColumns: $rawExpressions,
+            rawColumns: $columns,
         )->query;
-
 
         try {
             return $this->executeStatement($sql, $event);

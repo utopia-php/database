@@ -16,9 +16,11 @@ use Utopia\Query\Hook;
  * 1. **Return value**: Lifecycle hooks return void and cannot modify the document or
  *    influence the operation result. Decorators return a Document back into the pipeline.
  *
- * 2. **Error handling**: Exceptions thrown by lifecycle hooks are silently caught to
- *    prevent side effects from breaking business logic. Decorator exceptions propagate
- *    to the caller.
+ * 2. **Error handling**: For document reads and writes, the document purges they cause
+ *    and index creation, a lifecycle hook's exception reaches the caller and the
+ *    remaining hooks do not run. For every other event it is swallowed and the remaining
+ *    hooks still run. An \Error always reaches the caller. Decorator exceptions always
+ *    propagate to the caller.
  *
  * Lifecycle hooks do not receive collection context. Use Decorators when you need to
  * transform documents before they reach the caller.

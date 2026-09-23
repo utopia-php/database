@@ -2716,14 +2716,21 @@ class Database
 
     /**
      * Fire suppressible user lifecycle hooks after mandatory invalidation succeeds.
+     *
+     * Whether a hook's exception reaches the caller depends on the event
+     * ({@see propagatesHookFailures()}); an \Error always does.
      */
     protected function triggerHooks(Event $event, mixed $data = null): void
     {
+        $propagates = $this->propagatesHookFailures($event);
+
         foreach ($this->getActiveLifecycleHooks() as $hook) {
             try {
                 $hook->handle($event, $data);
-            } catch (Throwable) {
-                // Lifecycle hooks must not break business logic
+            } catch (Exception $exception) {
+                if ($propagates) {
+                    throw $exception;
+                }
             }
         }
     }
@@ -2739,6 +2746,49 @@ class Database
         foreach ($this->getActiveLifecycleHooks() as $hook) {
             $hook->handle($event, $data);
         }
+    }
+
+    /**
+     * Keeps 7.x behaviour: the events it dispatched unguarded let a listener failure fail
+     * the call; the ones it wrapped in try/catch isolate every hook from the others.
+     */
+    private function propagatesHookFailures(Event $event): bool
+    {
+        return match ($event) {
+            Event::IndexCreate,
+            Event::DocumentRead,
+            Event::DocumentCreate,
+            Event::DocumentsCreate,
+            Event::DocumentUpdate,
+            Event::DocumentsUpdate,
+            Event::DocumentsUpsert,
+            Event::DocumentIncrease,
+            Event::DocumentDecrease,
+            Event::DocumentDelete,
+            Event::DocumentsDelete,
+            Event::DocumentFind,
+            Event::DocumentCount,
+            Event::DocumentSum => true,
+            Event::All,
+            Event::DatabaseList,
+            Event::DatabaseCreate,
+            Event::DatabaseDelete,
+            Event::CollectionList,
+            Event::CollectionCreate,
+            Event::CollectionUpdate,
+            Event::CollectionRead,
+            Event::CollectionDelete,
+            Event::DocumentPurge,
+            Event::PermissionsCreate,
+            Event::PermissionsRead,
+            Event::PermissionsDelete,
+            Event::AttributeCreate,
+            Event::AttributesCreate,
+            Event::AttributeUpdate,
+            Event::AttributeDelete,
+            Event::IndexRename,
+            Event::IndexDelete => false,
+        };
     }
 
     /**

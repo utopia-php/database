@@ -66,7 +66,7 @@ class Aggregate extends Base
             $this->schema[$attribute->key] = true;
         }
 
-        $this->numeric = $this->numericTypes($attributes);
+        $this->numeric = self::numericTypes($attributes);
     }
 
     public function getMethodType(): string
@@ -115,8 +115,10 @@ class Aggregate extends Base
     }
 
     /**
-     * Arithmetic aggregates need a number and the bitwise ones an integer. An attribute outside
-     * this collection's schema, a joined or schemaless one, has no type to check here.
+     * Arithmetic aggregates need a number and the bitwise ones an integer, as the collection the
+     * attribute resolves to declares it: this one, or the join it names. An attribute that
+     * collection does not declare, a schemaless one or one of a join whose collection is unknown,
+     * has no type to check here.
      */
     private function isValidOperand(Query $query): bool
     {
@@ -124,11 +126,25 @@ class Aggregate extends Base
         $attribute = $query->getAttribute();
         $bitwise = \in_array($method, self::BITWISE_METHODS, true);
 
-        if ((! $bitwise && ! \in_array($method, self::NUMERIC_METHODS, true)) || ! isset($this->schema[$attribute])) {
+        if (! $bitwise && ! \in_array($method, self::NUMERIC_METHODS, true)) {
             return true;
         }
 
-        $type = $this->numeric[$attribute] ?? null;
+        if (isset($this->schema[$attribute])) {
+            $type = $this->numeric[$attribute] ?? null;
+        } else {
+            $join = $this->joinOf($attribute);
+            $dot = \strpos($attribute, '.');
+            $column = $dot === false ? $attribute : \substr($attribute, $dot + 1);
+
+            if ($join !== null && isset($join->attributes[$column])) {
+                $type = $join->numeric[$column] ?? null;
+            } elseif ($join !== null && $this->isJoinedInternalAttribute($column)) {
+                $type = $this->numeric[$column] ?? null;
+            } else {
+                return true;
+            }
+        }
 
         if ($type === null) {
             $this->message = 'Aggregate '.$method->value.' requires a numeric attribute that is not an array: '.$attribute;
@@ -146,10 +162,12 @@ class Aggregate extends Base
     }
 
     /**
+     * The type of each attribute that holds a single number.
+     *
      * @param  array<Document>  $attributes
      * @return array<string, ColumnType>
      */
-    private function numericTypes(array $attributes): array
+    public static function numericTypes(array $attributes): array
     {
         $types = [];
 

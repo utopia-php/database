@@ -166,6 +166,46 @@ final class JoinedColumnTest extends TestCase
         $this->assertSame('Invalid query: Attribute not found in schema: note.nothing', $validator->getDescription());
     }
 
+    /**
+     * @return array<string, array{0: Query, 1: bool}>
+     */
+    public static function joinedAggregateProvider(): array
+    {
+        return [
+            'stddev of a joined integer' => [Query::stddev('note.score', 'result'), true],
+            'varPop of a joined double' => [Query::varPop('note.ratio', 'result'), true],
+            'variance of a bare name resolved to a joined integer' => [Query::variance('score', 'result'), true],
+            'bitAnd of a joined integer' => [Query::bitAnd('note.score', 'result'), true],
+            'bitXor of a bare name resolved to a joined integer' => [Query::bitXor('score', 'result'), true],
+            'bitOr of a joined double' => [Query::bitOr('note.ratio', 'result'), false],
+            'stddevSamp of a joined string' => [Query::stddevSamp('note.body', 'result'), false],
+            'varSamp of a bare name resolved to a joined string array' => [Query::varSamp('tags', 'result'), false],
+            'min of a joined string' => [Query::min('note.body', 'result'), true],
+            'max of a joined string array' => [Query::max('note.tags', 'result'), true],
+        ];
+    }
+
+    #[DataProvider('joinedAggregateProvider')]
+    public function testArithmeticAndBitwiseAggregatesTypeAJoinedAttributeByItsCollection(Query $aggregate, bool $valid): void
+    {
+        $validator = $this->validator([$this->notes()]);
+
+        $this->assertSame($valid, $validator->isValid([self::join(), $aggregate]), $validator->getDescription());
+    }
+
+    public function testMainCollectionAttributeKeepsItsOwnTypeWhenAJoinDeclaresItToo(): void
+    {
+        $validator = $this->validator([$this->collection('notes', [
+            $this->attribute('customerId', ColumnType::String),
+            $this->attribute('visits', ColumnType::String),
+        ])]);
+
+        $this->assertTrue($validator->isValid([self::join(), Query::sum('visits', 'result')]), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([self::join(), Query::sum('note.visits', 'result')]));
+        $this->assertSame('Invalid query: Aggregate sum requires a numeric attribute that is not an array: note.visits', $validator->getDescription());
+    }
+
     public function testDocumentQueriesCheckJoinConditionsAgainstTheJoinedCollection(): void
     {
         $validator = new DocumentQueries($this->attributes());
@@ -258,6 +298,9 @@ final class JoinedColumnTest extends TestCase
         return $this->collection('notes', [
             $this->attribute('customerId', ColumnType::String),
             $this->attribute('body', ColumnType::String),
+            $this->attribute('score', ColumnType::Integer),
+            $this->attribute('ratio', ColumnType::Double),
+            $this->attribute('tags', ColumnType::String, array: true),
             $this->attribute('customer', ColumnType::Relationship),
         ]);
     }
@@ -282,7 +325,7 @@ final class JoinedColumnTest extends TestCase
         ]);
     }
 
-    private function attribute(string $key, ColumnType $type): Document
+    private function attribute(string $key, ColumnType $type, bool $array = false): Document
     {
         return new Document([
             '$id' => $key,
@@ -291,7 +334,7 @@ final class JoinedColumnTest extends TestCase
             'size' => $type === ColumnType::String ? 256 : 0,
             'required' => false,
             'signed' => true,
-            'array' => false,
+            'array' => $array,
             'filters' => [],
         ]);
     }

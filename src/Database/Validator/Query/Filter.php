@@ -43,7 +43,7 @@ class Filter extends Base
         private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
         private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
-        private readonly bool $supportUnsignedBigInt = false
+        private readonly bool $supportUnsignedBigInt = true
     ) {
         foreach ($attributes as $attribute) {
             /** @var string $attrKey */

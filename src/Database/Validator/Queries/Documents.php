@@ -38,7 +38,7 @@ class Documents extends IndexedQueries
         DateTime $minAllowedDate = new DateTime('0000-01-01'),
         DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         bool $supportForAttributes = true,
-        bool $supportUnsignedBigInt = false
+        bool $supportUnsignedBigInt = true
     ) {
         $attributes[] = new Document([
             Document::ID => Document::ID,

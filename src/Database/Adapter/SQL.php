@@ -4367,34 +4367,60 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($hasAggregation && ! empty($joinTablePrefixes)) {
-            /** @var array<Document> $collectionAttrs */
-            $collectionAttrs = $collection->getAttribute('attributes', []);
-            $mainAttributeSet = [];
-            foreach ($collectionAttrs as $attr) {
-                $mainAttributeSet[$attr->getId()] = true;
+            $mainAttributes = [];
+            foreach (Database::internalAttributes() as $attribute) {
+                $mainAttributes[$attribute->key] = true;
             }
-            $defaultJoinPrefix = $joinTablePrefixes[0]['alias'];
+            /** @var array<Document> $collectionAttributes */
+            $collectionAttributes = $collection->getAttribute('attributes', []);
+            foreach ($collectionAttributes as $attribute) {
+                $mainAttributes[$attribute->getId()] = true;
+            }
+
+            $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
+            $declared = [];
+            foreach ($joinTablePrefixes as $join) {
+                $keys = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? null) : null;
+                $declared[$join['alias']] = \is_array($keys) ? \array_flip(\array_filter($keys, \is_string(...))) : null;
+            }
+
+            $qualify = function (string $attribute) use ($mainAttributes, $declared): string {
+                if (
+                    $attribute === '*'
+                    || $attribute === ''
+                    || \is_numeric($attribute)
+                    || \str_contains($attribute, '.')
+                    || isset($mainAttributes[$attribute])
+                ) {
+                    return $attribute;
+                }
+
+                $aliases = [];
+                foreach ($declared as $alias => $attributes) {
+                    if ($attributes === null || isset($attributes[$attribute])) {
+                        $aliases[] = $alias;
+                    }
+                }
+
+                if (\count($aliases) > 1) {
+                    throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+                }
+
+                if ($aliases === []) {
+                    throw new QueryException('Attribute not found in schema: '.$attribute);
+                }
+
+                return $aliases[0].'.'.$this->getInternalKeyForAttribute($attribute);
+            };
 
             foreach ($queries as $query) {
                 if ($query->getMethod()->isAggregate()) {
-                    $attr = $query->getAttribute();
-                    if ($attr !== '*' && $attr !== '' && ! \str_contains($attr, '.') && ! isset($mainAttributeSet[$attr])) {
-                        $internalAttr = $this->getInternalKeyForAttribute($attr);
-                        $query->setAttribute($defaultJoinPrefix.'.'.$internalAttr);
-                    }
+                    $query->setAttribute($qualify($query->getAttribute()));
                 } elseif ($query->getMethod() === Method::GroupBy) {
-                    $values = $query->getValues();
-                    $qualified = false;
-                    foreach ($values as $i => $col) {
-                        if (\is_string($col) && ! \str_contains($col, '.') && ! isset($mainAttributeSet[$col])) {
-                            $internalCol = $this->getInternalKeyForAttribute($col);
-                            $values[$i] = $defaultJoinPrefix.'.'.$internalCol;
-                            $qualified = true;
-                        }
-                    }
-                    if ($qualified) {
-                        $query->setValues($values);
-                    }
+                    $query->setValues(\array_map(
+                        static fn (mixed $column): mixed => \is_string($column) ? $qualify($column) : $column,
+                        $query->getValues(),
+                    ));
                 }
             }
         }

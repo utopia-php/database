@@ -1152,7 +1152,6 @@ class SQLite extends MariaDB
      */
     public function createDocument(Document $collection, Document $document): Document
     {
-        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1219,22 +1218,17 @@ class SQLite extends MariaDB
             foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                 $role = \str_replace('"', '', $permission['role']);
                 $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                if ($columnSecurity) {
-                    $columnBind = ":_column_{$type}_{$i}";
-                    $permissionBinds[$columnBind] = $permission['column'];
-                    $permissions[] = "('{$type}', '{$role}', {$columnBind}, '{$document->getId()}' {$tenantQuery})";
-                } else {
-                    $permissions[] = "('{$type}', '{$role}', '{$document->getId()}' {$tenantQuery})";
-                }
+                $columnBind = ":_column_{$type}_{$i}";
+                $permissionBinds[$columnBind] = $permission['column'];
+                $permissions[] = "('{$type}', '{$role}', {$columnBind}, '{$document->getId()}' {$tenantQuery})";
             }
         }
 
         if (!empty($permissions)) {
             $tenantQuery = $this->sharedTables ? ', _tenant' : '';
-            $columnColumn = $columnSecurity ? ', _column' : '';
 
             $queryPermissions = "
-				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission{$columnColumn}, _document {$tenantQuery})
+				INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_type, _permission, _column, _document {$tenantQuery})
 				VALUES " . \implode(', ', $permissions);
 
             $queryPermissions = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $queryPermissions);
@@ -1281,7 +1275,6 @@ class SQLite extends MariaDB
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $spatialAttributes = $this->getSpatialAttributes($collection);
-        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1318,12 +1311,8 @@ class SQLite extends MariaDB
             foreach (Database::PERMISSIONS as $type) {
                 foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $tenantQuery = $this->sharedTables ? ', :_tenant' : '';
-                    if ($columnSecurity) {
-                        $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantQuery})";
-                        $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
-                    } else {
-                        $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i} {$tenantQuery})";
-                    }
+                    $values[] = "(:_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantQuery})";
+                    $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
 
                     $binds[":_add_{$type}_{$i}"] = $permission['role'];
                 }
@@ -1331,10 +1320,9 @@ class SQLite extends MariaDB
 
             if (!empty($values)) {
                 $tenantQuery = $this->sharedTables ? ', _tenant' : '';
-                $columnColumn = $columnSecurity ? ', _column' : '';
 
                 $sql = "
-			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission{$columnColumn} {$tenantQuery})
+			   INSERT INTO `{$this->getNamespace()}_{$name}_perms` (_document, _type, _permission, _column {$tenantQuery})
 			   VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);

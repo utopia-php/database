@@ -521,7 +521,6 @@ abstract class SQL extends Adapter
      */
     public function updateDocuments(Document $collection, Document $updates, array $documents): int
     {
-        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         if (empty($documents)) {
             return 0;
         }
@@ -646,10 +645,8 @@ abstract class SQL extends Adapter
                     continue;
                 }
 
-                $columnSelect = $columnSecurity ? ', _column' : '';
-
                 $sql = "
-                    SELECT _type, _permission{$columnSelect}
+                    SELECT _type, _permission, _column
                     FROM {$this->getSQLTable($name . '_perms')}
                     WHERE _document = :_uid
                     {$this->getTenantQuery($collection)}
@@ -715,17 +712,7 @@ abstract class SQL extends Adapter
                             $removeBindValues[$roleBind] = $role;
                             $removeBindValues[$columnBind] = $column;
 
-                            $pairs[] = $columnSecurity
-                                ? "(_permission = :{$roleBind} AND _column = :{$columnBind})"
-                                : "(_permission = :{$roleBind})";
-
-                            if (!$columnSecurity) {
-                                unset($removeBindValues[$columnBind]);
-                                $removeBindKeys = \array_values(\array_filter(
-                                    $removeBindKeys,
-                                    fn ($key) => $key !== ':' . $columnBind
-                                ));
-                            }
+                            $pairs[] = "(_permission = :{$roleBind} AND _column = :{$columnBind})";
                         }
 
                         $removeQueries[] = "(
@@ -761,12 +748,7 @@ abstract class SQL extends Adapter
                             $columnBindKey = 'addcol_' . $type . '_' . $index . '_' . $i;
                             $addBindValues[$columnBindKey] = $column;
 
-                            if ($columnSecurity) {
-                                $addQuery .= "(:_uid_{$index}, '{$type}', :{$bindKey}, :{$columnBindKey}";
-                            } else {
-                                unset($addBindValues[$columnBindKey]);
-                                $addQuery .= "(:_uid_{$index}, '{$type}', :{$bindKey}";
-                            }
+                            $addQuery .= "(:_uid_{$index}, '{$type}', :{$bindKey}, :{$columnBindKey}";
 
                             if ($this->sharedTables) {
                                 $addQuery .= ", :_tenant)";
@@ -805,10 +787,8 @@ abstract class SQL extends Adapter
             }
 
             if (!empty($addQuery)) {
-                $columnColumn = $columnSecurity ? ', _column' : '';
-
                 $sqlAddPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission{$columnColumn}
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column
                 ";
 
                 if ($this->sharedTables) {
@@ -1166,7 +1146,7 @@ abstract class SQL extends Adapter
      * Returns a suffix for the permissions INSERT statement when ignoring duplicates.
      * Override in adapter subclasses for DB-specific syntax.
      */
-    protected function getInsertPermissionsSuffix(bool $columnSecurity = false): string
+    protected function getInsertPermissionsSuffix(): string
     {
         return '';
     }
@@ -2097,53 +2077,6 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Does any permission in this collection still name a column?
-     *
-     * Used to refuse disabling column security while it would still change meaning:
-     * the row filter matches on the role alone, so a permission left scoped to a
-     * column would widen to the whole row once masking stops being applied.
-     *
-     * _column is the last member of _index1, so this cannot seek -- it scans. The scan
-     * is index-only, since every column it reads is in that index, and LIMIT 1 stops
-     * it at the first match. That makes the refusing case cheap and the permitting
-     * case (nothing scoped, so nothing to find) a full pass over the index. Acceptable
-     * because it runs once, on a deliberate disable, rather than on any query path;
-     * an index on _column would make it instant but has to be maintained on every
-     * permission write to buy that.
-     *
-     * @param Document $collection
-     * @return bool
-     * @throws DatabaseException
-     */
-    public function hasColumnPermissions(Document $collection): bool
-    {
-        if (!$collection->getAttribute('columnSecurity', false)) {
-            return false;
-        }
-
-        $name = $this->filter($collection->getId());
-
-        $stmt = $this->getPDO()->prepare("
-            SELECT 1
-            FROM {$this->getSQLTable($name . '_perms')}
-            WHERE {$this->quote('_column')} <> ''
-            {$this->getTenantQuery($collection->getId())}
-            LIMIT 1
-        ");
-
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-
-        $this->execute($stmt);
-
-        $found = $stmt->fetchColumn();
-        $stmt->closeCursor();
-
-        return $found !== false;
-    }
-
-    /**
      * Move or drop the permissions scoped to one column.
      *
      * The column key lives in two places: _perms._column, which backs permission
@@ -2930,7 +2863,6 @@ abstract class SQL extends Adapter
      */
     public function createDocuments(Document $collection, array $documents): array
     {
-        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         if (empty($documents)) {
             return $documents;
         }
@@ -3020,13 +2952,9 @@ abstract class SQL extends Adapter
                         $tenantBind = $this->sharedTables ? ", :_tenant_{$index}" : '';
                         $role = \str_replace('"', '', $permission['role']);
 
-                        if ($columnSecurity) {
-                            $columnBind = ":_column_{$type}_{$index}_{$i}";
-                            $bindValuesPermissions[$columnBind] = $permission['column'];
-                            $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid_{$index} {$tenantBind})";
-                        } else {
-                            $permissions[] = "('{$type}', '{$role}', :_uid_{$index} {$tenantBind})";
-                        }
+                        $columnBind = ":_column_{$type}_{$index}_{$i}";
+                        $bindValuesPermissions[$columnBind] = $permission['column'];
+                        $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid_{$index} {$tenantBind})";
 
                         $bindValuesPermissions[":_uid_{$index}"] = $document->getId();
                         if ($this->sharedTables) {
@@ -3052,13 +2980,12 @@ abstract class SQL extends Adapter
 
             if (!empty($permissions)) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';
-                $columnColumn = $columnSecurity ? ', _column' : '';
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission{$columnColumn}, _document {$tenantColumn})
+                    {$this->getInsertKeyword()} {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$tenantColumn})
                     VALUES {$permissions}
-                    {$this->getInsertPermissionsSuffix($columnSecurity)}
+                    {$this->getInsertPermissionsSuffix()}
                 ";
 
                 $stmtPermissions = $this->getPDO()->prepare($sqlPermissions);
@@ -3089,7 +3016,6 @@ abstract class SQL extends Adapter
         string $attribute,
         array $changes
     ): array {
-        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         if (empty($changes)) {
             return $changes;
         }
@@ -3369,12 +3295,8 @@ abstract class SQL extends Adapter
                         $pairs = [];
                         foreach (\array_keys($toRemove) as $i) {
                             [$role, $column] = \explode("\0", $toRemove[$i], 2);
-                            if ($columnSecurity) {
-                                $pairs[] = "(_permission = :remove_{$type}_{$index}_{$i} AND _column = :removecol_{$type}_{$index}_{$i})";
-                                $removeBindValues[":removecol_{$type}_{$index}_{$i}"] = $column;
-                            } else {
-                                $pairs[] = "(_permission = :remove_{$type}_{$index}_{$i})";
-                            }
+                            $pairs[] = "(_permission = :remove_{$type}_{$index}_{$i} AND _column = :removecol_{$type}_{$index}_{$i})";
+                            $removeBindValues[":removecol_{$type}_{$index}_{$i}"] = $column;
 
                             $removeBindValues[":remove_{$type}_{$index}_{$i}"] = $role;
                         }
@@ -3398,9 +3320,7 @@ abstract class SQL extends Adapter
                     foreach ($toAdd as $i => $permission) {
                         [$role, $column] = \explode("\0", $permission, 2);
 
-                        $addQuery = $columnSecurity
-                            ? "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}, :addcol_{$type}_{$index}_{$i}"
-                            : "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}";
+                        $addQuery = "(:_uid_{$index}, '{$type}', :add_{$type}_{$index}_{$i}, :addcol_{$type}_{$index}_{$i}";
 
                         if ($this->sharedTables) {
                             $addQuery .= ", :_tenant_{$index}";
@@ -3410,10 +3330,7 @@ abstract class SQL extends Adapter
                         $addQueries[] = $addQuery;
                         $addBindValues[":_uid_{$index}"] = $document->getId();
                         $addBindValues[":add_{$type}_{$index}_{$i}"] = $role;
-
-                        if ($columnSecurity) {
-                            $addBindValues[":addcol_{$type}_{$index}_{$i}"] = $column;
-                        }
+                        $addBindValues[":addcol_{$type}_{$index}_{$i}"] = $column;
 
                         if ($this->sharedTables) {
                             $addBindValues[":_tenant_{$index}"] = $document->getTenant();
@@ -3432,8 +3349,7 @@ abstract class SQL extends Adapter
             }
 
             if (!empty($addQueries)) {
-                $columnColumn = $columnSecurity ? ', _column' : '';
-                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission{$columnColumn}";
+                $sqlAddPermissions = "INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column";
                 if ($this->sharedTables) {
                     $sqlAddPermissions .= ", _tenant";
                 }

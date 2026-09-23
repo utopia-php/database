@@ -1301,7 +1301,7 @@ trait RelationshipTests
             Permission::create(Role::any()),
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
-        ], false);
+        ], false, false);
         $level2 = $level1->getAttribute('level2');
         $level3 = $level2->getAttribute('level3');
 

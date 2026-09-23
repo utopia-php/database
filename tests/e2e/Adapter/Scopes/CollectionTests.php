@@ -758,7 +758,7 @@ trait CollectionTests
         $this->assertIsArray($collection->getPermissions());
         $this->assertCount(4, $collection->getPermissions());
 
-        $collection = $database->updateCollection('collectionUpdate', [], true);
+        $collection = $database->updateCollection('collectionUpdate', [], true, false);
 
         $this->assertTrue($collection->getAttribute('documentSecurity'));
         $this->assertIsArray($collection->getPermissions());
@@ -786,7 +786,7 @@ trait CollectionTests
         }
 
         try {
-            $database->updateCollection('not_found', [], true);
+            $database->updateCollection('not_found', [], true, false);
             $this->fail('Failed to throw exception');
         } catch (Exception $e) {
             $this->assertEquals('Collection not found', $e->getMessage());

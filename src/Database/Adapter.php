@@ -1041,14 +1041,6 @@ abstract class Adapter
     abstract public function deleteColumnPermissions(Document $collection, string $column): array;
 
     /**
-     * Is any permission in this collection still scoped to a column?
-     *
-     * @param Document $collection
-     * @return bool
-     */
-    abstract public function hasColumnPermissions(Document $collection): bool;
-
-    /**
      * Are schema indexes supported?
      *
      * @return bool

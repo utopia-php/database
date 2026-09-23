@@ -990,7 +990,6 @@ class Postgres extends SQL
      */
     public function createDocument(Document $collection, Document $document): Document
     {
-        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1053,13 +1052,9 @@ class Postgres extends SQL
             foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                 $role = \str_replace('"', '', $permission['role']);
                 $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                if ($columnSecurity) {
-                    $columnBind = ":_column_{$type}_{$i}";
-                    $permissionBinds[$columnBind] = $permission['column'];
-                    $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$sqlTenant})";
-                } else {
-                    $permissions[] = "('{$type}', '{$role}', :_uid {$sqlTenant})";
-                }
+                $columnBind = ":_column_{$type}_{$i}";
+                $permissionBinds[$columnBind] = $permission['column'];
+                $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$sqlTenant})";
             }
         }
 
@@ -1067,10 +1062,9 @@ class Postgres extends SQL
         if (!empty($permissions)) {
             $permissions = \implode(', ', $permissions);
             $sqlTenant = $this->sharedTables ? ', _tenant' : '';
-            $columnColumn = $columnSecurity ? ', _column' : '';
 
             $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission{$columnColumn}, _document {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$sqlTenant})
 				VALUES {$permissions}
 			";
 
@@ -1116,7 +1110,6 @@ class Postgres extends SQL
     public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
     {
         $spatialAttributes = $this->getSpatialAttributes($collection);
-        $columnSecurity = $collection->getAttribute('columnSecurity', false);
         $collection = $collection->getId();
         $attributes = $document->getAttributes();
         $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1149,12 +1142,8 @@ class Postgres extends SQL
             foreach (Database::PERMISSIONS as $type) {
                 foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                    if ($columnSecurity) {
-                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$sqlTenant})";
-                        $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
-                    } else {
-                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
-                    }
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$sqlTenant})";
+                    $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
 
                     $binds[":_add_{$type}_{$i}"] = $permission['role'];
                 }
@@ -1162,10 +1151,9 @@ class Postgres extends SQL
 
             if (!empty($values)) {
                 $sqlTenant = $this->sharedTables ? ', _tenant' : '';
-                $columnColumn = $columnSecurity ? ', _column' : '';
 
                 $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission{$columnColumn} {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column {$sqlTenant})
 				VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -2409,7 +2397,7 @@ class Postgres extends SQL
         return "ON CONFLICT {$conflictTarget} DO NOTHING";
     }
 
-    protected function getInsertPermissionsSuffix(bool $columnSecurity = false): string
+    protected function getInsertPermissionsSuffix(): string
     {
         if (!$this->skipDuplicates) {
             return '';

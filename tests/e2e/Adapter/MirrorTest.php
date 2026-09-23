@@ -166,7 +166,8 @@ class MirrorTest extends Base
             [
                 Permission::read(Role::users()),
             ],
-            $collection->getAttribute('documentSecurity')
+            $collection->getAttribute('documentSecurity'),
+            $collection->getAttribute('columnSecurity', false)
         );
 
         // Asset both databases have updated the collection

@@ -843,7 +843,6 @@ class MariaDB extends SQL
     {
         try {
             $spatialAttributes = $this->getSpatialAttributes($collection);
-            $columnSecurity = $collection->getAttribute('columnSecurity', false);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
@@ -909,9 +908,12 @@ class MariaDB extends SQL
                 $attributeIndex++;
             }
 
-            // _column is named only when the collection enabled column security, so
-            // a table that never did is never referenced with it and needs no ALTER.
-            // Same shape as the _tenant conditional below.
+            // _column is always named. Every permissions table carries it -- new ones
+            // from CREATE TABLE, older ones from the column-permissions migration -- so
+            // there is nothing to make it conditional on. Writing it unconditionally also
+            // keeps _perms in step with the _permissions JSON on the row: a grant stored
+            // as read("role", "salary") lands as _column = 'salary' whatever the flag
+            // says, so the query gate and masking can never disagree about it.
             $permissions = [];
             $permissionBinds = [];
             foreach (Database::PERMISSIONS as $type) {
@@ -919,23 +921,18 @@ class MariaDB extends SQL
                     $tenantBind = $this->sharedTables ? ", :_tenant" : '';
                     $role = \str_replace('"', '', $permission['role']);
 
-                    if ($columnSecurity) {
-                        $columnBind = ":_column_{$type}_{$i}";
-                        $permissionBinds[$columnBind] = $permission['column'];
-                        $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$tenantBind})";
-                    } else {
-                        $permissions[] = "('{$type}', '{$role}', :_uid {$tenantBind})";
-                    }
+                    $columnBind = ":_column_{$type}_{$i}";
+                    $permissionBinds[$columnBind] = $permission['column'];
+                    $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$tenantBind})";
                 }
             }
 
             if (!empty($permissions)) {
                 $tenantColumn = $this->sharedTables ? ', _tenant' : '';
-                $columnColumn = $columnSecurity ? ', _column' : '';
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission{$columnColumn}, _document {$tenantColumn})
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$tenantColumn})
                     VALUES {$permissions};
                 ";
 
@@ -1010,7 +1007,6 @@ class MariaDB extends SQL
     {
         try {
             $spatialAttributes = $this->getSpatialAttributes($collection);
-            $columnSecurity = $collection->getAttribute('columnSecurity', false);
             $collection = $collection->getId();
             $attributes = $document->getAttributes();
             $attributes['_createdAt'] = $document->getCreatedAt();
@@ -1044,12 +1040,8 @@ class MariaDB extends SQL
                     foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                         $tenantPlaceholder = $this->sharedTables ? ', :_tenant' : '';
 
-                        if ($columnSecurity) {
-                            $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantPlaceholder})";
-                            $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
-                        } else {
-                            $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$tenantPlaceholder})";
-                        }
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantPlaceholder})";
+                        $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
 
                         $binds[":_add_{$type}_{$i}"] = $permission['role'];
                     }
@@ -1057,10 +1049,9 @@ class MariaDB extends SQL
 
                 if (!empty($values)) {
                     $tenantColumn = $this->sharedTables ? ', _tenant' : '';
-                    $columnColumn = $columnSecurity ? ', _column' : '';
 
                     $sql = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission{$columnColumn} {$tenantColumn})
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column {$tenantColumn})
 				    VALUES " . \implode(', ', $values);
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);

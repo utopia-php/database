@@ -9,7 +9,6 @@ use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\PDO;
@@ -121,6 +120,60 @@ class ColumnSecurityFlagTest extends TestCase
         ]));
     }
 
+    /**
+     * Regression: upsert reached the adapter without passing through the guard, so a
+     * column-scoped grant could be stored on a collection with the flag off. The
+     * permission landed in the _permissions JSON with its column but in _perms with
+     * _column = '', which reads as "every column" -- so masking and the query gate
+     * disagreed about the same grant.
+     */
+    public function testUpsertWithColumnPermissionIsRejected(): void
+    {
+        $this->collection('plain', false);
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('column security is not enabled');
+
+        $this->authorization->skip(fn () => $this->database->upsertDocuments('plain', [
+            new Document(['$id' => 'd1', '$permissions' => [], 'name' => 'Ann']),
+            new Document([
+                '$id' => 'd2',
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+            ]),
+        ]));
+    }
+
+    /**
+     * The column is written to _perms whatever the flag says, so the two stores agree
+     * about every grant they hold.
+     */
+    public function testColumnIsWrittenToBothStores(): void
+    {
+        $this->collection('secured', true);
+
+        $this->authorization->skip(fn () => $this->database->upsertDocuments('secured', [
+            new Document([
+                '$id' => 'd1',
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100000,
+            ]),
+        ]));
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        // masking reads the JSON...
+        $document = $this->database->getDocument('secured', 'd1');
+        $this->assertSame(100000, $document->getAttribute('salary'));
+        $this->assertNull($document->getAttribute('name'));
+
+        // ...the gate reads _perms, and they agree
+        $this->assertSame(100000, $this->database->sum('secured', 'salary'));
+        $this->assertSame([], $this->database->find('secured', [Query::isNotNull('name')]));
+    }
+
     public function testUpdateDocumentIntroducingAColumnPermissionIsRejected(): void
     {
         $this->collection('plain', false);
@@ -181,7 +234,8 @@ class ColumnSecurityFlagTest extends TestCase
         $this->authorization->skip(fn () => $this->database->updateCollection(
             'plain',
             [Permission::read(Role::any(), 'name')],
-            true
+            true,
+            false
         ));
     }
 
@@ -262,11 +316,11 @@ class ColumnSecurityFlagTest extends TestCase
     }
 
     /**
-     * Disabling would leave the column half of the permission unwritten and
-     * unenforced, so the row filter -- which matches on the role alone -- would widen
-     * it to the whole row. Refuse rather than silently escalate.
+     * Disabling is allowed whatever the collection holds. With the flag off the column
+     * half of a permission is inert, so read("user:hr", "salary") grants what
+     * read("user:hr") grants -- the row opens up rather than staying half-enforced.
      */
-    public function testDisablingIsRefusedWhileColumnPermissionsExist(): void
+    public function testDisablingIsAllowedWhileColumnPermissionsExist(): void
     {
         $this->collection('secured', true);
 
@@ -277,10 +331,48 @@ class ColumnSecurityFlagTest extends TestCase
             'salary' => 100000,
         ])));
 
-        $this->expectException(DependencyException::class);
-        $this->expectExceptionMessage('Cannot disable column security');
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        $this->assertNull($this->database->getDocument('secured', 'd1')->getAttribute('name'));
 
         $this->authorization->skip(fn () => $this->database->updateCollection('secured', [], true, false));
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        $document = $this->database->getDocument('secured', 'd1');
+
+        $this->assertSame('Bob', $document->getAttribute('name'));
+        $this->assertSame(100000, $document->getAttribute('salary'));
+    }
+
+    /**
+     * Nothing is rewritten on the way out, so the restriction comes back intact.
+     */
+    public function testReenablingRestoresTheRestriction(): void
+    {
+        $this->collection('secured', true);
+
+        $this->authorization->skip(function () {
+            $this->database->createDocument('secured', new Document([
+                '$id' => 'd1',
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100000,
+            ]));
+
+            $this->database->updateCollection('secured', [], true, false);
+            $this->database->updateCollection('secured', [], true, true);
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        $document = $this->database->getDocument('secured', 'd1');
+
+        $this->assertSame(100000, $document->getAttribute('salary'));
+        $this->assertNull($document->getAttribute('name'));
     }
 
     public function testDisablingIsAllowedOnceTheyAreRemoved(): void

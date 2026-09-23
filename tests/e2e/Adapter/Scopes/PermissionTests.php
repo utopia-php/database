@@ -1363,7 +1363,7 @@ trait PermissionTests
 
         $database->updateCollection($collection->getId(), permissions: [
             'i dont work'
-        ], documentSecurity: false);
+        ], documentSecurity: false, columnSecurity: false);
     }
 
     public function testWritePermissions(): void

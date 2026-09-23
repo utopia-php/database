@@ -2176,11 +2176,6 @@ class Memory extends Adapter
         return $updated;
     }
 
-    public function hasColumnPermissions(Document $collection): bool
-    {
-        return false;
-    }
-
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return '';

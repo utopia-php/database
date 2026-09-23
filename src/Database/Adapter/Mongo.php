@@ -4294,60 +4294,6 @@ class Mongo extends Adapter
         return true;
     }
 
-    /**
-     * Is any permission in this collection still scoped to a column?
-     *
-     * Read by the guard that refuses to disable column security while such grants
-     * exist. No index can answer it -- the column is inside an assembled string -- so
-     * it scans, stopping at the first document that has one.
-     *
-     * @param Document $collection
-     * @return bool
-     * @throws Exception
-     */
-    public function hasColumnPermissions(Document $collection): bool
-    {
-        if (!$collection->getAttribute('columnSecurity', false)) {
-            return false;
-        }
-
-        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
-        $cursor = null;
-
-        while (true) {
-            $filters = [];
-
-            if (!\is_null($cursor)) {
-                $filters['_uid'] = ['$gt' => $cursor];
-            }
-
-            if ($this->sharedTables) {
-                $filters['_tenant'] = $this->getTenantFilters($collection->getId());
-            }
-
-            $found = $this->client->find($name, $filters, [
-                'limit' => Database::DELETE_BATCH_SIZE,
-                'sort' => ['_uid' => 1],
-                'projection' => ['_uid' => 1, '_permissions' => 1],
-            ])->cursor->firstBatch ?? [];
-
-            if (empty($found)) {
-                return false;
-            }
-
-            foreach ($found as $row) {
-                $row = $this->client->toArray($row);
-                $cursor = $row['_uid'];
-
-                foreach ($row['_permissions'] ?? [] as $permission) {
-                    if (!Permission::parse((string)$permission)->isForAllColumns()) {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-
     public function renameColumnPermissions(Document $collection, string $old, string $new): array
     {
         return $this->repointColumnPermissions($collection, $old, $new);

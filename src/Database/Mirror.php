@@ -261,7 +261,7 @@ class Mirror extends Database
         return $result;
     }
 
-    public function updateCollection(string $id, array $permissions, bool $documentSecurity, ?bool $columnSecurity = null): Document
+    public function updateCollection(string $id, array $permissions, bool $documentSecurity, bool $columnSecurity): Document
     {
         $result = $this->source->updateCollection($id, $permissions, $documentSecurity, $columnSecurity);
 

@@ -2028,12 +2028,13 @@ class Database
      * @param string $id
      * @param array<string> $permissions
      * @param bool $documentSecurity
+     * @param bool $columnSecurity
      *
      * @return Document
      * @throws ConflictException
      * @throws DatabaseException
      */
-    public function updateCollection(string $id, array $permissions, bool $documentSecurity, ?bool $columnSecurity = null): Document
+    public function updateCollection(string $id, array $permissions, bool $documentSecurity, bool $columnSecurity): Document
     {
         $collection = $this->silent(fn () => $this->getCollection($id));
 
@@ -2055,21 +2056,29 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
-        $resolved = $columnSecurity ?? $collection->getAttribute('columnSecurity', false);
-
+        // Validated against the flag this call is setting, not the one the collection
+        // currently carries: enabling and writing a column-scoped permission in the
+        // same call has to be accepted, and disabling in the same call as one has to be
+        // refused.
         $this->assertColumnSecurityEnabled(
-            (new Document($collection->getArrayCopy()))->setAttribute('columnSecurity', $resolved),
+            (new Document($collection->getArrayCopy()))->setAttribute('columnSecurity', $columnSecurity),
             $permissions
         );
 
-        if (!\is_null($columnSecurity) && $columnSecurity !== $collection->getAttribute('columnSecurity', false)) {
-            $this->setColumnSecurity($collection, $columnSecurity);
+        // Only enabling has a precondition. Turning it off is always allowed, whatever
+        // the collection already holds: with the flag off the column half of a
+        // permission is inert everywhere -- masking, the query gate, count and sum all
+        // ignore it -- so read("role", "salary") grants what read("role") grants.
+        // Nothing is rewritten either, so the column stays in the stored permission and
+        // enabling again restores the exact restriction.
+        if ($columnSecurity && !$this->adapter->getSupportForColumnPermissions()) {
+            throw new DatabaseException('Column security is not supported by this adapter');
         }
 
         $collection
             ->setAttribute('$permissions', $permissions)
             ->setAttribute('documentSecurity', $documentSecurity)
-            ->setAttribute('columnSecurity', $columnSecurity ?? $collection->getAttribute('columnSecurity', false));
+            ->setAttribute('columnSecurity', $columnSecurity);
 
         $collection = $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection));
 
@@ -5188,6 +5197,16 @@ class Database
             return null;
         }
 
+        // Column scoping is not in play on this collection, so the column half of a
+        // permission is inert -- read("role", "salary") grants what read("role")
+        // grants. Returning null here rather than a column list is what keeps masking
+        // in step with the query gate, which already drops _column when the flag is
+        // off. The stored permission keeps its column, so enabling the flag again
+        // restores the restriction exactly.
+        if (!$collection->getAttribute('columnSecurity', false)) {
+            return null;
+        }
+
         $permissions = $collection->getPermissionsByTypeWithColumns($type);
 
         if ($collection->getAttribute('documentSecurity', false)) {
@@ -5234,41 +5253,6 @@ class Database
         }
 
         return $keys;
-    }
-
-    /**
-     * Turn column security on or off for a collection.
-     *
-     * Enabling only sets the flag. Every permissions table created since column
-     * permissions existed already carries _column and the unique index over it, and
-     * older ones are brought to that shape by a migration rather than on the fly --
-     * an ALTER that reads every permission row has no business running inside an
-     * API request.
-     *
-     * Disabling is refused while any permission is still scoped to a column: the row
-     * filter matches on the role alone, so such a permission would widen to the whole
-     * row once the column part stops being written and queried.
-     *
-     * @param Document $collection
-     * @param bool $columnSecurity
-     * @return void
-     * @throws DatabaseException
-     */
-    private function setColumnSecurity(Document $collection, bool $columnSecurity): void
-    {
-        if ($columnSecurity) {
-            if (!$this->adapter->getSupportForColumnPermissions()) {
-                throw new DatabaseException('Column security is not supported by this adapter');
-            }
-
-            return;
-        }
-
-        if ($this->adapter->hasColumnPermissions($collection)) {
-            throw new DependencyException(
-                'Cannot disable column security: permissions scoped to a column still exist. Remove them first.'
-            );
-        }
     }
 
     /**
@@ -7133,14 +7117,14 @@ class Database
 
             $this->preserveHiddenPermissions($collection, $old, $document);
 
-            // Only newly introduced ones are rejected. A document that already carries
-            // a column-scoped permission must stay editable -- otherwise disabling the
-            // flag, or writing one before it was disabled, would lock the document.
+            // Every permission being written is checked, not only the ones this update
+            // introduces. A column-scoped grant on a collection with the flag off is a
+            // restriction that does not apply, and carrying it forward silently would
+            // let it start applying the day the flag went on. The caller resubmits the
+            // permission it actually means. Only writes that carry $permissions are
+            // affected -- an update that leaves them alone never reaches here.
             if ($collection->getId() !== self::METADATA && $document->offsetExists('$permissions')) {
-                $this->assertColumnSecurityEnabled(
-                    $collection,
-                    \array_diff($document->getPermissions(), $old->getPermissions())
-                );
+                $this->assertColumnSecurityEnabled($collection, $document->getPermissions());
             }
 
             $skipPermissionsUpdate = true;
@@ -8218,6 +8202,12 @@ class Database
         $collection = $this->silent(fn () => $this->getCollection($collection));
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionAttributes = $collection->getAttribute('attributes', []);
+
+        if ($collection->getId() !== self::METADATA) {
+            foreach ($documents as $document) {
+                $this->assertColumnSecurityEnabled($collection, $document->getPermissions());
+            }
+        }
         $time = DateTime::now();
         $created = 0;
         $updated = 0;

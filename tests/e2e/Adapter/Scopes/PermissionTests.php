@@ -188,6 +188,222 @@ trait PermissionTests
         );
     }
 
+    public function testTenantPerDocumentUpsertWithNoTenantSelectedRevokesUnderTheDocumentsTenant(): void
+    {
+        $this->withTenantPerDocumentNotes('tpdRevokeNoTenant', function (Database $database): void {
+            $database->upsertDocuments('notes', [$this->tenantPerDocumentNote(5, ['alice'])]);
+
+            $this->assertTenantPerDocumentRevokedBobUnderTenant5($database);
+        });
+    }
+
+    public function testTenantPerDocumentUpsertUnderAnotherTenantRevokesOnlyTheDocumentsOwnGrant(): void
+    {
+        $this->withTenantPerDocumentNotes('tpdRevokeOtherTenant', function (Database $database): void {
+            $database->withTenant(
+                6,
+                fn (): int => $database->upsertDocuments('notes', [$this->tenantPerDocumentNote(5, ['alice'])]),
+            );
+
+            $this->assertTenantPerDocumentRevokedBobUnderTenant5($database);
+        });
+    }
+
+    public function testTenantPerDocumentUpsertBatchAcrossTenantsRevokesOnlyWhereTheDocumentRevoked(): void
+    {
+        $this->withTenantPerDocumentNotes('tpdRevokeBatch', function (Database $database): void {
+            $database->upsertDocuments('notes', [
+                $this->tenantPerDocumentNote(5, ['alice']),
+                $this->tenantPerDocumentNote(6, ['alice', 'bob'], 'retitled'),
+            ]);
+
+            $this->assertTenantPerDocumentRevokedBobUnderTenant5($database);
+        });
+    }
+
+    public function testTenantPerDocumentRolledBackUpsertKeepsTheGrantUnderTheDocumentsTenant(): void
+    {
+        $this->withTenantPerDocumentNotes('tpdRevokeRollback', function (Database $database): void {
+            try {
+                $database->withTransaction(function () use ($database): void {
+                    $database->upsertDocuments('notes', [$this->tenantPerDocumentNote(5, ['alice'])]);
+
+                    throw new Exception('Roll the revoke back');
+                });
+            } catch (Exception $exception) {
+                $this->assertSame('Roll the revoke back', $exception->getMessage());
+            }
+
+            if ($database->getAdapter() instanceof SQL) {
+                $this->assertSame(
+                    [5 => ['user:alice', 'user:bob'], 6 => ['user:alice', 'user:bob']],
+                    $this->tenantPerDocumentGrants($database),
+                );
+            }
+            $this->assertSame(
+                [5 => ['note'], 6 => ['note']],
+                $this->tenantPerDocumentReadable($database, 'bob'),
+                'A rolled back revoke must restore the grant under the document\'s own tenant',
+            );
+        });
+    }
+
+    /**
+     * Runs a scenario in a schema of its own where no tenant is selected and each document carries
+     * its own: tenants 5 and 6 each hold a document `note` that alice and bob can read.
+     *
+     * @param  callable(Database): void  $scenario
+     */
+    private function withTenantPerDocumentNotes(string $schema, callable $scenario): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (
+            ! $database->getSharedTables()
+            || ! $adapter->hasFeature(Feature\Upserts::class)
+            || ! $adapter->supports(Capability::Schemas)
+        ) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $tenantPerDocument = $database->getTenantPerDocument();
+        $tenant = $database->getTenant();
+        $namespace = $database->getNamespace();
+        $current = $database->getDatabase();
+        $schema .= '_'.static::getTestToken();
+
+        if ($database->exists($schema)) {
+            $database->delete($schema);
+        }
+
+        try {
+            $database
+                ->setDatabase($schema)
+                ->setNamespace('')
+                ->setTenant(null)
+                ->create();
+
+            $database->createCollection(new Collection(
+                id: 'notes',
+                attributes: [Attribute::string(key: 'title', size: 64)],
+                permissions: [
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+                documentSecurity: true,
+            ));
+
+            $database->setTenantPerDocument(true);
+            foreach ([5, 6] as $documentTenant) {
+                $database->createDocument('notes', $this->tenantPerDocumentNote($documentTenant, ['alice', 'bob']));
+            }
+
+            $this->assertSame(
+                [5 => ['note'], 6 => ['note']],
+                $this->tenantPerDocumentReadable($database, 'bob'),
+                'A document created with no tenant selected must be readable through its grants under its own tenant',
+            );
+
+            $scenario($database);
+        } finally {
+            $database
+                ->setTenantPerDocument($tenantPerDocument)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($current);
+        }
+    }
+
+    private function assertTenantPerDocumentRevokedBobUnderTenant5(Database $database): void
+    {
+        if ($database->getAdapter() instanceof SQL) {
+            $this->assertSame(
+                [5 => ['user:alice'], 6 => ['user:alice', 'user:bob']],
+                $this->tenantPerDocumentGrants($database),
+                'Revoking bob on tenant 5\'s document must remove tenant 5\'s row and no other tenant\'s',
+            );
+        }
+        $this->assertSame([5 => [], 6 => ['note']], $this->tenantPerDocumentReadable($database, 'bob'));
+        $this->assertSame([5 => ['note'], 6 => ['note']], $this->tenantPerDocumentReadable($database, 'alice'));
+    }
+
+    /**
+     * @param  list<string>  $readers
+     */
+    private function tenantPerDocumentNote(int $tenant, array $readers, string $title = 'first'): Document
+    {
+        return new Document([
+            '$id' => 'note',
+            '$tenant' => $tenant,
+            'title' => $title,
+            '$permissions' => \array_map(
+                static fn (string $reader): string => Permission::read(Role::user($reader)),
+                $readers,
+            ),
+        ]);
+    }
+
+    /**
+     * @return array<int, list<string>>
+     */
+    private function tenantPerDocumentReadable(Database $database, string $reader): array
+    {
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::user($reader)->toString());
+
+        try {
+            $readable = [];
+            foreach ([5, 6] as $tenant) {
+                $readable[$tenant] = $this->documentIds($database->withTenant($tenant, fn (): array => $database->find('notes')));
+            }
+
+            return $readable;
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+    }
+
+    /**
+     * @return array<int, list<string>>
+     */
+    private function tenantPerDocumentGrants(Database $database): array
+    {
+        $adapter = $database->getAdapter();
+        $this->assertInstanceOf(SQL::class, $adapter);
+
+        $grants = [];
+        foreach ([5, 6] as $tenant) {
+            $statement = $database->withTenant($tenant, fn () => $adapter->getBuilder(Storage::permissionsTable('notes'))
+                ->select([Storage::PERM_PERMISSION])
+                ->filter([
+                    Query::equal(Storage::PERM_DOCUMENT, ['note']),
+                    Query::equal(Storage::PERM_TYPE, [PermissionType::Read->value]),
+                ])
+                ->build());
+
+            $permissions = [];
+            foreach ($adapter->rawQuery($statement->query, $statement->bindings) as $row) {
+                $permission = $row->getAttribute(Storage::PERM_PERMISSION);
+                $this->assertIsString($permission);
+                $permissions[] = $permission;
+            }
+            \sort($permissions);
+            $grants[$tenant] = $permissions;
+        }
+
+        return $grants;
+    }
+
     private static string $collSecurityCollection = '';
 
     private static string $collSecurityParentCollection = '';

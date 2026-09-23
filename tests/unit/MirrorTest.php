@@ -8,6 +8,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Swoole\Runtime;
 use Tests\Unit\Event\RecordingLifecycle;
 use Tests\Unit\Support\CountingMemory;
 use Throwable;
@@ -779,14 +780,19 @@ class MirrorTest extends TestCase
     private static function inCoroutine(Closure $callback): void
     {
         $failure = null;
+        $hookFlags = Runtime::getHookFlags();
 
-        run(static function () use ($callback, &$failure): void {
-            try {
-                $callback();
-            } catch (Throwable $error) {
-                $failure = $error;
-            }
-        });
+        try {
+            run(static function () use ($callback, &$failure): void {
+                try {
+                    $callback();
+                } catch (Throwable $error) {
+                    $failure = $error;
+                }
+            });
+        } finally {
+            Runtime::setHookFlags($hookFlags);
+        }
 
         if ($failure !== null) {
             throw $failure;

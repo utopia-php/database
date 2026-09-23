@@ -205,16 +205,10 @@ class Filter extends Base
                 case ColumnType::Text:
                 case ColumnType::MediumText:
                 case ColumnType::LongText:
-                case ColumnType::Uuid7:
-                case ColumnType::Enum:
-                case ColumnType::Json:
-                case ColumnType::Binary:
                     $validator = new Text(0, 0);
                     break;
 
                 case ColumnType::Integer:
-                case ColumnType::Serial:
-                case ColumnType::SmallSerial:
                     /** @var int $size */
                     $size = $attributeSchema['size'] ?? 4;
                     /** @var bool $signed */
@@ -226,7 +220,6 @@ class Filter extends Base
                     break;
 
                 case ColumnType::BigInteger:
-                case ColumnType::BigSerial:
                     /** @var bool $signed */
                     $signed = $attributeSchema['signed'] ?? true;
                     $validator = new BigInt($signed, $this->supportUnsignedBigInt);
@@ -242,7 +235,6 @@ class Filter extends Base
                     break;
 
                 case ColumnType::Datetime:
-                case ColumnType::Timestamp:
                     $validator = new DatetimeValidator(
                         min: $this->minAllowedDate,
                         max: $this->maxAllowedDate

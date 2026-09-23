@@ -65,7 +65,7 @@ trait Documents
 
         if (Attribute::isIntegerType($attribute->type)) {
             if (! $attribute->signed
-                && \in_array($attribute->type, [ColumnType::BigInteger, ColumnType::BigSerial], true)
+                && $attribute->type === ColumnType::BigInteger
                 && ! $this->adapter->supports(Capability::UnsignedBigInt)) {
                 throw new TypeException('Unsigned 64-bit arithmetic is not supported by this adapter.');
             }

@@ -68,7 +68,6 @@ use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
 use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 use Utopia\Query\Schema\Table;
-use Utopia\Query\Schema\Table\MySQL as MySQLTable;
 use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
 
 /**
@@ -2283,7 +2282,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     break;
 
                 case ColumnType::BigInteger->value:
-                case ColumnType::BigSerial->value:
                     $total += 8;
                     break;
 
@@ -3943,7 +3941,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 ? $table->bigInteger($filteredId)
                 : $table->integer($filteredId),
             ColumnType::BigInteger => $table->bigInteger($filteredId),
-            ColumnType::BigSerial => $this->addBigSerialColumn($table, $filteredId),
             ColumnType::Float, ColumnType::Double => $table->float($filteredId),
             ColumnType::Boolean => $table->boolean($filteredId),
             ColumnType::Datetime => $table->datetime($filteredId, 3),
@@ -3958,7 +3955,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             default => throw new DatabaseException('Unknown type: '.$type->value),
         };
 
-        if (! $signed && \in_array($type, [ColumnType::Integer, ColumnType::BigInteger, ColumnType::BigSerial, ColumnType::Float, ColumnType::Double], true)) {
+        if (! $signed && \in_array($type, [ColumnType::Integer, ColumnType::BigInteger, ColumnType::Float, ColumnType::Double], true)) {
             $column->unsigned();
         }
 
@@ -3996,15 +3993,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function getSpatialColumnSrid(): ?int
     {
         return Database::DEFAULT_SRID;
-    }
-
-    private function addBigSerialColumn(Table $table, string $name): Column
-    {
-        if (! $table instanceof MySQLTable && ! $table instanceof PostgreSQLTable) {
-            throw new DatabaseException('Serial columns are not supported on this dialect');
-        }
-
-        return $table->bigSerial($name);
     }
 
     private function addVectorColumn(Table $table, string $name, int $size): Column

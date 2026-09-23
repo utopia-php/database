@@ -278,7 +278,7 @@ class Operator extends Validator
                 }
 
                 if (! $attribute->signed
-                    && \in_array($type, [ColumnType::BigInteger, ColumnType::BigSerial], true)
+                    && $type === ColumnType::BigInteger
                     && ! $this->supportUnsignedBigInt) {
                     $this->message = "Cannot apply {$methodName} operator: unsigned 64-bit arithmetic is not supported by this adapter";
 

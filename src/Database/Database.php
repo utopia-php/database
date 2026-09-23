@@ -3229,7 +3229,6 @@ class Database
                 );
             }
         } catch (Throwable $e) {
-            // Attempt rollback only if conditions are met
             if ($shouldRollback && $rollbackOperation !== null) {
                 if ($rollbackReturnsErrors) {
                     /** @var array<string> $cleanupErrors */
@@ -3241,14 +3240,12 @@ class Database
                         );
                     }
                 } elseif ($silentRollback) {
-                    // Silent mode: swallow rollback errors
                     try {
                         $rollbackOperation();
                     } catch (Throwable $e) {
                         // Silent rollback - errors are swallowed
                     }
                 } else {
-                    // Regular mode: rollback throws on failure
                     try {
                         $rollbackOperation();
                     } catch (Throwable $ex) {

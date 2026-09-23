@@ -22,7 +22,8 @@ use Utopia\Database\Validator\Authorization;
 
 /**
  * A joined column is valid exactly when the column would be valid unaliased on the joined
- * collection for the same query type, in find(), count(), sum() and getDocument().
+ * collection for the same query type, in find(), count(), sum() and getDocument(), and the
+ * arithmetic and bitwise aggregates type a joined attribute by the collection that declares it.
  */
 final class JoinedColumnValidationTest extends TestCase
 {
@@ -46,6 +47,9 @@ final class JoinedColumnValidationTest extends TestCase
             Attribute::string(key: 'customerId', size: 64),
             Attribute::string(key: 'body', size: 256),
             Attribute::integer(key: 'score'),
+            Attribute::double(key: 'ratio'),
+            Attribute::string(key: 'tags', size: 32, array: true),
+            Attribute::integer(key: 'points', array: true),
         ]);
         $this->createCollection('replies', [
             Attribute::string(key: 'noteId', size: 64),
@@ -57,6 +61,9 @@ final class JoinedColumnValidationTest extends TestCase
             'customerId' => 'first',
             'body' => 'needle',
             'score' => 3,
+            'ratio' => 0.5,
+            'tags' => ['a'],
+            'points' => [1],
         ]);
         $this->createDocument('replies', 'reply', ['noteId' => 'note', 'text' => 'thanks']);
     }
@@ -227,6 +234,54 @@ final class JoinedColumnValidationTest extends TestCase
                 $this->assertSame('Invalid query method: equal', $error->getMessage(), $label);
             }
         }
+    }
+
+    /**
+     * @return array<string, array{0: Query, 1: string}>
+     */
+    public static function nonNumericJoinedAttributeProvider(): array
+    {
+        $numeric = static fn (string $method, string $attribute): string => 'Invalid query: Aggregate '.$method.' requires a numeric attribute that is not an array: '.$attribute;
+        $integer = static fn (string $method, string $attribute): string => 'Invalid query: Aggregate '.$method.' requires an integer attribute that is not an array: '.$attribute;
+
+        return [
+            'sum of a joined string' => [Query::sum('note.body', 'result'), $numeric('sum', 'note.body')],
+            'sum of a bare name resolved to a joined string' => [Query::sum('body', 'result'), $numeric('sum', 'body')],
+            'avg of a joined string' => [Query::avg('note.body', 'result'), $numeric('avg', 'note.body')],
+            'stddev of a joined string' => [Query::stddev('note.body', 'result'), $numeric('stddev', 'note.body')],
+            'variance of a bare name resolved to a joined string' => [Query::variance('body', 'result'), $numeric('variance', 'body')],
+            'bitAnd of a joined string' => [Query::bitAnd('note.body', 'result'), $numeric('bitAnd', 'note.body')],
+            'sum of a joined string array' => [Query::sum('note.tags', 'result'), $numeric('sum', 'note.tags')],
+            'avg of a bare name resolved to a joined string array' => [Query::avg('tags', 'result'), $numeric('avg', 'tags')],
+            'sum of a joined integer array' => [Query::sum('note.points', 'result'), $numeric('sum', 'note.points')],
+            'bitOr of a bare name resolved to a joined integer array' => [Query::bitOr('points', 'result'), $numeric('bitOr', 'points')],
+            'bitXor of a joined double' => [Query::bitXor('note.ratio', 'result'), $integer('bitXor', 'note.ratio')],
+            'sum of a joined internal attribute' => [Query::sum('note.$createdAt', 'result'), $numeric('sum', 'note.$createdAt')],
+        ];
+    }
+
+    #[DataProvider('nonNumericJoinedAttributeProvider')]
+    public function testArithmeticAndBitwiseAggregatesTypeAJoinedAttributeByItsCollection(Query $aggregate, string $message): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage($message);
+
+        $this->database->find('customers', [self::join(), $aggregate]);
+    }
+
+    public function testArithmeticAggregatesOfNumericJoinedAttributesStayValid(): void
+    {
+        $results = $this->database->find('customers', [
+            self::join(),
+            Query::sum('note.score', 'total'),
+            Query::avg('note.ratio', 'average'),
+            Query::sum('score', 'bare'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame(3, $results[0]->getAttribute('total'));
+        $this->assertSame(0.5, $results[0]->getAttribute('average'));
+        $this->assertSame(3, $results[0]->getAttribute('bare'));
     }
 
     private static function join(): Query

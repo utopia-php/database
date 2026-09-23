@@ -7712,4 +7712,40 @@ trait JoinTests
 
         $this->cleanupAggCollections($database, $collections);
     }
+
+    public function testJoinArithmeticAggregateOfAJoinedStringIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jnsa');
+        $joins = [
+            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            Query::join($notes, '$id', 'customerId', '=', 'note'),
+        ];
+
+        foreach ([
+            'Aggregate sum requires a numeric attribute that is not an array: purchase.status' => Query::sum('purchase.status', 'total'),
+            'Aggregate sum requires a numeric attribute that is not an array: status' => Query::sum('status', 'total'),
+            'Aggregate avg requires a numeric attribute that is not an array: note.body' => Query::avg('note.body', 'average'),
+            'Aggregate stddev requires a numeric attribute that is not an array: purchase.memo' => Query::stddev('purchase.memo', 'spread'),
+            'Aggregate bitAnd requires a numeric attribute that is not an array: purchase.$createdAt' => Query::bitAnd('purchase.$createdAt', 'bits'),
+        ] as $message => $aggregate) {
+            try {
+                $database->find($customers, [...$joins, $aggregate]);
+                $this->fail('An aggregate over a joined attribute that holds no number reached the engine: '.$message);
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: '.$message, $error->getMessage());
+            }
+        }
+
+        $results = $database->find($customers, [...$joins, Query::sum('purchase.amount', 'total')]);
+        $this->assertCount(1, $results);
+        $this->assertSame(150, $this->intAttribute($results[0], 'total'));
+
+        $this->cleanupAggCollections($database, $collections);
+    }
 }

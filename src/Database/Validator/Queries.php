@@ -373,7 +373,7 @@ class Queries extends Validator
                 }
             }
 
-            $joins[] = new JoinedCollection($query->getJoinAlias(), $attributes);
+            $joins[] = new JoinedCollection($query->getJoinAlias(), $attributes, Aggregate::numericTypes($definitions));
         }
 
         return $joins;

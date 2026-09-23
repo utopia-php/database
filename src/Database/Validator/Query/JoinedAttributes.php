@@ -139,10 +139,31 @@ trait JoinedAttributes
     }
 
     /**
+     * The known join an attribute this collection does not declare resolves to: the join of its
+     * alias, or the join that declares a bare name.
+     */
+    protected function joinOf(string $attribute): ?JoinedCollection
+    {
+        $dot = \strpos($attribute, '.');
+
+        if ($dot !== false) {
+            return $this->joinsByAlias[\substr($attribute, 0, $dot)] ?? null;
+        }
+
+        foreach ($this->joins as $join) {
+            if (isset($join->attributes[$attribute])) {
+                return $join;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Internal attributes are the same on every collection, except `$collection`: a read derives
      * it from the collection it reads, and a joined row has no column for it.
      */
-    private function isJoinedInternalAttribute(string $column): bool
+    protected function isJoinedInternalAttribute(string $column): bool
     {
         return \str_starts_with($column, '$')
             && $column !== Document::COLLECTION

@@ -481,6 +481,7 @@ class Index extends Validator
                     $attrSize,
                     ! empty($index->lengths[$attributePosition]) ? $index->lengths[$attributePosition] : $attrSize,
                 ],
+                ColumnType::Float,
                 ColumnType::Double => [2, 2],
                 default => [1, 1],
             };

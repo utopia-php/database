@@ -1942,6 +1942,104 @@ class Database
     }
 
     /**
+     * Decode the values a document carries under each join alias as a direct read of the joined
+     * collection would: cast to their types, then passed through every decode filter they declare,
+     * with a document built from the joined row. An alias whose `$id` is null matched no row, and
+     * its values stay null.
+     *
+     * @param  array<string, Document>  $collections  The collection each join alias reads
+     *
+     * @throws DatabaseException
+     */
+    protected function decodeJoins(Document $document, array $collections): Document
+    {
+        foreach ($this->joinedRows($document, $collections) as $alias => $row) {
+            $collection = $collections[$alias];
+            $keys = \array_map(\strval(...), \array_keys($row));
+
+            $joined = Document::fromRow([...$row, Document::COLLECTION => $collection->getId()]);
+            $joined = $this->castingAfter($collection, $joined);
+            $joined = $this->casting($collection, $joined);
+            $joined = $this->decode($collection, $joined, $keys);
+
+            foreach ($keys as $key) {
+                $document->setAttribute($alias.'.'.$key, $joined->getAttribute($key));
+            }
+        }
+
+        return $document;
+    }
+
+    /**
+     * Encode the values a document carries under each join alias back to how the joined collection
+     * stores them. Returns a copy: the document is usually a caller's cursor, which keeps its
+     * decoded values.
+     *
+     * @param  array<string, Document>  $collections  The collection each join alias reads
+     *
+     * @throws DatabaseException
+     */
+    protected function encodeJoins(Document $document, array $collections): Document
+    {
+        $rows = $this->joinedRows($document, $collections);
+        if ($rows === []) {
+            return $document;
+        }
+
+        $encoded = clone $document;
+        foreach ($rows as $alias => $row) {
+            $collection = $collections[$alias];
+            $keys = \array_map(\strval(...), \array_keys($row));
+
+            $joined = Document::fromRow([...$row, Document::COLLECTION => $collection->getId()]);
+            $joined = $this->encode($collection, $joined, applyDefaults: false);
+            $joined = $this->castingBefore($collection, $joined);
+
+            foreach ($keys as $key) {
+                $encoded->setAttribute($alias.'.'.$key, $joined->getAttribute($key));
+            }
+        }
+
+        return $encoded;
+    }
+
+    /**
+     * The row each join alias carries in a document, by attribute. `$permissions` is never encoded
+     * or decoded, and an alias whose `$id` is null matched no row: both are left out.
+     *
+     * @param  array<string, Document>  $collections
+     * @return array<string, array<string, mixed>>
+     */
+    private function joinedRows(Document $document, array $collections): array
+    {
+        if ($collections === []) {
+            return [];
+        }
+
+        $rows = [];
+        foreach ($document as $key => $value) {
+            $key = (string) $key;
+            $dot = \strpos($key, '.');
+            if ($dot === false) {
+                continue;
+            }
+
+            $alias = \substr($key, 0, $dot);
+            $attribute = \substr($key, $dot + 1);
+            if (! isset($collections[$alias]) || $attribute === Document::PERMISSIONS) {
+                continue;
+            }
+
+            $rows[$alias][$attribute] = $value;
+        }
+
+        return \array_filter(
+            $rows,
+            static fn (array $row): bool => ! \array_key_exists(Document::ID, $row) || $row[Document::ID] !== null,
+        );
+    }
+
+    /**
      * Cast document attribute values to their proper PHP types based on the collection schema.
      *
      * @param Document $collection The collection definition containing attribute type information.

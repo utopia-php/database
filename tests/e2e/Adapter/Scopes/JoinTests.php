@@ -5837,6 +5837,104 @@ trait JoinTests
         $this->cleanupAggCollections($database, $this->aliasCollections());
     }
 
+    public function testJoinedValuesDecodeLikeADirectRead(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->addFilter(
+            'joinedSeal',
+            static fn (mixed $value): mixed => \is_string($value) ? \json_encode(['data' => \base64_encode($value), 'method' => 'base64']) : $value,
+            static function (mixed $value): mixed {
+                $payload = \is_string($value) ? \json_decode($value, true) : null;
+                if (! \is_array($payload) || ! \is_string($payload['data'] ?? null)) {
+                    return $value;
+                }
+
+                return \base64_decode($payload['data'], true);
+            },
+        );
+
+        $main = 'jdec_main';
+        $joined = 'jdec_joined';
+        $this->cleanupAggCollections($database, [$main, $joined]);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $main, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($main, Attribute::string(key: 'name', size: 64, required: true));
+        $database->createCollection(new Collection(id: $joined, permissions: $permissions, documentSecurity: false));
+        $database->createAttributes($joined, [
+            Attribute::string(key: 'mainId', size: 64, required: true),
+            Attribute::integer(key: 'total', required: true),
+            Attribute::float(key: 'price', required: true),
+            Attribute::boolean(key: 'paid', required: true),
+            Attribute::datetime(key: 'placedAt', required: true),
+            Attribute::string(key: 'tags', size: 32, array: true),
+            Attribute::string(key: 'meta', size: 1024, filters: ['json']),
+            Attribute::string(key: 'secret', size: 1024, filters: ['joinedSeal']),
+        ]);
+
+        $placedAt = ['m1' => '2024-05-06T07:08:09.123+00:00', 'm2' => '2024-05-06T08:00:00.000+00:00', 'm3' => '2024-05-06T09:00:00.000+00:00'];
+        foreach ($placedAt as $id => $at) {
+            $database->createDocument($main, new Document(['$id' => $id, 'name' => $id, '$permissions' => [Permission::read(Role::any())]]));
+            $database->createDocument($joined, new Document([
+                '$id' => 'j'.$id,
+                'mainId' => $id,
+                'total' => 10,
+                'price' => 2.5,
+                'paid' => true,
+                'placedAt' => $at,
+                'tags' => ['a', 'b'],
+                'meta' => ['color' => 'red'],
+                'secret' => 'plain-secret',
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $attributes = ['mainId', 'total', 'price', 'paid', 'placedAt', 'tags', 'meta', 'secret'];
+        $direct = $database->getDocument($joined, 'jm1');
+        $join = Query::join($joined, '$id', 'mainId', '=', 'dec');
+        $selected = Query::select(['name', ...\array_map(static fn (string $attribute): string => 'dec.'.$attribute, $attributes)]);
+
+        foreach ([
+            'find' => $database->find($main, [$join, Query::equal('$id', ['m1'])]),
+            'find with a select' => $database->find($main, [$join, $selected, Query::equal('$id', ['m1'])]),
+            'getDocument' => [$database->getDocument($main, 'm1', [$join])],
+            'getDocument with a select' => [$database->getDocument($main, 'm1', [$join, $selected])],
+        ] as $label => $rows) {
+            $this->assertCount(1, $rows, $label);
+            $row = $rows[0];
+            foreach ($attributes as $attribute) {
+                $this->assertSame($direct->getAttribute($attribute), $row->getAttribute('dec.'.$attribute), "{$label}: dec.{$attribute}");
+            }
+            $this->assertSame(10, $row->getAttribute('dec.total'), $label);
+            $this->assertSame(2.5, $row->getAttribute('dec.price'), $label);
+            $this->assertTrue($row->getAttribute('dec.paid'), $label);
+            $this->assertSame(['a', 'b'], $row->getAttribute('dec.tags'), $label);
+            $this->assertSame(['color' => 'red'], $row->getAttribute('dec.meta'), $label);
+            $this->assertSame('plain-secret', $row->getAttribute('dec.secret'), $label);
+        }
+
+        $page = [$join, Query::orderAsc('dec.placedAt'), Query::limit(1)];
+        $ids = [];
+        $cursor = null;
+        for ($attempt = 0; $attempt < 4; $attempt++) {
+            $rows = $database->find($main, $cursor === null ? $page : [...$page, Query::cursorAfter($cursor)]);
+            if ($rows === []) {
+                break;
+            }
+            $ids[] = $rows[0]->getId();
+            $cursor = $rows[0];
+        }
+        $this->assertSame(['m1', 'm2', 'm3'], $ids, 'A cursor carrying decoded joined values pages by them');
+
+        $this->cleanupAggCollections($database, [$main, $joined]);
+    }
+
     public function testFullOuterJoinThenRightJoinReturnsUnmatchedRowsOnce(): void
     {
         $database = static::getDatabase();

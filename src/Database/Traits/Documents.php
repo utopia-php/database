@@ -59,6 +59,8 @@ trait Documents
 
     private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
     {
+        $current ??= 0;
+
         if (Attribute::isIntegerType($attribute->type)) {
             if (! $attribute->signed
                 && \in_array($attribute->type, [ColumnType::BigInteger, ColumnType::BigSerial], true)

@@ -370,7 +370,38 @@ final class RelationshipHookTest extends TestCase
     /**
      * @param  Closure(): Adapter  $adapter
      */
-    private function database(Closure $adapter): Database
+    #[DataProvider('adapters')]
+    public function testRelationshipMaintenanceKeepsTheTenantOfEveryRelatedDocument(Closure $adapter): void
+    {
+        $database = $this->database($adapter, sharedTables: true);
+        $this->relate($database, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->setTenant(1);
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1', '$tenant' => 1]));
+        $database->createDocument('child', new Document(['$id' => 'child1', '$tenant' => 1, 'parent' => 'parent1']));
+        $database->createDocument('child', new Document(['$id' => 'child2', '$tenant' => 1]));
+        $database->createDocument('child', new Document(['$id' => 'foreign', '$tenant' => 2, 'parent' => 'parent1']));
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => ['child2']]));
+        $this->assertSame(['child2'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+
+        foreach (['child1', 'child2'] as $id) {
+            $child = $database->getDocument('child', $id);
+            $this->assertSame(1, $child->getTenant(), "{$id} must keep its tenant");
+            $this->assertNull($child->getAttribute('parent'), "{$id} must no longer reference the deleted parent");
+        }
+
+        $foreign = $database->withTenant(2, fn () => $database->skipRelationships(fn () => $database->getDocument('child', 'foreign')));
+        $this->assertSame(2, $foreign->getTenant());
+        $this->assertSame('parent1', $foreign->getAttribute('parent'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    private function database(Closure $adapter, bool $sharedTables = false): Database
     {
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
@@ -380,6 +411,13 @@ final class RelationshipHookTest extends TestCase
             ->setAuthorization($authorization)
             ->setDatabase('relationship_hook')
             ->setNamespace('relationship_hook_'.\uniqid());
+
+        if ($sharedTables) {
+            $database
+                ->setSharedTables(true)
+                ->setTenantPerDocument(true)
+                ->setTenant(null);
+        }
 
         $database->create();
         $database->addHook(new Relationships($database));

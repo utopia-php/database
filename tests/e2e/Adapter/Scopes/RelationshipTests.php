@@ -4930,4 +4930,109 @@ trait RelationshipTests
         $database->deleteCollection('authorsOrder');
         $database->deleteCollection('postsOrder');
     }
+
+    /**
+     * deleteDocument() reports every document on the other side of a two-way relationship
+     * whose relationship the delete changed, including the ones it never writes to.
+     */
+    public function testDeleteDocumentRelatedCallback(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $collectionPermissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $documentPermissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection('related_parent', permissions: $collectionPermissions, documentSecurity: true);
+        $database->createCollection('related_child', permissions: $collectionPermissions, documentSecurity: true);
+
+        $database->createRelationship(
+            collection: 'related_parent',
+            relatedCollection: 'related_child',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: true,
+            id: 'children',
+            twoWayKey: 'parent',
+            onDelete: Database::RELATION_MUTATE_SET_NULL,
+        );
+
+        foreach (['child1', 'child2'] as $childId) {
+            $database->createDocument('related_child', new Document([
+                '$id' => $childId,
+                '$permissions' => $documentPermissions,
+            ]));
+        }
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent1',
+            '$permissions' => $documentPermissions,
+            'children' => ['child1', 'child2'],
+        ]));
+
+        // Deleting the parent writes every child, so each one is reported with its
+        // reference already cleared.
+        $reported = [];
+        $database->deleteDocument('related_parent', 'parent1', function (Document $related, Document $collection) use (&$reported) {
+            $reported[$related->getId()] = $collection->getId();
+            $this->assertNull($related->getAttribute('parent'));
+        });
+
+        $this->assertEquals([
+            'child1' => 'related_child',
+            'child2' => 'related_child',
+        ], $reported);
+
+        // Deleting a child writes nothing to the parent -- the foreign key lived on the
+        // deleted row -- but the parent's relationship changed, so it is still reported.
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent2',
+            '$permissions' => $documentPermissions,
+            'children' => ['child1'],
+        ]));
+
+        $reported = [];
+        $database->deleteDocument('related_child', 'child1', function (Document $related) use (&$reported) {
+            $reported[] = $related->getId();
+        });
+
+        $this->assertEquals(['parent2'], $reported);
+
+        // A cascaded document is gone, so it is not reported as changed.
+        $database->updateRelationship(
+            collection: 'related_parent',
+            id: 'children',
+            onDelete: Database::RELATION_MUTATE_CASCADE,
+        );
+
+        $database->createDocument('related_child', new Document([
+            '$id' => 'child3',
+            '$permissions' => $documentPermissions,
+            'parent' => 'parent2',
+        ]));
+
+        $reported = [];
+        $database->deleteDocument('related_parent', 'parent2', function (Document $related) use (&$reported) {
+            $reported[] = $related->getId();
+        });
+
+        $this->assertEquals([], $reported);
+        $this->assertTrue($database->getDocument('related_child', 'child3')->isEmpty());
+
+        $database->deleteCollection('related_parent');
+        $database->deleteCollection('related_child');
+    }
 }

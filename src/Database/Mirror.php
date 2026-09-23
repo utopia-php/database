@@ -868,9 +868,10 @@ class Mirror extends Database
         return $modified;
     }
 
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(string $collection, string $id, ?callable $onRelated = null): bool
     {
-        $result = $this->source->deleteDocument($collection, $id);
+        // Only the source reports related documents; the destination is a mirror of the same write.
+        $result = $this->source->deleteDocument($collection, $id, $onRelated);
 
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)

@@ -486,6 +486,22 @@ class Database
     protected array $relationshipDeleteStack = [];
 
     /**
+     * Documents on the other side of a relationship that a delete changed, keyed by
+     * collection and document id. Only collected while a delete is running.
+     *
+     * @var array<string, array{collection: Document, document: Document}>|null
+     */
+    protected ?array $relatedDocuments = null;
+
+    /**
+     * Ids removed by the delete that is currently running, so cascaded documents are
+     * not reported as changed.
+     *
+     * @var array<string, true>
+     */
+    protected array $relatedDocumentsRemoved = [];
+
+    /**
      * Type mapping for collections to custom document classes
      * @var array<string, class-string<Document>>
      */
@@ -7959,8 +7975,15 @@ class Database
     /**
      * Delete Document
      *
+     * $onRelated is called once per document on the other side of a relationship whose
+     * relationship changed because of this delete, after the transaction commits. That
+     * covers documents this delete wrote, such as a set-null peer, and documents left
+     * holding a reference that is now gone, which are not written at all. Documents the
+     * delete cascaded away are not reported.
+     *
      * @param string $collection
      * @param string $id
+     * @param (callable(Document $related, Document $collection): void)|null $onRelated
      *
      * @return bool
      *
@@ -7969,59 +7992,117 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      */
-    public function deleteDocument(string $collection, string $id): bool
+    public function deleteDocument(string $collection, string $id, ?callable $onRelated = null): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        $deleted = $this->withTransaction(function () use ($collection, $id, &$document) {
-            $document = $this->authorization->skip(fn () => $this->silent(
-                fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
-            ));
+        // A cascade re-enters this method, so only the outermost call owns the buffer.
+        $collecting = $this->relatedDocuments === null;
+        $related = [];
+        $removed = [];
 
-            if ($document->isEmpty()) {
-                return false;
-            }
-
-            if ($collection->getId() !== self::METADATA) {
-                $documentSecurity = $collection->getAttribute('documentSecurity', false);
-
-                if (!$this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
-                    ...$collection->getDelete(),
-                    ...($documentSecurity ? $document->getDelete() : [])
-                ]))) {
-                    throw new AuthorizationException($this->authorization->getDescription());
+        try {
+            $deleted = $this->withTransaction(function () use ($collection, $id, $collecting, &$document) {
+                // Reset inside the transaction so a retried attempt starts from an empty buffer.
+                if ($collecting) {
+                    $this->relatedDocuments = [];
+                    $this->relatedDocumentsRemoved = [];
                 }
+
+                $document = $this->authorization->skip(fn () => $this->silent(
+                    fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
+                ));
+
+                if ($document->isEmpty()) {
+                    return false;
+                }
+
+                if ($collection->getId() !== self::METADATA) {
+                    $documentSecurity = $collection->getAttribute('documentSecurity', false);
+
+                    if (!$this->authorization->isValid(new Input(self::PERMISSION_DELETE, [
+                        ...$collection->getDelete(),
+                        ...($documentSecurity ? $document->getDelete() : [])
+                    ]))) {
+                        throw new AuthorizationException($this->authorization->getDescription());
+                    }
+                }
+
+                // Check if document was updated after the request timestamp
+                try {
+                    $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
+                } catch (Exception $e) {
+                    throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
+                }
+
+                if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
+                    throw new ConflictException('Document was updated after the request timestamp');
+                }
+
+                if ($this->resolveRelationships) {
+                    $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
+                }
+
+                $result = $this->adapter->deleteDocument($collection->getId(), $id);
+
+                if ($result) {
+                    $this->relatedDocumentsRemoved[$this->relatedDocumentKey($collection->getId(), $id)] = true;
+                }
+
+                $this->purgeCachedDocument($collection->getId(), $id);
+
+                return $result;
+            });
+        } finally {
+            if ($collecting) {
+                $related = $this->relatedDocuments ?? [];
+                $removed = $this->relatedDocumentsRemoved;
+                $this->relatedDocuments = null;
+                $this->relatedDocumentsRemoved = [];
             }
-
-            // Check if document was updated after the request timestamp
-            try {
-                $oldUpdatedAt = new \DateTime($document->getUpdatedAt());
-            } catch (Exception $e) {
-                throw new DatabaseException($e->getMessage(), $e->getCode(), $e);
-            }
-
-            if (!\is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
-                throw new ConflictException('Document was updated after the request timestamp');
-            }
-
-            if ($this->resolveRelationships) {
-                $document = $this->silent(fn () => $this->deleteDocumentRelationships($collection, $document));
-            }
-
-            $result = $this->adapter->deleteDocument($collection->getId(), $id);
-
-            $this->purgeCachedDocument($collection->getId(), $id);
-
-            return $result;
-        });
+        }
 
         if ($deleted) {
             // Purge again after commit so readers cannot re-cache the pre-commit version
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
+
+            // After the commit, so nothing is reported for a transaction that rolled back.
+            if ($onRelated !== null) {
+                foreach ($related as $key => $entry) {
+                    if (isset($removed[$key])) {
+                        continue;
+                    }
+
+                    $onRelated($entry['document'], $entry['collection']);
+                }
+            }
         }
 
         return $deleted;
+    }
+
+    /**
+     * Record a document on the other side of a relationship that the running delete changed.
+     *
+     * A later call for the same document wins, so a document read from the deleted
+     * document's relationships is replaced by the copy the write returned.
+     */
+    private function recordRelatedDocument(Document $collection, Document $document): void
+    {
+        if ($this->relatedDocuments === null || $document->isEmpty()) {
+            return;
+        }
+
+        $this->relatedDocuments[$this->relatedDocumentKey($collection->getId(), $document->getId())] = [
+            'collection' => $collection,
+            'document' => $document,
+        ];
+    }
+
+    private function relatedDocumentKey(string $collection, string $id): string
+    {
+        return $collection . ':' . $id;
     }
 
     /**
@@ -8054,6 +8135,17 @@ class Database
 
             $relationship->setAttribute('collection', $collection->getId());
             $relationship->setAttribute('document', $document->getId());
+
+            // Documents on the other side hold a reference to this one, so their relationship
+            // changes whether or not the delete writes to them. A write below replaces these
+            // with the copy it returned, and a cascade drops them again.
+            if ($twoWay) {
+                foreach (\is_array($value) ? $value : [$value] as $relation) {
+                    if ($relation instanceof Document) {
+                        $this->recordRelatedDocument($relatedCollection, $relation);
+                    }
+                }
+            }
 
             switch ($onDelete) {
                 case Database::RELATION_MUTATE_RESTRICT:
@@ -8165,13 +8257,15 @@ class Database
                     return;
                 }
 
-                $this->skipRelationships(fn () => $this->updateDocument(
+                $updated = $this->skipRelationships(fn () => $this->updateDocument(
                     $relatedCollection->getId(),
                     $related->getId(),
                     new Document([
                         $twoWayKey => null
                     ])
                 ));
+
+                $this->recordRelatedDocument($relatedCollection, $updated);
             });
         }
 
@@ -8247,13 +8341,15 @@ class Database
                         return;
                     }
 
-                    $this->skipRelationships(fn () => $this->updateDocument(
+                    $updated = $this->skipRelationships(fn () => $this->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
                         new Document([
                             $twoWayKey => null
                         ])
                     ));
+
+                    $this->recordRelatedDocument($relatedCollection, $updated);
                 });
                 break;
 
@@ -8266,13 +8362,15 @@ class Database
 
                 foreach ($relations as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
-                        $this->skipRelationships(fn () => $this->updateDocument(
+                        $updated = $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $relation->getId(),
                             new Document([
                                 $twoWayKey => null
                             ]),
                         ));
+
+                        $this->recordRelatedDocument($relatedCollection, $updated);
                     });
                 }
                 break;
@@ -8286,13 +8384,15 @@ class Database
 
                 foreach ($relations as $relation) {
                     $this->authorization->skip(function () use ($relatedCollection, $twoWayKey, $relation) {
-                        $this->skipRelationships(fn () => $this->updateDocument(
+                        $updated = $this->skipRelationships(fn () => $this->updateDocument(
                             $relatedCollection->getId(),
                             $relation->getId(),
                             new Document([
                                 $twoWayKey => null
                             ])
                         ));
+
+                        $this->recordRelatedDocument($relatedCollection, $updated);
                     });
                 }
                 break;

@@ -3393,6 +3393,11 @@ trait Documents
     public function count(string $collection, array $queries = [], ?int $max = null): int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $indexes */
@@ -3451,6 +3456,11 @@ trait Documents
     public function sum(string $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
+
+        if ($collection->isEmpty()) {
+            throw new NotFoundException('Collection not found');
+        }
+
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         /** @var array<Document> $indexes */

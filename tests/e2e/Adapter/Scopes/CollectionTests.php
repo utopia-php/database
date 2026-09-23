@@ -1515,6 +1515,30 @@ trait CollectionTests
             $this->assertInstanceOf(NotFoundException::class, $e);
             $this->assertSame('Collection not found', $e->getMessage());
         }
+
+        try {
+            $database->count('not_exist');
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(NotFoundException::class, $e);
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
+
+        try {
+            $database->sum('not_exist', 'value');
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(NotFoundException::class, $e);
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
+
+        try {
+            $database->getAuthorization()->skip(fn () => $database->count('not_exist'));
+            $this->fail('Failed to throw Exception');
+        } catch (Exception $e) {
+            $this->assertInstanceOf(NotFoundException::class, $e);
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
     }
 
     public function testUpdateDeleteCollectionNotFound(): void

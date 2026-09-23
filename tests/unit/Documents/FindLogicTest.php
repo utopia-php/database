@@ -1070,17 +1070,19 @@ class FindLogicTest extends TestCase
         ]);
     }
 
-    public function testCountThrowsAuthorizationForMissingCollection(): void
+    public function testCountThrowsNotFoundExceptionForMissingCollection(): void
     {
         $this->adapter->method('getDocument')->willReturn(new Document());
-        $this->expectException(AuthorizationException::class);
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('Collection not found');
         $this->database->count('nonexistent');
     }
 
-    public function testSumThrowsAuthorizationForMissingCollection(): void
+    public function testSumThrowsNotFoundExceptionForMissingCollection(): void
     {
         $this->adapter->method('getDocument')->willReturn(new Document());
-        $this->expectException(AuthorizationException::class);
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('Collection not found');
         $this->database->sum('nonexistent', 'amount');
     }
 

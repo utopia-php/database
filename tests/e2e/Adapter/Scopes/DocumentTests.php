@@ -24,6 +24,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -3055,6 +3056,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
     }
 
@@ -3104,6 +3106,7 @@ trait DocumentTests
             $this->fail('Failed to throw exception');
         } catch (Throwable $e) {
             $this->assertInstanceOf(DuplicateException::class, $e);
+            $this->assertInstanceOf(UniqueException::class, $e);
         }
 
         $database->deleteDocument($this->getMoviesCollection(), $document->getId());
@@ -7653,7 +7656,6 @@ trait DocumentTests
         $database->createAttribute('duplicateMessages', Attribute::string(key: 'email', size: 128, required: true));
         $database->createIndex('duplicateMessages', Index::unique(key: 'emailUnique', attributes: ['email'], lengths: [128]));
 
-        // Create first document
         $database->createDocument('duplicateMessages', new Document([
             '$id' => 'dup_msg_1',
             '$permissions' => [
@@ -7662,7 +7664,6 @@ trait DocumentTests
             'email' => 'test@example.com',
         ]));
 
-        // Test 1: Duplicate document ID should say "Document already exists"
         try {
             $database->createDocument('duplicateMessages', new Document([
                 '$id' => 'dup_msg_1',
@@ -7673,10 +7674,10 @@ trait DocumentTests
             ]));
             $this->fail('Expected DuplicateException for duplicate document ID');
         } catch (DuplicateException $e) {
+            $this->assertNotInstanceOf(UniqueException::class, $e);
             $this->assertStringContainsString('Document already exists', $e->getMessage());
         }
 
-        // Test 2: Unique index violation should mention "unique attributes"
         try {
             $database->createDocument('duplicateMessages', new Document([
                 '$id' => 'dup_msg_2',
@@ -7685,8 +7686,32 @@ trait DocumentTests
                 ],
                 'email' => 'test@example.com',
             ]));
-            $this->fail('Expected DuplicateException for unique index violation');
+            $this->fail('Expected UniqueException for unique index violation');
         } catch (DuplicateException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
+            $this->assertStringContainsString('unique attributes', $e->getMessage());
+        }
+
+        // '_uid' is the document ID column, so a conflicting value containing it must not be read as an ID conflict.
+        $database->createDocument('duplicateMessages', new Document([
+            '$id' => 'dup_msg_3',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'email' => 'prefix_uid_suffix@example.com',
+        ]));
+
+        try {
+            $database->createDocument('duplicateMessages', new Document([
+                '$id' => 'dup_msg_4',
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                ],
+                'email' => 'prefix_uid_suffix@example.com',
+            ]));
+            $this->fail('Expected UniqueException for unique index violation on a value containing _uid');
+        } catch (DuplicateException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
             $this->assertStringContainsString('unique attributes', $e->getMessage());
         }
 

@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
@@ -2160,7 +2161,7 @@ class Redis extends Adapter implements
                     \array_unshift($signature, $tenant);
                 }
                 if (\serialize($signature) === $newHash) {
-                    throw new DuplicateException('Document with the requested unique attributes already exists');
+                    throw new UniqueException('Document with the requested unique attributes already exists');
                 }
             }
         }

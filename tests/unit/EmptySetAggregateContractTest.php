@@ -78,6 +78,33 @@ final class EmptySetAggregateContractTest extends TestCase
     }
 
     /**
+     * MySQL and MariaDB aggregate an emulated full outer join once, over the union of its halves, and
+     * that outer statement answers the same way; PostgreSQL joins natively.
+     *
+     * @param  class-string<SQL>  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testBitwiseAggregatesOverAFullOuterJoinWithNoInputValuesAreNull(string $adapter): void
+    {
+        $rows = $this->find($adapter, inputs: 0, queries: [
+            Query::fullOuterJoin('other', '$id', 'collectionId', '=', 'joined'),
+            Query::count('*', 'rows'),
+            Query::bitAnd('joined.flags', 'all_bits'),
+            Query::bitOr('joined.flags', 'any_bits'),
+            Query::bitXor('joined.flags', 'odd_bits'),
+            Query::sum('joined.flags', 'total'),
+        ]);
+
+        $this->assertSame([[
+            'rows' => '0',
+            'all_bits' => null,
+            'any_bits' => null,
+            'odd_bits' => null,
+            'total' => null,
+        ]], $rows);
+    }
+
+    /**
      * Run a find whose statement is answered as if `$inputs` rows fed every aggregate.
      *
      * @param  class-string<SQL>  $adapter

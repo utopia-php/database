@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\NativeFullOuterJoinSQLite;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -24,9 +25,10 @@ final class QueryShapeDatabaseTest extends TestCase
 {
     private const string COLLECTION = 'orders';
 
-    private function database(): Database
+    private function database(bool $nativeFullOuterJoin = false): Database
     {
-        $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $pdo = new PDO('sqlite::memory:');
+        $database = new Database($nativeFullOuterJoin ? new NativeFullOuterJoinSQLite($pdo) : new SQLite($pdo), new Cache(new NoCache()));
         $database
             ->setDatabase('query_shape')
             ->setNamespace('query_shape_'.\uniqid())
@@ -205,5 +207,61 @@ final class QueryShapeDatabaseTest extends TestCase
             $this->assertTrue($results[0]->offsetExists($alias), $alias.' must be present');
             $this->assertNull($results[0]->getAttribute($alias), $alias.' over no rows must be null');
         }
+    }
+
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function fullOuterJoinModes(): iterable
+    {
+        yield 'emulated full outer join' => [false];
+        yield 'native full outer join' => [true];
+    }
+
+    /**
+     * The contract holds over a full outer join too, whose aggregation runs once over both halves of
+     * the emulation on engines without one.
+     */
+    #[DataProvider('fullOuterJoinModes')]
+    public function testEmptySetAggregatesOverAFullOuterJoinFollowTheContract(bool $nativeFullOuterJoin): void
+    {
+        $database = $this->database($nativeFullOuterJoin);
+        $database->createCollection(new Collection(
+            id: 'refunds',
+            attributes: [
+                Attribute::integer(key: 'amount', required: true),
+                Attribute::string(key: 'status', size: 20, required: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->createDocument('refunds', new Document([
+            'amount' => 2,
+            'status' => 'refunded',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $noRows = [
+            Query::fullOuterJoin('refunds', 'status', 'status', '=', 'refund'),
+            Query::equal('status', ['nonexistent']),
+        ];
+
+        $results = $database->find(self::COLLECTION, [
+            ...$noRows,
+            Query::count('*', 'rows'),
+            Query::countDistinct('refund.status', 'statuses'),
+            Query::sum('refund.amount', 'total'),
+            Query::avg('refund.amount', 'mean'),
+            Query::min('amount', 'least'),
+            Query::max('refund.amount', 'most'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame(0, $results[0]->getAttribute('rows'));
+        $this->assertSame(0, $results[0]->getAttribute('statuses'));
+        foreach (['total', 'mean', 'least', 'most'] as $alias) {
+            $this->assertTrue($results[0]->offsetExists($alias), $alias.' must be present');
+            $this->assertNull($results[0]->getAttribute($alias), $alias.' over no rows must be null');
+        }
+        $this->assertSame(0, $database->count(self::COLLECTION, $noRows));
+        $this->assertSame(0, $database->sum(self::COLLECTION, 'amount', $noRows), 'Database::sum() still answers 0 over no rows');
     }
 }

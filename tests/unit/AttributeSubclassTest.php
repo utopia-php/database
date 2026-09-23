@@ -8,19 +8,13 @@ use Utopia\Cache\Adapter\None as NoneAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
-use Utopia\Database\Attribute\ArrayType;
 use Utopia\Database\Attribute\BigInteger;
-use Utopia\Database\Attribute\BigSerial;
-use Utopia\Database\Attribute\Binary;
 use Utopia\Database\Attribute\Boolean;
 use Utopia\Database\Attribute\Datetime;
-use Utopia\Database\Attribute\Decimal;
 use Utopia\Database\Attribute\Double;
-use Utopia\Database\Attribute\EnumType;
 use Utopia\Database\Attribute\FloatType;
 use Utopia\Database\Attribute\Id;
 use Utopia\Database\Attribute\Integer;
-use Utopia\Database\Attribute\Json;
 use Utopia\Database\Attribute\Linestring;
 use Utopia\Database\Attribute\LongText;
 use Utopia\Database\Attribute\MediumText;
@@ -28,16 +22,8 @@ use Utopia\Database\Attribute\ObjectType;
 use Utopia\Database\Attribute\Point;
 use Utopia\Database\Attribute\Polygon;
 use Utopia\Database\Attribute\Relationship;
-use Utopia\Database\Attribute\Serial;
-use Utopia\Database\Attribute\SmallInteger;
-use Utopia\Database\Attribute\SmallSerial;
 use Utopia\Database\Attribute\StringType;
 use Utopia\Database\Attribute\Text;
-use Utopia\Database\Attribute\Timestamp;
-use Utopia\Database\Attribute\TinyInteger;
-use Utopia\Database\Attribute\Tuple;
-use Utopia\Database\Attribute\Uuid;
-use Utopia\Database\Attribute\Uuid7;
 use Utopia\Database\Attribute\Varchar;
 use Utopia\Database\Attribute\Vector;
 use Utopia\Database\Collection;
@@ -61,33 +47,42 @@ final class AttributeSubclassTest extends TestCase
             'text' => [Text::class, 'text', ColumnType::Text, 0],
             'mediumText' => [MediumText::class, 'mediumText', ColumnType::MediumText, 0],
             'longText' => [LongText::class, 'longText', ColumnType::LongText, 0],
-            'tinyInteger' => [TinyInteger::class, 'tinyInteger', ColumnType::TinyInteger, 0],
-            'smallInteger' => [SmallInteger::class, 'smallInteger', ColumnType::SmallInteger, 0],
             'integer' => [Integer::class, 'integer', ColumnType::Integer, 0],
             'bigInteger' => [BigInteger::class, 'bigInteger', ColumnType::BigInteger, 0],
             'float' => [FloatType::class, 'float', ColumnType::Float, 0],
             'double' => [Double::class, 'double', ColumnType::Double, 0],
-            'decimal' => [Decimal::class, 'decimal', ColumnType::Decimal, 0],
             'boolean' => [Boolean::class, 'boolean', ColumnType::Boolean, 0],
             'datetime' => [Datetime::class, 'datetime', ColumnType::Datetime, 0],
-            'timestamp' => [Timestamp::class, 'timestamp', ColumnType::Timestamp, 0],
-            'json' => [Json::class, 'json', ColumnType::Json, 0],
-            'binary' => [Binary::class, 'binary', ColumnType::Binary, 0],
-            'enum' => [EnumType::class, 'enum', ColumnType::Enum, 0],
             'point' => [Point::class, 'point', ColumnType::Point, 0],
             'linestring' => [Linestring::class, 'linestring', ColumnType::Linestring, 0],
             'polygon' => [Polygon::class, 'polygon', ColumnType::Polygon, 0],
             'vector' => [Vector::class, 'vector', ColumnType::Vector, 0],
             'id' => [Id::class, 'id', ColumnType::Id, 0],
-            'uuid' => [Uuid::class, 'uuid', ColumnType::Uuid, 0],
-            'uuid7' => [Uuid7::class, 'uuid7', ColumnType::Uuid7, 0],
             'object' => [ObjectType::class, 'object', ColumnType::Object, 0],
             'relationship' => [Relationship::class, 'relationship', ColumnType::Relationship, 0],
-            'serial' => [Serial::class, 'serial', ColumnType::Serial, 0],
-            'bigSerial' => [BigSerial::class, 'bigSerial', ColumnType::BigSerial, 0],
-            'smallSerial' => [SmallSerial::class, 'smallSerial', ColumnType::SmallSerial, 0],
-            'array' => [ArrayType::class, 'array', ColumnType::Array, 0],
-            'tuple' => [Tuple::class, 'tuple', ColumnType::Tuple, 0],
+        ];
+    }
+
+    /**
+     * @return array<string, array{ColumnType}>
+     */
+    public static function removedTypes(): array
+    {
+        return [
+            'tinyinteger' => [ColumnType::TinyInteger],
+            'smallinteger' => [ColumnType::SmallInteger],
+            'decimal' => [ColumnType::Decimal],
+            'timestamp' => [ColumnType::Timestamp],
+            'json' => [ColumnType::Json],
+            'binary' => [ColumnType::Binary],
+            'enum' => [ColumnType::Enum],
+            'uuid' => [ColumnType::Uuid],
+            'uuid7' => [ColumnType::Uuid7],
+            'serial' => [ColumnType::Serial],
+            'bigserial' => [ColumnType::BigSerial],
+            'smallserial' => [ColumnType::SmallSerial],
+            'array' => [ColumnType::Array],
+            'tuple' => [ColumnType::Tuple],
         ];
     }
 
@@ -338,18 +333,17 @@ final class AttributeSubclassTest extends TestCase
         $this->assertSame(true, $restored->required);
     }
 
-    public function testEnumAndArrayAreSubclasses(): void
+    #[DataProvider('removedTypes')]
+    public function testMetadataOfARemovedTypeStillHydratesAsThePlainAttribute(ColumnType $type): void
     {
-        $enum = Attribute::enum(key: 'status');
-        $array = Attribute::array(key: 'tags');
+        $fromDocument = Attribute::fromDocument(new Document(['key' => 'x', 'type' => $type->value]));
+        $fromArray = Attribute::fromArray(['key' => 'x', 'type' => $type->value]);
 
-        $this->assertSame(ColumnType::Enum, $enum->type);
-        $this->assertSame('status', $enum->key);
-        $this->assertSame(0, $enum->size);
-
-        $this->assertSame(ColumnType::Array, $array->type);
-        $this->assertSame('tags', $array->key);
-        $this->assertSame(0, $array->size);
+        foreach ([$fromDocument, $fromArray] as $attribute) {
+            $this->assertSame(Attribute::class, $attribute::class);
+            $this->assertSame($type, $attribute->type);
+            $this->assertSame('x', $attribute->key);
+        }
     }
 
     /**

@@ -6,6 +6,8 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use ReflectionMethod;
+use ReflectionNamedType;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -237,6 +239,27 @@ final class TypeTableTest extends TestCase
             \in_array($type, self::UNSTORABLE, true),
             $type->value.' must be classified exactly once',
         );
+    }
+
+    public function testEveryFactoryBuildsAStorableType(): void
+    {
+        $factories = [];
+        foreach ((new ReflectionClass(Attribute::class))->getMethods(ReflectionMethod::IS_STATIC) as $method) {
+            $returnType = $method->getReturnType();
+            if (
+                $method->isPublic()
+                && $returnType instanceof ReflectionNamedType
+                && \is_subclass_of($returnType->getName(), Attribute::class)
+            ) {
+                $factories[] = $method->getName();
+            }
+        }
+        \sort($factories);
+
+        $expected = [...\array_keys(self::samples()), 'relationship'];
+        \sort($expected);
+
+        $this->assertSame($expected, $factories);
     }
 
     #[DataProvider('columnTypes')]

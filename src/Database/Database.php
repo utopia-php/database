@@ -3225,7 +3225,7 @@ class Database
         try {
             if ($collection->getId() !== self::METADATA) {
                 $this->withRetries(
-                    fn () => $this->skipValidation(fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection)))
+                    fn () => $this->silent(fn () => $this->updateDocument(self::METADATA, $collection->getId(), $collection))
                 );
             }
         } catch (Throwable $e) {

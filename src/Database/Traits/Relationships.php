@@ -274,12 +274,10 @@ trait Relationships
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection, $created) {
             $indexesCreated = [];
             try {
-                $this->skipValidation(function () use ($collection, $relatedCollection) {
-                    $this->withRetries(function () use ($collection, $relatedCollection) {
-                        $this->withTransaction(function () use ($collection, $relatedCollection) {
-                            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-                            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-                        });
+                $this->withRetries(function () use ($collection, $relatedCollection) {
+                    $this->withTransaction(function () use ($collection, $relatedCollection) {
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
                 });
             } catch (Throwable $e) {
@@ -351,7 +349,7 @@ trait Relationships
                 }
 
                 try {
-                    $this->skipValidation(fn () => $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
+                    $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
                         /** @var array<Attribute> $attributes */
                         $attributes = $collection->getAttribute('attributes', []);
                         $collection->setAttribute('attributes', array_filter($attributes, fn (Attribute $attr) => $attr->getId() !== $id));
@@ -361,7 +359,7 @@ trait Relationships
                         $relatedAttributes = $relatedCollection->getAttribute('attributes', []);
                         $relatedCollection->setAttribute('attributes', array_filter($relatedAttributes, fn (Attribute $attr) => $attr->getId() !== $twoWayKey));
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-                    }));
+                    });
                 } catch (Throwable $cleanupError) {
                     Console::error("Failed to cleanup metadata for relationship '{$id}': ".$cleanupError->getMessage());
                 }
@@ -901,13 +899,11 @@ trait Relationships
         }
 
         try {
-            $this->skipValidation(function () use ($collection, $relatedCollection) {
-                $this->withRetries(function () use ($collection, $relatedCollection) {
-                    $this->silent(function () use ($collection, $relatedCollection) {
-                        $this->withTransaction(function () use ($collection, $relatedCollection) {
-                            $this->updateDocument(self::METADATA, $collection->getId(), $collection);
-                            $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
-                        });
+            $this->withRetries(function () use ($collection, $relatedCollection) {
+                $this->silent(function () use ($collection, $relatedCollection) {
+                    $this->withTransaction(function () use ($collection, $relatedCollection) {
+                        $this->updateDocument(self::METADATA, $collection->getId(), $collection);
+                        $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
                 });
             });

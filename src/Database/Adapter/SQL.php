@@ -42,6 +42,7 @@ use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
+use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
@@ -3894,12 +3895,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @param  array<BaseQuery>  $queries
      * @return list<array{table: string, alias: string}>
+     *
+     * @throws QueryException
      */
     private function remapJoinQueries(array &$queries): array
     {
         $joinTablePrefixes = [];
         $joinIndex = 0;
         $alias = Query::DEFAULT_ALIAS;
+        $takenAliases = $this->declaredJoinAliases($queries);
 
         foreach ($queries as $query) {
             if (! $query->getMethod()->isJoin()) {
@@ -3911,9 +3915,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $query->setAttribute($resolvedTable);
 
             $method = $query->getMethod();
-            $joinAlias = $this->sanitizeJoinAlias($query->getJoinAlias());
+            $joinAlias = $query->getJoinAlias();
             if ($joinAlias === '') {
-                $joinAlias = 'j'.$joinIndex;
+                $joinAlias = $this->generateJoinAlias($joinIndex, $takenAliases);
             }
             $joinIndex++;
 
@@ -3940,6 +3944,54 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $joinTablePrefixes;
+    }
+
+    /**
+     * @param  array<BaseQuery>  $queries
+     * @return array<string, true> Every alias the joins declare, lower-cased
+     *
+     * @throws QueryException
+     */
+    private function declaredJoinAliases(array $queries): array
+    {
+        $declared = [];
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $alias = $query->getJoinAlias();
+            if ($alias === '') {
+                continue;
+            }
+
+            $invalid = JoinValidator::describeInvalidAlias($alias);
+            if ($invalid !== null) {
+                throw new QueryException($invalid);
+            }
+
+            $key = \strtolower($alias);
+            if (isset($declared[$key])) {
+                throw new QueryException("Join alias \"{$alias}\" is declared more than once");
+            }
+            $declared[$key] = true;
+        }
+
+        return $declared;
+    }
+
+    /**
+     * @param  array<string, true>  $takenAliases  Lower-cased aliases already in use
+     */
+    private function generateJoinAlias(int $joinIndex, array &$takenAliases): string
+    {
+        do {
+            $alias = 'j'.$joinIndex++;
+        } while (isset($takenAliases[$alias]));
+
+        $takenAliases[$alias] = true;
+
+        return $alias;
     }
 
     /**
@@ -4550,15 +4602,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $results;
-    }
-
-    private function sanitizeJoinAlias(string $alias): string
-    {
-        if ($alias !== '' && \preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $alias) === 1) {
-            return $alias;
-        }
-
-        return '';
     }
 
     private function qualifyJoinColumn(string $column, string $defaultAlias): string

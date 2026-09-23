@@ -58,7 +58,7 @@ class Attribute extends Document
             'default' => $default,
             'signed' => $signed,
             'array' => $array,
-            'format' => $format,
+            'format' => $format === '' ? null : $format,
             'formatOptions' => $formatOptions,
             'filters' => $filters,
         ];
@@ -117,7 +117,7 @@ class Attribute extends Document
             case 'format':
                 $format = $this->getAttribute('format');
 
-                return \is_string($format) ? $format : null;
+                return \is_string($format) && $format !== '' ? $format : null;
             case 'formatOptions':
                 $formatOptions = $this->getAttribute('formatOptions', []);
                 if (! \is_array($formatOptions)) {
@@ -161,7 +161,7 @@ class Attribute extends Document
             'default' => $this->setAttribute('default', $value),
             'signed' => $this->setAttribute('signed', $value),
             'array' => $this->setAttribute('array', $value),
-            'format' => $this->setAttribute('format', $value),
+            'format' => $this->setAttribute('format', $value === '' ? null : $value),
             'formatOptions' => $this->setAttribute('formatOptions', $value),
             'filters' => $this->setAttribute('filters', $value),
             'status' => $this->setAttribute('status', $value),

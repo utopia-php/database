@@ -8,10 +8,12 @@ use Utopia\Database\Attribute\Boolean;
 use Utopia\Database\Attribute\Integer;
 use Utopia\Database\Attribute\StringType;
 use Utopia\Database\Collection;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\Order;
 
 class CollectionModelTest extends TestCase
@@ -284,5 +286,33 @@ class CollectionModelTest extends TestCase
 
         $this->assertSame('idx_test', $indexes[0]->key);
         $this->assertSame('fulltext', $indexes[0]->getAttribute('type'));
+    }
+
+    public function testLegacyEmptyFormatHydratesAsNoFormat(): void
+    {
+        $row = [
+            Document::ID => 'resourceInternalId',
+            'key' => 'resourceInternalId',
+            'type' => ColumnType::String->value,
+            'size' => Database::LENGTH_KEY,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'format' => '',
+            'formatOptions' => [],
+            'filters' => [],
+        ];
+        $definition = Attribute::string(key: 'resourceInternalId', size: Database::LENGTH_KEY)->toDocument()->getArrayCopy();
+
+        $collections = [
+            'fromArray' => Collection::fromArray([Document::ID => 'migrations', 'attributes' => [$row]]),
+            'constructor' => new Collection(id: 'migrations', attributes: [new Document($row)]),
+        ];
+
+        foreach ($collections as $path => $collection) {
+            $this->assertNull($collection->attributes[0]->getAttribute('format'), $path);
+            $this->assertSame($definition, $collection->attributes[0]->toDocument()->getArrayCopy(), $path);
+        }
     }
 }

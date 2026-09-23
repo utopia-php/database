@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Attribute\Integer;
 use Utopia\Database\Attribute\StringType;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Query\Schema\ColumnType;
 
@@ -381,5 +382,65 @@ class AttributeModelTest extends TestCase
 
         $nullAttr = Attribute::string(key: 'n', size: 32, default: null);
         $this->assertSame(null, $nullAttr->default);
+    }
+
+    public function testLegacyEmptyFormatHydratesLikeTheDefinition(): void
+    {
+        $stored = Attribute::fromArray($this->legacyRow('resourceInternalId'));
+        $definition = Attribute::string(key: 'resourceInternalId', size: Database::LENGTH_KEY);
+
+        $this->assertSame($definition->type, $stored->type);
+        foreach (['size', 'required', 'default', 'signed', 'array', 'format', 'formatOptions', 'filters'] as $key) {
+            $this->assertSame($definition->getAttribute($key), $stored->getAttribute($key), "Stored '{$key}' differs from the definition");
+        }
+        $this->assertSame($definition->toDocument()->getArrayCopy(), $stored->toDocument()->getArrayCopy());
+    }
+
+    public function testEmptyFormatMeansNoFormatOnEveryConstructionPath(): void
+    {
+        $assigned = Attribute::string(key: 'title', format: 'email');
+        $assigned->format = '';
+
+        $attributes = [
+            'constructor' => new Attribute(key: 'title', format: ''),
+            'factory' => Attribute::string(key: 'title', format: ''),
+            'fromDocument' => Attribute::fromDocument(new Document($this->legacyRow('title'))),
+            'magic setter' => $assigned,
+        ];
+
+        foreach ($attributes as $path => $attribute) {
+            $this->assertNull($attribute->getAttribute('format'), $path);
+            $this->assertNull($attribute->format, $path);
+            $this->assertNull($attribute->toDocument()->getAttribute('format'), $path);
+        }
+    }
+
+    public function testEmptyFormatWrittenDirectlyReadsAsNoFormat(): void
+    {
+        $attribute = Attribute::string(key: 'title', format: 'email');
+        $attribute->setAttribute('format', '');
+
+        $this->assertNull($attribute->format);
+        $this->assertNull($attribute->toDocument()->getAttribute('format'));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function legacyRow(string $key): array
+    {
+        return [
+            Document::ID => $key,
+            'key' => $key,
+            'type' => ColumnType::String->value,
+            'size' => Database::LENGTH_KEY,
+            'required' => false,
+            'default' => null,
+            'signed' => true,
+            'array' => false,
+            'format' => '',
+            'formatOptions' => [],
+            'filters' => [],
+        ];
     }
 }

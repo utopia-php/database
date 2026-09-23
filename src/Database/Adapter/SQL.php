@@ -3279,9 +3279,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Run a prepared statement and hand it to the profiler when one is attached.
      *
      * Subclasses that wrap execute() with engine-specific timeout handling call
-     * this instead of $stmt->execute(), so the statement is still counted. They
-     * cannot reach it through parent::execute() — MySQL extends MariaDB, whose
-     * execute() applies MariaDB's own timeout statement.
+     * this instead of $stmt->execute(), so the statement is still counted.
      *
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
      */

@@ -6,6 +6,7 @@ use Exception;
 use InvalidArgumentException;
 use PDO as PhpPDO;
 use Pdo\Sqlite as PdoSqlite;
+use PDOException;
 use PDOStatement as PhpPDOStatement;
 use Throwable;
 use Utopia\Console;
@@ -31,6 +32,13 @@ class PDO
     protected PhpPDO $pdo;
 
     private ?string $hostname = null;
+
+    /**
+     * Statements that set session state, keyed by the setting each one sets.
+     *
+     * @var array<string, string>
+     */
+    private array $session = [];
 
     /**
      * Create a new PDO wrapper instance.
@@ -89,7 +97,7 @@ class PDO
         }
 
         if ($statement === false) {
-            throw new \PDOException("Failed to prepare statement: {$query}");
+            throw new PDOException("Failed to prepare statement: {$query}");
         }
 
         return $statement;
@@ -125,11 +133,41 @@ class PDO
     }
 
     /**
-     * Create a new connection to the database
+     * Run a statement that sets session state and replay it on every connection a
+     * reconnect opens, before a call that lost the old connection is retried. A later
+     * statement for the same setting replaces the earlier one.
+     *
+     * @throws Throwable
+     */
+    public function configure(string $setting, string $statement): void
+    {
+        if ($this->exec($statement) === false) {
+            throw new PDOException("Failed to configure session: {$statement}");
+        }
+
+        $this->session[$setting] = $statement;
+    }
+
+    /**
+     * Create a new connection to the database with the configured session.
+     *
+     * It replaces the current connection only once the session is replayed: after a
+     * failed replay the lost connection stays, so the next call reconnects again
+     * instead of running without the configured session.
+     *
+     * @throws Throwable
      */
     public function reconnect(): void
     {
-        $this->pdo = $this->connect();
+        $pdo = $this->connect();
+
+        foreach ($this->session as $statement) {
+            if ($pdo->exec($statement) === false) {
+                throw new PDOException("Failed to configure session: {$statement}");
+            }
+        }
+
+        $this->pdo = $pdo;
     }
 
     private function connect(): PhpPDO

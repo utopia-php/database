@@ -3,11 +3,14 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PDOException;
 use Redis;
+use ReflectionProperty;
 use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -25,6 +28,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\PDO;
 use Utopia\Database\Query;
 
 trait GeneralTests
@@ -964,6 +968,68 @@ trait GeneralTests
         } finally {
             $database->clearTimeout();
             $database->deleteCollection('count-timeouts');
+        }
+    }
+
+    public function testTimeoutSurvivesReconnect(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof MariaDB || ! $adapter->getDriver() instanceof PDO) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $driver = $adapter->getDriver();
+        $settings = [];
+        foreach (['dsn', 'username', 'password'] as $name) {
+            $value = (new ReflectionProperty(PDO::class, $name))->getValue($driver);
+            $this->assertIsString($value);
+            $settings[] = $value;
+        }
+        [$dsn, $username, $password] = $settings;
+        $killer = new \PDO($dsn, $username, $password, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+
+        $interruptedByTimeout = function () use ($driver): bool {
+            $statement = $driver->prepare('SELECT SLEEP(3)');
+            try {
+                $statement->execute();
+            } catch (PDOException $error) {
+                if (\in_array($error->errorInfo[1] ?? null, [1969, 3024], true)) {
+                    return true;
+                }
+
+                throw $error;
+            }
+
+            return \in_array($statement->fetchColumn(), [1, '1'], true);
+        };
+
+        $database->setTimeout(1000);
+
+        try {
+            $connection = $adapter->getConnectionId();
+            $this->assertMatchesRegularExpression('/^\d+$/', $connection);
+            $killer->exec("KILL {$connection}");
+
+            $interrupted = ['statement that reconnects' => $interruptedByTimeout()];
+            $this->assertNotSame($connection, $adapter->getConnectionId(), 'KILL must have forced a reconnect');
+
+            $database->setTimeout(1000);
+            $interrupted['same timeout set again'] = $interruptedByTimeout();
+
+            $database->reconnect();
+            $interrupted['explicit reconnect'] = $interruptedByTimeout();
+
+            $this->assertSame([
+                'statement that reconnects' => true,
+                'same timeout set again' => true,
+                'explicit reconnect' => true,
+            ], $interrupted, 'The 1s timeout must cut SELECT SLEEP(3) short after every reconnect');
+        } finally {
+            $database->clearTimeout();
         }
     }
 

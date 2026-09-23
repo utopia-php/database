@@ -6,6 +6,7 @@ use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
+use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
 use Utopia\Database\Attribute;
@@ -26,6 +27,7 @@ use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
+use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
@@ -1026,8 +1028,17 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         return $rings;
     }
 
-    /** Last value pushed to MariaDB session var max_statement_time, in seconds. */
-    private float $appliedMaxStatementTime = 0.0;
+    private const string TIMEOUT_SETTING = 'timeout';
+
+    /** The session timeout last set, in milliseconds. */
+    private int $appliedTimeout = 0;
+
+    /**
+     * The Swoole PDOProxy round the timeout was set in: the proxy's reconnects open
+     * sessions at the server default, while Utopia\Database\PDO replays the timeout
+     * on the sessions its reconnects open.
+     */
+    private int $appliedRound = 0;
 
     /**
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
@@ -1060,13 +1071,38 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
     private function applyTimeout(int $milliseconds): void
     {
-        $seconds = $milliseconds > 0 ? $milliseconds / 1000.0 : 0.0;
-        if ($seconds === $this->appliedMaxStatementTime) {
+        $round = $this->getSessionRound();
+        if ($round !== $this->appliedRound) {
+            $this->appliedTimeout = 0;
+            $this->appliedRound = $round;
+        }
+
+        if ($milliseconds === $this->appliedTimeout) {
             return;
         }
 
-        $this->getPDO()->exec('SET max_statement_time = '.\sprintf('%.6F', $seconds));
-        $this->appliedMaxStatementTime = $seconds;
+        $statement = $this->getTimeoutStatement($milliseconds);
+        $driver = $this->getDriver();
+        if ($driver instanceof DatabasePDO) {
+            $driver->configure(self::TIMEOUT_SETTING, $statement);
+        } else {
+            $driver->exec($statement);
+        }
+
+        $this->appliedTimeout = $milliseconds;
+        $this->appliedRound = $this->getSessionRound();
+    }
+
+    protected function getTimeoutStatement(int $milliseconds): string
+    {
+        return 'SET max_statement_time = '.\sprintf('%.6F', $milliseconds / 1000.0);
+    }
+
+    private function getSessionRound(): int
+    {
+        $driver = $this->getDriver();
+
+        return $driver instanceof PDOProxy ? $driver->getRound() : 0;
     }
 
     /**

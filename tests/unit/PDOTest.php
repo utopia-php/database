@@ -2,8 +2,10 @@
 
 namespace Tests\Unit;
 
+use PDOException;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
+use ReflectionProperty;
 use Utopia\Database\PDO;
 use Utopia\Database\PDOStatement;
 
@@ -199,5 +201,69 @@ class PDOTest extends TestCase
         $this->expectExceptionMessage('Failed to prepare statement: INVALID');
 
         $pdoWrapper->prepareNative('INVALID');
+    }
+
+    public function testReconnectReplaysTheConfiguredSession(): void
+    {
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $pdo->configure('cache', 'PRAGMA cache_size = 100');
+        $pdo->configure('cache', 'PRAGMA cache_size = 200');
+        $pdo->configure('keys', 'PRAGMA foreign_keys = ON');
+
+        $pdo->reconnect();
+
+        $this->assertSame(200, $this->pragma($pdo, 'cache_size'), 'The latest statement for a setting must win');
+        $this->assertSame(1, $this->pragma($pdo, 'foreign_keys'));
+    }
+
+    public function testCallRetriedAfterALostConnectionRunsOnTheConfiguredSession(): void
+    {
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $pdo->configure('marker', 'CREATE TEMP TABLE marker AS SELECT 7 AS value');
+
+        $lost = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $lost->method('inTransaction')->willReturn(false);
+        $lost->expects($this->once())
+            ->method('query')
+            ->willThrowException(new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away'));
+        (new ReflectionProperty(PDO::class, 'pdo'))->setValue($pdo, $lost);
+
+        $statement = $pdo->query('SELECT value FROM temp.marker');
+
+        $this->assertInstanceOf(\PDOStatement::class, $statement);
+        $this->assertSame(7, $statement->fetchColumn());
+    }
+
+    public function testReconnectKeepsTheLostConnectionWhenTheSessionCannotBeReplayed(): void
+    {
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $pdo->exec('CREATE TEMP TABLE local (value INTEGER)');
+        $pdo->configure('row', 'INSERT INTO temp.local VALUES (1)');
+
+        $connection = new ReflectionProperty(PDO::class, 'pdo');
+        $lost = $connection->getValue($pdo);
+
+        $failure = null;
+        try {
+            $pdo->reconnect();
+        } catch (PDOException $error) {
+            $failure = $error;
+        }
+
+        $this->assertInstanceOf(PDOException::class, $failure, 'The new connection has no temp.local to replay into');
+        $this->assertSame($lost, $connection->getValue($pdo), 'A connection missing the configured session must never be used');
+    }
+
+    private function pragma(PDO $pdo, string $name): int
+    {
+        $statement = $pdo->query("PRAGMA {$name}");
+        $this->assertInstanceOf(\PDOStatement::class, $statement);
+
+        $value = $statement->fetchColumn();
+        $this->assertIsInt($value);
+
+        return $value;
     }
 }

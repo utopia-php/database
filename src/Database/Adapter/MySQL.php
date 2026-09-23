@@ -4,9 +4,6 @@ namespace Utopia\Database\Adapter;
 
 use Exception;
 use PDOException;
-use PDOStatement;
-use Swoole\Database\PDOStatementProxy;
-use Throwable;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Event;
@@ -17,7 +14,6 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
-use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\MySQL as MySQLBuilder;
@@ -53,72 +49,10 @@ class MySQL extends MariaDB
         ));
     }
 
-    /**
-     * Set max execution time
-     *
-     * @throws DatabaseException
-     */
-    public function setTimeout(int $milliseconds, Event $event = Event::All): void
+    #[\Override]
+    protected function getTimeoutStatement(int $milliseconds): string
     {
-        if ($milliseconds <= 0) {
-            throw new DatabaseException('Timeout must be greater than 0');
-        }
-
-        if ($event === Event::All) {
-            $this->applyTimeout($milliseconds);
-        }
-
-        $this->setTimeoutState($milliseconds, $event);
-    }
-
-    public function clearTimeout(Event $event = Event::All): void
-    {
-        if ($event === Event::All) {
-            $this->applyTimeout(0);
-        }
-
-        $this->clearTimeoutState($event);
-    }
-
-    private int $appliedMaxExecutionTime = 0;
-
-    /**
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
-     */
-    protected function execute(mixed $stmt, ?Event $event = null): bool
-    {
-        $event ??= $this->getStatementEvent($stmt);
-        $baseline = $this->getTimeout();
-        $timeout = $event === null ? $baseline : $this->getTimeout($event);
-        $this->applyTimeout($timeout);
-
-        $exception = null;
-        try {
-            return $this->executeAndProfile($stmt);
-        } catch (Throwable $error) {
-            $exception = $error;
-            throw $error;
-        } finally {
-            if ($timeout !== $baseline) {
-                try {
-                    $this->applyTimeout($baseline);
-                } catch (Throwable $error) {
-                    if ($exception === null) {
-                        throw $error;
-                    }
-                }
-            }
-        }
-    }
-
-    private function applyTimeout(int $milliseconds): void
-    {
-        if ($milliseconds === $this->appliedMaxExecutionTime) {
-            return;
-        }
-
-        $this->getPDO()->exec("SET SESSION MAX_EXECUTION_TIME = {$milliseconds}");
-        $this->appliedMaxExecutionTime = $milliseconds;
+        return "SET SESSION MAX_EXECUTION_TIME = {$milliseconds}";
     }
 
     /**

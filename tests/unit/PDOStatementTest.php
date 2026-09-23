@@ -219,4 +219,20 @@ final class PDOStatementTest extends TestCase
         $this->assertTrue($wrapper->execute());
         $this->assertSame([['value', 'old'], ['param', 'new']], $replay, 'replay must preserve original bind order so the last binding wins');
     }
+
+    public function testExecuteRetriedAfterALostConnectionRunsOnTheConfiguredSession(): void
+    {
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $pdo->configure('marker', 'CREATE TEMP TABLE marker AS SELECT 7 AS value');
+
+        $lost = $this->statementMock();
+        $lost->expects($this->once())
+            ->method('execute')
+            ->willThrowException(new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away'));
+
+        $statement = new PDOStatement($pdo, $lost, 'SELECT value FROM temp.marker');
+
+        $this->assertTrue($statement->execute());
+        $this->assertSame(7, $statement->fetchColumn());
+    }
 }

@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use Closure;
 use DateTime;
+use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -14,20 +15,25 @@ use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
+use Utopia\Database\Change;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
 use Utopia\Database\Type\TypeRegistry;
+
+use function Swoole\Coroutine\run;
 
 class MirrorTest extends TestCase
 {
@@ -472,6 +478,43 @@ class MirrorTest extends TestCase
         $this->assertSame(1, $runs);
     }
 
+    public function testSingleUpsertThroughMirrorHonoursTheRequestTimestamp(): void
+    {
+        $mirror = $this->seed(new Mirror(self::sqlite(), self::sqlite()));
+
+        $this->expectException(ConflictException::class);
+
+        self::inCoroutine(static fn (): mixed => $mirror->withRequestTimestamp(
+            new DateTime('-1 hour'),
+            static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([Document::ID => 'first', 'title' => 'late'])),
+        ));
+    }
+
+    public function testSingleUpsertThroughMirrorKeepsScopedPreservedDates(): void
+    {
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->seed(new Mirror($source, $destination));
+        $createdAt = '2001-02-03T04:05:06.000+00:00';
+
+        self::inCoroutine(static fn (): mixed => $mirror->withPreserveDates(
+            static fn (): mixed => $mirror->upsertDocument(self::COLLECTION, new Document([
+                Document::ID => 'dated',
+                '$createdAt' => $createdAt,
+                '$updatedAt' => $createdAt,
+                'title' => 'dated',
+                'views' => 1,
+            ])),
+        ));
+
+        $expected = (new DateTime($createdAt))->getTimestamp();
+        foreach (['source' => $source, 'destination' => $destination] as $name => $database) {
+            $stored = $database->getDocument(self::COLLECTION, 'dated')->getCreatedAt();
+            $this->assertNotNull($stored, $name);
+            $this->assertSame($expected, (new DateTime($stored))->getTimestamp(), $name);
+        }
+    }
+
     public function testProfilingThroughMirrorRecordsIntoTheProfilerItReturns(): void
     {
         [$mirror, $source, $destination] = $this->pair();
@@ -539,6 +582,109 @@ class MirrorTest extends TestCase
         $call($mirror);
 
         $this->assertSame($expected, $read($source));
+        $this->assertSame([[$action, 'destination unreachable']], $errors);
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror, Document): mixed}>
+     */
+    public static function upserts(): iterable
+    {
+        yield 'upsertDocument' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocument(self::COLLECTION, $document),
+        ];
+        yield 'upsertDocuments' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocuments(self::COLLECTION, [$document]),
+        ];
+        yield 'upsertDocumentsWithIncrease' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocumentsWithIncrease(self::COLLECTION, 'views', [$document]),
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror, Document): mixed  $upsert
+     */
+    #[DataProvider('upserts')]
+    public function testUpsertThroughMirrorFiresEachEventOnce(Closure $upsert): void
+    {
+        $mirror = $this->seed(new Mirror(self::sqlite(), self::sqlite()));
+        $recorder = new RecordingLifecycle();
+        $mirror->addHook($recorder);
+
+        self::inCoroutine(static fn (): mixed => $upsert($mirror, new Document([Document::ID => 'upserted', 'title' => 'upserted', 'views' => 2])));
+
+        $this->assertSame([Event::DocumentPurge, Event::DocumentsUpsert], $recorder->getEvents());
+    }
+
+    /**
+     * @param  Closure(Mirror, Document): mixed  $upsert
+     */
+    #[DataProvider('upserts')]
+    public function testUpsertThroughMirrorReachesTheDestination(Closure $upsert): void
+    {
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->seed(new Mirror($source, $destination));
+        $errors = [];
+        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+
+        self::inCoroutine(static fn (): mixed => $upsert($mirror, new Document([Document::ID => 'first', 'title' => 'upserted', 'views' => 2])));
+
+        $this->assertSame([], $errors);
+        $upserted = $source->getDocument(self::COLLECTION, 'first');
+        $mirrored = $destination->getDocument(self::COLLECTION, 'first');
+        $this->assertNotSame(1, $upserted->getAttribute('views'));
+        $this->assertSame(
+            [$upserted->getAttribute('title'), $upserted->getAttribute('views')],
+            [$mirrored->getAttribute('title'), $mirrored->getAttribute('views')],
+        );
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror, Document): mixed, string}>
+     */
+    public static function upsertActions(): iterable
+    {
+        yield 'upsertDocument' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocument(self::COLLECTION, $document),
+            'upsertDocuments',
+        ];
+        yield 'upsertDocuments' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocuments(self::COLLECTION, [$document]),
+            'upsertDocuments',
+        ];
+        yield 'upsertDocumentsWithIncrease' => [
+            static fn (Mirror $mirror, Document $document): mixed => $mirror->upsertDocumentsWithIncrease(self::COLLECTION, 'views', [$document]),
+            'upsertDocumentsWithIncrease',
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror, Document): mixed  $upsert
+     */
+    #[DataProvider('upsertActions')]
+    public function testUpsertReplicationFailureIsReportedUnderItsAction(Closure $upsert, string $action): void
+    {
+        $destination = new Database(new class (new PDO('sqlite::memory:')) extends SQLite {
+            /**
+             * @param  array<Change>  $changes
+             * @return array<Document>
+             */
+            public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+            {
+                throw new RuntimeException('destination unreachable');
+            }
+        }, new Cache(new None()));
+        $mirror = $this->seed(new Mirror(self::sqlite(), $destination));
+        $errors = [];
+        $mirror->onError(static function (string $failed, Throwable $error) use (&$errors): void {
+            $errors[] = [$failed, $error->getMessage()];
+        });
+
+        self::inCoroutine(static fn (): mixed => $upsert($mirror, new Document([Document::ID => 'first', 'title' => 'upserted', 'views' => 2])));
+
         $this->assertSame([[$action, 'destination unreachable']], $errors);
     }
 
@@ -621,6 +767,35 @@ class MirrorTest extends TestCase
         ]));
 
         return $mirror;
+    }
+
+    /**
+     * Runs $callback in a coroutine scheduler, as a Swoole server does, so the mirror's
+     * asynchronous replication finishes inside it; a failure is rethrown outside, where
+     * PHPUnit can report it.
+     *
+     * @param  Closure(): mixed  $callback
+     */
+    private static function inCoroutine(Closure $callback): void
+    {
+        $failure = null;
+
+        run(static function () use ($callback, &$failure): void {
+            try {
+                $callback();
+            } catch (Throwable $error) {
+                $failure = $error;
+            }
+        });
+
+        if ($failure !== null) {
+            throw $failure;
+        }
+    }
+
+    private static function sqlite(): Database
+    {
+        return new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()));
     }
 
     private static function configurableAdapter(): Memory

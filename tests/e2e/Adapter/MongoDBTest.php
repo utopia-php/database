@@ -15,6 +15,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Mongo\Client;
 
 class MongoDBTest extends Base
@@ -254,5 +255,50 @@ class MongoDBTest extends Base
                 $authorization->addRole($role);
             }
         }
+    }
+
+    public function testReadsDropAStoredNonStringPermission(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'lenientReads';
+        $permissions = [Permission::read(Role::any())];
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: true,
+        ));
+        $database->createDocument($collection, new Document([
+            '$id' => 'note',
+            '$permissions' => $permissions,
+            'title' => 'stored',
+        ]));
+
+        $client = $database->getAdapter()->getDriver();
+        $this->assertInstanceOf(Client::class, $client);
+        $client->update(
+            $database->getNamespace().'_'.$collection,
+            [Storage::UID => 'note'],
+            ['$set' => [Storage::PERMISSIONS => [Permission::read(Role::any()), 42, null]]],
+        );
+        $database->purgeCachedDocument($collection, 'note');
+
+        $this->assertSame($permissions, $database->getDocument($collection, 'note')->getPermissions());
+        $this->assertSame(
+            [$permissions],
+            \array_map(fn (Document $document): array => $document->getPermissions(), $database->find($collection)),
+        );
+
+        $this->assertSame(1, $database->updateDocuments($collection, new Document(['title' => 'bulk'])));
+        $this->assertSame('bulk', $database->getDocument($collection, 'note')->getAttribute('title'));
+
+        $updated = $database->updateDocument($collection, 'note', new Document(['title' => 'single']));
+        $this->assertSame('single', $updated->getAttribute('title'));
+        $this->assertSame($permissions, $updated->getPermissions());
     }
 }

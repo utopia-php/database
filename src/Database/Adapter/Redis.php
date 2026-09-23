@@ -1665,7 +1665,7 @@ class Redis extends Adapter implements
             throw new DatabaseException('Document decode failed: '.$e->getMessage(), 0, $e);
         }
 
-        return new Document($data);
+        return Document::fromStorage($data);
     }
 
     /**

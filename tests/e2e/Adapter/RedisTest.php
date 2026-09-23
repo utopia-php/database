@@ -3,10 +3,16 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
+use ReflectionMethod;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
 /**
  * Paratest's `--functional` mode invokes `setUpBeforeClass`/`tearDownAfterClass`
@@ -116,4 +122,52 @@ class RedisTest extends Base
         );
     }
 
+    public function testReadsDropAStoredNonStringPermission(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'lenientReads';
+        $permissions = [Permission::read(Role::any())];
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: true,
+        ));
+        $database->createDocument($collection, new Document([
+            '$id' => 'note',
+            '$permissions' => $permissions,
+            'title' => 'stored',
+        ]));
+
+        $adapter = $database->getAdapter();
+        $client = self::$redisClient;
+        $this->assertInstanceOf(RedisAdapter::class, $adapter);
+        $this->assertNotNull($client);
+        $key = (new ReflectionMethod(RedisAdapter::class, 'docKey'))->invoke($adapter, $collection, 'note');
+        $this->assertIsString($key);
+        $payload = $client->get($key);
+        $this->assertIsString($payload);
+        $stored = \json_decode($payload, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertIsArray($stored);
+        $stored[Document::PERMISSIONS] = [Permission::read(Role::any()), 42, null];
+        $client->set($key, \json_encode($stored, JSON_THROW_ON_ERROR));
+
+        $this->assertSame($permissions, $database->getDocument($collection, 'note')->getPermissions());
+        $this->assertSame(
+            [$permissions],
+            \array_map(fn (Document $document): array => $document->getPermissions(), $database->find($collection)),
+        );
+
+        $this->assertSame(1, $database->updateDocuments($collection, new Document(['title' => 'bulk'])));
+        $this->assertSame('bulk', $database->getDocument($collection, 'note')->getAttribute('title'));
+
+        $updated = $database->updateDocument($collection, 'note', new Document(['title' => 'single']));
+        $this->assertSame('single', $updated->getAttribute('title'));
+        $this->assertSame($permissions, $updated->getPermissions());
+    }
 }

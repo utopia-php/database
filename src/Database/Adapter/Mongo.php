@@ -1366,7 +1366,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         /** @var array<string, mixed>|null $resultArray */
         $resultArray = $this->client->toArray($result[0]);
         $result = $this->replaceChars('_', '$', $resultArray ?? []);
-        $document = new Document($result);
+        $document = Document::fromStorage($result);
         $document = $this->castingAfter($collection, $document);
 
         // Ensure missing relationship attributes are set to null (MongoDB doesn't store null fields)
@@ -2277,7 +2277,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $record = $this->replaceChars('_', '$', $resultCast);
                 /** @var array<string, mixed> $convertedRecord */
                 $convertedRecord = $this->convertStdClassToArray($record);
-                $found[] = new Document($convertedRecord);
+                $found[] = Document::fromStorage($convertedRecord);
             }
 
             // Get cursor ID for subsequent batches
@@ -2310,7 +2310,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $record = $this->replaceChars('_', '$', $resultCast);
                     /** @var array<string, mixed> $convertedRecord */
                     $convertedRecord = $this->convertStdClassToArray($record);
-                    $found[] = new Document($convertedRecord);
+                    $found[] = Document::fromStorage($convertedRecord);
                 }
 
                 if (isset($moreCursorFind->id)) {

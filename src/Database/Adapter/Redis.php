@@ -242,7 +242,7 @@ class Redis extends Adapter implements
             $attributePayload[] = [
                 Document::ID => $attribute->key,
                 'key' => $attribute->key,
-                'type' => $attribute->type->value,
+                'type' => Attribute::persistedType($attribute->type),
                 'size' => $attribute->size,
                 'signed' => $attribute->signed,
                 'array' => $attribute->array,
@@ -327,7 +327,7 @@ class Redis extends Adapter implements
         $record = [
             Document::ID => $id,
             'key' => $id,
-            'type' => $attribute->type->value,
+            'type' => Attribute::persistedType($attribute->type),
             'size' => $attribute->size,
             'signed' => $attribute->signed,
             'array' => $attribute->array,
@@ -370,7 +370,7 @@ class Redis extends Adapter implements
         $record = [
             Document::ID => $id,
             'key' => $id,
-            'type' => $attribute->type->value,
+            'type' => Attribute::persistedType($attribute->type),
             'size' => $attribute->size,
             'signed' => $attribute->signed,
             'array' => $attribute->array,

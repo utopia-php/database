@@ -306,7 +306,7 @@ final class AttributeSubclassTest extends TestCase
     {
         $attribute = Attribute::fromDocument(new Document([
             'key' => 'count',
-            'type' => Attribute::LEGACY_BIG_INTEGER,
+            'type' => 'bigint',
         ]));
 
         $this->assertInstanceOf(BigInteger::class, $attribute);

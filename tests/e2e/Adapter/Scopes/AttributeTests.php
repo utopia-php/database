@@ -2053,6 +2053,47 @@ trait AttributeTests
         }
     }
 
+    public function testBigIntegerAttributesPersistTheBigintSpelling(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collectionName = 'bigint_persisted_spelling';
+        $database->createCollection(new Collection(
+            id: $collectionName,
+            attributes: [Attribute::bigInteger(key: 'inline')],
+        ));
+        $this->assertTrue($database->createAttribute($collectionName, Attribute::bigInteger(key: 'single')));
+        $expected = ['inline' => 'bigint', 'single' => 'bigint'];
+
+        if ($database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->assertTrue($database->createAttributes($collectionName, [Attribute::bigInteger(key: 'batch')]));
+            $expected['batch'] = 'bigint';
+        }
+
+        $database->updateAttributeRequired($collectionName, 'single', true);
+
+        $stored = $database->skipFilters(fn (): Document => $database->getAuthorization()->skip(
+            fn (): Document => $database->getDocument(Database::METADATA, $collectionName),
+        ));
+        $storedAttributes = $stored->getAttribute('attributes');
+        $this->assertIsString($storedAttributes);
+
+        /** @var list<array<string, mixed>> $decoded */
+        $decoded = \json_decode($storedAttributes, true, flags: JSON_THROW_ON_ERROR);
+        $types = [];
+        foreach ($decoded as $attribute) {
+            $key = $attribute['key'] ?? null;
+            $this->assertIsString($key);
+            $types[$key] = $attribute['type'] ?? null;
+        }
+        $this->assertSame($expected, $types);
+
+        foreach ($database->getCollection($collectionName)->attributes as $attribute) {
+            $this->assertSame(ColumnType::BigInteger, $attribute->type, $attribute->key);
+        }
+    }
+
     public function testCreateAttributesSuccessMultiple(): void
     {
         /** @var Database $database */

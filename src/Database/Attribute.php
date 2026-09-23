@@ -24,7 +24,7 @@ use Utopia\Query\Schema\ColumnType;
  */
 class Attribute extends Document
 {
-    public const string LEGACY_BIG_INTEGER = 'bigint';
+    private const string PERSISTED_BIG_INTEGER = 'bigint';
 
     /**
      * @param  array<string, mixed>  $formatOptions
@@ -52,7 +52,7 @@ class Attribute extends Document
         $data = [
             self::ID => $key,
             'key' => $key,
-            'type' => $type->value,
+            'type' => self::persistedType($type),
             'size' => $size,
             'required' => $required,
             'default' => $default,
@@ -155,7 +155,7 @@ class Attribute extends Document
     {
         match ($name) {
             'key' => $this->setAttribute('key', $value)->setAttribute(self::ID, $value),
-            'type' => $this->setAttribute('type', $value instanceof ColumnType ? $value->value : $value),
+            'type' => $this->setAttribute('type', $value),
             'size' => $this->setAttribute('size', $value),
             'required' => $this->setAttribute('required', $value),
             'default' => $this->setAttribute('default', $value),
@@ -176,6 +176,19 @@ class Attribute extends Document
             'key', 'type', 'size', 'required', 'default', 'signed', 'array', 'format', 'formatOptions', 'filters', 'status', 'options' => true,
             default => $this->offsetExists($name),
         };
+    }
+
+    /**
+     * @param  string|null  $key
+     */
+    #[\Override]
+    public function offsetSet(mixed $key, mixed $value): void
+    {
+        $type = $key === 'type' && ($value instanceof ColumnType || \is_string($value))
+            ? self::tryNormalizeType($value)
+            : null;
+
+        parent::offsetSet($key, $type === null ? $value : self::persistedType($type));
     }
 
     /**
@@ -1234,13 +1247,18 @@ class Attribute extends Document
         );
     }
 
+    public static function persistedType(ColumnType $type): string
+    {
+        return $type === ColumnType::BigInteger ? self::PERSISTED_BIG_INTEGER : $type->value;
+    }
+
     public static function normalizeType(ColumnType|string $type): ColumnType
     {
         if ($type instanceof ColumnType) {
             return $type;
         }
 
-        return ColumnType::from($type === self::LEGACY_BIG_INTEGER ? ColumnType::BigInteger->value : $type);
+        return $type === self::PERSISTED_BIG_INTEGER ? ColumnType::BigInteger : ColumnType::from($type);
     }
 
     public static function tryNormalizeType(ColumnType|string $type): ?ColumnType
@@ -1249,7 +1267,7 @@ class Attribute extends Document
             return $type;
         }
 
-        return ColumnType::tryFrom($type === self::LEGACY_BIG_INTEGER ? ColumnType::BigInteger->value : $type);
+        return $type === self::PERSISTED_BIG_INTEGER ? ColumnType::BigInteger : ColumnType::tryFrom($type);
     }
 
     public static function isNumericType(ColumnType|string $type): bool
@@ -1312,7 +1330,7 @@ class Attribute extends Document
         $data = [
             Document::ID => ID::custom($this->key),
             'key' => $this->key,
-            'type' => $this->type->value,
+            'type' => self::persistedType($this->type),
             'size' => $this->size,
             'required' => $this->required,
             'default' => $this->default,

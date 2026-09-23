@@ -1553,7 +1553,7 @@ class OperatorValidationTest extends TestCase
         $collection->setAttribute('attributes', [new Document([
             '$id' => 'value',
             'key' => 'value',
-            'type' => Attribute::LEGACY_BIG_INTEGER,
+            'type' => 'bigint',
             'signed' => true,
             'array' => false,
         ])]);

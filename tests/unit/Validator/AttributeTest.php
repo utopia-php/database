@@ -19,17 +19,17 @@ class AttributeTest extends TestCase
     {
         $attribute = AttributeVO::fromDocument(new Document([
             '$id' => 'total',
-            'type' => AttributeVO::LEGACY_BIG_INTEGER,
+            'type' => 'bigint',
             'size' => 8,
         ]));
 
         $this->assertSame(ColumnType::BigInteger, $attribute->type);
         $this->assertSame(0, $attribute->size);
-        $this->assertSame(ColumnType::BigInteger->value, $attribute->toDocument()->getAttribute('type'));
+        $this->assertSame('bigint', $attribute->toDocument()->getAttribute('type'));
 
         $arrayAttribute = AttributeVO::fromArray([
             '$id' => 'arrayTotal',
-            'type' => AttributeVO::LEGACY_BIG_INTEGER,
+            'type' => 'bigint',
             'size' => 64,
         ]);
 

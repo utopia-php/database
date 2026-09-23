@@ -448,10 +448,11 @@ trait JoinComboTests
         [$mCol, , , $selfCol, $cCol] = $this->seedJoinComboFixture($database);
 
         $any = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $documentLevel = [Permission::create(Role::any())];
         $database->updateCollection($selfCol, $any, false);
         $database->updateCollection($cCol, $any, false);
 
-        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $selfCol, $cCol, $any): void {
+        $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $selfCol, $cCol, $documentLevel): void {
             $visible = $database->find($mCol, [
                 Query::join($selfCol, '$id', 'mainId', '=', 'mid'),
                 Query::join($cCol, 'mid.$id', 'selfId', '=', 'c'),
@@ -466,7 +467,7 @@ trait JoinComboTests
             $this->assertNotFalse($visibleEncoded);
             $this->assertSame(true, \str_contains($visibleEncoded, 'c-combo-secret'));
 
-            $database->updateCollection($cCol, $any, true);
+            $database->updateCollection($cCol, $documentLevel, true);
 
             $hidden = $database->find($mCol, [
                 Query::join($selfCol, '$id', 'mainId', '=', 'mid'),
@@ -1192,7 +1193,7 @@ trait JoinComboTests
             $database->createCollection(new Collection(id: $mCol, permissions: $any, documentSecurity: false));
             $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
 
-            $database->createCollection(new Collection(id: $metaCol, permissions: $any));
+            $database->createCollection(new Collection(id: $metaCol, permissions: [Permission::create(Role::any())]));
             $database->createAttribute($metaCol, Attribute::string(key: 'mainId', required: true));
             $database->createAttribute($metaCol, Attribute::integer(key: 'score', required: true));
             $database->createAttribute($metaCol, Attribute::string(key: 'secret', size: 100));
@@ -1699,6 +1700,7 @@ trait JoinComboTests
         $this->cleanupAggCollections($database, [$mCol, $pubCol, $secCol, $selfCol, $cCol]);
 
         $any = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $documentLevel = [Permission::create(Role::any())];
 
         $database->createCollection(new Collection(id: $mCol, permissions: $any, documentSecurity: false));
         $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
@@ -1707,17 +1709,17 @@ trait JoinComboTests
         $database->createAttribute($pubCol, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($pubCol, Attribute::integer(key: 'score', required: true));
 
-        $database->createCollection(new Collection(id: $secCol, permissions: $any));
+        $database->createCollection(new Collection(id: $secCol, permissions: $documentLevel));
         $database->createAttribute($secCol, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($secCol, Attribute::integer(key: 'score', required: true));
         $database->createAttribute($secCol, Attribute::string(key: 'secret', size: 100));
 
-        $database->createCollection(new Collection(id: $selfCol, permissions: $any));
+        $database->createCollection(new Collection(id: $selfCol, permissions: $documentLevel));
         $database->createAttribute($selfCol, Attribute::string(key: 'payload', size: 100, required: true));
         $database->createAttribute($selfCol, Attribute::string(key: 'tag', size: 50, required: true));
         $database->createAttribute($selfCol, Attribute::string(key: 'mainId'));
 
-        $database->createCollection(new Collection(id: $cCol, permissions: $any));
+        $database->createCollection(new Collection(id: $cCol, permissions: $documentLevel));
         $database->createAttribute($cCol, Attribute::string(key: 'selfId', required: true));
         $database->createAttribute($cCol, Attribute::string(key: 'secret', size: 100, required: true));
 
@@ -2036,6 +2038,7 @@ trait JoinComboTests
         $this->cleanupAggCollections($database, [$mCol, $metaCol, $peerCol, $aCol, $bCol, $cCol]);
 
         $any = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $documentLevel = [Permission::create(Role::any())];
         $readAny = [Permission::read(Role::any())];
         $hidden = [Permission::read(Role::user('combo-hard-hidden'))];
 
@@ -2044,14 +2047,14 @@ trait JoinComboTests
         $database->createAttribute($mCol, Attribute::integer(key: 'rank', required: true));
         $database->createAttribute($mCol, Attribute::string(key: 'peerKey'));
 
-        $database->createCollection(new Collection(id: $metaCol, permissions: $any));
+        $database->createCollection(new Collection(id: $metaCol, permissions: $documentLevel));
         $database->createAttribute($metaCol, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($metaCol, Attribute::integer(key: 'score', required: true));
         $database->createAttribute($metaCol, Attribute::string(key: 'secret', size: 100));
         $database->createAttribute($metaCol, Attribute::string(key: 'label', size: 100));
         $database->createAttribute($metaCol, Attribute::string(key: 'body'));
 
-        $database->createCollection(new Collection(id: $peerCol, permissions: $any));
+        $database->createCollection(new Collection(id: $peerCol, permissions: $documentLevel));
         $database->createAttribute($peerCol, Attribute::string(key: 'mainId'));
         $database->createAttribute($peerCol, Attribute::string(key: 'label', size: 100, required: true));
         $database->createAttribute($peerCol, Attribute::integer(key: 'score', required: true));
@@ -2065,7 +2068,7 @@ trait JoinComboTests
         $database->createAttribute($bCol, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($bCol, Attribute::string(key: 'label', size: 100, required: true));
 
-        $database->createCollection(new Collection(id: $cCol, permissions: $any));
+        $database->createCollection(new Collection(id: $cCol, permissions: $documentLevel));
         $database->createAttribute($cCol, Attribute::string(key: 'bId', required: true));
         $database->createAttribute($cCol, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($cCol, Attribute::string(key: 'secret', size: 100, required: true));

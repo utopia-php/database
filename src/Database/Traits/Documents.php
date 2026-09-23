@@ -450,12 +450,13 @@ trait Documents
             }
         }
 
+        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
         $skipAuth = empty($joins)
             && $collection->getId() !== self::METADATA
-            && $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+            && $collectionGranted;
 
         $getDocument = fn () => $this->adapter->getDocument(
-            $this->withJoinAttributes($this->withJoinDocumentSecurity($collection, $joinDocumentSecurity), $joins),
+            $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted || $collection->getId() === self::METADATA), $joins),
             $id,
             $queries,
             $forUpdate
@@ -3049,9 +3050,9 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
+        $collectionGranted = $this->authorization->isValid(new Input($forPermission, $collection->getPermissionsByType($forPermission)));
 
-        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $collectionGranted && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -3068,9 +3069,9 @@ trait Documents
         $groupByAttrs = $grouped['groupBy'];
         $having = $grouped['having'];
         $joins = $grouped['joins'];
-        if (! empty($joins)) {
-            $skipAuth = false;
-        }
+        // Skipping authorization would also skip the joined collections' permission filters,
+        // so with joins the main collection's grant travels to the adapter instead.
+        $skipAuth = $collectionGranted && empty($joins);
         $distinct = $grouped['distinct'];
         $limit = $grouped['limit'];
         $offset = $grouped['offset'];
@@ -3255,7 +3256,7 @@ trait Documents
             }
 
             if (! isset($results)) {
-                $adapterCollection = $this->withJoinAttributes($this->withJoinDocumentSecurity($collection, $joinDocumentSecurity), $joins);
+                $adapterCollection = $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins);
 
                 // Inline the auth-skip toggle to avoid the per-find Closure
                 // allocation that authorization->skip() requires. Mirrors
@@ -3499,9 +3500,9 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
 
-        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $collectionGranted && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -3511,7 +3512,7 @@ trait Documents
             fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $skipAuth);
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted);
         if ($prepared === null) {
             return 0;
         }
@@ -3559,9 +3560,9 @@ trait Documents
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
-        $skipAuth = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
+        $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
 
-        if (! $skipAuth && ! $documentSecurity && $collection->getId() !== self::METADATA) {
+        if (! $collectionGranted && ! $documentSecurity && $collection->getId() !== self::METADATA) {
             throw new AuthorizationException($this->authorization->getDescription());
         }
 
@@ -3571,7 +3572,7 @@ trait Documents
             fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $skipAuth);
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted);
         if ($prepared === null) {
             return 0;
         }
@@ -3717,22 +3718,21 @@ trait Documents
         Document $collection,
         array $queries,
         array $relationships,
-        bool $skipAuth,
+        bool $collectionGranted,
     ): ?array {
         $grouped = Query::groupForDatabase($queries);
         $filters = $grouped['filters'];
         $joins = $grouped['joins'];
 
         if (! empty($joins)) {
-            $skipAuth = false;
-
             if (! $this->adapter->supports(Capability::Joins)) {
                 throw new QueryException('Join queries are not supported by this adapter');
             }
 
-            $collection = $this->withJoinDocumentSecurity(
+            $collection = $this->withJoinAuthorization(
                 $collection,
                 $this->authorizeJoins($joins, PermissionType::Read),
+                $collectionGranted,
             );
         }
 
@@ -3749,8 +3749,19 @@ trait Documents
             return null;
         }
 
-        return [$collection, $convertedQueries, $skipAuth];
+        return [$collection, $convertedQueries, $collectionGranted && empty($joins)];
     }
+
+    /**
+     * Set on the collection handed to the adapter for a join read when the caller
+     * holds the collection-level permission, so its rows are not filtered per document.
+     */
+    public const string COLLECTION_GRANTED = 'collectionGranted';
+
+    /**
+     * Maps each joined table to whether the adapter filters its rows per document.
+     */
+    public const string JOIN_DOCUMENT_SECURITY = 'joinDocumentSecurity';
 
     /**
      * @param  array<Query>  $joins
@@ -3768,13 +3779,15 @@ trait Documents
                 throw new QueryException("Joined collection '{$joinCollectionId}' not found");
             }
 
-            if (! $this->authorization->isValid(new Input($forPermission, $joinCollection->getPermissionsByType($forPermission)))) {
+            $granted = $this->authorization->isValid(new Input($forPermission, $joinCollection->getPermissionsByType($forPermission)));
+            $documentSecurity = (bool) $joinCollection->getAttribute('documentSecurity', false);
+
+            if (! $granted && ! $documentSecurity) {
                 throw new AuthorizationException("Unauthorized access to joined collection '{$joinCollectionId}'");
             }
 
-            $enabled = (bool) $joinCollection->getAttribute('documentSecurity', false);
             foreach ($this->joinDocumentSecurityKeys($joinCollectionId, $joinCollection) as $key) {
-                $joinDocumentSecurity[$key] = $enabled;
+                $joinDocumentSecurity[$key] = ! $granted;
             }
         }
 
@@ -3802,14 +3815,15 @@ trait Documents
     /**
      * @param  array<string, bool>  $joinDocumentSecurity
      */
-    private function withJoinDocumentSecurity(Document $collection, array $joinDocumentSecurity): Document
+    private function withJoinAuthorization(Document $collection, array $joinDocumentSecurity, bool $collectionGranted): Document
     {
         if ($joinDocumentSecurity === []) {
             return $collection;
         }
 
         $adapterCollection = clone $collection;
-        $adapterCollection->setAttribute('joinDocumentSecurity', $joinDocumentSecurity);
+        $adapterCollection->setAttribute(self::COLLECTION_GRANTED, $collectionGranted);
+        $adapterCollection->setAttribute(self::JOIN_DOCUMENT_SECURITY, $joinDocumentSecurity);
 
         return $adapterCollection;
     }

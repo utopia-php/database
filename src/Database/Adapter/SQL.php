@@ -4492,7 +4492,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         if ($this->authorization->getStatus()) {
             $hasJoins = ! empty($joinTablePrefixes);
-            if ($this->filtersPerDocument($collection)) {
+            $granted = $hasJoins && $collection->getAttribute(Database::COLLECTION_GRANTED, false) === true;
+            if (! $granted && $this->filtersPerDocument($collection)) {
                 $docCol = $hasJoins ? $alias.'.'.Storage::UID : Storage::UID;
                 $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
                 if ($preservingOuter) {
@@ -4505,7 +4506,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $builder->addHook($permissionHook);
             }
 
-            $joinDocumentSecurity = $collection->getAttribute('joinDocumentSecurity', []);
+            $joinDocumentSecurity = $collection->getAttribute(Database::JOIN_DOCUMENT_SECURITY, []);
             /** @var array<string, mixed> $joinDocumentSecurity */
             $joinDocumentSecurity = \is_array($joinDocumentSecurity) ? $joinDocumentSecurity : [];
 

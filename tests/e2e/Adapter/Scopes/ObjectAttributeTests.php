@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -721,6 +722,227 @@ trait ObjectAttributeTests
         $this->assertTrue($exceptionThrown, 'Expected Index exception for Object index with orders');
 
         // Clean up
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testObjectAttributeInvalidCases(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Objects) || ! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection(new Collection(id: $collectionId));
+
+        $this->createAttribute($database, $collectionId, 'meta', ColumnType::Object, 0, false);
+
+        $invalidValues = [
+            'invalid1' => 'this is a string not an object',
+            'invalid2' => 12345,
+            'invalid3' => true,
+        ];
+        foreach ($invalidValues as $id => $value) {
+            try {
+                $database->createDocument($collectionId, new Document([
+                    '$id' => $id,
+                    '$permissions' => [Permission::read(Role::any())],
+                    'meta' => $value,
+                ]));
+                $this->fail('Expected Structure exception for a '.\get_debug_type($value).' value');
+            } catch (\Throwable $exception) {
+                $this->assertInstanceOf(StructureException::class, $exception);
+            }
+        }
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'valid1',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => [
+                'name' => 'John',
+                'age' => 30,
+                'settings' => [
+                    'notifications' => true,
+                    'theme' => 'dark',
+                ],
+            ],
+        ]));
+
+        $results = $database->find($collectionId, [
+            Query::equal('meta', [['settings' => ['notifications' => false]]]),
+        ]);
+        $this->assertCount(0, $results, 'Should not match when nested value differs');
+
+        $results = $database->find($collectionId, [
+            Query::equal('meta', [['settings' => ['notifications' => true]]]),
+        ]);
+        $this->assertSame(['valid1'], array_map(fn (Document $document) => $document->getId(), $results), 'Should match when the nested value is equal');
+
+        $results = $database->find($collectionId, [
+            Query::equal('meta', [['nonexistent' => 'value']]),
+        ]);
+        $this->assertCount(0, $results, 'Should not match non-existent keys');
+
+        $database->createDocument($collectionId, new Document([
+            '$id' => 'valid2',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => [
+                'fruits' => ['apple', 'banana', 'orange'],
+            ],
+        ]));
+        $results = $database->find($collectionId, [
+            Query::containsAny('meta', [['fruits' => 'grape']]),
+        ]);
+        $this->assertCount(0, $results, 'Should not match non-existent array element');
+
+        $results = $database->find($collectionId, [
+            Query::containsAny('meta', [['fruits' => 'banana']]),
+        ]);
+        $this->assertSame(['valid2'], array_map(fn (Document $document) => $document->getId(), $results), 'Should match an existing array element');
+
+        $orderTest = $database->createDocument($collectionId, new Document([
+            '$id' => 'order_test',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => [
+                'z_last' => 'value',
+                'a_first' => 'value',
+                'm_middle' => 'value',
+            ],
+        ]));
+        $meta = $orderTest->getAttribute('meta');
+        $this->assertIsArray($meta);
+        $this->assertArrayHasKey('z_last', $meta);
+        $this->assertArrayHasKey('a_first', $meta);
+        $this->assertArrayHasKey('m_middle', $meta);
+
+        $largeStructure = [];
+        for ($index = 0; $index < 50; $index++) {
+            $largeStructure["key_{$index}"] = [
+                'id' => $index,
+                'name' => "Item {$index}",
+                'values' => range(1, 10),
+            ];
+        }
+        $large = $database->createDocument($collectionId, new Document([
+            '$id' => 'large_structure',
+            '$permissions' => [Permission::read(Role::any())],
+            'meta' => $largeStructure,
+        ]));
+        $this->assertIsArray($large->getAttribute('meta'));
+        $this->assertCount(50, $large->getArray('meta'));
+
+        $results = $database->find($collectionId, [
+            Query::equal('meta', [['key_25' => ['id' => 25, 'name' => 'Item 25', 'values' => range(1, 10)]]]),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertSame('large_structure', $results[0]->getId());
+
+        $fetchedLarge = $database->getDocument($collectionId, 'large_structure');
+        $this->assertSame('large_structure', $fetchedLarge->getId());
+        $this->assertIsArray($fetchedLarge->getAttribute('meta'));
+        $this->assertCount(50, $fetchedLarge->getArray('meta'));
+        $this->assertSame(25, $this->nestedMetaValue($fetchedLarge->getArray('meta'), ['key_25', 'id']));
+        $this->assertSame('Item 25', $this->nestedMetaValue($fetchedLarge->getArray('meta'), ['key_25', 'name']));
+
+        $results = $database->find($collectionId, [
+            Query::select(['$id', 'meta']),
+            Query::equal('meta', [['name' => 'John']]),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertSame('valid1', $results[0]->getId());
+        $this->assertIsArray($results[0]->getAttribute('meta'));
+        $this->assertSame('John', $this->nestedMetaValue($results[0]->getArray('meta'), ['name']));
+        $this->assertSame(30, $this->nestedMetaValue($results[0]->getArray('meta'), ['age']));
+
+        $fetchedValid1 = $database->getDocument($collectionId, 'valid1');
+        $this->assertSame('valid1', $fetchedValid1->getId());
+        $this->assertIsArray($fetchedValid1->getAttribute('meta'));
+        $this->assertSame('John', $this->nestedMetaValue($fetchedValid1->getArray('meta'), ['name']));
+        $this->assertTrue($this->nestedMetaValue($fetchedValid1->getArray('meta'), ['settings', 'notifications']));
+        $this->assertSame('dark', $this->nestedMetaValue($fetchedValid1->getArray('meta'), ['settings', 'theme']));
+
+        $results = $database->find($collectionId, [
+            Query::select(['$id', '$permissions']),
+            Query::equal('meta', [['fruits' => ['apple', 'banana', 'orange']]]),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertSame('valid2', $results[0]->getId());
+        $this->assertEmpty($results[0]->getAttribute('meta'), 'An unselected object attribute must not be returned');
+
+        $this->assertTrue($database->getDocument($collectionId, 'does_not_exist')->isEmpty());
+
+        $defaultSettings = ['config' => ['theme' => 'light', 'lang' => 'en']];
+        $this->createAttribute($database, $collectionId, 'settings', ColumnType::Object, 0, false, $defaultSettings);
+        $database->createDocument($collectionId, new Document(['$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($collectionId, new Document([
+            'settings' => ['config' => ['theme' => 'dark', 'lang' => 'en']],
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $results = $database->find($collectionId, [
+            Query::equal('settings', [['config' => ['theme' => 'light']], ['config' => ['theme' => 'dark']]]),
+        ]);
+        $this->assertCount(2, $results);
+
+        $results = $database->find($collectionId, [
+            Query::containsAny('settings', [['config' => ['lang' => 'en']]]),
+        ]);
+        $this->assertCount(2, $results);
+
+        $database->deleteCollection($collectionId);
+    }
+
+    public function testObjectAttributeDefaults(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Objects) || ! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->markTestSkipped('Adapter does not support object attributes');
+        }
+
+        $collectionId = ID::unique();
+        $database->createCollection(new Collection(id: $collectionId));
+
+        $this->createAttribute($database, $collectionId, 'metaDefaultEmpty', ColumnType::Object, 0, false, []);
+        $this->createAttribute($database, $collectionId, 'settings', ColumnType::Object, 0, false, ['config' => ['theme' => 'light', 'lang' => 'en']]);
+        $this->createAttribute($database, $collectionId, 'profile', ColumnType::Object, 0, true, null);
+        $this->createAttribute($database, $collectionId, 'profile2', ColumnType::Object, 0, false, ['name' => 'anon']);
+        $this->createAttribute($database, $collectionId, 'misc', ColumnType::Object, 0, false, null);
+
+        try {
+            $database->createDocument($collectionId, new Document([
+                '$id' => 'def1',
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $this->fail('Expected Structure exception for missing required object attribute');
+        } catch (\Throwable $exception) {
+            $this->assertInstanceOf(StructureException::class, $exception);
+        }
+
+        $document = $database->createDocument($collectionId, new Document([
+            '$id' => 'def2',
+            '$permissions' => [Permission::read(Role::any())],
+            'profile' => ['name' => 'provided'],
+        ]));
+
+        $this->assertIsArray($document->getAttribute('metaDefaultEmpty'));
+        $this->assertEmpty($document->getAttribute('metaDefaultEmpty'));
+        $this->assertIsArray($document->getAttribute('settings'));
+        $this->assertSame('light', $this->nestedMetaValue($document->getArray('settings'), ['config', 'theme']));
+        $this->assertSame('en', $this->nestedMetaValue($document->getArray('settings'), ['config', 'lang']));
+        $this->assertSame('provided', $this->nestedMetaValue($document->getArray('profile'), ['name']));
+        $this->assertIsArray($document->getAttribute('profile2'));
+        $this->assertSame('anon', $this->nestedMetaValue($document->getArray('profile2'), ['name']));
+        $this->assertNull($document->getAttribute('misc'));
+
+        $results = $database->find($collectionId, [
+            Query::equal('settings', [['config' => ['theme' => 'light']]]),
+        ]);
+        $this->assertCount(1, $results, 'A materialised object default must be stored, not only returned');
+        $this->assertSame('def2', $results[0]->getId());
+
         $database->deleteCollection($collectionId);
     }
 

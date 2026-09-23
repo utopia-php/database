@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter;
 
 use Exception;
 use Redis;
+use Tests\E2E\Adapter\Scopes\MongoReadFilterTests;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Mongo;
@@ -18,6 +19,8 @@ use Utopia\Mongo\Client;
 
 class MongoDBTest extends Base
 {
+    use MongoReadFilterTests;
+
     public static ?Database $database = null;
 
     protected static string $namespace;

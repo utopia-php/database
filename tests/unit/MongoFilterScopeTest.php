@@ -148,6 +148,57 @@ final class MongoFilterScopeTest extends TestCase
         $this->assertArrayNotHasKey(Storage::PERMISSIONS, $this->filters['aggregate'][0] ?? []);
     }
 
+    public function testReadsFilterByPermissionWithoutThePermissionsHook(): void
+    {
+        $adapter = $this->createAdapter()->removeWriteHook(Permissions::class);
+        $collection = new Document(['$id' => self::COLLECTION]);
+
+        $this->assertFalse($adapter->hasPermissionHook());
+
+        $adapter->find($collection);
+        $adapter->find($collection, forPermission: PermissionType::Delete);
+        $adapter->count($collection);
+        $adapter->sum($collection, 'count');
+
+        $read = ['$in' => ['read("any")', 'read("users")', 'read("user:bob")']];
+        $this->assertSame(
+            [$read, ['$in' => ['delete("any")', 'delete("users")', 'delete("user:bob")']]],
+            $this->permissionFilters('find'),
+            'find() must filter by the requested permission whether or not a Permissions write hook is registered',
+        );
+        $this->assertSame(
+            [$read, $read],
+            $this->permissionFilters('aggregate'),
+            'count() and sum() must filter by read permission whether or not a Permissions write hook is registered',
+        );
+    }
+
+    public function testReadsWithoutThePermissionsHookSkipTheFilterWhileAuthorizationIsDisabled(): void
+    {
+        $adapter = $this->createAdapter()->removeWriteHook(Permissions::class);
+        $collection = new Document(['$id' => self::COLLECTION]);
+
+        $this->authorization->skip(function () use ($adapter, $collection): void {
+            $adapter->find($collection);
+            $adapter->count($collection);
+            $adapter->sum($collection, 'count');
+        });
+
+        $this->assertSame([null], $this->permissionFilters('find'));
+        $this->assertSame([null, null], $this->permissionFilters('aggregate'));
+    }
+
+    /**
+     * @return list<mixed>
+     */
+    private function permissionFilters(string $operation): array
+    {
+        return \array_map(
+            fn (array $filters): mixed => $filters[Storage::PERMISSIONS] ?? null,
+            $this->filters[$operation] ?? [],
+        );
+    }
+
     /**
      * @param  list<string>  $operations
      */

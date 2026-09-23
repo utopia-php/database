@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use Closure;
+use DateTime;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -23,6 +24,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
 use Utopia\Database\Type\TypeRegistry;
@@ -399,6 +401,75 @@ class MirrorTest extends TestCase
 
         $this->assertSame(\array_fill(0, 3, '{"filtered":true}'), $skipped);
         $this->assertSame(\array_fill(0, 3, ['filtered' => true]), \array_map(self::meta(...), $databases));
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror, Closure(): mixed): mixed, Closure(Database): mixed, mixed, mixed}>
+     */
+    public static function scopedSetters(): iterable
+    {
+        yield 'withPreserveDates' => [
+            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withPreserveDates($callback),
+            static fn (Database $database): mixed => $database->getPreserveDates(),
+            true,
+            false,
+        ];
+        yield 'withPreserveSequence' => [
+            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withPreserveSequence($callback),
+            static fn (Database $database): mixed => $database->getPreserveSequence(),
+            true,
+            false,
+        ];
+        yield 'withTenant' => [
+            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withTenant(7, $callback),
+            static fn (Database $database): mixed => $database->getTenant(),
+            7,
+            null,
+        ];
+        yield 'skipRelationships' => [
+            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationships($callback),
+            static fn (Database $database): mixed => $database->getRelationshipHook()?->isEnabled(),
+            false,
+            true,
+        ];
+        yield 'skipRelationshipsExistCheck' => [
+            static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationshipsExistCheck($callback),
+            static fn (Database $database): mixed => $database->getRelationshipHook()?->shouldCheckExist(),
+            false,
+            true,
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror, Closure(): mixed): mixed  $scope
+     * @param  Closure(Database): mixed  $read
+     */
+    #[DataProvider('scopedSetters')]
+    public function testScopedSetterAppliesToTheSourceOnce(Closure $scope, Closure $read, mixed $inside, mixed $outside): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+        $mirror->addHook(new Relationships($mirror));
+        $databases = [$mirror, $source, $destination];
+        $observed = [];
+
+        $scope($mirror, static function () use (&$observed, $databases, $read): void {
+            $observed[] = \array_map($read, $databases);
+        });
+
+        $this->assertSame([[$inside, $inside, $outside]], $observed);
+        $this->assertSame(\array_fill(0, 3, $outside), \array_map($read, $databases));
+    }
+
+    public function testRequestTimestampThroughMirrorRunsTheCallbackOnce(): void
+    {
+        [$mirror] = $this->pair();
+        $runs = 0;
+
+        $mirror->withRequestTimestamp(new DateTime(), static function () use (&$runs): void {
+            $runs++;
+        });
+
+        $this->assertSame(1, $runs);
     }
 
     public function testProfilingThroughMirrorRecordsIntoTheProfilerItReturns(): void

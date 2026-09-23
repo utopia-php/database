@@ -15,6 +15,7 @@ use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Mirroring\Filter;
+use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
@@ -227,6 +228,197 @@ class Mirror extends Database
         parent::setQueryCache($queryCache);
         $this->source->setQueryCache($queryCache);
         $this->destination?->setQueryCache($queryCache);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setCacheName(string $name): static
+    {
+        parent::setCacheName($name);
+        $this->source->setCacheName($name);
+        $this->destination?->setCacheName($name);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setTenantPerDocument(bool $enabled): static
+    {
+        parent::setTenantPerDocument($enabled);
+        $this->source->setTenantPerDocument($enabled);
+        $this->destination?->setTenantPerDocument($enabled);
+
+        return $this;
+    }
+
+    /**
+     * A destination that cannot apply the timeout is reported through onError(), like a
+     * failed destination write: MariaDB applies it on the destination's connection.
+     *
+     * {@inheritdoc}
+     */
+    public function setTimeout(int $milliseconds, Event $event = Event::All): static
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function clearTimeout(Event $event = Event::All): void
+    {
+        $this->delegate(__FUNCTION__, \func_get_args());
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setGlobalCollections(array $collections): static
+    {
+        parent::setGlobalCollections($collections);
+        $this->source->setGlobalCollections($collections);
+        $this->destination?->setGlobalCollections($collections);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function resetGlobalCollections(): void
+    {
+        parent::resetGlobalCollections();
+        $this->source->resetGlobalCollections();
+        $this->destination?->resetGlobalCollections();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setMetadata(string $key, mixed $value): static
+    {
+        parent::setMetadata($key, $value);
+        $this->source->setMetadata($key, $value);
+        $this->destination?->setMetadata($key, $value);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function resetMetadata(): void
+    {
+        parent::resetMetadata();
+        $this->source->resetMetadata();
+        $this->destination?->resetMetadata();
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setMigrating(bool $migrating): self
+    {
+        parent::setMigrating($migrating);
+        $this->source->setMigrating($migrating);
+        $this->destination?->setMigrating($migrating);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function setTypeRegistry(?TypeRegistry $typeRegistry): static
+    {
+        parent::setTypeRegistry($typeRegistry);
+        $this->source->setTypeRegistry($typeRegistry);
+        $this->destination?->setTypeRegistry($typeRegistry);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function enableLocks(bool $enabled): static
+    {
+        parent::enableLocks($enabled);
+        $this->source->enableLocks($enabled);
+        $this->destination?->enableLocks($enabled);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function enableFilters(): static
+    {
+        parent::enableFilters();
+        $this->source->enableFilters();
+        $this->destination?->enableFilters();
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function disableFilters(): static
+    {
+        parent::disableFilters();
+        $this->source->disableFilters();
+        $this->destination?->disableFilters();
+
+        return $this;
+    }
+
+    /**
+     * The source's and destination's scopes enclose the mirror's own: Database::skipFilters()
+     * disables through disableFilters(), which reaches them, but restores only the mirror's flag.
+     *
+     * {@inheritdoc}
+     */
+    public function skipFilters(callable $callback, ?array $filters = null): mixed
+    {
+        $skip = fn (): mixed => parent::skipFilters($callback, $filters);
+        $destination = $this->destination;
+
+        return $this->source->skipFilters(
+            fn (): mixed => $destination === null ? $skip() : $destination->skipFilters($skip, $filters),
+            $filters,
+        );
+    }
+
+    /**
+     * The mirror queries through its source's adapter, so it reports to the source's profiler.
+     *
+     * {@inheritdoc}
+     */
+    public function enableProfiling(): static
+    {
+        $this->source->enableProfiling();
+        $this->destination?->enableProfiling();
+        $this->profiler = $this->source->getProfiler();
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function disableProfiling(): static
+    {
+        $this->source->disableProfiling();
+        $this->destination?->disableProfiling();
 
         return $this;
     }

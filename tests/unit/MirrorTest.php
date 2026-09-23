@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Tests\Unit\Event\RecordingLifecycle;
 use Tests\Unit\Support\CountingMemory;
+use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -15,6 +16,7 @@ use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -23,6 +25,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
+use Utopia\Database\Type\TypeRegistry;
 
 class MirrorTest extends TestCase
 {
@@ -241,6 +244,233 @@ class MirrorTest extends TestCase
         $this->assertStaleUntilPurgedThroughMirror($mirror, $source);
     }
 
+    public function testUpdateThroughMirrorPurgesDocumentsCachedUnderItsCacheName(): void
+    {
+        $mirror = $this->seed(new Mirror(
+            new Database(new Memory(), new Cache(new MemoryCache())),
+            new Database(new Memory(), new Cache(new None())),
+        ));
+        $mirror->setCacheName('mirrored');
+
+        $this->assertSame('first', $mirror->getDocument(self::COLLECTION, 'first')->getAttribute('title'));
+
+        $mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']));
+
+        $this->assertSame('updated', $mirror->getDocument(self::COLLECTION, 'first')->getAttribute('title'));
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror): mixed, Closure(Database): mixed, mixed}>
+     */
+    public static function forwardedSetters(): iterable
+    {
+        $queryCache = new QueryCache(new Cache(new None()));
+        $typeRegistry = new TypeRegistry();
+        $meta = self::meta(...);
+
+        yield 'setQueryCache' => [
+            static fn (Mirror $mirror): mixed => $mirror->setQueryCache($queryCache),
+            static fn (Database $database): mixed => $database->getQueryCache(),
+            $queryCache,
+        ];
+        yield 'setCacheName' => [
+            static fn (Mirror $mirror): mixed => $mirror->setCacheName('mirrored'),
+            static fn (Database $database): mixed => $database->getCacheName(),
+            'mirrored',
+        ];
+        yield 'setGlobalCollections' => [
+            static fn (Mirror $mirror): mixed => $mirror->setGlobalCollections(['projects']),
+            static fn (Database $database): mixed => $database->getGlobalCollections(),
+            ['projects'],
+        ];
+        yield 'resetGlobalCollections' => [
+            static function (Mirror $mirror): void {
+                self::onEach($mirror, static fn (Database $database): mixed => $database->setGlobalCollections(['projects']))->resetGlobalCollections();
+            },
+            static fn (Database $database): mixed => $database->getGlobalCollections(),
+            [],
+        ];
+        yield 'setTenantPerDocument' => [
+            static fn (Mirror $mirror): mixed => $mirror->setTenantPerDocument(true),
+            static fn (Database $database): mixed => $database->getTenantPerDocument(),
+            true,
+        ];
+        yield 'setTimeout' => [
+            static fn (Mirror $mirror): mixed => $mirror->setTimeout(500),
+            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            500,
+        ];
+        yield 'clearTimeout' => [
+            static function (Mirror $mirror): void {
+                self::onEach($mirror, static fn (Database $database): mixed => $database->setTimeout(500))->clearTimeout();
+            },
+            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            0,
+        ];
+        yield 'setMetadata' => [
+            static fn (Mirror $mirror): mixed => $mirror->setMetadata('request', 'mirrored'),
+            static fn (Database $database): mixed => $database->getMetadata(),
+            ['request' => 'mirrored'],
+        ];
+        yield 'resetMetadata' => [
+            static function (Mirror $mirror): void {
+                self::onEach($mirror, static fn (Database $database): mixed => $database->setMetadata('request', 'mirrored'))->resetMetadata();
+            },
+            static fn (Database $database): mixed => $database->getMetadata(),
+            [],
+        ];
+        yield 'disableFilters' => [
+            static fn (Mirror $mirror): mixed => $mirror->disableFilters(),
+            $meta,
+            '{"filtered":true}',
+        ];
+        yield 'enableFilters' => [
+            static fn (Mirror $mirror): mixed => self::onEach($mirror, static fn (Database $database): mixed => $database->disableFilters())->enableFilters(),
+            $meta,
+            ['filtered' => true],
+        ];
+        yield 'enableLocks' => [
+            static fn (Mirror $mirror): mixed => $mirror->enableLocks(true),
+            static fn (Database $database): mixed => $database->getAdapter()->getAlterLocks(),
+            true,
+        ];
+        yield 'enableProfiling' => [
+            static fn (Mirror $mirror): mixed => $mirror->enableProfiling(),
+            static fn (Database $database): mixed => $database->getProfiler()?->isEnabled(),
+            true,
+        ];
+        yield 'disableProfiling' => [
+            static fn (Mirror $mirror): mixed => self::onEach($mirror, static fn (Database $database): mixed => $database->enableProfiling())->disableProfiling(),
+            static fn (Database $database): mixed => $database->getProfiler()?->isEnabled(),
+            false,
+        ];
+        yield 'setMigrating' => [
+            static fn (Mirror $mirror): mixed => $mirror->setMigrating(true),
+            static fn (Database $database): mixed => $database->isMigrating(),
+            true,
+        ];
+        yield 'setTypeRegistry' => [
+            static fn (Mirror $mirror): mixed => $mirror->setTypeRegistry($typeRegistry),
+            static fn (Database $database): mixed => $database->getTypeRegistry(),
+            $typeRegistry,
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $configure
+     * @param  Closure(Database): mixed  $read
+     */
+    #[DataProvider('forwardedSetters')]
+    public function testSetterReachesSourceAndDestination(Closure $configure, Closure $read, mixed $expected): void
+    {
+        $source = new Database(self::configurableAdapter(), new Cache(new None()));
+        $destination = new Database(self::configurableAdapter(), new Cache(new None()));
+        $mirror = new Mirror($source, $destination);
+
+        $configure($mirror);
+
+        $this->assertSame($expected, $read($mirror), 'mirror');
+        $this->assertSame($expected, $read($source), 'source');
+        $this->assertSame($expected, $read($destination), 'destination');
+    }
+
+    /**
+     * @return iterable<string, array{array<string>|null}>
+     */
+    public static function skippedFilters(): iterable
+    {
+        yield 'every filter' => [null];
+        yield 'named filters' => [['json']];
+    }
+
+    /**
+     * @param  array<string>|null  $filters
+     */
+    #[DataProvider('skippedFilters')]
+    public function testSkipFiltersRestoresSourceAndDestination(?array $filters): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+        $databases = [$mirror, $source, $destination];
+
+        $skipped = $mirror->skipFilters(
+            static fn (): array => \array_map(self::meta(...), $databases),
+            $filters,
+        );
+
+        $this->assertSame(\array_fill(0, 3, '{"filtered":true}'), $skipped);
+        $this->assertSame(\array_fill(0, 3, ['filtered' => true]), \array_map(self::meta(...), $databases));
+    }
+
+    public function testProfilingThroughMirrorRecordsIntoTheProfilerItReturns(): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+
+        $mirror->enableProfiling();
+
+        $this->assertNotNull($mirror->getProfiler());
+        $this->assertSame($source->getProfiler(), $mirror->getProfiler());
+        $this->assertSame($mirror->getProfiler(), $mirror->getAdapter()->getProfiler());
+        $this->assertNotNull($destination->getProfiler());
+        $this->assertSame($destination->getProfiler(), $destination->getAdapter()->getProfiler());
+
+        $mirror->disableProfiling();
+
+        $this->assertNull($mirror->getAdapter()->getProfiler());
+        $this->assertNull($destination->getAdapter()->getProfiler());
+    }
+
+    /**
+     * @return iterable<string, array{string, Closure(Mirror): mixed, Closure(Database): mixed, mixed}>
+     */
+    public static function timeoutCalls(): iterable
+    {
+        yield 'setTimeout' => [
+            'setTimeout',
+            static fn (Mirror $mirror): mixed => $mirror->setTimeout(500),
+            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            500,
+        ];
+        yield 'clearTimeout' => [
+            'clearTimeout',
+            static function (Mirror $mirror): void {
+                $mirror->clearTimeout();
+            },
+            static fn (Database $database): mixed => $database->getAdapter()->getTimeout(),
+            0,
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $call
+     * @param  Closure(Database): mixed  $read
+     */
+    #[DataProvider('timeoutCalls')]
+    public function testDestinationTimeoutFailureIsReportedNotThrown(string $action, Closure $call, Closure $read, mixed $expected): void
+    {
+        $source = new Database(self::configurableAdapter(), new Cache(new None()));
+        $destination = new Database(new class () extends Memory {
+            public function setTimeout(int $milliseconds, Event $event = Event::All): void
+            {
+                throw new RuntimeException('destination unreachable');
+            }
+
+            public function clearTimeout(Event $event = Event::All): void
+            {
+                throw new RuntimeException('destination unreachable');
+            }
+        }, new Cache(new None()));
+        $mirror = new Mirror($source, $destination);
+        $errors = [];
+        $mirror->onError(static function (string $failed, Throwable $error) use (&$errors): void {
+            $errors[] = [$failed, $error->getMessage()];
+        });
+
+        $call($mirror);
+
+        $this->assertSame($expected, $read($source));
+        $this->assertSame([[$action, 'destination unreachable']], $errors);
+    }
+
     private function assertStaleUntilPurgedThroughMirror(Mirror $mirror, Database $reader): void
     {
         $this->assertSame('first', $this->title($reader));
@@ -263,6 +493,33 @@ class MirrorTest extends TestCase
     private function title(Database $database): mixed
     {
         return $database->findOne(self::COLLECTION, [Query::equal(Document::ID, ['first'])])->getAttribute('title');
+    }
+
+    /**
+     * Applies $apply to the wrapped databases directly, then to the mirror, so an undo through
+     * the mirror has state to clear on each of them.
+     *
+     * @param  Closure(Database): mixed  $apply
+     */
+    private static function onEach(Mirror $mirror, Closure $apply): Mirror
+    {
+        $apply($mirror->getSource());
+        $destination = $mirror->getDestination();
+        if ($destination !== null) {
+            $apply($destination);
+        }
+        $apply($mirror);
+
+        return $mirror;
+    }
+
+    private static function meta(Database $database): mixed
+    {
+        $collection = new Collection(id: self::COLLECTION, attributes: [
+            Attribute::string(key: 'meta', size: 64, filters: ['json']),
+        ]);
+
+        return $database->decode($collection, new Document(['meta' => '{"filtered":true}']))->getAttribute('meta');
     }
 
     private function seed(Mirror $mirror): Mirror
@@ -293,6 +550,29 @@ class MirrorTest extends TestCase
         ]));
 
         return $mirror;
+    }
+
+    private static function configurableAdapter(): Memory
+    {
+        return new class () extends Memory {
+            /**
+             * @return array<Capability>
+             */
+            public function capabilities(): array
+            {
+                return [...parent::capabilities(), Capability::AlterLock];
+            }
+
+            public function setTimeout(int $milliseconds, Event $event = Event::All): void
+            {
+                $this->setTimeoutState($milliseconds, $event);
+            }
+
+            public function clearTimeout(Event $event = Event::All): void
+            {
+                $this->clearTimeoutState($event);
+            }
+        };
     }
 
     /**

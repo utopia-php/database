@@ -2550,17 +2550,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function getSequences(string $collection, array $documents): array
     {
         $documentIds = [];
-        /** @var array<int> $documentTenants */
         $documentTenants = [];
         foreach ($documents as $document) {
             if (empty($document->getSequence())) {
                 $documentIds[] = $document->getId();
 
                 if ($this->sharedTables) {
-                    $tenant = $document->getTenant();
-                    if ($tenant !== null) {
-                        $documentTenants[] = $tenant;
-                    }
+                    $documentTenants[] = $document->getTenant() ?? $this->getTenant();
                 }
             }
         }
@@ -2572,15 +2568,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $sequences = [];
         $name = $this->getNamespace().'_'.$this->filter($collection);
 
-        $filters = [Storage::UID => ['$in' => $documentIds]];
+        $filters = [Storage::UID => ['$in' => \array_values(\array_unique($documentIds))]];
 
         if ($this->sharedTables) {
-            $filters[Storage::TENANT] = $this->getTenantFilters($collection, $documentTenants);
+            $filters[Storage::TENANT] = $this->getTenantFilters($collection, \array_values(\array_unique($documentTenants)));
         }
         try {
             // Use cursor paging for large result sets
             $options = [
-                'projection' => [Storage::UID => 1, Storage::SEQUENCE => 1],
+                'projection' => [Storage::UID => 1, Storage::SEQUENCE => 1, Storage::TENANT => 1],
                 'batchSize' => self::DEFAULT_BATCH_SIZE,
             ];
 
@@ -2591,17 +2587,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             /** @var array<\stdClass> $results */
             $results = $responseCursor->firstBatch ?? [];
 
-            // Process first batch
-            foreach ($results as $result) {
-                /** @var \stdClass $result */
-                /** @var mixed $uid */
-                $uid = $result->{Storage::UID};
-                /** @var mixed $oid */
-                $oid = $result->{Storage::SEQUENCE};
-                $uidStr = \is_string($uid) ? $uid : (\is_scalar($uid) ? (string) $uid : '');
-                $oidStr = \is_string($oid) ? $oid : (\is_scalar($oid) ? (string) $oid : '');
-                $sequences[$uidStr] = $oidStr;
-            }
+            $this->collectSequences($results, $sequences);
 
             // Get cursor ID for subsequent batches
             /** @var int|null $cursorId */
@@ -2627,16 +2613,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     break;
                 }
 
-                foreach ($moreResults as $result) {
-                    /** @var \stdClass $result */
-                    /** @var mixed $uid */
-                    $uid = $result->{Storage::UID};
-                    /** @var mixed $oid */
-                    $oid = $result->{Storage::SEQUENCE};
-                    $uidStr = \is_string($uid) ? $uid : (\is_scalar($uid) ? (string) $uid : '');
-                    $oidStr = \is_string($oid) ? $oid : (\is_scalar($oid) ? (string) $oid : '');
-                    $sequences[$uidStr] = $oidStr;
-                }
+                $this->collectSequences($moreResults, $sequences);
 
                 // Update cursor ID for next iteration
                 if (isset($moreCursor->id)) {
@@ -2655,12 +2632,38 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         foreach ($documents as $document) {
-            if (isset($sequences[$document->getId()])) {
-                $document[Document::SEQUENCE] = $sequences[$document->getId()];
+            $tenant = $this->sharedTables ? ($document->getTenant() ?? $this->getTenant()) : null;
+            $key = $this->sequenceKey($tenant, $document->getId());
+            if (isset($sequences[$key])) {
+                $document[Document::SEQUENCE] = $sequences[$key];
             }
         }
 
         return $documents;
+    }
+
+    /**
+     * @param  array<\stdClass>  $rows
+     * @param  array<string, string>  $sequences
+     */
+    private function collectSequences(array $rows, array &$sequences): void
+    {
+        foreach ($rows as $row) {
+            $tenant = $this->sharedTables ? ($row->{Storage::TENANT} ?? null) : null;
+            $key = $this->sequenceKey($tenant, $this->stringifyIdentifier($row->{Storage::UID} ?? null));
+            $sequences[$key] = $this->stringifyIdentifier($row->{Storage::SEQUENCE} ?? null);
+        }
+    }
+
+    /**
+     * `_uid` is unique only per tenant under shared tables, so a batch spanning tenants
+     * must match each row back to the document of the same tenant.
+     */
+    private function sequenceKey(mixed $tenant, string $id): string
+    {
+        $tenant = $tenant === null ? '' : $this->stringifyIdentifier($tenant);
+
+        return $tenant."\0".$id;
     }
 
     /**
@@ -2902,7 +2905,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * @param  array<int|string>  $tenants
+     * @param  array<int|string|null>  $tenants
      * @return int|string|null|array<string, array<int|string|null>>
      */
     public function getTenantFilters(
@@ -2913,7 +2916,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             return null;
         }
 
-        /** @var array<int|string> $values */
+        /** @var array<int|string|null> $values */
         $values = [];
 
         if (\count($tenants) === 0) {

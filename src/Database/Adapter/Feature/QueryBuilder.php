@@ -11,7 +11,11 @@ use Utopia\Query\Schema;
 interface QueryBuilder
 {
     /**
-     * Get a query builder for the given collection.
+     * Get a query builder over the given collection's table, for Database::from().
+     *
+     * It maps document attributes to columns and, under shared tables, keeps every statement to
+     * the selected tenant. It applies no permissions, and its statements bypass the document and
+     * query caches, `_perms` upkeep, validation, hooks and events.
      *
      * @param string $collection The collection identifier.
      * @return Builder The query builder.

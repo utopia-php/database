@@ -170,6 +170,61 @@ class Document extends ArrayObject
     }
 
     /**
+     * Construct from a document read back from storage.
+     *
+     * Builds nested documents like the constructor, but drops non-string permissions instead of
+     * rejecting them, as fromRow() does.
+     *
+     * @param  array<string, mixed>  $data
+     *
+     * @throws StructureException When $id is not a string or $permissions is not an array
+     */
+    public static function fromStorage(array $data): self
+    {
+        if (array_key_exists(self::ID, $data) && ! \is_string($data[self::ID])) {
+            throw new StructureException(self::ID.' must be of type string');
+        }
+
+        if (array_key_exists(self::PERMISSIONS, $data)) {
+            if (! \is_array($data[self::PERMISSIONS])) {
+                throw new StructureException(self::PERMISSIONS.' must be of type array');
+            }
+            $data[self::PERMISSIONS] = \array_values(\array_unique(\array_filter($data[self::PERMISSIONS], \is_string(...))));
+        }
+
+        foreach ($data as $key => $value) {
+            if (! \is_array($value)) {
+                continue;
+            }
+
+            if (isset($value[self::ID]) || isset($value[self::COLLECTION])) {
+                /** @var array<string, mixed> $value */
+                $data[$key] = self::fromStorage($value);
+
+                continue;
+            }
+
+            $converted = false;
+            foreach ($value as $childKey => $child) {
+                if (\is_array($child) && (isset($child[self::ID]) || isset($child[self::COLLECTION]))) {
+                    /** @var array<string, mixed> $child */
+                    $value[$childKey] = self::fromStorage($child);
+                    $converted = true;
+                }
+            }
+
+            if ($converted) {
+                $data[$key] = $value;
+            }
+        }
+
+        $document = new self();
+        $document->exchangeArray($data);
+
+        return $document;
+    }
+
+    /**
      * Get the document's unique identifier.
      *
      * @return string The document ID, or empty string if not set.

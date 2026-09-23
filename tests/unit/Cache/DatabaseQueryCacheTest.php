@@ -206,9 +206,13 @@ final class DatabaseQueryCacheTest extends TestCase
             fn () => $database->createAttribute('users', Attribute::integer(key: 'age')),
         );
         $database->find('users', [Query::equal('name', ['first'])]);
-        $database->find('users', [Query::equal('name', ['second'])]);
+        $straddled = $adapter->getObservedValidators();
 
-        $this->assertSame(2, $adapter->getObservedValidators());
+        $database->find('users', [Query::equal('name', ['second'])]);
+        $this->assertSame($straddled + 1, $adapter->getObservedValidators(), 'The build that straddled the purge must not be published');
+
+        $database->find('users', [Query::equal('name', ['third'])]);
+        $this->assertSame($straddled + 1, $adapter->getObservedValidators(), 'The build after the purge must be published and reused');
     }
 
     public function testMemoryCacheSeparatesRolesAndExecutionShapes(): void

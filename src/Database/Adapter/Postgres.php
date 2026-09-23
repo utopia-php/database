@@ -19,6 +19,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
@@ -1944,6 +1945,15 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         // Unknown column
         if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
+        }
+
+        if (
+            $e->getCode() === '42P10'
+            && isset($e->errorInfo[1])
+            && $e->errorInfo[1] === 7
+            && \str_contains($e->getMessage(), 'for SELECT DISTINCT, ORDER BY expressions must appear in select list')
+        ) {
+            return new QueryException('A distinct() query can only be ordered by a selected attribute on this database', $e->getCode(), $e);
         }
 
         return $e;

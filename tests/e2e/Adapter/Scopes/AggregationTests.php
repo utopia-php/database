@@ -5,6 +5,8 @@ namespace Tests\E2E\Adapter\Scopes;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -2005,6 +2007,38 @@ trait AggregationTests
         $database->deleteCollection($collection);
     }
 
+    public function testDistinctOrderedByAnUnselectedAttributeIsRejectedWhereTheEngineRefusesIt(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'distinct_order';
+        $this->createScores($database, $collection);
+
+        $queries = [Query::distinct(), Query::select(['name']), Query::orderAsc('score')];
+
+        if ($adapter->hasFeature(Postgres::class) || $adapter->hasFeature(MySQL::class)) {
+            $this->assertRejectedAsQueryShape(
+                fn () => $database->find($collection, $queries),
+                'A distinct() query can only be ordered by a selected attribute on this database',
+            );
+        } else {
+            $this->assertSame(['beta', 'gamma', 'alpha'], $this->namesOf($database->find($collection, $queries)));
+        }
+
+        $this->assertSame(
+            ['beta', 'gamma', 'alpha'],
+            $this->namesOf($database->find($collection, [Query::distinct(), Query::select(['name', 'score']), Query::orderAsc('score')])),
+        );
+
+        $database->deleteCollection($collection);
+    }
+
     private function createScores(Database $database, string $collection): void
     {
         if ($database->exists($database->getDatabase(), $collection)) {
@@ -2035,5 +2069,14 @@ trait AggregationTests
 
         $this->assertInstanceOf(NotFoundException::class, $error, $error === null ? 'the unknown column was accepted' : $error::class.': '.$error->getMessage());
         $this->assertSame('Attribute not found', $error->getMessage());
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<mixed>
+     */
+    private function namesOf(array $rows): array
+    {
+        return \array_values(\array_map(fn (Document $row): mixed => $row->getAttribute('name'), $rows));
     }
 }

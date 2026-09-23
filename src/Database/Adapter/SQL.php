@@ -31,6 +31,8 @@ use Utopia\Database\Hook\OuterJoinTenantFilter;
 use Utopia\Database\Hook\PermissionAllowNullUid;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Hook\PermissionJoinFilter;
+use Utopia\Database\Hook\RawOuterJoinTenantFilter;
+use Utopia\Database\Hook\RawTenantFilter;
 use Utopia\Database\Hook\Tenancy;
 use Utopia\Database\Hook\TenantFilter;
 use Utopia\Database\Hook\WriteContext;
@@ -3243,9 +3245,38 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $count;
     }
 
+    /**
+     * A builder over the collection's table for Database::from(): it maps document attributes to
+     * columns and applies no permissions.
+     *
+     * Under shared tables it keeps every statement to the selected tenant: the main table and every
+     * table joined through the builder's join methods (RawTenantFilter). It does not use
+     * newBuilder()'s tenant hooks, which need a read's joins up front; the caller adds these later.
+     * Not kept to the tenant: SQL the caller writes, builders that did not come from Database::from()
+     * (subqueries, unions, lateral joins) and a dialect's multi-table updates and deletes.
+     */
     public function getBuilder(string $collection): SQLBuilder
     {
-        return $this->newBuilder($this->filter($collection));
+        $name = $this->filter($collection);
+        if (! $this->sharedTables) {
+            return $this->newBuilder($name);
+        }
+
+        $table = $this->getSQLTableRaw($name);
+        $tenants = new RawTenantFilter(
+            $this->tenant,
+            $table,
+            $name === Database::METADATA || $name === Storage::permissionsTable(Database::METADATA),
+            $this->getIdentifierQuoteChar(),
+        );
+        $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
+
+        return $this->createBuilder()
+            ->from($table)
+            ->addHook($this->attributeMap)
+            ->addHook($tenants)
+            ->addHook(new RawOuterJoinTenantFilter($tenants))
+            ->beforeBuild($tenants->reset(...));
     }
 
     public function getSchema(): Schema

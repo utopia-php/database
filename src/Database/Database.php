@@ -8343,6 +8343,13 @@ class Database
 
             $regularUpdatesUserOnly = \array_diff_key($regularUpdates, \array_flip($internalKeys));
 
+            // Before the comparison, or a caller echoing back a document it read would
+            // delete the grants masking hid from it. assertColumnsWritable() does not
+            // cover this: it gates on update scope, while masking keys off read scope,
+            // so an unscoped update grant plus a column-scoped read grant passes that
+            // guard and still arrives with permissions missing.
+            $this->preserveHiddenPermissions($collection, $old, $document);
+
             $skipPermissionsUpdate = true;
 
             if ($document->offsetExists('$permissions')) {

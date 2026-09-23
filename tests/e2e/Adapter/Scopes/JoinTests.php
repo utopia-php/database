@@ -7074,6 +7074,59 @@ trait JoinTests
     }
 
     /**
+     * Chains of joins over collections read per document return what the same joins return over
+     * the documents direct reads return: an unreadable document neither hides a row an outer join
+     * keeps nor pairs with it, so a review of an unreadable author comes back like a review of an
+     * author that does not exist. Under shared tables a full outer join cannot be combined with a
+     * right join.
+     */
+    public function testJoinChainsReadWhatDirectReadsAllow(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $secured = ['jcv_authors', 'jcv_books', 'jcv_reviews', 'jcv_extras'];
+        $direct = ['jcvd_authors', 'jcvd_books', 'jcvd_reviews', 'jcvd_extras'];
+
+        $chains = [
+            'a right join' => [[Method::RightJoin, 1, '$id']],
+            'a full outer join' => [[Method::FullOuterJoin, 1, '$id']],
+            'an inner join, then a right join' => [[Method::Join, 1, '$id'], [Method::RightJoin, 2, '$id']],
+            'a left join, then a right join' => [[Method::LeftJoin, 1, '$id'], [Method::RightJoin, 2, '$id']],
+            'a cross join, then a right join' => [[Method::CrossJoin, 3, ''], [Method::RightJoin, 2, '$id']],
+            'a right join, then a right join on it' => [[Method::RightJoin, 1, '$id'], [Method::RightJoin, 2, 'book.authorId']],
+            'a full outer join, then a right join' => [[Method::FullOuterJoin, 1, '$id'], [Method::RightJoin, 2, '$id']],
+            'a right join, then a full outer join on it' => [[Method::RightJoin, 1, '$id'], [Method::FullOuterJoin, 2, 'book.authorId']],
+        ];
+
+        try {
+            $this->seedJoinChainVisibility($database, $secured, documentSecurity: true);
+            $this->seedJoinChainVisibility($database, $direct, documentSecurity: false);
+
+            $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $chains, $secured, $direct): void {
+                foreach ($chains as $label => $chain) {
+                    $methods = \array_column($chain, 0);
+                    $rejected = $database->getSharedTables()
+                        && \in_array(Method::FullOuterJoin, $methods, true)
+                        && \in_array(Method::RightJoin, $methods, true);
+
+                    $this->assertSame(
+                        $rejected ? 'rejected' : $this->joinChainVisibilityRead($database, $direct, $chain),
+                        $this->joinChainVisibilityRead($database, $secured, $chain),
+                        "{$label} must return what the same joins return over what direct reads return",
+                    );
+                }
+            });
+        } finally {
+            $this->cleanupAggCollections($database, [...$secured, ...$direct]);
+        }
+    }
+
+    /**
      * A right join that follows a cross join, or a right join its ON references, must not pair its
      * rows with another tenant's rows of the earlier table: they would vanish instead of coming back
      * unmatched, and what a tenant reads would depend on another tenant's keys.
@@ -7161,6 +7214,106 @@ trait JoinTests
             $database->setTenant(null);
             $this->cleanupAggCollections($database, [...$collections, $extras]);
             $database->setTenant($tenant);
+        }
+    }
+
+    /**
+     * The documents of testJoinChainsReadWhatDirectReadsAllow: with document security every
+     * collection shows only the documents the caller holds read on, and the unreadable ones share
+     * keys with readable ones. Without it, the collections hold exactly the documents a direct read
+     * of the others returns.
+     *
+     * @param array{string, string, string, string} $collections authors, books, reviews, extras
+     */
+    private function seedJoinChainVisibility(Database $database, array $collections, bool $documentSecurity): void
+    {
+        [$authors, $books, $reviews, $extras] = $collections;
+        $this->cleanupAggCollections($database, $collections);
+
+        $permissions = $documentSecurity
+            ? [Permission::create(Role::any())]
+            : [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $authors, permissions: $permissions, documentSecurity: $documentSecurity));
+        $database->createAttribute($authors, Attribute::string(key: 'name', size: 64, required: true));
+        foreach ([$books => 'pages', $reviews => 'stars', $extras => 'weight'] as $collection => $number) {
+            $database->createCollection(new Collection(id: $collection, permissions: $permissions, documentSecurity: $documentSecurity));
+            $database->createAttribute($collection, Attribute::string(key: 'authorId', size: 64, required: true));
+            $database->createAttribute($collection, Attribute::integer(key: $number, required: true));
+        }
+
+        $documents = [
+            $authors => [
+                'a1' => [['name' => 'a1'], true],
+                'a2' => [['name' => 'a2'], true],
+                'hidden' => [['name' => 'hidden'], false],
+            ],
+            $books => [
+                'b1' => [['authorId' => 'a1', 'pages' => 1], true],
+                'b2' => [['authorId' => 'a2', 'pages' => 2], false],
+                'b3' => [['authorId' => 'hidden', 'pages' => 3], true],
+                'b4' => [['authorId' => 'ghost', 'pages' => 4], true],
+                'b5' => [['authorId' => 'a1', 'pages' => 5], false],
+            ],
+            $reviews => [
+                'r1' => [['authorId' => 'a1', 'stars' => 10], true],
+                'r2' => [['authorId' => 'a2', 'stars' => 20], true],
+                'r3' => [['authorId' => 'hidden', 'stars' => 30], true],
+                'r4' => [['authorId' => 'ghost', 'stars' => 40], true],
+                'r5' => [['authorId' => 'a2', 'stars' => 50], false],
+            ],
+            $extras => [
+                'x1' => [['authorId' => 'a1', 'weight' => 100], false],
+            ],
+        ];
+
+        foreach ($documents as $collection => $rows) {
+            foreach ($rows as $id => [$attributes, $readable]) {
+                if (! $readable && ! $documentSecurity) {
+                    continue;
+                }
+
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    '$permissions' => [$readable ? Permission::read(Role::any()) : Permission::read(Role::user('someone-else'))],
+                    ...$attributes,
+                ]));
+            }
+        }
+    }
+
+    /**
+     * @param array{string, string, string, string} $collections authors, books, reviews, extras
+     * @param list<array{Method, int, string}> $chain Each join's method, collection index and ON column
+     * @return array{rows: list<list<string|int|null>>, count: int, sum: int|float}|string
+     */
+    private function joinChainVisibilityRead(Database $database, array $collections, array $chain): array|string
+    {
+        $numbers = [];
+        $joins = [];
+        foreach ($chain as [$method, $collection, $on]) {
+            [$alias, $number] = [1 => ['book', 'pages'], 2 => ['review', 'stars'], 3 => ['extra', 'weight']][$collection];
+            $numbers[] = $alias.'.'.$number;
+            $joins[] = match ($method) {
+                Method::Join => Query::join($collections[$collection], $on, 'authorId', '=', $alias),
+                Method::LeftJoin => Query::leftJoin($collections[$collection], $on, 'authorId', '=', $alias),
+                Method::RightJoin => Query::rightJoin($collections[$collection], $on, 'authorId', '=', $alias),
+                Method::FullOuterJoin => Query::fullOuterJoin($collections[$collection], $on, 'authorId', '=', $alias),
+                Method::CrossJoin => Query::crossJoin($collections[$collection], $alias),
+                default => throw new \InvalidArgumentException("{$method->value} is not a join"),
+            };
+        }
+
+        try {
+            return [
+                'rows' => $this->joinTenancyRows(
+                    $database->find($collections[0], [...$joins, Query::select(['name', ...$numbers]), Query::limit(100)]),
+                    $numbers,
+                ),
+                'count' => $database->count($collections[0], $joins),
+                'sum' => $database->sum($collections[0], $numbers[\count($numbers) - 1], $joins),
+            ];
+        } catch (QueryException) {
+            return 'rejected';
         }
     }
 

@@ -26,6 +26,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Hook\JoinChain;
 use Utopia\Database\Hook\OuterJoinChainFilter;
+use Utopia\Database\Hook\OuterJoinPermissionFilter;
 use Utopia\Database\Hook\OuterJoinTenantFilter;
 use Utopia\Database\Hook\PermissionAllowNullUid;
 use Utopia\Database\Hook\PermissionFilter;
@@ -4549,10 +4550,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($this->authorization->getStatus()) {
             $hasJoins = ! empty($joinTablePrefixes);
             $granted = $hasJoins && $collection->getAttribute(Database::COLLECTION_GRANTED, false) === true;
+            $permissionConditions = [];
             if (! $granted && $this->filtersPerDocument($collection)) {
                 $docCol = $hasJoins ? $alias.'.'.Storage::UID : Storage::UID;
                 $permissionHook = $this->newPermissionHook($name, $roles, $forPermission->value, $docCol);
-                if ($preservingOuter) {
+                if ($preserving) {
+                    $permissionConditions[$alias] = $permissionHook->filter($alias);
                     $permissionHook = new PermissionAllowNullUid(
                         $permissionHook,
                         $docCol,
@@ -4571,16 +4574,26 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     continue;
                 }
 
+                $permissionHook = $this->newPermissionHook(
+                    $this->filter($join['table']),
+                    $roles,
+                    $forPermission->value,
+                    $join['alias'].'.'.Storage::UID
+                );
+                if ($preserving) {
+                    $permissionConditions[$join['alias']] = $permissionHook->filter($join['alias']);
+                }
                 $builder->addHook(new PermissionJoinFilter(
-                    $this->newPermissionHook(
-                        $this->filter($join['table']),
-                        $roles,
-                        $forPermission->value,
-                        $join['alias'].'.'.Storage::UID
-                    ),
+                    $permissionHook,
                     $join['alias'],
                     $this->getIdentifierQuoteChar(),
+                    $preserving,
                 ));
+            }
+
+            if ($permissionConditions !== []) {
+                $builder->addHook(new OuterJoinPermissionFilter($alias, $permissionConditions, $this->getIdentifierQuoteChar()));
+                $builder->addHook(new OuterJoinChainFilter($chain, $permissionConditions, $this->getIdentifierQuoteChar()));
             }
         }
     }

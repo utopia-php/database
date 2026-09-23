@@ -3273,7 +3273,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             permDocumentColumn: Storage::PERM_DOCUMENT,
             permRoleColumn: Storage::PERM_PERMISSION,
             permTypeColumn: Storage::PERM_TYPE,
-            subqueryFilter: $this->sharedTables ? new TenantFilter($this->tenant) : null,
+            subqueryFilter: $this->sharedTables
+                ? new TenantFilter(
+                    $this->tenant,
+                    Database::METADATA,
+                    Storage::permissionsTable($collection),
+                    quoteChar: $this->getIdentifierQuoteChar(),
+                )
+                : null,
             quoteChar: $this->getIdentifierQuoteChar(),
         );
     }

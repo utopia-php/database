@@ -3,6 +3,8 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -2498,5 +2500,173 @@ trait SpatialTests
         }
 
         $database->deleteCollection($collection);
+    }
+
+    public function testBatchSpatialAttributesMatchSingleCreation(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\Spatial::class) || ! $adapter->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'spatial_batch_definitions';
+        $database->createCollection(new Collection(id: $collection));
+
+        try {
+            $this->assertTrue($database->createAttribute($collection, Attribute::point(key: 'singlePoint', required: true)));
+            $this->assertTrue($database->createAttribute($collection, Attribute::linestring(key: 'singleRoute')));
+            $this->assertTrue($database->createAttribute($collection, Attribute::polygon(key: 'singleArea', required: true)));
+
+            $this->assertTrue($database->createAttributes($collection, [
+                Attribute::point(key: 'batchPoint', required: true),
+                Attribute::linestring(key: 'batchRoute'),
+                Attribute::polygon(key: 'batchArea', required: true),
+            ]));
+
+            $shapes = [
+                'Point' => [1.5, 2.5],
+                'Route' => [[0.0, 0.0], [1.0, 1.0]],
+                'Area' => [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]],
+            ];
+
+            $definitions = $this->getSpatialColumnDefinitions($database, $collection);
+            if ($definitions !== null) {
+                foreach (\array_keys($shapes) as $shape) {
+                    $this->assertArrayHasKey('single'.$shape, $definitions);
+                    $this->assertSame(
+                        $definitions['single'.$shape],
+                        $definitions['batch'.$shape] ?? null,
+                        'A '.$shape.' column created in a batch must have the definition createAttribute() gives it',
+                    );
+                }
+            }
+
+            $values = [
+                '$id' => 'shapes',
+                '$permissions' => [Permission::read(Role::any())],
+            ];
+            foreach ($shapes as $shape => $value) {
+                $values['single'.$shape] = $value;
+                $values['batch'.$shape] = $value;
+            }
+            $database->createDocument($collection, new Document($values));
+
+            $document = $database->getDocument($collection, 'shapes');
+            foreach ($shapes as $shape => $value) {
+                $this->assertSame($value, $document->getAttribute('batch'.$shape));
+                $this->assertSame($document->getAttribute('single'.$shape), $document->getAttribute('batch'.$shape));
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testRequiredSpatialAttributesOnPopulatedCollection(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\Spatial::class) || ! $adapter->supports(Capability::SpatialIndexNull)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'spatial_required_populated';
+        $database->createCollection(new Collection(id: $collection));
+
+        try {
+            $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'name', size: 64)));
+            $database->createDocument($collection, new Document([
+                '$id' => 'existing',
+                '$permissions' => [Permission::read(Role::any())],
+                'name' => 'created before the spatial attributes',
+            ]));
+
+            $this->assertTrue($database->createAttribute($collection, Attribute::point(key: 'location', required: true)));
+            $this->assertTrue($database->createAttributes($collection, [
+                Attribute::linestring(key: 'route', required: true),
+                Attribute::polygon(key: 'area', required: true),
+            ]));
+
+            $definitions = $this->getSpatialColumnDefinitions($database, $collection);
+            if ($definitions !== null) {
+                foreach (['location', 'route', 'area'] as $key) {
+                    $this->assertArrayHasKey($key, $definitions);
+                    $this->assertStringNotContainsString('NOT NULL', $definitions[$key], 'A spatial column must stay nullable where the adapter indexes nullable spatial columns');
+                }
+            }
+
+            $existing = $database->getDocument($collection, 'existing');
+            $this->assertSame('created before the spatial attributes', $existing->getAttribute('name'));
+            $this->assertNull($existing->getAttribute('location'));
+            $this->assertNull($existing->getAttribute('route'));
+            $this->assertNull($existing->getAttribute('area'));
+
+            try {
+                $database->createDocument($collection, new Document([
+                    '$id' => 'incomplete',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'name' => 'missing its required shapes',
+                ]));
+                $this->fail('A document without its required spatial attributes must be rejected');
+            } catch (StructureException $e) {
+                $this->assertStringContainsString('Missing required attribute "location"', $e->getMessage());
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * Physical definition of every column of a collection's table, keyed by column name.
+     *
+     * @return array<string, string>|null null when the adapter's schema cannot be read here
+     */
+    private function getSpatialColumnDefinitions(Database $database, string $collection): ?array
+    {
+        $adapter = $database->getAdapter();
+        $table = $database->getNamespace().'_'.$collection;
+
+        if ($adapter instanceof MariaDB) {
+            $rows = $adapter->rawQuery('SHOW CREATE TABLE `'.$database->getDatabase().'`.`'.$table.'`');
+            $statement = $rows[0]->getAttribute('Create Table');
+            $this->assertIsString($statement);
+
+            $definitions = [];
+            foreach (\explode("\n", $statement) as $line) {
+                if (\preg_match('/^\s*`([^`]+)` (.+?),?$/', $line, $matches) === 1) {
+                    $definitions[$matches[1]] = $matches[2];
+                }
+            }
+
+            return $definitions;
+        }
+
+        if ($adapter instanceof Postgres) {
+            $rows = $adapter->rawQuery(
+                'SELECT a.attname AS "column", format_type(a.atttypid, a.atttypmod) || CASE WHEN a.attnotnull THEN \' NOT NULL\' ELSE \' NULL\' END AS "definition"
+                FROM pg_attribute a
+                WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped',
+                ['"'.$database->getDatabase().'"."'.$table.'"'],
+            );
+
+            $definitions = [];
+            foreach ($rows as $row) {
+                $column = $row->getAttribute('column');
+                $definition = $row->getAttribute('definition');
+                $this->assertIsString($column);
+                $this->assertIsString($definition);
+                $definitions[$column] = $definition;
+            }
+
+            return $definitions;
+        }
+
+        return null;
     }
 }

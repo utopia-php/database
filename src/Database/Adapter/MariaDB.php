@@ -400,37 +400,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     }
 
     /**
-     * Create a new attribute column, handling spatial types with MariaDB-specific syntax.
-     *
-     * @param string $collection The collection name
-     * @param Attribute $attribute The attribute definition
-     * @return bool
-     *
-     * @throws DatabaseException
+     * MariaDB has no column SRID attribute: MySQL's `SRID n` column syntax is a parse error there.
      */
-    public function createAttribute(string $collection, Attribute $attribute): bool
+    #[\Override]
+    protected function getSpatialColumnSrid(): ?int
     {
-        if (\in_array($attribute->type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon])) {
-            $id = $this->filter($attribute->key);
-            $table = $this->getSQLTableRaw($collection);
-            $sqlType = $this->getSpatialSQLType($attribute->type->value, $attribute->required);
-            $sql = "ALTER TABLE {$table} ADD COLUMN {$this->quote($id)} {$sqlType}";
-            $lockType = $this->getLockType();
-            if (! empty($lockType)) {
-                $sql .= ' '.$lockType;
-            }
-
-            try {
-                $ok = $this->executeStatement($sql, Event::AttributeCreate);
-                $this->invalidateSpatialAttributesCache($collection);
-
-                return $ok;
-            } catch (PDOException $e) {
-                throw $this->processException($e);
-            }
-        }
-
-        return parent::createAttribute($collection, $attribute);
+        return null;
     }
 
     /**

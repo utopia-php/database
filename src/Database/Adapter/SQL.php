@@ -3750,25 +3750,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     ): Column {
         $filteredId = $this->filter($id);
 
-        if (\in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon])) {
-            $col = match ($type) {
-                ColumnType::Point => $table->point($filteredId, Database::DEFAULT_SRID),
-                ColumnType::Linestring => $table->linestring($filteredId, Database::DEFAULT_SRID),
-                ColumnType::Polygon => $table->polygon($filteredId, Database::DEFAULT_SRID),
-            };
-            if (! $required) {
-                $col->nullable();
+        if (\in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
+            $column = $this->addSpatialColumn($table, $filteredId, $type);
+            if (! $required || $this->supports(Capability::SpatialIndexNull)) {
+                $column->nullable();
             }
 
-            return $col;
+            return $column;
         }
 
         if ($array) {
-            // Arrays use JSON type and are nullable by default
             return $table->json($filteredId)->nullable();
         }
 
-        $col = match ($type) {
+        $column = match ($type) {
             ColumnType::String => match (true) {
                 $size > 16777215 => $table->longText($filteredId),
                 $size > 65535 => $table->mediumText($filteredId),
@@ -3795,20 +3790,44 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             default => throw new DatabaseException('Unknown type: '.$type->value),
         };
 
-        // Apply unsigned for types that support it
         if (! $signed && \in_array($type, [ColumnType::Integer, ColumnType::BigInteger, ColumnType::BigSerial, ColumnType::Float, ColumnType::Double], true)) {
-            $col->unsigned();
+            $column->unsigned();
         }
 
-        // Id type is always unsigned
         if ($type === ColumnType::Id) {
-            $col->unsigned();
+            $column->unsigned();
         }
 
         // Non-spatial columns are nullable by default to match existing behavior
-        $col->nullable();
+        $column->nullable();
 
-        return $col;
+        return $column;
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    private function addSpatialColumn(Table $table, string $name, ColumnType $type): Column
+    {
+        $srid = $this->getSpatialColumnSrid();
+        if ($srid === null) {
+            return $table->addColumn($name, $type);
+        }
+
+        return match ($type) {
+            ColumnType::Point => $table->point($name, $srid),
+            ColumnType::Linestring => $table->linestring($name, $srid),
+            ColumnType::Polygon => $table->polygon($name, $srid),
+            default => throw new DatabaseException('Unknown spatial type: '.$type->value),
+        };
+    }
+
+    /**
+     * SRID written into spatial column definitions, or null for a dialect that cannot declare one on a column.
+     */
+    protected function getSpatialColumnSrid(): ?int
+    {
+        return Database::DEFAULT_SRID;
     }
 
     private function addBigSerialColumn(Table $table, string $name): Column

@@ -9,7 +9,6 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
-use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Pool;
@@ -18,7 +17,6 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Tenancy;
@@ -328,33 +326,5 @@ final class PoolTest extends TestCase
         $pool->setAuthorization(new Authorization());
 
         return $pool;
-    }
-}
-
-final class TimeoutRecordingAdapter extends Memory implements Feature\Timeouts
-{
-    public function setTimeout(int $milliseconds, Event $event = Event::All): void
-    {
-        $this->setTimeoutState($milliseconds, $event);
-    }
-
-    public function clearTimeout(Event $event = Event::All): void
-    {
-        $this->clearTimeoutState($event);
-    }
-}
-
-final class ElsewherePinnedPool extends Pool
-{
-    private ?Adapter $elsewhere = null;
-
-    public function pinElsewhere(Adapter $adapter): void
-    {
-        $this->elsewhere = $adapter;
-    }
-
-    protected function pin(): ?Adapter
-    {
-        return $this->elsewhere;
     }
 }

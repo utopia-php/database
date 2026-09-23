@@ -15,6 +15,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Query\Method;
 
 trait JoinTests
@@ -7745,6 +7746,43 @@ trait JoinTests
         $results = $database->find($customers, [...$joins, Query::sum('purchase.amount', 'total')]);
         $this->assertCount(1, $results);
         $this->assertSame(150, $this->intAttribute($results[0], 'total'));
+
+        $this->cleanupAggCollections($database, $collections);
+    }
+
+    public function testJoinedInternalAttributesGroupTheJoinedRows(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jiag');
+
+        foreach ([
+            'inner join' => Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            'left join' => Query::leftJoin($orders, '$id', 'customerId', '=', 'purchase'),
+            'full outer join' => Query::fullOuterJoin($orders, '$id', 'customerId', '=', 'purchase'),
+        ] as $type => $join) {
+            foreach ([Document::ID, Document::SEQUENCE, Document::CREATED_AT, Document::UPDATED_AT, Document::PERMISSIONS] as $attribute) {
+                $total = 0;
+                foreach ($database->find($customers, [$join, Query::count('*', 'rows'), Query::groupBy(['purchase.'.$attribute])]) as $group) {
+                    $this->assertArrayHasKey(Storage::column($attribute), $group->getArrayCopy(), $type.' grouped by purchase.'.$attribute);
+                    $total += $this->intAttribute($group, 'rows');
+                }
+                $this->assertSame(3, $total, $type.' grouped by purchase.'.$attribute);
+            }
+        }
+
+        $groups = $database->find($customers, [
+            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            Query::sum('purchase.amount', 'total'),
+            Query::groupBy(['purchase.$id']),
+            Query::orderAsc('purchase.$id'),
+        ]);
+        $this->assertSame(['open', 'other', 'paid'], \array_map(static fn (Document $group): mixed => $group->getAttribute(Storage::UID), $groups));
+        $this->assertSame([50, 7, 100], \array_map(fn (Document $group): int => $this->intAttribute($group, 'total'), $groups));
 
         $this->cleanupAggCollections($database, $collections);
     }

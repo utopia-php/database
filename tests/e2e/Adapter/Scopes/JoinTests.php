@@ -7347,4 +7347,104 @@ trait JoinTests
                 ->execute();
         });
     }
+
+    /**
+     * The builder declares a join alias quoted, so the tenant and permission conditions added for
+     * it must name it quoted too: PostgreSQL folds an unquoted mixed-case alias to lower case and
+     * then finds no table by that name.
+     */
+    public function testMixedCaseJoinAliasesReadWhatLowerCaseAliasesRead(): void
+    {
+        $this->assertJoinAliasesReadWhatLowerCaseAliasesRead(['jam_authors', 'jam_books', 'jam_reviews', 'jam_extras'], [1 => 'Book', 2 => 'Review', 3 => 'Extra']);
+    }
+
+    /**
+     * A reserved word is a valid join alias once quoted, as the builder declares it, but not where
+     * a tenant or permission condition names it unquoted.
+     */
+    public function testReservedWordJoinAliasesReadWhatLowerCaseAliasesRead(): void
+    {
+        $this->assertJoinAliasesReadWhatLowerCaseAliasesRead(['jar_authors', 'jar_books', 'jar_reviews', 'jar_extras'], [1 => 'order', 2 => 'group', 3 => 'select']);
+    }
+
+    /**
+     * Every join type and the chains whose later right join repeats earlier tables' conditions,
+     * over collections read per document, under the adapter's tenancy.
+     *
+     * @param array{string, string, string, string} $collections authors, books, reviews, extras
+     * @param array{1: string, 2: string, 3: string} $aliases The alias of books, reviews and extras
+     */
+    private function assertJoinAliasesReadWhatLowerCaseAliasesRead(array $collections, array $aliases): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $chains = [
+            'an inner join' => [[Method::Join, 1, null]],
+            'a left join' => [[Method::LeftJoin, 1, null]],
+            'a right join' => [[Method::RightJoin, 1, null]],
+            'a full outer join' => [[Method::FullOuterJoin, 1, null]],
+            'a cross join' => [[Method::CrossJoin, 1, null]],
+            'an inner join, then a right join' => [[Method::Join, 1, null], [Method::RightJoin, 2, null]],
+            'a cross join, then a right join' => [[Method::CrossJoin, 3, null], [Method::RightJoin, 2, null]],
+            'a right join, then a right join on it' => [[Method::RightJoin, 1, null], [Method::RightJoin, 2, 1]],
+        ];
+
+        try {
+            $this->seedJoinChainVisibility($database, $collections, documentSecurity: true);
+
+            $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $collections, $aliases, $chains): void {
+                foreach ($chains as $label => $chain) {
+                    $expected = $this->joinAliasRead($database, $collections, $chain, [1 => 'book', 2 => 'review', 3 => 'extra']);
+
+                    $this->assertNotSame([], $expected['rows'], "{$label} must return rows for the comparison to mean anything");
+                    $this->assertSame(
+                        $expected,
+                        $this->joinAliasRead($database, $collections, $chain, $aliases),
+                        "{$label} aliased ".\implode(', ', $aliases).' must read what it reads with lower-case aliases',
+                    );
+                }
+            });
+        } finally {
+            $this->cleanupAggCollections($database, $collections);
+        }
+    }
+
+    /**
+     * @param array{string, string, string, string} $collections authors, books, reviews, extras
+     * @param list<array{Method, int, ?int}> $chain Each join's method, the index of the collection it joins, and the
+     *                                             index of the joined collection its ON names, or null for the main one
+     * @param array{1: string, 2: string, 3: string} $aliases The alias of books, reviews and extras
+     * @return array{rows: list<list<string|int|null>>, count: int, sum: int|float, document: list<list<string|int|null>>}
+     */
+    private function joinAliasRead(Database $database, array $collections, array $chain, array $aliases): array
+    {
+        $numbers = [];
+        $joins = [];
+        foreach ($chain as [$method, $collection, $on]) {
+            $alias = $aliases[$collection];
+            $numbers[] = $alias.'.'.[1 => 'pages', 2 => 'stars', 3 => 'weight'][$collection];
+            $left = $on === null ? '$id' : $aliases[$on].'.authorId';
+            $joins[] = match ($method) {
+                Method::Join => Query::join($collections[$collection], $left, 'authorId', '=', $alias),
+                Method::LeftJoin => Query::leftJoin($collections[$collection], $left, 'authorId', '=', $alias),
+                Method::RightJoin => Query::rightJoin($collections[$collection], $left, 'authorId', '=', $alias),
+                Method::FullOuterJoin => Query::fullOuterJoin($collections[$collection], $left, 'authorId', '=', $alias),
+                Method::CrossJoin => Query::crossJoin($collections[$collection], $alias),
+                default => throw new \InvalidArgumentException("{$method->value} is not a join"),
+            };
+        }
+        $selection = Query::select(['name', ...$numbers]);
+
+        return [
+            'rows' => $this->joinTenancyRows($database->find($collections[0], [...$joins, $selection, Query::limit(100)]), $numbers),
+            'count' => $database->count($collections[0], $joins),
+            'sum' => $database->sum($collections[0], $numbers[\count($numbers) - 1], $joins),
+            'document' => $this->joinTenancyRows([$database->getDocument($collections[0], 'a1', [...$joins, $selection])], $numbers),
+        ];
+    }
 }

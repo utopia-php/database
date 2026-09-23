@@ -47,7 +47,7 @@ final class OuterJoinTenantFilterTest extends TestCase
         $this->assertNotNull($result);
         $this->assertSame(Placement::On, $result->placement, 'Only ON decides which rows the join pairs');
         $this->assertSame(
-            '(table_main._tenant IN (?) OR `table_main`.`_uid` IS NULL) AND j0._tenant IN (?)',
+            '(`table_main`._tenant IN (?) OR `table_main`.`_uid` IS NULL) AND `j0`._tenant IN (?)',
             $result->condition->expression,
         );
         $this->assertSame([7, 7], $result->condition->bindings);
@@ -69,7 +69,7 @@ final class OuterJoinTenantFilterTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertSame(
-            '(table_main._tenant IN (?) OR table_main._tenant IS NULL) AND j0._tenant IN (?)',
+            '(`table_main`._tenant IN (?) OR `table_main`._tenant IS NULL) AND `j0`._tenant IN (?)',
             $result->condition->expression,
             'A shared pool defines its metadata once, with no tenant, for every tenant to read',
         );
@@ -82,7 +82,7 @@ final class OuterJoinTenantFilterTest extends TestCase
         $result = (new OuterJoinTenantFilter($filter, self::SOURCE))->filterJoin(self::ALIAS, JoinType::FullOuter);
 
         $this->assertNotNull($result);
-        $this->assertSame('table_main._tenant IN (?, ?) AND j0._tenant IN (?, ?)', $result->condition->expression);
+        $this->assertSame('`table_main`._tenant IN (?, ?) AND `j0`._tenant IN (?, ?)', $result->condition->expression);
         $this->assertSame([1, 2, 1, 2], $result->condition->bindings);
     }
 
@@ -93,7 +93,7 @@ final class OuterJoinTenantFilterTest extends TestCase
         $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);
         $this->assertSame(
-            '(j0._tenant IN (?) OR `j0`.`_uid` IS NULL)',
+            '(`j0`._tenant IN (?) OR `j0`.`_uid` IS NULL)',
             $result->condition->expression,
             'A stored row without a tenant is not a missing row, so the tenant column cannot tell them apart',
         );

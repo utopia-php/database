@@ -53,7 +53,7 @@ final class OuterJoinChainFilterTest extends TestCase
         $this->assertNotNull($result);
         $this->assertSame(Placement::On, $result->placement, 'Only ON decides which rows the join pairs');
         $this->assertSame(
-            '(c._tenant IN (?) OR `c`.`_uid` IS NULL) AND (x._tenant IN (?) OR `x`.`_uid` IS NULL)',
+            '(`c`._tenant IN (?) OR `c`.`_uid` IS NULL) AND (`x`._tenant IN (?) OR `x`.`_uid` IS NULL)',
             $result->condition->expression,
             'The inner-joined table meets its condition in its own ON; a table an earlier outer join left missing must not stop the pairing',
         );

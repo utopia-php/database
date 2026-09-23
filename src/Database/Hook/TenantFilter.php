@@ -31,6 +31,8 @@ class TenantFilter implements Filter, JoinFilter
      *                                outer join produced without a main-table match. It must be a
      *                                NOT NULL column such as `_uid`, never `_tenant`, or a stored row
      *                                that has no tenant would pass as if it were missing
+     * @param string $quoteChar The adapter's identifier quote: tables are named quoted with it, as the
+     *                          builder declares them
      */
     public function __construct(
         int|string|null|array $tenant,
@@ -53,7 +55,9 @@ class TenantFilter implements Filter, JoinFilter
 
     public function filter(string $table): Condition
     {
-        $prefix = (!\str_contains($table, '.') && !\str_contains($table, '`')) ? "{$table}." : '';
+        $prefix = (! \str_contains($table, '.') && ! \str_contains($table, $this->quoteChar))
+            ? AllowNullColumn::quote($table, $this->quoteChar).'.'
+            : '';
 
         $name = $this->collection !== '' ? $this->collection : $table;
 
@@ -114,6 +118,8 @@ class TenantFilter implements Filter, JoinFilter
      */
     public function joined(string $table): Condition
     {
-        return new Condition("{$table}.".Storage::TENANT." IN ({$this->placeholders()})", $this->tenants);
+        $column = AllowNullColumn::quote($table, $this->quoteChar).'.'.Storage::TENANT;
+
+        return new Condition("{$column} IN ({$this->placeholders()})", $this->tenants);
     }
 }

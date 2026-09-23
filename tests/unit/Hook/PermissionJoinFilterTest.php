@@ -20,7 +20,7 @@ final class PermissionJoinFilterTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertSame(Placement::On, $result->placement);
-        $this->assertStringContainsString('j0.'.Storage::UID, $result->condition->expression);
+        $this->assertStringContainsString('`j0`.`'.Storage::UID.'`', $result->condition->expression);
         $this->assertNull($hook->filterJoin('j1', JoinType::Left));
     }
 
@@ -40,7 +40,7 @@ final class PermissionJoinFilterTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);
-        $this->assertStringContainsString('j0.'.Storage::UID, $result->condition->expression);
+        $this->assertStringContainsString('`j0`.`'.Storage::UID.'`', $result->condition->expression);
         $this->assertStringNotContainsString('IS NULL', $result->condition->expression);
     }
 
@@ -51,7 +51,7 @@ final class PermissionJoinFilterTest extends TestCase
 
         $this->assertNotNull($result);
         $this->assertSame(Placement::Where, $result->placement);
-        $this->assertStringContainsString('j0.'.Storage::UID, $result->condition->expression);
+        $this->assertStringContainsString('`j0`.`'.Storage::UID.'`', $result->condition->expression);
         $this->assertStringContainsString('IS NULL', $result->condition->expression);
         $this->assertSame($this->permissionFilter()->filter('j0')->bindings, $result->condition->bindings);
     }

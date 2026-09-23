@@ -7072,4 +7072,129 @@ trait JoinTests
 
         return $rows;
     }
+
+    /**
+     * A right join that follows a cross join, or a right join its ON references, must not pair its
+     * rows with another tenant's rows of the earlier table: they would vanish instead of coming back
+     * unmatched, and what a tenant reads would depend on another tenant's keys.
+     */
+    public function testSharedTablesJoinChainsKeepRowsOnlyAnotherTenantMatches(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collections = ['jtx_authors', 'jtx_books', 'jtx_reviews'];
+        [$authors, $books, $reviews] = $collections;
+        $extras = 'jtx_extras';
+        $tenant = $database->getTenant();
+
+        $rowsByChain = [
+            'a cross join, then a right join' => [
+                'joins' => [Query::crossJoin($extras, 'extra'), Query::rightJoin($reviews, '$id', 'authorId', '=', 'review')],
+                'numbers' => ['extra.weight', 'review.stars'],
+                'rows' => [
+                    1 => [[null, null, 5], [null, null, 4], [null, null, 3], [null, null, 2]],
+                    2 => [['two-shared', 7, 1]],
+                ],
+            ],
+            'a cross join, then a right join on it' => [
+                'joins' => [Query::crossJoin($extras, 'extra'), Query::rightJoin($reviews, 'extra.authorId', 'authorId', '=', 'review')],
+                'numbers' => ['extra.weight', 'review.stars'],
+                'rows' => [
+                    1 => [[null, null, 5], [null, null, 4], [null, null, 3], [null, null, 2]],
+                    2 => [['two-a1', 7, 1], ['two-a2', 7, 1], ['two-shared', 7, 1]],
+                ],
+            ],
+            'a right join, then a right join on it' => [
+                'joins' => [Query::rightJoin($books, '$id', 'authorId', '=', 'book'), Query::rightJoin($reviews, 'book.authorId', 'authorId', '=', 'review')],
+                'numbers' => ['book.pages', 'review.stars'],
+                'rows' => [
+                    1 => [['one-a1', 11, 5], [null, null, 4], [null, null, 3], [null, 12, 2]],
+                    2 => [[null, null, 1]],
+                ],
+            ],
+        ];
+
+        try {
+            $this->seedJoinTenancyFixture($database, ...$collections);
+            $this->seedJoinTenancyExtras($database, $extras);
+
+            foreach ($rowsByChain as $label => ['joins' => $joins, 'numbers' => $numbers, 'rows' => $rowsByTenant]) {
+                foreach ($rowsByTenant as $selected => $rows) {
+                    $database->setTenant($selected);
+
+                    $this->assertSame(
+                        $this->joinTenancySorted($rows),
+                        $this->joinTenancyRows(
+                            $database->find($authors, [...$joins, Query::select(['name', ...$numbers])]),
+                            $numbers,
+                        ),
+                        "Tenant {$selected} must read through {$label} what its own database would return",
+                    );
+                    $this->assertSame(\count($rows), $database->count($authors, $joins), "Tenant {$selected} must count through {$label} what its own database would count");
+                }
+            }
+
+            $database->setTenant(1);
+            foreach ([
+                'a full outer join, then a right join' => [Query::fullOuterJoin($books, '$id', 'authorId', '=', 'book'), Query::rightJoin($reviews, '$id', 'authorId', '=', 'review')],
+                'a right join, then a full outer join' => [Query::rightJoin($books, '$id', 'authorId', '=', 'book'), Query::fullOuterJoin($reviews, 'book.authorId', 'authorId', '=', 'review')],
+            ] as $label => $joins) {
+                foreach ([
+                    'find' => fn () => $database->find($authors, $joins),
+                    'count' => fn () => $database->count($authors, $joins),
+                    'sum' => fn () => $database->sum($authors, 'review.stars', $joins),
+                ] as $read => $call) {
+                    try {
+                        $call();
+                        $this->fail("{$read} through {$label} must be rejected under shared tables");
+                    } catch (QueryException $exception) {
+                        $this->assertStringContainsString('full outer join', $exception->getMessage());
+                    }
+                }
+            }
+        } finally {
+            $database->setTenant(null);
+            $this->cleanupAggCollections($database, [...$collections, $extras]);
+            $database->setTenant($tenant);
+        }
+    }
+
+    /**
+     * Extras only tenant 2 and a tenantless row have, so tenant 1's cross join with them is empty.
+     */
+    private function seedJoinTenancyExtras(Database $database, string $extras): void
+    {
+        $database->setTenant(null);
+        $database->createCollection(new Collection(
+            id: $extras,
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+        $database->createAttribute($extras, Attribute::string(key: 'authorId', size: 64, required: true));
+        $database->createAttribute($extras, Attribute::integer(key: 'weight', required: true));
+
+        $tenantless = 3;
+        foreach ([2 => ['x1', 'shared', 7], $tenantless => ['x9', 'a2', 9]] as $owner => [$id, $authorId, $weight]) {
+            $database->setTenant($owner);
+            $database->createDocument($extras, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                'authorId' => $authorId,
+                'weight' => $weight,
+            ]));
+        }
+
+        $database->getAuthorization()->skip(function () use ($database, $extras, $tenantless): void {
+            $database->from($extras)
+                ->set([Document::TENANT => null])
+                ->filter([Query::equal(Document::ID, ['x9']), Query::equal(Document::TENANT, [$tenantless])])
+                ->update()
+                ->execute();
+        });
+    }
 }

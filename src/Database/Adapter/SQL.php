@@ -24,6 +24,8 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\JoinChain;
+use Utopia\Database\Hook\OuterJoinChainFilter;
 use Utopia\Database\Hook\OuterJoinTenantFilter;
 use Utopia\Database\Hook\PermissionAllowNullUid;
 use Utopia\Database\Hook\PermissionFilter;
@@ -47,6 +49,7 @@ use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
+use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
 use Utopia\Query\CursorDirection;
@@ -4521,6 +4524,26 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if ($compiled !== null) {
                 $builder->whereRaw($compiled['expression'], $compiled['bindings']);
             }
+        }
+
+        $chain = JoinChain::fromQueries($queries);
+        $preserving = $chain->hasPreservingOuterJoin();
+
+        if ($this->sharedTables && $preserving) {
+            // newBuilder() relaxes the main table's tenant condition only when told the read keeps rows
+            // without the main table ($preservingOuter). The first half of an emulated full outer join
+            // is built without it even when a right join keeps such rows, so it would drop them; the
+            // combination is refused on every adapter alike.
+            if (! $preservingOuter || ($chain->has(JoinType::FullOuter) && $chain->has(JoinType::Right))) {
+                throw new QueryException('A full outer join cannot be combined with a right join under shared tables');
+            }
+
+            $tenantFilter = new TenantFilter($this->tenant);
+            $tenantConditions = [];
+            foreach ($joinTablePrefixes as $join) {
+                $tenantConditions[$join['alias']] = $tenantFilter->joined($join['alias']);
+            }
+            $builder->addHook(new OuterJoinChainFilter($chain, $tenantConditions, $this->getIdentifierQuoteChar()));
         }
 
         if ($this->authorization->getStatus()) {

@@ -518,6 +518,9 @@ trait Documents
 
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
+        if (! empty($joins)) {
+            $document = $this->decodeJoins($document, $this->joinedCollectionsByAlias($joins));
+        }
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
         if ($this->relationshipHook !== null && ! $this->relationshipHook->isInBatchPopulation() && $this->relationshipHook->isEnabled() && ! empty($relationships) && (empty($selects) || ! empty($nestedSelections))) {
@@ -3147,9 +3150,12 @@ trait Documents
             throw new DatabaseException('cursor Document must be from the same Collection.');
         }
 
+        $joinedCollections = $isAggregation ? [] : $this->joinedCollectionsByAlias($joins);
+
         if (! empty($cursor)) {
             $cursor = $this->encode($collection, $cursor);
             $cursor = $this->castingBefore($collection, $cursor);
+            $cursor = $this->encodeJoins($cursor, $joinedCollections);
             $cursor = $cursor->getArrayCopy();
             foreach ($orderAttributes as $order) {
                 if (\array_key_exists($order, $cursor) && $cursor[$order] !== null) {
@@ -3324,6 +3330,9 @@ trait Documents
             $node = $this->castingAfter($collection, $node);
             $node = $this->casting($collection, $node);
             $node = $this->decode($collection, $node, $selections);
+            if ($joinedCollections !== []) {
+                $node = $this->decodeJoins($node, $joinedCollections);
+            }
 
             // Convert to custom document type if mapped
             if ($hasCustomType) {
@@ -3869,6 +3878,45 @@ trait Documents
         $adapterCollection->setAttribute(self::JOIN_ATTRIBUTES, $joinAttributes);
 
         return $adapterCollection;
+    }
+
+    /**
+     * The collection each join reads, by the alias its values come back under: the alias the join
+     * declares, or the one generated for it. Each collection is loaded once.
+     *
+     * @param  array<Query>  $joins
+     * @return array<string, Document>
+     */
+    private function joinedCollectionsByAlias(array $joins): array
+    {
+        $taken = [];
+        foreach ($joins as $join) {
+            $alias = $join->getJoinAlias();
+            if ($alias !== '') {
+                $taken[\strtolower($alias)] = true;
+            }
+        }
+
+        $loaded = [];
+        $collections = [];
+        foreach (\array_values($joins) as $position => $join) {
+            $alias = $join->getJoinAlias();
+            // The adapter returns an undeclared join's values under the alias SQL::generateJoinAlias()
+            // gives it; this must name it the same way.
+            if ($alias === '') {
+                $number = $position;
+                do {
+                    $alias = 'j'.$number++;
+                } while (isset($taken[$alias]));
+                $taken[$alias] = true;
+            }
+
+            $id = $join->getAttribute();
+            $loaded[$id] ??= $this->silent(fn () => $this->getCollection($id));
+            $collections[$alias] = $loaded[$id];
+        }
+
+        return $collections;
     }
 
     /**

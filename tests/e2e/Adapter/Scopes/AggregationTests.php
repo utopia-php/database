@@ -1964,6 +1964,11 @@ trait AggregationTests
     public function testAggregateAliasesAreLimitedToSixtyThreeCharacters(): void
     {
         $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
 
         $collection = 'alias_length';
         $this->createProducts($database, $collection);
@@ -1979,12 +1984,6 @@ trait AggregationTests
             fn () => $database->find($collection, [Query::count('*', $tooLong), Query::groupBy(['category'])]),
             'Invalid query: Aggregate alias is too long: at most 63 characters are allowed',
         );
-
-        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
-            $database->deleteCollection($collection);
-
-            return;
-        }
 
         $total = $database->find($collection, [Query::sum('price', $longest)]);
         $this->assertCount(1, $total);

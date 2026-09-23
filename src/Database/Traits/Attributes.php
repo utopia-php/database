@@ -67,7 +67,7 @@ trait Attributes
             throw new NotFoundException('Collection not found');
         }
 
-        if (in_array($type, Database::ATTRIBUTE_FILTER_TYPES, true)) {
+        if (in_array($type, Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
             $filters[] = $type->value;
             $filters = array_unique($filters);
             $attribute->filters = $filters;
@@ -230,7 +230,7 @@ trait Attributes
                 throw new DatabaseException('Missing attribute key');
             }
 
-            if (in_array($attribute->type, Database::ATTRIBUTE_FILTER_TYPES, true)) {
+            if (in_array($attribute->type, Database::ATTRIBUTE_FILTER_COLUMN_TYPES, true)) {
                 $attribute->filters = array_values(
                     array_unique(array_merge($attribute->filters, [$attribute->type->value]))
                 );

@@ -98,7 +98,7 @@ class Database
      *
      * @var list<ColumnType>
      */
-    public const array ATTRIBUTE_FILTER_TYPES = [
+    public const array ATTRIBUTE_FILTER_COLUMN_TYPES = [
         ColumnType::Point,
         ColumnType::Linestring,
         ColumnType::Polygon,

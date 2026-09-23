@@ -6027,6 +6027,182 @@ trait JoinTests
         $this->cleanupAggCollections($database, [$main, $meta]);
     }
 
+    public function testFullOuterJoinAggregatesCountEveryRowOnce(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
+        $join = Query::fullOuterJoin($joined, 'link', 'link', '=', 'b');
+
+        $rows = $database->find($main, [
+            $join,
+            Query::count('*', 'rows'),
+            Query::count('b.$id', 'joined'),
+            Query::countDistinct('b.category', 'categories'),
+            Query::sum('b.score', 'total'),
+            Query::avg('b.score', 'mean'),
+            Query::min('b.score', 'low'),
+            Query::max('b.score', 'high'),
+            Query::sum('score', 'mainTotal'),
+        ]);
+
+        $this->assertCount(1, $rows);
+        $expected = ['rows' => 6, 'joined' => 4, 'categories' => 2, 'total' => 22, 'low' => 4, 'high' => 7, 'mainTotal' => 70];
+        foreach ($expected as $key => $value) {
+            $this->assertSame($value, $this->intAttribute($rows[0], $key), $key);
+        }
+        $this->assertEqualsWithDelta(5.5, $this->numericAttribute($rows[0], 'mean'), 0.001);
+
+        $empty = $database->find($main, [
+            $join,
+            Query::equal('category', ['none']),
+            Query::count('*', 'rows'),
+            Query::sum('b.score', 'total'),
+            Query::max('b.score', 'high'),
+        ]);
+
+        $this->assertCount(1, $empty);
+        $this->assertSame(0, $this->intAttribute($empty[0], 'rows'));
+        $this->assertNull($empty[0]->getAttribute('total'));
+        $this->assertNull($empty[0]->getAttribute('high'));
+
+        $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
+    }
+
+    public function testFullOuterJoinGroupsHavingAndPagesCountEveryRowOnce(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
+        $grouped = [
+            Query::fullOuterJoin($joined, 'link', 'link', '=', 'b'),
+            Query::groupBy(['b.category']),
+            Query::count('*', 'rows'),
+            Query::sum('b.score', 'total'),
+            Query::sum('score', 'mainTotal'),
+            Query::orderDesc('rows'),
+        ];
+        $this->assertSame(
+            [[null, 3, 6, 50], ['p', 2, 9, 10], ['q', 1, 7, 10]],
+            $this->fullOuterJoinGroups($database->find($main, $grouped)),
+        );
+        $this->assertSame(
+            [[null, 3, 6, 50], ['p', 2, 9, 10]],
+            $this->fullOuterJoinGroups($database->find($main, [...$grouped, Query::having([Query::greaterThan('rows', 1)])])),
+        );
+        $this->assertSame(
+            [['p', 2, 9, 10], ['q', 1, 7, 10]],
+            $this->fullOuterJoinGroups($database->find($main, [...$grouped, Query::limit(2), Query::offset(1)])),
+        );
+
+        $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
+    }
+
+    public function testFullOuterJoinUnaliasedAggregatesKeepTheNamesTheEngineGivesThem(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $joined] = $this->createFullOuterJoinAggregateCollections($database);
+        $aggregates = [Query::count(), Query::sum('b.score'), Query::max('score')];
+
+        $left = $database->find($main, [Query::leftJoin($joined, 'link', 'link', '=', 'b'), ...$aggregates]);
+        $full = $database->find($main, [Query::fullOuterJoin($joined, 'link', 'link', '=', 'b'), ...$aggregates]);
+
+        $this->assertCount(1, $left);
+        $this->assertCount(1, $full);
+        $this->assertSame(\array_keys($left[0]->getArrayCopy()), \array_keys($full[0]->getArrayCopy()));
+        $this->assertSame(
+            [6, 22, 30],
+            \array_map(static fn (mixed $value): int => \is_numeric($value) ? (int) $value : -1, \array_values($full[0]->getArrayCopy())),
+        );
+
+        $this->cleanupAggCollections($database, $this->fullOuterJoinAggregateCollections());
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<array{mixed, int, int, int}>
+     */
+    private function fullOuterJoinGroups(array $rows): array
+    {
+        return \array_values(\array_map(
+            fn (Document $row): array => [
+                $row->getAttribute('category'),
+                $this->intAttribute($row, 'rows'),
+                $this->intAttribute($row, 'total'),
+                $this->intAttribute($row, 'mainTotal'),
+            ],
+            $rows,
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fullOuterJoinAggregateCollections(): array
+    {
+        return ['foja_main', 'foja_joined'];
+    }
+
+    /**
+     * m1 matches b1 and b4, m2 and m3 match nothing and nothing matches b2 and b3, so an emulated full
+     * outer join returns rows from both halves, and equal categories (null among them) from both.
+     *
+     * @return list<string>
+     */
+    private function createFullOuterJoinAggregateCollections(Database $database): array
+    {
+        $collections = $this->fullOuterJoinAggregateCollections();
+        [$main, $joined] = $collections;
+        $this->cleanupAggCollections($database, $collections);
+
+        $rows = [
+            $main => ['m1' => ['1', 'p', 10], 'm2' => ['2', 'q', 20], 'm3' => ['5', 'p', 30]],
+            $joined => ['b1' => ['1', 'p', 4], 'b2' => ['3', 'p', 5], 'b3' => ['6', null, 6], 'b4' => ['1', 'q', 7]],
+        ];
+        foreach ($rows as $collection => $documents) {
+            $database->createCollection(new Collection(
+                id: $collection,
+                attributes: [
+                    Attribute::string(key: 'link', size: 16, required: true),
+                    Attribute::string(key: 'category', size: 16, required: false),
+                    Attribute::integer(key: 'score', required: true),
+                ],
+                permissions: $collection === $main
+                    ? [Permission::create(Role::any())]
+                    : [Permission::create(Role::any()), Permission::read(Role::any())],
+                documentSecurity: true,
+            ));
+
+            foreach ($documents as $id => [$link, $category, $score]) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    'link' => $link,
+                    'category' => $category,
+                    'score' => $score,
+                    '$permissions' => [Permission::read(Role::any())],
+                ]));
+            }
+        }
+
+        return $collections;
+    }
+
     /**
      * @return list<string>
      */

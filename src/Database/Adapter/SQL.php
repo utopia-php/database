@@ -72,6 +72,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 {
     private const string FOJ_ORDER_ALIAS_PREFIX = 'foj_ord_';
 
+    private const string FOJ_ROWS_ALIAS = 'foj_rows';
+
+    /**
+     * No aggregate alias can start with `$`, so a projected column never shares a result name with an
+     * aggregate.
+     */
+    private const string FOJ_COLUMN_PREFIX = '$foj_col_';
+
     /**
      * Where the rows of an emulated full outer join come from: a main-side row it paired with no
      * joined row, a main-side row paired with a joined row, a joined row it paired with no main-side
@@ -1413,7 +1421,28 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 ??= $this->qualifyOrderAttribute($attribute, $joinAliases);
         };
 
-        if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
+        $emulatesFullOuterJoin = $this->needsFullOuterJoinEmulation($this->createBuilder(), $queries);
+
+        if ($emulatesFullOuterJoin && $hasAggregation) {
+            $results = $this->findFullOuterJoinAggregate(
+                $collectionDoc,
+                $queries,
+                $joinTablePrefixes,
+                $hasDistinct,
+                $adapterFilterQueries,
+                $name,
+                $alias,
+                $roles,
+                $forPermission,
+                $orderAttributes,
+                $orderTypes,
+                $limit,
+                $offset,
+                $cursor,
+                $cursorDirection,
+                $resolveInternalKey,
+            );
+        } elseif ($emulatesFullOuterJoin) {
             [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
             $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
@@ -4609,6 +4638,232 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $this->quote(\substr($key, 0, $dot)).'.'.$this->quote(\substr($key, $dot + 1));
+    }
+
+    /**
+     * Aggregate an emulated full outer join once, over the rows of both halves. Each half keeps its own
+     * joins, filters, tenant and permission conditions and projects the columns the aggregation reads;
+     * their UNION ALL is read as one derived table, and the aggregates, groups, having, distinct(), order
+     * and page run over it through the projection and fetch a native full outer join goes through.
+     *
+     * @param  array<BaseQuery>  $queries  With the join columns remapJoinQueries() qualified
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @param  array<Query>  $adapterFilterQueries
+     * @param  array<string>  $roles
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
+     * @param  callable(string): string  $resolveInternalKey
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws DatabaseException
+     */
+    private function findFullOuterJoinAggregate(
+        Document $collection,
+        array $queries,
+        array $joinTablePrefixes,
+        bool $hasDistinct,
+        array $adapterFilterQueries,
+        string $name,
+        string $alias,
+        array $roles,
+        PermissionType $forPermission,
+        array $orderAttributes,
+        array $orderTypes,
+        ?int $limit,
+        ?int $offset,
+        array $cursor,
+        CursorDirection $cursorDirection,
+        callable $resolveInternalKey,
+    ): array {
+        $aggregationQueries = [];
+        $rowQueries = [];
+        $aggregateAliases = [];
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (! $this->shapesAggregatedRows($method)) {
+                $rowQueries[] = $query;
+
+                continue;
+            }
+
+            $aggregationQueries[] = $query;
+            $aggregateAlias = $query->getValue('');
+            if ($method->isAggregate() && \is_string($aggregateAlias) && $aggregateAlias !== '') {
+                $aggregateAliases[$aggregateAlias] = true;
+            }
+        }
+
+        $joinAliases = \array_column($joinTablePrefixes, 'alias');
+        $aggregation = $this->createBuilder();
+        // The halves carry every tenant and permission condition of the read. The aggregation reads only
+        // their rows, so it takes none of the permission filters configureFindBuilder() gives a builder
+        // that reads the tables.
+        $this->authorization->skip(fn (): bool => $this->configureFindBuilder(
+            $aggregation,
+            $collection,
+            $aggregationQueries,
+            $joinTablePrefixes,
+            true,
+            $hasDistinct,
+            [],
+            $name,
+            $alias,
+            $roles,
+            $forPermission,
+            true,
+        ));
+        $this->applyFindPage($aggregation, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
+        $columns = $this->fullOuterJoinColumns($aggregationQueries, $orderAttributes, $orderTypes, $joinAliases, $aggregateAliases, $alias);
+
+        [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($rowQueries, $alias);
+        $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
+        $halves = [];
+        foreach ([[$leftQueries, $leftPreserving], [$rightQueries, true]] as [$halfQueries, $preservingOuter]) {
+            $half = $this->newBuilder($name, $alias, $preservingOuter);
+            if ($columns === []) {
+                $half->selectRaw('1');
+            }
+            foreach ($columns as $source => $column) {
+                $half->selectRaw($this->quoteOrderColumn($source, $alias).' AS '.$this->quote($column));
+            }
+            $this->applyFindFilters($half, $collection, $halfQueries, $joinTablePrefixes, $adapterFilterQueries, $name, $alias, $roles, $forPermission, $preservingOuter);
+            $this->applyFindCursor($half, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $resolveInternalKey);
+            $halves[] = $half;
+        }
+
+        [$left, $right] = $halves;
+        $left->unionAll($right);
+        $aggregation->fromSub($left, self::FOJ_ROWS_ALIAS);
+        $aggregation->addHook(new AttributeMap($this->fullOuterJoinColumnSpellings($columns, $aggregateAliases, $alias)));
+
+        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind), $columns);
+    }
+
+    private function shapesAggregatedRows(Method $method): bool
+    {
+        return $method->isAggregate() || match ($method) {
+            Method::GroupBy, Method::Having, Method::Select, Method::Distinct => true,
+            default => false,
+        };
+    }
+
+    /**
+     * The columns an aggregation over an emulated full outer join reads — aggregated attributes, groups,
+     * selections, having conditions and order attributes — keyed by table-qualified column, each with the
+     * column both halves project it as.
+     *
+     * @param  array<BaseQuery>  $queries  The aggregation's queries, as configureFindBuilder() left them
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string>  $joinAliases
+     * @param  array<string, true>  $aggregateAliases
+     * @return array<string, string>
+     */
+    private function fullOuterJoinColumns(array $queries, array $orderAttributes, array $orderTypes, array $joinAliases, array $aggregateAliases, string $alias): array
+    {
+        $references = [];
+        while ($queries !== []) {
+            $query = \array_shift($queries);
+            $method = $query->getMethod();
+
+            if ($method->isNested()) {
+                foreach ($query->getValues() as $condition) {
+                    if ($condition instanceof BaseQuery) {
+                        $queries[] = $condition;
+                    }
+                }
+            } elseif ($method === Method::GroupBy || $method === Method::Select) {
+                foreach ($query->getValues() as $column) {
+                    if (\is_string($column)) {
+                        $references[] = $column;
+                    }
+                }
+            } else {
+                $references[] = $query->getAttribute();
+            }
+        }
+
+        foreach ($orderAttributes as $i => $attribute) {
+            if (($orderTypes[$i] ?? OrderDirection::Asc) !== OrderDirection::Random) {
+                $references[] = $this->qualifyOrderAttribute($attribute, $joinAliases);
+            }
+        }
+
+        $columns = [];
+        foreach ($references as $reference) {
+            if ($reference === '' || $reference === '*' || \is_numeric($reference) || isset($aggregateAliases[$reference])) {
+                continue;
+            }
+
+            $dot = \strpos($reference, '.');
+            $source = $dot === false
+                ? $alias.'.'.$this->getInternalKeyForAttribute($reference)
+                : \substr($reference, 0, $dot).'.'.$this->getInternalKeyForAttribute(\substr($reference, $dot + 1));
+            $columns[$source] ??= self::FOJ_COLUMN_PREFIX.\count($columns);
+        }
+
+        return $columns;
+    }
+
+    /**
+     * Every spelling the aggregation's queries can give a projected column — table-qualified or, on the
+     * main table, bare; by internal or public name — resolved to the derived column that holds it. An
+     * aggregate alias keeps naming its aggregate.
+     *
+     * @param  array<string, string>  $columns
+     * @param  array<string, true>  $aggregateAliases
+     * @return array<string, string>
+     */
+    private function fullOuterJoinColumnSpellings(array $columns, array $aggregateAliases, string $alias): array
+    {
+        $spellings = [];
+        foreach ($columns as $source => $column) {
+            [$table, $name] = \explode('.', $source, 2);
+            $candidates = [$source, $table.'.'.Storage::attribute($name)];
+            if ($table === $alias) {
+                $candidates[] = $name;
+                $candidates[] = Storage::attribute($name);
+            }
+
+            foreach ($candidates as $spelling) {
+                if (! isset($aggregateAliases[$spelling])) {
+                    $spellings[$spelling] = self::FOJ_ROWS_ALIAS.'.'.$column;
+                }
+            }
+        }
+
+        return $spellings;
+    }
+
+    /**
+     * Name each result column the way the single statement names it: a derived column after the column
+     * it holds, an expression over derived columns after the same expression over the columns they hold.
+     *
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  array<string, string>  $columns
+     * @return array<int, array<string, mixed>>
+     */
+    private function fullOuterJoinResultNames(array $rows, array $columns): array
+    {
+        $names = [];
+        $expressions = [];
+        foreach ($columns as $source => $column) {
+            [$table, $name] = \explode('.', $source, 2);
+            $names[$column] = $name;
+            $expressions[$this->quote(self::FOJ_ROWS_ALIAS).'.'.$this->quote($column)] = $this->quote($table).'.'.$this->quote($name);
+        }
+
+        foreach ($rows as $index => $row) {
+            $named = [];
+            foreach ($row as $key => $value) {
+                $key = (string) $key;
+                $named[$names[$key] ?? \strtr($key, $expressions)] = $value;
+            }
+            $rows[$index] = $named;
+        }
+
+        return $rows;
     }
 
     /**

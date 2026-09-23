@@ -8,8 +8,6 @@ use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Adapter\Pool;
-use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -1234,6 +1232,13 @@ trait CollectionTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
+        // Transform hooks rewrite SQL statements, so only SQL adapters have a query to rewrite.
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
         $database->createCollection(new Collection(id: 'docs', attributes: [
             Attribute::string(key: 'name', size: 767, required: true),
         ]));
@@ -1244,29 +1249,35 @@ trait CollectionTests
             'name' => 'value1',
         ]));
 
-        $collection = $database->getCollection('docs');
-        $adapter = $database->getAdapter();
+        $this->assertCount(1, $database->find('docs'));
+
+        $database->setMetadata('scope', 'api.users');
+
         $hook = new class () implements Transform {
+            public string $query = '';
+
             public function transform(Event $event, string $query): string
             {
+                if ($event !== Event::DocumentRead) {
+                    return $query;
+                }
+
+                $this->query = $query;
+
                 return $query.' AND 1 = 0';
             }
         };
         $database->addHook($hook);
 
         try {
-            $result = $adapter->getDocument($collection, 'doc1');
-
-            if ($adapter instanceof SQL || $adapter instanceof Pool) {
-                $this->assertTrue($result->isEmpty());
-            } else {
-                $this->assertFalse($result->isEmpty());
-            }
+            $this->assertTrue($database->getDocument('docs', 'doc1')->isEmpty());
+            $this->assertStringContainsString('/* scope: api.users */', $hook->query);
         } finally {
             $database->removeTransform($hook::class);
+            $database->resetMetadata();
         }
 
-        $this->assertFalse($adapter->getDocument($collection, 'doc1')->isEmpty());
+        $this->assertCount(1, $database->find('docs'));
     }
 
     /**

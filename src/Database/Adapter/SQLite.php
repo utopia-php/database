@@ -1790,7 +1790,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             ) {
                 $columns = $this->getViolatedColumns($message);
                 if ($columns !== null && $columns !== [Storage::UID] && $columns !== [Storage::TENANT, Storage::UID]) {
-                    return new UniqueException('Unique index violation', $e->getCode(), $e);
+                    return new UniqueException('Document with the requested unique attributes already exists', $e->getCode(), $e);
                 }
 
                 return new DuplicateException('Document already exists', $e->getCode(), $e);

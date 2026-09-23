@@ -1587,7 +1587,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
             if ($key !== null && $key !== Storage::UID && $key !== 'PRIMARY') {
-                return new UniqueException('Unique index violation', $e->getCode(), $e);
+                return new UniqueException('Document with the requested unique attributes already exists', $e->getCode(), $e);
             }
 
             return new DuplicateException('Document already exists', $e->getCode(), $e);

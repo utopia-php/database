@@ -3777,7 +3777,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if ($e->getCode() === 11000 || $e->getCode() === 11001) {
             $index = $this->getViolatedIndex($e->getMessage());
             if ($index !== null && $index !== Storage::UID && $index !== '_id_') {
-                return new UniqueException('Unique index violation', $e->getCode(), $e);
+                return new UniqueException('Document with the requested unique attributes already exists', $e->getCode(), $e);
             }
 
             return new DuplicateException('Document already exists', $e->getCode(), $e);

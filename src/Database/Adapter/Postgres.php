@@ -1920,7 +1920,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         if ($e->getCode() === '23505' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
             $columns = $this->getViolatedColumns($e->getMessage());
             if ($columns !== null && $columns !== [Storage::UID] && $columns !== [Storage::TENANT, Storage::UID]) {
-                return new UniqueException('Unique index violation', $e->getCode(), $e);
+                return new UniqueException('Document with the requested unique attributes already exists', $e->getCode(), $e);
             }
 
             return new DuplicateException('Document already exists', $e->getCode(), $e);

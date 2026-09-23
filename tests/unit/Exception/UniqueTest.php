@@ -8,12 +8,12 @@ use Utopia\Database\Exception\Unique;
 
 final class UniqueTest extends TestCase
 {
-    public function testLegacyMessageIsNormalized(): void
+    public function testMessageIsNotRewritten(): void
     {
         $previous = new RuntimeException('previous');
         $exception = new Unique('Unique index violation', 42, $previous);
 
-        $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        $this->assertSame('Unique index violation', $exception->getMessage());
         $this->assertSame(42, $exception->getCode());
         $this->assertSame($previous, $exception->getPrevious());
     }

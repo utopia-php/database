@@ -1644,9 +1644,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $documents = [];
 
         if ($hasAggregation) {
+            $inputs = $this->bitwiseInputs($queries);
             foreach ($results as $row) {
                 /** @var array<string, mixed> $row */
-                $documents[] = Document::fromRow($this->bitwiseResults($row));
+                $documents[] = Document::fromRow($this->bitwiseResults($row, $inputs));
             }
 
             return $documents;
@@ -2066,19 +2067,21 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * drop the input counts populationStatistics() added.
      *
      * @param  array<string, mixed>  $row
+     * @param  array<string, BaseQuery>  $inputs  Each aliased bitwise aggregate, keyed by its input count, as bitwiseInputs() gives them
      * @return array<string, mixed>
      */
-    private function bitwiseResults(array $row): array
+    private function bitwiseResults(array $row, array $inputs): array
     {
-        foreach ($row as $key => $value) {
-            if (! \str_starts_with($key, self::BITWISE_INPUTS)) {
+        foreach ($inputs as $count => $aggregate) {
+            if (! \array_key_exists($count, $row)) {
                 continue;
             }
 
-            unset($row[$key]);
+            $value = $row[$count];
+            unset($row[$count]);
 
-            $alias = \substr($key, \strlen(self::BITWISE_INPUTS));
-            if (\array_key_exists($alias, $row) && \is_numeric($value) && (int) $value === 0) {
+            $alias = $aggregate->getValue('');
+            if (\is_string($alias) && \array_key_exists($alias, $row) && \is_numeric($value) && (int) $value === 0) {
                 $row[$alias] = null;
             }
         }
@@ -4484,9 +4487,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 return $aliases[0].'.'.$this->getInternalKeyForAttribute($attribute);
             };
 
+            // The builder leaves a name that is also an aggregate alias unqualified, so an aggregate reads a main
+            // attribute qualified: a joined column of the same name would otherwise make it ambiguous.
             foreach ($queries as $query) {
                 if ($query->getMethod()->isAggregate()) {
-                    $query->setAttribute($qualify($query->getAttribute()));
+                    $attribute = $query->getAttribute();
+                    $query->setAttribute(isset($mainAttributes[$attribute]) ? $alias.'.'.$attribute : $qualify($attribute));
                 } elseif ($query->getMethod() === Method::GroupBy) {
                     $query->setValues(\array_map(
                         static fn (mixed $column): mixed => \is_string($column) ? $qualify($column) : $column,
@@ -4499,8 +4505,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($hasAggregation) {
             foreach ($queries as $query) {
                 if ($query->getMethod() === Method::GroupBy) {
+                    // Each group is selected as the GROUP BY clause names it once applyFindFilters() maps it.
+                    $columns = clone $query;
+                    $this->remapDottedQueryAttributes([$columns], $joinTablePrefixes, $collection);
                     /** @var array<string> $groupCols */
-                    $groupCols = $query->getValues();
+                    $groupCols = $columns->getValues();
                     $builder->select(\array_map(
                         fn (string $col) => \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col)),
                         $groupCols
@@ -4674,14 +4683,34 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             if ($method !== null) {
                 $queries[$index] = (clone $query)->setMethod($method);
             }
+        }
 
-            $alias = $query->getValue('');
-            if (\in_array($query->getMethod(), self::BITWISE_AGGREGATES, true) && \is_string($alias) && $alias !== '') {
-                $queries[] = Query::count($query->getAttribute(), self::BITWISE_INPUTS.$alias);
-            }
+        foreach ($this->bitwiseInputs($queries) as $count => $aggregate) {
+            $queries[] = Query::count($aggregate->getAttribute(), $count);
         }
 
         return $queries;
+    }
+
+    /**
+     * Each aliased bitwise aggregate, keyed by the alias of the input count populationStatistics()
+     * adds for it: `$inputs:<n>` for the n-th of them. The name stays short because PostgreSQL
+     * truncates an identifier to 63 bytes, and a truncated count named another aggregate's alias.
+     *
+     * @param  array<BaseQuery>  $queries
+     * @return array<string, BaseQuery>
+     */
+    private function bitwiseInputs(array $queries): array
+    {
+        $inputs = [];
+        foreach ($queries as $query) {
+            $alias = $query->getValue('');
+            if (\in_array($query->getMethod(), self::BITWISE_AGGREGATES, true) && \is_string($alias) && $alias !== '') {
+                $inputs[self::BITWISE_INPUTS.\count($inputs)] = $query;
+            }
+        }
+
+        return $inputs;
     }
 
     private function filtersPerDocument(Document $collection): bool
@@ -4850,21 +4879,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $aggregateAlias = $query->getValue('');
             if ($method->isAggregate() && \is_string($aggregateAlias) && $aggregateAlias !== '') {
                 $aggregateAliases[$aggregateAlias] = true;
-            }
-        }
-
-        // Over the derived table a bare name that is also an aggregate alias names the aggregate, so an
-        // aggregate over a main-table attribute of that name reads it qualified, as the halves project it.
-        $mainAttributes = [];
-        /** @var array<Document> $collectionAttributes */
-        $collectionAttributes = $collection->getAttribute('attributes', []);
-        foreach ($collectionAttributes as $attribute) {
-            $mainAttributes[$attribute->getId()] = true;
-        }
-        foreach ($aggregationQueries as $index => $query) {
-            $attribute = $query->getAttribute();
-            if ($query->getMethod()->isAggregate() && isset($aggregateAliases[$attribute], $mainAttributes[$attribute])) {
-                $aggregationQueries[$index] = (clone $query)->setAttribute($alias.'.'.$attribute);
             }
         }
 

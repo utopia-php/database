@@ -2078,4 +2078,77 @@ trait AggregationTests
     {
         return \array_values(\array_map(fn (Document $row): mixed => $row->getAttribute('name'), $rows));
     }
+
+    public function testMainAttributeAggregatedUnderItsOwnNameOverAJoinIsReadFromTheMainTable(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $main = 'own_name_main';
+        $joined = 'own_name_joined';
+        $this->cleanupAggCollections($database, [$main, $joined]);
+        foreach ([$main, $joined] as $collection) {
+            $database->createCollection(new Collection(
+                id: $collection,
+                attributes: [Attribute::string(key: 'link', size: 16, required: true), Attribute::integer(key: 'score', required: true)],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            ));
+        }
+        foreach ([[$main, '1', 10], [$main, '2', 20], [$joined, '1', 1], [$joined, '3', 3]] as [$collection, $link, $score]) {
+            $database->createDocument($collection, new Document([
+                'link' => $link,
+                'score' => $score,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([
+            'inner join' => [Query::join($joined, 'link', 'link', '=', 'other'), 10, 1],
+            'left join' => [Query::leftJoin($joined, 'link', 'link', '=', 'other'), 30, 2],
+            'right join' => [Query::rightJoin($joined, 'link', 'link', '=', 'other'), 10, 2],
+            'full outer join' => [Query::fullOuterJoin($joined, 'link', 'link', '=', 'other'), 30, 3],
+        ] as $type => [$join, $total, $rows]) {
+            $own = $database->find($main, [$join, Query::sum('score', 'score')]);
+            $this->assertCount(1, $own, $type);
+            $this->assertSame($total, $this->intAttribute($own[0], 'score'), $type);
+
+            $other = $database->find($main, [$join, Query::sum('score', 'total'), Query::count('*', 'score')]);
+            $this->assertCount(1, $other, $type);
+            $this->assertSame($total, $this->intAttribute($other[0], 'total'), $type);
+            $this->assertSame($rows, $this->intAttribute($other[0], 'score'), $type);
+        }
+
+        $this->cleanupAggCollections($database, [$main, $joined]);
+    }
+
+    public function testBitwiseAggregateUnderALongAliasLeavesAnotherAggregateItsValue(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'long_bitwise_alias';
+        $this->createProducts($database, $collection);
+        $alias = \str_repeat('b', 60);
+        $prefix = \substr($alias, 0, 55);
+
+        $results = $database->find($collection, [
+            Query::equal('category', ['nonexistent']),
+            Query::bitAnd('price', $alias),
+            Query::count('*', $prefix),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertNull($results[0]->getAttribute($alias), 'a bitwise aggregate over no rows is null');
+        $this->assertSame(0, $this->intAttribute($results[0], $prefix), 'an aggregate named like the start of the bitwise alias keeps its value');
+
+        $database->deleteCollection($collection);
+    }
 }

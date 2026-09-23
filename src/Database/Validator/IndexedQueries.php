@@ -90,11 +90,11 @@ class IndexedQueries extends Queries
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @return array<string, true>
+     * @return array<string, list<IndexVO>> The indexes of the collection each join alias names
      */
-    private function joinAliases(array $queries): array
+    private function joinIndexes(array $queries): array
     {
-        $aliases = [];
+        $indexes = [];
 
         foreach ($queries as $query) {
             if (! $query->getMethod()->isJoin()) {
@@ -102,12 +102,20 @@ class IndexedQueries extends Queries
             }
 
             $alias = $query->getJoinAlias();
-            if ($alias !== '') {
-                $aliases[$alias] = true;
+            if ($alias === '') {
+                continue;
+            }
+
+            /** @var array<IndexVO|Document> $definitions */
+            $definitions = $this->getJoinedCollection($query->getAttribute())?->getAttribute('indexes', []) ?? [];
+
+            $indexes[$alias] = [];
+            foreach ($definitions as $index) {
+                $indexes[$alias][] = $index instanceof IndexVO ? $index : IndexVO::fromDocument($index);
             }
         }
 
-        return $aliases;
+        return $indexes;
     }
 
     /**
@@ -143,14 +151,14 @@ class IndexedQueries extends Queries
             return false;
         }
 
-        return $this->validateSearchIndexes($queries, $this->joinAliases($queries));
+        return $this->validateSearchIndexes($queries, $this->joinIndexes($queries));
     }
 
     /**
      * @param  array<BaseQuery>  $queries
-     * @param  array<string, true>  $joinAliases
+     * @param  array<string, list<IndexVO>>  $joinIndexes
      */
-    private function validateSearchIndexes(array $queries, array $joinAliases): bool
+    private function validateSearchIndexes(array $queries, array $joinIndexes): bool
     {
         foreach ($queries as $query) {
             if (
@@ -158,17 +166,21 @@ class IndexedQueries extends Queries
                 $query->getMethod() === Method::NotSearch
             ) {
                 $attribute = $query->getAttribute();
+                $column = $attribute;
+                $indexes = $this->indexes;
+
                 $dot = \strpos($attribute, '.');
-                if ($dot !== false && isset($joinAliases[\substr($attribute, 0, $dot)])) {
-                    continue;
+                if ($dot !== false && isset($joinIndexes[\substr($attribute, 0, $dot)])) {
+                    $column = \substr($attribute, $dot + 1);
+                    $indexes = $joinIndexes[\substr($attribute, 0, $dot)];
                 }
 
                 $matched = false;
 
-                foreach ($this->indexes as $index) {
+                foreach ($indexes as $index) {
                     if (
                         $index->type === IndexType::Fulltext
-                        && $index->attributes === [$attribute]
+                        && $index->attributes === [$column]
                     ) {
                         $matched = true;
                     }
@@ -182,13 +194,13 @@ class IndexedQueries extends Queries
             }
 
             if ($query->isNestedJoin()) {
-                if (! $this->validateSearchIndexes($query->getJoinOnQueries(), $joinAliases)) {
+                if (! $this->validateSearchIndexes($query->getJoinOnQueries(), $joinIndexes)) {
                     return false;
                 }
             } elseif ($query->isNested()) {
                 /** @var array<BaseQuery> $nested */
                 $nested = $query->getValues();
-                if (! $this->validateSearchIndexes($nested, $joinAliases)) {
+                if (! $this->validateSearchIndexes($nested, $joinIndexes)) {
                     return false;
                 }
             }

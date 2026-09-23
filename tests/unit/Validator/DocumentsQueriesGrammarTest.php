@@ -97,7 +97,8 @@ class DocumentsQueriesGrammarTest extends TestCase
             supportForAggregations: true,
         );
 
-        $this->assertTrue($validator->isValid([$query]), $method.': '.$validator->getDescription());
+        $queries = $method === 'having' ? [Query::groupBy(['rating']), $query] : [$query];
+        $this->assertTrue($validator->isValid($queries), $method.': '.$validator->getDescription());
     }
 
     #[DataProvider('aggregationQueries')]

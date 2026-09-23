@@ -1404,14 +1404,13 @@ trait Documents
                 $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
             }
 
+            // The operator refetch goes through find(), which already decoded every document;
+            // decoding again would run each decode filter twice.
             /** @var array<Document> $batch */
             $batch = \array_map(
-                fn (Document $doc) =>
-                $this->decode(
-                    $collection,
-                    $this->castingAfter($collection, $doc),
-                    $selections
-                ),
+                fn (Document $doc) => $hasOperators
+                    ? $this->castingAfter($collection, $doc)
+                    : $this->decode($collection, $this->castingAfter($collection, $doc), $selections),
                 $batch
             );
 

@@ -8,6 +8,7 @@ use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Base;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\GroupBy;
+use Utopia\Database\Validator\Query\Having;
 use Utopia\Database\Validator\Query\Join;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
@@ -168,6 +169,8 @@ class Queries extends Validator
         if (! $this->isValidJoinCount($parsedQueries)) {
             return false;
         }
+
+        $this->prepareHaving($parsedQueries);
 
         // Same pass: nested and/or children must keep the join aliases collected above.
         $pending = $parsedQueries;
@@ -367,5 +370,45 @@ class Queries extends Validator
         }
 
         return true;
+    }
+
+    /**
+     * Hand each having validator the filter rules, aggregate aliases and groupBy attributes of
+     * this query set, replacing those of the previous one.
+     *
+     * @param  list<Query>  $queries
+     */
+    private function prepareHaving(array $queries): void
+    {
+        $filter = null;
+        $having = [];
+        foreach ($this->validators as $validator) {
+            if ($validator instanceof Filter) {
+                $filter ??= $validator;
+            } elseif ($validator instanceof Having) {
+                $having[] = $validator;
+            }
+        }
+
+        if ($having === []) {
+            return;
+        }
+
+        $aggregations = [];
+        $groupBy = [];
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if ($method->isAggregate()) {
+                $aggregations[] = $query;
+            } elseif ($method === Method::GroupBy) {
+                \array_push($groupBy, ...\array_values($query->getValues()));
+            }
+        }
+
+        foreach ($having as $validator) {
+            $validator->setFilter($filter);
+            $validator->setAggregations($aggregations);
+            $validator->setGroupBy($groupBy);
+        }
     }
 }

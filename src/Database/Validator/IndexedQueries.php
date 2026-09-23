@@ -185,7 +185,7 @@ class IndexedQueries extends Queries
                 if (! $this->validateSearchIndexes($query->getJoinOnQueries(), $joinAliases)) {
                     return false;
                 }
-            } elseif ($query->isNested() && $query->getMethod() !== Method::Having) {
+            } elseif ($query->isNested()) {
                 /** @var array<BaseQuery> $nested */
                 $nested = $query->getValues();
                 if (! $this->validateSearchIndexes($nested, $joinAliases)) {

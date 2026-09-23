@@ -13,6 +13,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
 
 trait JoinTests
@@ -6316,5 +6317,173 @@ trait JoinTests
         }
 
         $this->fail("Accepted {$label}");
+    }
+
+    public function testJoinBareAggregateAttributeAmbiguousAcrossJoinsIsRejected(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders, $refunds] = $collections = $this->seedJoinedAttributeCollections($database, 'jbaa');
+        $joins = [
+            Query::join($orders, '$id', 'customerId', '=', 'alpha'),
+            Query::join($refunds, '$id', 'customerId', '=', 'beta'),
+        ];
+
+        foreach ([
+            [Query::sum('amount', 'total')],
+            [Query::count('*', 'rows'), Query::groupBy(['amount'])],
+        ] as $aggregation) {
+            try {
+                $database->find($customers, [...$joins, ...$aggregation]);
+                $this->fail('A bare attribute two joins declare was bound to one of them');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute "amount" is ambiguous across joins; qualify it with a join alias', $error->getMessage());
+            }
+        }
+
+        $results = $database->find($customers, [
+            ...$joins,
+            Query::sum('alpha.amount', 'ordered'),
+            Query::sum('beta.amount', 'refunded'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame(150, $this->intAttribute($results[0], 'ordered'));
+        $this->assertSame(10, $this->intAttribute($results[0], 'refunded'));
+
+        $this->cleanupAggCollections($database, $collections);
+    }
+
+    public function testJoinBareAggregateAttributeResolvesToTheDeclaringJoin(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jbar');
+
+        $results = $database->find($customers, [
+            Query::join($notes, '$id', 'customerId', '=', 'note'),
+            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            Query::sum('amount', 'total'),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertSame(150, $this->intAttribute($results[0], 'total'));
+
+        $results = $database->find($customers, [
+            Query::join($notes, '$id', 'customerId'),
+            Query::join($orders, '$id', 'customerId'),
+            Query::sum('amount', 'total'),
+            Query::groupBy(['status']),
+        ]);
+        $totals = [];
+        foreach ($results as $result) {
+            $status = $result->getAttribute('status');
+            $this->assertIsString($status);
+            $totals[$status] = $this->intAttribute($result, 'total');
+        }
+        \ksort($totals);
+        $this->assertSame(['open' => 50, 'paid' => 100], $totals);
+
+        $results = $database->find($customers, [
+            Query::leftJoin($notes, '$id', 'customerId', '=', 'note'),
+            Query::count('$id', 'customers'),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertSame(2, $this->intAttribute($results[0], 'customers'));
+
+        $this->cleanupAggCollections($database, $collections);
+    }
+
+    public function testJoinSearchOnJoinedAttributeRequiresFulltextIndex(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jsfi');
+        $unindexed = [
+            Query::join($orders, '$id', 'customerId', '=', 'purchase'),
+            Query::search('purchase.memo', 'gift'),
+        ];
+
+        foreach ([
+            'find' => fn () => $database->find($customers, $unindexed),
+            'count' => fn () => $database->count($customers, $unindexed),
+        ] as $method => $read) {
+            try {
+                $read();
+                $this->fail($method.'() searched a joined attribute without a fulltext index');
+            } catch (QueryException $error) {
+                $this->assertSame('Searching by attribute "purchase.memo" requires a fulltext index.', $error->getMessage(), $method);
+            }
+        }
+
+        $results = $database->find($customers, [
+            Query::join($notes, '$id', 'customerId', '=', 'note'),
+            Query::search('note.body', 'needle'),
+            Query::select(['name']),
+        ]);
+        $this->assertSame(['first'], \array_map(static fn (Document $document): string => $document->getId(), $results));
+
+        $this->cleanupAggCollections($database, $collections);
+    }
+
+    /**
+     * @return array{0: string, 1: string, 2: string, 3: string}
+     */
+    private function seedJoinedAttributeCollections(Database $database, string $prefix): array
+    {
+        $collections = [$prefix.'_c', $prefix.'_o', $prefix.'_r', $prefix.'_n'];
+        [$customers, $orders, $refunds, $notes] = $collections;
+        $this->cleanupAggCollections($database, $collections);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $customers, permissions: $permissions));
+        $database->createAttribute($customers, Attribute::string(key: 'name', size: 100, required: true));
+
+        $database->createCollection(new Collection(id: $orders, permissions: $permissions));
+        $database->createAttribute($orders, Attribute::string(key: 'customerId', size: 64, required: true));
+        $database->createAttribute($orders, Attribute::integer(key: 'amount', required: true));
+        $database->createAttribute($orders, Attribute::string(key: 'status', size: 32, required: true));
+        $database->createAttribute($orders, Attribute::string(key: 'memo', size: 256, required: true));
+
+        $database->createCollection(new Collection(id: $refunds, permissions: $permissions));
+        $database->createAttribute($refunds, Attribute::string(key: 'customerId', size: 64, required: true));
+        $database->createAttribute($refunds, Attribute::integer(key: 'amount', required: true));
+
+        $database->createCollection(new Collection(id: $notes, permissions: $permissions));
+        $database->createAttribute($notes, Attribute::string(key: 'customerId', size: 64, required: true));
+        $database->createAttribute($notes, Attribute::string(key: 'body', size: 256, required: true));
+        if ($database->getAdapter()->supports(Capability::Fulltext)) {
+            $database->createIndex($notes, Index::fullText(key: 'body_fulltext', attributes: ['body']));
+        }
+
+        $rows = [
+            [$customers, 'first', ['name' => 'First']],
+            [$customers, 'second', ['name' => 'Second']],
+            [$orders, 'paid', ['customerId' => 'first', 'amount' => 100, 'status' => 'paid', 'memo' => 'gift wrapped']],
+            [$orders, 'open', ['customerId' => 'first', 'amount' => 50, 'status' => 'open', 'memo' => 'pending']],
+            [$orders, 'other', ['customerId' => 'second', 'amount' => 7, 'status' => 'paid', 'memo' => 'plain']],
+            [$refunds, 'refund', ['customerId' => 'first', 'amount' => 5]],
+            [$notes, 'note', ['customerId' => 'first', 'body' => 'a needle in a haystack']],
+        ];
+        foreach ($rows as [$collection, $id, $attributes]) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                '$permissions' => [Permission::read(Role::any())],
+                ...$attributes,
+            ]));
+        }
+
+        return [$customers, $orders, $refunds, $notes];
     }
 }

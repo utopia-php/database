@@ -76,7 +76,12 @@ use Utopia\Query\Schema\Table\PostgreSQL as PostgreSQLTable;
  */
 abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBuilder, Feature\ColumnTypes, Feature\Relationships, Feature\Upserts
 {
-    private const string FOJ_ORDER_ALIAS_PREFIX = 'foj_ord_';
+    /**
+     * remapRow() drops every column with this prefix from every row it reads. filter() strips `$` from
+     * every column name and a join alias cannot hold one, so only the columns an emulated full outer
+     * join is ordered by carry it.
+     */
+    private const string FOJ_ORDER_ALIAS_PREFIX = '$foj_ord_';
 
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 

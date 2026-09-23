@@ -7447,4 +7447,177 @@ trait JoinTests
             'document' => $this->joinTenancyRows([$database->getDocument($collections[0], 'a1', [...$joins, $selection])], $numbers),
         ];
     }
+
+    public function testAttributeNamedLikeAFullOuterJoinOrderColumnIsRead(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $joined] = $this->createOrderColumnCollections($database);
+        $note = 'foj_ord_note';
+
+        $this->assertSame('first', $database->getDocument($main, 'm1')->getAttribute($note), 'getDocument');
+        $this->assertSame('first', $database->getDocument($main, 'm1', [Query::select([$note])])->getAttribute($note), 'getDocument with a select');
+        $this->assertSame(['first', 'second'], $this->orderColumnValues($database->find($main), $note), 'find');
+        $this->assertSame(['first', 'second'], $this->orderColumnValues($database->getAuthorization()->skip(fn (): array => $database->find($main)), $note), 'find without authorization');
+        $this->assertSame(['second'], $this->orderColumnValues($database->find($main, [Query::equal($note, ['second'])]), $note), 'find filtered by the attribute');
+        $this->assertSame(['second', 'first'], $this->orderColumnValues($database->find($main, [Query::orderDesc($note)]), $note), 'find ordered by the attribute');
+
+        $this->assertOrderColumnFullOuterJoin($database, $main, $joined, 'j', [
+            'ascending' => [Query::orderAsc($note), $note, ['first', 'second']],
+            'descending' => [Query::orderDesc($note), $note, ['second', 'first']],
+        ]);
+
+        $this->cleanupAggCollections($database, $this->orderColumnCollections());
+    }
+
+    public function testJoinAliasNamedLikeAFullOuterJoinOrderColumnReturnsItsColumns(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$main, $joined] = $this->createOrderColumnCollections($database);
+        $alias = 'foj_ord_x';
+
+        $this->assertSame(
+            [['m1', 'first', 'j1', 1]],
+            $this->orderColumnSummaries($database->find($main, [Query::join($joined, 'link', 'link', '=', $alias)]), $alias),
+            'find',
+        );
+        $this->assertSame(
+            [['m1', 'first', 'j1', 1]],
+            $this->orderColumnSummaries([$database->getDocument($main, 'm1', [Query::leftJoin($joined, 'link', 'link', '=', $alias)])], $alias),
+            'getDocument',
+        );
+
+        $this->assertOrderColumnFullOuterJoin($database, $main, $joined, $alias, [
+            'ascending' => [Query::orderAsc("{$alias}.score"), "{$alias}.score", [1, 3]],
+            'descending' => [Query::orderDesc("{$alias}.score"), "{$alias}.score", [3, 1]],
+        ]);
+
+        $this->cleanupAggCollections($database, $this->orderColumnCollections());
+    }
+
+    /**
+     * Every order returns each row of the full outer join once with its values, orders the rows that
+     * hold a value (engines place nulls apart), and gives each row the columns a left join gives it.
+     *
+     * @param  array<string, array{Query, string, list<string|int>}>  $orders
+     */
+    private function assertOrderColumnFullOuterJoin(Database $database, string $main, string $joined, string $alias, array $orders): void
+    {
+        $leftJoined = $database->find($main, [Query::leftJoin($joined, 'link', 'link', '=', $alias)]);
+        $this->assertCount(2, $leftJoined);
+        $columns = $this->orderColumnKeys($leftJoined[0]);
+
+        foreach ($orders as $label => [$order, $key, $ordered]) {
+            $rows = $database->find($main, [Query::fullOuterJoin($joined, 'link', 'link', '=', $alias), $order]);
+
+            $summaries = $this->orderColumnSummaries($rows, $alias);
+            \usort($summaries, static fn (array $left, array $right): int => \strcmp((string) \json_encode($left), (string) \json_encode($right)));
+            $this->assertSame([['', null, 'j2', 3], ['m1', 'first', 'j1', 1], ['m2', 'second', null, null]], $summaries, $label);
+
+            $values = \array_map(static fn (mixed $value): mixed => \is_numeric($value) ? (int) $value : $value, $this->orderColumnValues($rows, $key));
+            $this->assertSame($ordered, \array_values(\array_filter($values, static fn (mixed $value): bool => $value !== null)), $label);
+
+            foreach ($rows as $row) {
+                $this->assertSame($columns, $this->orderColumnKeys($row), $label);
+            }
+        }
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<mixed>
+     */
+    private function orderColumnValues(array $rows, string $key): array
+    {
+        return \array_values(\array_map(static fn (Document $row): mixed => $row->getAttribute($key), $rows));
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<array{string, mixed, mixed, ?int}>
+     */
+    private function orderColumnSummaries(array $rows, string $alias): array
+    {
+        return \array_values(\array_map(
+            fn (Document $row): array => [
+                $row->getId(),
+                $row->getAttribute('foj_ord_note'),
+                $row->getAttribute("{$alias}.\$id"),
+                $this->scoreOf($row, "{$alias}.score"),
+            ],
+            $rows,
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function orderColumnKeys(Document $row): array
+    {
+        $keys = \array_map(\strval(...), \array_keys($row->getArrayCopy()));
+        \sort($keys);
+
+        return $keys;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function orderColumnCollections(): array
+    {
+        return ['fojo_main', 'fojo_joined'];
+    }
+
+    /**
+     * m1 matches j1 and nothing matches m2 or j2, so a full outer join returns a row of each kind, and
+     * an emulated one returns rows from both of its halves.
+     *
+     * @return list<string>
+     */
+    private function createOrderColumnCollections(Database $database): array
+    {
+        $collections = $this->orderColumnCollections();
+        [$main, $joined] = $collections;
+        $this->cleanupAggCollections($database, $collections);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $main,
+            attributes: [
+                Attribute::string(key: 'link', size: 16, required: true),
+                Attribute::string(key: 'foj_ord_note', size: 64, required: false),
+            ],
+            permissions: $permissions,
+            documentSecurity: false,
+        ));
+        $database->createCollection(new Collection(
+            id: $joined,
+            attributes: [
+                Attribute::string(key: 'link', size: 16, required: true),
+                Attribute::integer(key: 'score', required: true),
+            ],
+            permissions: $permissions,
+            documentSecurity: false,
+        ));
+
+        foreach (['m1' => ['1', 'first'], 'm2' => ['2', 'second']] as $id => [$link, $note]) {
+            $database->createDocument($main, new Document(['$id' => $id, 'link' => $link, 'foj_ord_note' => $note]));
+        }
+        foreach (['j1' => ['1', 1], 'j2' => ['3', 3]] as $id => [$link, $score]) {
+            $database->createDocument($joined, new Document(['$id' => $id, 'link' => $link, 'score' => $score]));
+        }
+
+        return $collections;
+    }
 }

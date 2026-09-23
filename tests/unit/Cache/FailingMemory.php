@@ -8,23 +8,27 @@ final class FailingMemory extends MemoryCache
 {
     private bool $failing = false;
 
-    public function failPurges(): void
+    public function failBlocks(): void
     {
         $this->failing = true;
     }
 
-    public function seedEpoch(string $collection): void
-    {
-        $this->save('default:qcache:'.$collection.'#epoch', 'active:seed');
-    }
-
+    /**
+     * @param  array<int|string, mixed>|string  $data
+     * @return bool|string|array<int|string, mixed>
+     */
     #[\Override]
-    public function purge(string $key, string $hash = ''): bool
+    public function save(string $key, array|string $data, string $hash = ''): bool|string|array
     {
-        if ($this->failing && \str_ends_with($key, '#epoch')) {
+        if (
+            $this->failing
+            && \str_ends_with($key, '#epoch')
+            && \is_string($data)
+            && \str_starts_with($data, 'blocked:')
+        ) {
             return false;
         }
 
-        return parent::purge($key, $hash);
+        return parent::save($key, $data, $hash);
     }
 }

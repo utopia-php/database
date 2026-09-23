@@ -3198,25 +3198,21 @@ trait Documents
         } else {
             $queries = $convertedQueries;
 
-            $cacheKey = null;
-            $cacheGeneration = '0';
+            $cacheEntry = null;
+            $cacheGeneration = '';
             if (
                 $this->queryCache !== null
                 && $this->adapter->supports(Capability::Caching)
                 && ! $this->adapter->inTransaction()
                 && empty($joins)
-                && $this->queryCache->isEnabled($collection->getId())
             ) {
                 $cacheContext = $skipAuth
                     ? $this->authorization->skip(fn () => $this->getQueryCacheField($collection, $queryCacheQueries, forPermission: $forPermission))
                     : $this->getQueryCacheField($collection, $queryCacheQueries, forPermission: $forPermission);
 
                 if ($cacheContext !== null) {
-                    $cacheContext .= ':'.($this->adapter->supports(Capability::Hostname) ? $this->adapter->getHostname() : '');
-                }
-
-                if ($cacheContext !== null) {
-                    $cacheKey = $this->queryCache->buildQueryKey(
+                    $cacheEntry = $this->queryCache->getEntry(
+                        $this->getQueryCacheScope(),
                         $collection->getId(),
                         [
                             'input' => \array_map(
@@ -3237,15 +3233,17 @@ trait Documents
                             'cursor' => $this->normalizeQueryCacheQueryValue($cursor),
                             'cursorDirection' => $cursorDirection->value,
                         ],
-                        $this->adapter->getNamespace(),
-                        $this->adapter->getTenant(),
                         $cacheContext,
                     );
-                    $cacheGeneration = $this->queryCache->getGeneration($cacheKey);
-                    $cached = $this->queryCache->get($cacheKey);
+                }
+
+                if ($cacheEntry !== null) {
+                    $cached = $this->queryCache->get($cacheEntry);
                     if ($cached !== null) {
                         $results = $cached;
-                        $cacheKey = null;
+                        $cacheEntry = null;
+                    } else {
+                        $cacheGeneration = $this->queryCache->getGeneration($cacheEntry);
                     }
                 }
             }
@@ -3290,8 +3288,8 @@ trait Documents
                     );
                 }
 
-                if ($cacheKey !== null && $this->queryCache !== null) {
-                    $this->queryCache->set($cacheKey, $results, $cacheGeneration);
+                if ($cacheEntry !== null && $this->queryCache !== null) {
+                    $this->queryCache->set($cacheEntry, $results, $cacheGeneration);
                 }
             }
         }

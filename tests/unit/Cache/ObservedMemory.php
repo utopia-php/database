@@ -15,6 +15,8 @@ final class ObservedMemory extends DatabaseMemory
 
     private ?Closure $validatorCallback = null;
 
+    private ?Closure $commitCallback = null;
+
     private ?string $metadataCollection = null;
 
     private ?string $findCollection = null;
@@ -44,6 +46,11 @@ final class ObservedMemory extends DatabaseMemory
         $this->finds = 0;
     }
 
+    public function pauseNextCommit(Closure $callback): void
+    {
+        $this->commitCallback = $callback;
+    }
+
     public function getObservedMetadataReads(): int
     {
         return $this->metadataReads;
@@ -57,6 +64,16 @@ final class ObservedMemory extends DatabaseMemory
     public function getObservedFinds(): int
     {
         return $this->finds;
+    }
+
+    #[\Override]
+    public function commitTransaction(): bool
+    {
+        $callback = $this->commitCallback;
+        $this->commitCallback = null;
+        $callback?->__invoke();
+
+        return parent::commitTransaction();
     }
 
     #[\Override]

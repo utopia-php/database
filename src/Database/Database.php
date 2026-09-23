@@ -12,6 +12,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Cache\Invalidator;
 use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Scope;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -2507,7 +2508,8 @@ class Database
     }
 
     /**
-     * Stable cache key for cached query entries on a collection.
+     * Key of a collection's caller-owned withCache() region. find() caches its results in
+     * the query cache instead; purgeCachedQueries() clears both.
      */
     public function getQueryCacheKey(string $collectionId, ?string $namespace = null): string
     {
@@ -2523,6 +2525,16 @@ class Database
             $namespace ?? $this->getNamespace(),
             $this->adapter->getTenant(),
             $collectionId,
+        );
+    }
+
+    protected function getQueryCacheScope(?string $namespace = null): Scope
+    {
+        return new Scope(
+            hostname: $this->adapter->supports(Capability::Hostname) ? $this->adapter->getHostname() : '',
+            database: $this->adapter->getDatabase(),
+            namespace: $namespace ?? $this->adapter->getNamespace(),
+            tenant: $this->adapter->getTenant(),
         );
     }
 
@@ -2687,7 +2699,12 @@ class Database
      */
     protected function invalidate(Event $event, mixed $data = null): void
     {
-        $this->queryCacheInvalidator?->handle($event, $data);
+        $invalidator = $this->queryCacheInvalidator;
+        if ($invalidator === null || ! $invalidator->isMutation($event)) {
+            return;
+        }
+
+        $invalidator->invalidate($event, $data, $this->getQueryCacheScope());
     }
 
     /**
@@ -2695,7 +2712,7 @@ class Database
      */
     protected function getInvalidationTokens(Event $event, mixed $data = null): array
     {
-        return $this->queryCacheInvalidator?->tokens($event, $data) ?? [];
+        return $this->queryCacheInvalidator?->tokens($event, $data, $this->getQueryCacheScope()) ?? [];
     }
 
     /**

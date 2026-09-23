@@ -44,16 +44,16 @@ trait Transactions
             $tokens = $this->getInvalidationTokens($event, $data);
             $context = $this->getEventContext();
             $pending = [];
-            foreach ($tokens as $collection => $token) {
-                if (isset($this->queryCacheMutations[$context][$collection])) {
+            foreach ($tokens as $key => $token) {
+                if (isset($this->queryCacheMutations[$context][$key])) {
                     continue;
                 }
 
-                $pending[$collection] = $token;
+                $pending[$key] = $token;
             }
             $this->blockInvalidation($pending);
-            foreach ($pending as $collection => $token) {
-                $this->queryCacheMutations[$context][$collection] = $token;
+            foreach ($pending as $key => $token) {
+                $this->queryCacheMutations[$context][$key] = $token;
             }
 
             return $callback();

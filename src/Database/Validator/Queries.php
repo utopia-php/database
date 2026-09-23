@@ -61,7 +61,7 @@ class Queries extends Validator
             return false;
         }
         /** @var array<Query|string> $value */
-        if ($this->length && \count($value) > $this->length) {
+        if (! $this->isValidLength($value)) {
             return false;
         }
 
@@ -168,6 +168,10 @@ class Queries extends Validator
         $pending = $parsedQueries;
         while ($pending !== []) {
             $query = \array_shift($pending);
+
+            if ($query->isNested() && ! $this->isValidLength($query->getValues(), $query->getMethod())) {
+                return false;
+            }
 
             if (\in_array($query->getMethod(), Query::LOGICAL_TYPES, true)) {
                 foreach ($query->getValues() as $nested) {
@@ -316,5 +320,24 @@ class Queries extends Validator
     public function getType(): string
     {
         return self::TYPE_OBJECT;
+    }
+
+    /**
+     * A group of queries, the whole set or the children of one nested query, may hold at most
+     * `length` queries.
+     *
+     * @param  array<mixed>  $queries
+     */
+    private function isValidLength(array $queries, ?Method $group = null): bool
+    {
+        if ($this->length === 0 || \count($queries) <= $this->length) {
+            return true;
+        }
+
+        $this->message = $group === null
+            ? 'Too many queries: at most '.$this->length.' are allowed'
+            : 'Too many queries in '.$group->value.': at most '.$this->length.' are allowed';
+
+        return false;
     }
 }

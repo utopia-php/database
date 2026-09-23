@@ -7786,4 +7786,173 @@ trait JoinTests
 
         $this->cleanupAggCollections($database, $collections);
     }
+
+    public function testJoinConditionNamingNoColumnIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders, , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jcnc');
+        $purchase = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+        $notFound = 'Invalid query: Attribute not found in schema: ';
+
+        foreach ([
+            'an unknown right column' => [[Query::join($orders, '$id', 'nothing', '=', 'purchase')], $notFound.'nothing'],
+            'an unknown left column' => [[Query::join($orders, 'nothing', 'customerId', '=', 'purchase')], $notFound.'nothing'],
+            'an unknown right column of an on condition' => [[Query::leftJoin($notes, 'note', [Query::on('$id', 'nothing')])], $notFound.'nothing'],
+            'an unknown left column of an on condition' => [[Query::leftJoin($notes, 'note', [Query::on('nothing', 'customerId')])], $notFound.'nothing'],
+            'an unknown column of an earlier join' => [[$purchase, Query::join($notes, 'purchase.nothing', 'customerId', '=', 'note')], $notFound.'purchase.nothing'],
+            'a join declared after it' => [
+                [Query::join($notes, 'purchase.customerId', 'customerId', '=', 'note'), $purchase],
+                'Invalid query: The left column of a join condition must belong to the main collection or to a join declared before it: purchase.customerId',
+            ],
+        ] as $shape => [$joins, $message]) {
+            foreach ([
+                'find()' => fn () => $database->find($customers, $joins),
+                'count()' => fn () => $database->count($customers, $joins),
+                'sum()' => fn () => $database->sum($customers, '$sequence', $joins),
+                'getDocument()' => fn () => $database->getDocument($customers, 'first', $joins),
+            ] as $read => $call) {
+                try {
+                    $call();
+                    $this->fail($read.' sent a join condition that names no column to the engine: '.$shape);
+                } catch (QueryException $error) {
+                    $this->assertSame($message, $error->getMessage(), $read.': '.$shape);
+                }
+            }
+        }
+
+        $this->assertSame(3, $database->count($customers, [Query::leftJoin($orders, 'purchase', [Query::on('$id', 'purchase.customerId')])]));
+        $this->assertSame(2, $database->count($customers, [$purchase, Query::join($notes, 'purchase.customerId', 'customerId', '=', 'note')]), 'a join names the columns of the join before it');
+
+        $this->cleanupAggCollections($database, $collections);
+    }
+
+    public function testSumRejectsAnAttributeASumAggregateRejects(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $joins = $database->getAdapter()->supports(Capability::Joins);
+        [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jsum');
+        $purchase = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+        $notFound = 'Invalid query: Attribute not found in schema: ';
+        $numeric = 'Invalid query: Aggregate sum requires a numeric attribute that is not an array: ';
+
+        $rejected = [
+            'an unknown attribute' => [$customers, 'nothing', [], $notFound.'nothing'],
+            'a string' => [$orders, 'status', [], $numeric.'status'],
+            'an internal attribute' => [$orders, '$sequence', [], $numeric.'$sequence'],
+        ];
+        if ($joins) {
+            $rejected += [
+                'a joined string' => [$customers, 'purchase.status', [$purchase], $numeric.'purchase.status'],
+                'an unknown joined attribute' => [$customers, 'purchase.nothing', [$purchase], $notFound.'purchase.nothing'],
+                'an attribute only a join declares, unqualified' => [$customers, 'amount', [$purchase], $notFound.'amount'],
+            ];
+        }
+
+        foreach ($rejected as $shape => [$collection, $attribute, $queries, $message]) {
+            try {
+                $database->sum($collection, $attribute, $queries);
+                $this->fail('sum() added up '.$shape);
+            } catch (QueryException $error) {
+                $this->assertSame($message, $error->getMessage(), $shape);
+            }
+        }
+
+        $this->assertSame(157, $database->sum($orders, 'amount'));
+        if ($joins) {
+            $this->assertSame(157, $database->sum($customers, 'purchase.amount', [$purchase]));
+        }
+
+        $this->cleanupAggCollections($database, $collections);
+    }
+
+    public function testTenantIsReadOnlyWhereTheTablesHoldIt(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jten');
+        $purchase = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+
+        foreach ([
+            'count' => [Query::count('$collection', 'total')],
+            'groupBy' => [Query::count('*', 'rows'), Query::groupBy(['$collection'])],
+        ] as $shape => $queries) {
+            try {
+                $database->find($customers, $queries);
+                $this->fail('a '.$shape.' of $collection, which no table holds, reached the engine');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute not found in schema: $collection', $error->getMessage(), $shape);
+            }
+        }
+
+        $reads = [
+            '$tenant' => [
+                'count' => fn (): array => $database->find($customers, [Query::count('$tenant', 'total')]),
+                'groupBy' => fn (): array => $database->find($customers, [Query::count('*', 'total'), Query::groupBy(['$tenant'])]),
+            ],
+            'purchase.$tenant' => [
+                'count' => fn (): array => $database->find($customers, [$purchase, Query::count('purchase.$tenant', 'total')]),
+                'groupBy' => fn (): array => $database->find($customers, [$purchase, Query::count('*', 'total'), Query::groupBy(['purchase.$tenant'])]),
+            ],
+        ];
+
+        if (! $database->getSharedTables()) {
+            foreach ($reads as $attribute => $shapes) {
+                foreach ($shapes as $shape => $read) {
+                    try {
+                        $read();
+                        $this->fail('a '.$shape.' of '.$attribute.' reached a table that does not hold it');
+                    } catch (QueryException $error) {
+                        $this->assertSame('Invalid query: Attribute not found in schema: '.$attribute, $error->getMessage(), $shape);
+                    }
+                }
+            }
+
+            try {
+                $database->find($customers, [$purchase, Query::select(['name', 'purchase.$tenant'])]);
+                $this->fail('a select of purchase.$tenant reached a table that does not hold it');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute not found in schema: purchase.$tenant', $error->getMessage());
+            }
+
+            $this->cleanupAggCollections($database, $collections);
+
+            return;
+        }
+
+        $tenant = (string) $database->getTenant();
+        foreach (['$tenant' => 2, 'purchase.$tenant' => 3] as $attribute => $rows) {
+            $counted = $reads[$attribute]['count']();
+            $this->assertCount(1, $counted, $attribute);
+            $this->assertSame($rows, $this->intAttribute($counted[0], 'total'), $attribute);
+
+            $grouped = $reads[$attribute]['groupBy']();
+            $this->assertCount(1, $grouped, $attribute);
+            $this->assertSame($rows, $this->intAttribute($grouped[0], 'total'), $attribute);
+            $value = $grouped[0]->getAttribute(Storage::TENANT);
+            $this->assertIsScalar($value, $attribute);
+            $this->assertSame($tenant, (string) $value, $attribute);
+        }
+
+        foreach ($database->find($customers, [$purchase, Query::select(['name', 'purchase.$tenant'])]) as $customer) {
+            $value = $customer->getAttribute('purchase.$tenant');
+            $this->assertIsScalar($value);
+            $this->assertSame($tenant, (string) $value);
+        }
+
+        $this->cleanupAggCollections($database, $collections);
+    }
 }

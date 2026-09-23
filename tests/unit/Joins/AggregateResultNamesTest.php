@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Joins;
 
+use Closure;
 use PDO;
 use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -15,6 +16,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -24,8 +26,9 @@ use Utopia\Query\Method;
 
 /**
  * Each column of an aggregation's result has one name: an aggregate over a main attribute named like
- * its own alias reads the main table even when a joined collection has that attribute too, and the
- * input counts behind the bitwise aggregates have names no engine shortens.
+ * its own alias reads the main table even when a joined collection has that attribute too, an alias
+ * names neither another aggregate nor a group, and the input counts behind the bitwise aggregates
+ * have names no engine shortens.
  */
 final class AggregateResultNamesTest extends TestCase
 {
@@ -70,6 +73,37 @@ final class AggregateResultNamesTest extends TestCase
             [['COUNT(*)' => $rows, 'SUM(`table_main`.`score`)' => $total, 'SUM(`a`.`score`)' => $joinedTotal]],
             $this->rows($database->find('main', [$this->join($join), Query::count(), Query::sum('score'), Query::sum('a.score')])),
         );
+    }
+
+    /**
+     * @return iterable<string, array{Closure(): list<Query>, string}>
+     */
+    public static function collidingAliases(): iterable
+    {
+        $grouped = static fn (string $alias, string $attribute): string => 'Invalid query: Aggregate alias "'.$alias.'" is the name the groupBy attribute "'.$attribute.'" is returned under';
+
+        yield 'a grouped main attribute' => [static fn (): array => [Query::count('*', 'link'), Query::groupBy(['link'])], $grouped('link', 'link')];
+        yield 'a grouped main attribute over a join' => [static fn (): array => [Query::join('a', 'link', 'link', '=', 'a'), Query::count('*', 'label'), Query::groupBy(['label'])], $grouped('label', 'label')];
+        yield 'a grouped main attribute over a full outer join' => [static fn (): array => [Query::fullOuterJoin('a', 'link', 'link', '=', 'a'), Query::count('*', 'label'), Query::groupBy(['label'])], $grouped('label', 'label')];
+        yield 'a grouped joined attribute' => [static fn (): array => [Query::join('a', 'link', 'link', '=', 'a'), Query::sum('score', 'score'), Query::groupBy(['a.score'])], $grouped('score', 'a.score')];
+        yield 'a grouped internal attribute' => [static fn (): array => [Query::count('*', '_uid'), Query::groupBy(['$id'])], $grouped('_uid', '$id')];
+        yield 'another aggregate' => [static fn (): array => [Query::count('*', 'rows'), Query::sum('score', 'rows')], 'Invalid query: Aggregate alias "rows" is given to more than one aggregate'];
+    }
+
+    /**
+     * @param  Closure(): list<Query>  $queries
+     */
+    #[DataProvider('collidingAliases')]
+    public function testAliasNamingAnotherColumnOfTheResultIsAnInvalidQuery(Closure $queries, string $message): void
+    {
+        foreach ([false, true] as $native) {
+            try {
+                $rows = $this->database($native)->find('main', $queries());
+                $this->fail(($native ? 'native' : 'emulated').': the shape was accepted and returned '.\json_encode($this->rows($rows)));
+            } catch (QueryException $error) {
+                $this->assertSame($message, $error->getMessage());
+            }
+        }
     }
 
     public function testAliasesNamingNoOtherColumnKeepEveryValue(): void

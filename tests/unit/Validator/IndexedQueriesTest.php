@@ -192,6 +192,12 @@ class IndexedQueriesTest extends TestCase
             '$id' => 'meta',
             'attributes' => [
                 new Document([
+                    '$id' => 'mainId',
+                    'key' => 'mainId',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
+                new Document([
                     '$id' => 'body',
                     'key' => 'body',
                     'type' => ColumnType::String->value,
@@ -243,6 +249,12 @@ class IndexedQueriesTest extends TestCase
         $validator->setJoinedCollections([new Document([
             '$id' => 'meta',
             'attributes' => [
+                new Document([
+                    '$id' => 'mainId',
+                    'key' => 'mainId',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
                 new Document([
                     '$id' => 'body',
                     'key' => 'body',

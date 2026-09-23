@@ -27,6 +27,7 @@ class Document extends Queries
 
     /**
      * @param  array<BaseDocument>  $attributes
+     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      *
      * @throws Exception
      */
@@ -38,6 +39,7 @@ class Document extends Queries
         private readonly DateTime $minAllowedDate = new DateTime('0000-01-01'),
         private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         private readonly bool $supportUnsignedBigInt = true,
+        bool $sharedTables = false,
     ) {
         $attributes[] = new BaseDocument([
             BaseDocument::ID => BaseDocument::ID,
@@ -67,8 +69,8 @@ class Document extends Queries
         $this->attributes = $attributes;
 
         $validators = [
-            new Select($attributes, $supportForAttributes),
-            new Join(),
+            new Select($attributes, $supportForAttributes, $sharedTables),
+            new Join($attributes, $supportForAttributes),
         ];
 
         parent::__construct($validators);
@@ -112,7 +114,7 @@ class Document extends Queries
                 $this->supportForAttributes,
                 $this->supportUnsignedBigInt,
             ),
-            new Join(),
+            new Join($this->attributes, $this->supportForAttributes),
         ]);
         $conditions->setJoinedCollections(\array_values($this->joinedCollections));
 

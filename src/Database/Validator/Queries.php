@@ -3,7 +3,6 @@
 namespace Utopia\Database\Validator;
 
 use Throwable;
-use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Query\Aggregate;
@@ -113,6 +112,7 @@ class Queries extends Validator
                 || $validator instanceof Order
                 || $validator instanceof Aggregate
                 || $validator instanceof GroupBy
+                || $validator instanceof Join
             ) {
                 $validator->resetJoinAliases();
             }
@@ -172,6 +172,7 @@ class Queries extends Validator
                     || $validator instanceof Order
                     || $validator instanceof Aggregate
                     || $validator instanceof GroupBy
+                    || $validator instanceof Join
                 ) {
                     $validator->allowJoins($joins);
                 }
@@ -202,7 +203,7 @@ class Queries extends Validator
             return false;
         }
 
-        $this->prepareHaving($parsedQueries);
+        $this->prepareAggregations($parsedQueries);
 
         // Same pass: nested and/or children must keep the join aliases collected above.
         $pending = $parsedQueries;
@@ -344,7 +345,6 @@ class Queries extends Validator
 
     /**
      * The collection each join of the query set reads, for the joins whose collection is given.
-     * Relationship attributes are left out: only some sides of a relationship have a column.
      *
      * @param  list<Query>  $queries
      * @return list<JoinedCollection>
@@ -359,21 +359,9 @@ class Queries extends Validator
             }
 
             $collection = $this->getJoinedCollection($query->getAttribute());
-            if ($collection === null) {
-                continue;
+            if ($collection !== null) {
+                $joins[] = JoinedCollection::of($query->getJoinAlias(), $collection);
             }
-
-            /** @var array<Attribute|Document> $definitions */
-            $definitions = $collection->getAttribute('attributes', []);
-
-            $attributes = [];
-            foreach ($definitions as $definition) {
-                if (! Attribute::isRelationship($definition)) {
-                    $attributes[$definition->getId()] = true;
-                }
-            }
-
-            $joins[] = new JoinedCollection($query->getJoinAlias(), $attributes, Aggregate::numericTypes($definitions));
         }
 
         return $joins;
@@ -442,24 +430,27 @@ class Queries extends Validator
     }
 
     /**
-     * Hand each having validator the filter rules, aggregate aliases and groupBy attributes of
-     * this query set, replacing those of the previous one.
+     * Hand each having and aggregate validator the aggregates and groupBy attributes of this query
+     * set, and each having validator the filter rules, replacing those of the previous one.
      *
      * @param  list<Query>  $queries
      */
-    private function prepareHaving(array $queries): void
+    private function prepareAggregations(array $queries): void
     {
         $filter = null;
         $having = [];
+        $aggregates = [];
         foreach ($this->validators as $validator) {
             if ($validator instanceof Filter) {
                 $filter ??= $validator;
             } elseif ($validator instanceof Having) {
                 $having[] = $validator;
+            } elseif ($validator instanceof Aggregate) {
+                $aggregates[] = $validator;
             }
         }
 
-        if ($having === []) {
+        if ($having === [] && $aggregates === []) {
             return;
         }
 
@@ -476,6 +467,11 @@ class Queries extends Validator
 
         foreach ($having as $validator) {
             $validator->setFilter($filter);
+            $validator->setAggregations($aggregations);
+            $validator->setGroupBy($groupBy);
+        }
+
+        foreach ($aggregates as $validator) {
             $validator->setAggregations($aggregations);
             $validator->setGroupBy($groupBy);
         }

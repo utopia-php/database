@@ -2,7 +2,6 @@
 
 namespace Utopia\Database\Validator\Query;
 
-use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
@@ -22,8 +21,9 @@ class Select extends Base
 
     /**
      * @param  array<Document>  $attributes
+     * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      */
-    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
+    public function __construct(array $attributes = [], protected bool $supportForAttributes = true, protected bool $sharedTables = false)
     {
         foreach ($attributes as $attribute) {
             /** @var string $attrKey */
@@ -51,7 +51,7 @@ class Select extends Base
             return false;
         }
 
-        $internalKeys = self::internalKeys();
+        $internalKeys = $this->internalKeys();
 
         if (\count($value->getValues()) === 0) {
             $this->message = 'No attributes selected';
@@ -120,18 +120,25 @@ class Select extends Base
 
     protected function acceptsMainAttribute(string $attribute): bool
     {
-        return isset($this->schema[$attribute]) || \in_array($attribute, self::internalKeys(), true);
+        return isset($this->schema[$attribute]) || \in_array($attribute, $this->internalKeys(), true);
     }
 
     /**
+     * The internal attributes a read can select: every one but `$tenant`, which only shared tables
+     * hold.
+     *
      * @return array<string>
      */
-    private static function internalKeys(): array
+    private function internalKeys(): array
     {
-        return \array_map(
-            fn (Attribute $attribute): string => $attribute->key,
-            Database::internalAttributes()
-        );
+        $keys = [];
+        foreach (Database::internalAttributes() as $attribute) {
+            if ($this->sharedTables || $attribute->key !== Document::TENANT) {
+                $keys[] = $attribute->key;
+            }
+        }
+
+        return $keys;
     }
 
     /**

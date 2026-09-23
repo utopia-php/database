@@ -2,91 +2,98 @@
 
 namespace Tests\Unit\Type;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Utopia\Database\Type\Custom;
+use Utopia\Cache\Adapter\None;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Database;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Type\TypeRegistry;
-use Utopia\Query\Schema\ColumnType;
 
-class TypeRegistryTest extends TestCase
+final class TypeRegistryTest extends TestCase
 {
     public function testRegisterAndGet(): void
     {
         $registry = new TypeRegistry();
-        $type = new class () implements Custom {
-            public function name(): string
-            {
-                return 'money';
-            }
-
-            public function columnType(): ColumnType
-            {
-                return ColumnType::Integer;
-            }
-
-            public function columnSize(): int
-            {
-                return 0;
-            }
-
-            public function encode(mixed $value): mixed
-            {
-                if (! \is_int($value) && ! \is_float($value)) {
-                    return 0;
-                }
-
-                return (int) ($value * 100);
-            }
-
-            public function decode(mixed $value): mixed
-            {
-                if (! \is_int($value) && ! \is_float($value)) {
-                    return 0;
-                }
-
-                return $value / 100;
-            }
-        };
+        $type = new Reversed();
 
         $registry->register($type);
 
-        $this->assertSame($type, $registry->get('money'));
+        $this->assertSame($type, $registry->get('reversed'));
         $this->assertNull($registry->get('nonexistent'));
     }
 
     public function testAll(): void
     {
         $registry = new TypeRegistry();
-        $type = new class () implements Custom {
-            public function name(): string
-            {
-                return 'test_type';
-            }
+        $reversed = new Reversed();
+        $rot13 = new Rot13();
 
-            public function columnType(): ColumnType
-            {
-                return ColumnType::String;
-            }
+        $registry->register($reversed);
+        $registry->register($rot13);
 
-            public function columnSize(): int
-            {
-                return 255;
-            }
+        $this->assertSame(['reversed' => $reversed, 'rot13' => $rot13], $registry->all());
+    }
 
-            public function encode(mixed $value): mixed
-            {
-                return $value;
-            }
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function builtInFilters(): iterable
+    {
+        foreach (['json', 'datetime', 'point', 'linestring', 'polygon', 'vector', 'object'] as $name) {
+            yield $name => [$name];
+        }
+    }
 
-            public function decode(mixed $value): mixed
-            {
-                return $value;
-            }
-        };
+    #[DataProvider('builtInFilters')]
+    public function testBuiltInFilterNamesAreRejected(string $name): void
+    {
+        $registry = new TypeRegistry();
 
-        $registry->register($type);
-        $all = $registry->all();
+        try {
+            $registry->register(new Reversed($name));
+            $this->fail("registering a type named \"{$name}\" must be rejected");
+        } catch (DuplicateException $exception) {
+            $this->assertStringContainsString("\"{$name}\"", $exception->getMessage());
+        }
 
-        $this->assertCount(1, $all);
-        $this->assertArrayHasKey('test_type', $all);
+        $this->assertSame([], $registry->all());
+    }
+
+    public function testRegisteringLeavesTheGlobalFiltersUntouched(): void
+    {
+        $filters = new \ReflectionProperty(Database::class, 'filters');
+        $before = $filters->getValue();
+
+        (new TypeRegistry())->register(new Reversed());
+
+        $this->assertSame($before, $filters->getValue());
+    }
+
+    public function testDefaultFiltersNameEveryBuiltInFilter(): void
+    {
+        $filters = new \ReflectionProperty(Database::class, 'filters');
+        $registered = new \ReflectionProperty(Database::class, 'defaultFiltersRegistered');
+        $previousFilters = $filters->getValue();
+        $previousRegistered = $registered->getValue();
+
+        try {
+            $filters->setValue(null, []);
+            $registered->setValue(null, false);
+            new Database(new Memory(), new Cache(new None()));
+
+            $builtIn = $filters->getValue();
+            $this->assertIsArray($builtIn);
+            $names = \array_keys($builtIn);
+            $expected = Database::DEFAULT_FILTERS;
+            \sort($names);
+            \sort($expected);
+
+            $this->assertSame($expected, $names);
+        } finally {
+            $filters->setValue(null, $previousFilters);
+            $registered->setValue(null, $previousRegistered);
+        }
     }
 }

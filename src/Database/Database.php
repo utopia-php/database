@@ -108,6 +108,19 @@ class Database
     ];
 
     /**
+     * @var list<string>
+     */
+    public const array DEFAULT_FILTERS = [
+        'json',
+        'datetime',
+        ColumnType::Point->value,
+        ColumnType::Linestring->value,
+        ColumnType::Polygon->value,
+        ColumnType::Vector->value,
+        ColumnType::Object->value,
+    ];
+
+    /**
      * List of Internal attributes
      *
      * @var array<array<string, mixed>>
@@ -2430,34 +2443,10 @@ class Database
             $sortedSelects = $selects;
             \sort($sortedSelects);
 
-            $filterSignatures = [];
-            if ($this->filter) {
-                $disabled = $this->disabledFilters ?? [];
-
-                foreach (self::$filters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    if (\array_key_exists($name, $this->instanceFilters)) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                foreach ($this->instanceFilters as $name => $callbacks) {
-                    if (isset($disabled[$name])) {
-                        continue;
-                    }
-                    $filterSignatures[$name] = $callbacks['signature'];
-                }
-
-                \ksort($filterSignatures);
-            }
-
             $payload = \json_encode([
                 'selects' => $sortedSelects,
                 'relationships' => $this->relationshipHook?->isEnabled() ?? false,
-                'filters' => $filterSignatures,
+                'filters' => $this->getActiveFilterSignatures(),
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);
         }
@@ -2611,30 +2600,28 @@ class Database
      */
     private function getActiveFilterSignatures(): array
     {
-        $filterSignatures = [];
         if (! $this->filter) {
-            return $filterSignatures;
+            return [];
         }
 
-        $disabled = $this->disabledFilters ?? [];
+        $signatures = [];
 
         foreach (self::$filters as $name => $callbacks) {
-            if (isset($disabled[$name]) || \array_key_exists($name, $this->instanceFilters)) {
-                continue;
-            }
-            $filterSignatures[$name] = $callbacks['signature'];
+            $signatures[$name] = $callbacks['signature'];
+        }
+
+        foreach ($this->typeRegistry?->all() ?? [] as $name => $type) {
+            $signatures[$name] = $type::class;
         }
 
         foreach ($this->instanceFilters as $name => $callbacks) {
-            if (isset($disabled[$name])) {
-                continue;
-            }
-            $filterSignatures[$name] = $callbacks['signature'];
+            $signatures[$name] = $callbacks['signature'];
         }
 
-        \ksort($filterSignatures);
+        $signatures = \array_diff_key($signatures, $this->disabledFilters ?? []);
+        \ksort($signatures);
 
-        return $filterSignatures;
+        return $signatures;
     }
 
     /**
@@ -2722,21 +2709,24 @@ class Database
      */
     protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
     {
-        if (! array_key_exists($name, self::$filters) && ! array_key_exists($name, $this->instanceFilters)) {
-            throw new NotFoundException("Filter: {$name} not found");
-        }
-
         try {
             if (\array_key_exists($name, $this->instanceFilters)) {
-                $value = $this->instanceFilters[$name]['encode']($value, $document, $this);
-            } else {
-                $value = self::$filters[$name]['encode']($value, $document, $this);
+                return $this->instanceFilters[$name]['encode']($value, $document, $this);
+            }
+
+            $type = $this->typeRegistry?->get($name);
+            if ($type !== null) {
+                return $type->encode($value);
+            }
+
+            if (\array_key_exists($name, self::$filters)) {
+                return self::$filters[$name]['encode']($value, $document, $this);
             }
         } catch (Throwable $th) {
             throw new DatabaseException($th->getMessage(), $th->getCode(), $th);
         }
 
-        return $value;
+        throw new NotFoundException("Filter: {$name} not found");
     }
 
     /**
@@ -2757,17 +2747,20 @@ class Database
             return $value;
         }
 
-        if (! array_key_exists($filter, self::$filters) && ! array_key_exists($filter, $this->instanceFilters)) {
-            throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
+        if (\array_key_exists($filter, $this->instanceFilters)) {
+            return $this->instanceFilters[$filter]['decode']($value, $document, $this, $attribute);
         }
 
-        if (array_key_exists($filter, $this->instanceFilters)) {
-            $value = $this->instanceFilters[$filter]['decode']($value, $document, $this, $attribute);
-        } else {
-            $value = self::$filters[$filter]['decode']($value, $document, $this, $attribute);
+        $type = $this->typeRegistry?->get($filter);
+        if ($type !== null) {
+            return $type->decode($value);
         }
 
-        return $value;
+        if (\array_key_exists($filter, self::$filters)) {
+            return self::$filters[$filter]['decode']($value, $document, $this, $attribute);
+        }
+
+        throw new NotFoundException("Filter \"{$filter}\" not found for attribute \"{$attribute}\"");
     }
 
     /**

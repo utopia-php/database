@@ -3,6 +3,7 @@
 namespace Utopia\Database\Type;
 
 use Utopia\Database\Database;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 
 class TypeRegistry
 {
@@ -12,15 +13,18 @@ class TypeRegistry
     /** @var array<string, Embeddable> */
     private array $embeddables = [];
 
+    /**
+     * @throws DuplicateException
+     */
     public function register(Custom $type): void
     {
-        $this->types[$type->name()] = $type;
+        $name = $type->name();
 
-        Database::addFilter(
-            $type->name(),
-            fn (mixed $value) => $type->encode($value),
-            fn (mixed $value) => $type->decode($value),
-        );
+        if (\in_array($name, Database::DEFAULT_FILTERS, true)) {
+            throw new DuplicateException("Custom type \"{$name}\" collides with the built-in filter of the same name");
+        }
+
+        $this->types[$name] = $type;
     }
 
     public function registerEmbeddable(Embeddable $type): void

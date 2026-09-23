@@ -24,6 +24,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
+use Utopia\Database\Hook\OuterJoinTenantFilter;
 use Utopia\Database\Hook\PermissionAllowNullUid;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Hook\PermissionJoinFilter;
@@ -3211,17 +3212,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $this->attributeMap ??= new AttributeMap(Storage::attributeMap());
         $builder->addHook($this->attributeMap);
         if ($this->sharedTables) {
+            $source = $alias !== '' ? $alias : $table;
             $allowNullColumn = '';
             if ($allowNullTenant) {
-                $allowNullColumn = ($alias !== '' ? $alias : $table).'.'.Storage::TENANT;
+                $allowNullColumn = $source.'.'.Storage::UID;
             }
-            $builder->addHook(new TenantFilter(
+            $tenantFilter = new TenantFilter(
                 $tenants === [] ? $this->tenant : $tenants,
                 Database::METADATA,
                 $table,
                 $allowNullColumn,
                 $this->getIdentifierQuoteChar(),
-            ));
+            );
+            $builder->addHook($tenantFilter);
+            $builder->addHook(new OuterJoinTenantFilter($tenantFilter, $source));
         }
 
         return $builder;

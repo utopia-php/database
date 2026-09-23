@@ -91,13 +91,13 @@ final class TenantFilterTest extends TestCase
         $this->assertSame([7], $result->condition->bindings);
     }
 
-    public function testFilterJoinInnerPlacesTenantInWhereClause(): void
+    public function testFilterJoinInnerPlacesTenantInOnClause(): void
     {
         $hook = new TenantFilter(7);
         $result = $hook->filterJoin('j0', JoinType::Inner);
 
         $this->assertNotNull($result);
-        $this->assertSame(Placement::Where, $result->placement);
+        $this->assertSame(Placement::On, $result->placement);
         $this->assertSame('j0.'.Storage::TENANT.' IN (?)', $result->condition->expression);
     }
 

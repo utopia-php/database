@@ -16,16 +16,33 @@ class ReadWritePool extends Pool
         'list',
         'getSchemaAttributes',
         'getSchemaIndexes',
+        'getSizeOfCollection',
+        'getSizeOfCollectionOnDisk',
+        'ping',
+        'getConnectionId',
+    ];
+
+    /**
+     * Calls that neither read nor write data. They go wherever a read would and never open
+     * the sticky window, so a call that writes, or must see the latest write, never belongs here.
+     */
+    private const METADATA_METHODS = [
+        'supports',
+        'capabilities',
+        'hasFeature',
+        'setSupportForAttributes',
+        'getSupportNonUtfCharacters',
         'getBuilder',
         'getSchema',
         'getColumnType',
         'decodePoint',
         'decodeLinestring',
         'decodePolygon',
-        'getSizeOfCollection',
-        'getSizeOfCollectionOnDisk',
-        'ping',
-        'getConnectionId',
+        'castingBefore',
+        'castingAfter',
+        'setUTCDatetime',
+        'quote',
+        'getAttributeProjection',
         'getDocumentSizeLimit',
         'getAttributeWidth',
         'getCountOfAttributes',
@@ -44,9 +61,14 @@ class ReadWritePool extends Pool
         'getIdAttributeType',
         'getKeywords',
         'getInternalIndexesKeys',
-        'supports',
-        'capabilities',
-        'hasFeature',
+    ];
+
+    /**
+     * Metadata the write pool answers however reads are routed: the hostname namespaces
+     * document and query cache keys, so it must not change with the pool a read goes to.
+     */
+    private const WRITE_POOL_METADATA_METHODS = [
+        'getHostname',
     ];
 
     /**
@@ -59,6 +81,8 @@ class ReadWritePool extends Pool
     private int $stickyDurationMs = 5000;
 
     private ?float $lastWriteTimestamp = null;
+
+    private ?string $writePoolHostname = null;
 
     /**
      * @param  UtopiaPool<covariant Adapter>  $writePool
@@ -99,6 +123,12 @@ class ReadWritePool extends Pool
         }
     }
 
+    #[\Override]
+    public function getHostname(): string
+    {
+        return $this->writePoolHostname ??= parent::getHostname();
+    }
+
     /**
      * @param  array<mixed>  $args
      * @param  class-string|null  $feature
@@ -106,7 +136,7 @@ class ReadWritePool extends Pool
     #[\Override]
     protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
     {
-        if (! $this->isReadOperation($method, $args)) {
+        if ($this->isWrite($method, $args)) {
             try {
                 return parent::borrowAndInvoke($method, $args, $feature);
             } finally {
@@ -114,7 +144,7 @@ class ReadWritePool extends Pool
             }
         }
 
-        if ($this->pin() !== null || $this->isSticky()) {
+        if ($this->pin() !== null || $this->isSticky() || \in_array($method, self::WRITE_POOL_METADATA_METHODS, true)) {
             return parent::borrowAndInvoke($method, $args, $feature);
         }
 
@@ -132,9 +162,15 @@ class ReadWritePool extends Pool
     /**
      * @param  array<mixed>  $args
      */
-    private function isReadOperation(string $method, array $args): bool
+    private function isWrite(string $method, array $args): bool
     {
-        return \in_array($method, self::READ_METHODS, true) && ! $this->locksRow($method, $args);
+        if ($this->locksRow($method, $args)) {
+            return true;
+        }
+
+        return ! \in_array($method, self::READ_METHODS, true)
+            && ! \in_array($method, self::METADATA_METHODS, true)
+            && ! \in_array($method, self::WRITE_POOL_METADATA_METHODS, true);
     }
 
     /**

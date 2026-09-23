@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
@@ -18,6 +19,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
 
 trait AggregationTests
 {
@@ -2177,5 +2179,188 @@ trait AggregationTests
         $this->assertSame(0, $this->intAttribute($results[0], $prefix), 'an aggregate named like the start of the bitwise alias keeps its value');
 
         $database->deleteCollection($collection);
+    }
+
+    public function testSelectNextToAnAggregateMustNameAGroupedAttribute(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_select_ungrouped';
+        $this->createProducts($database, $collection);
+
+        foreach ([
+            ['name', [Query::count('*', 'total'), Query::select(['name'])]],
+            ['$id', [Query::sum('price', 'total'), Query::select(['$id'])]],
+            ['$collection', [Query::count('*', 'total'), Query::select(['$collection'])]],
+            ['name', [Query::count('*', 'total'), Query::groupBy(['category']), Query::select(['category', 'name'])]],
+            ['name', [Query::groupBy(['category']), Query::select(['name'])]],
+        ] as [$attribute, $queries]) {
+            $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $queries), $this->ungroupedSelectMessage($attribute));
+        }
+
+        if ($database->getAdapter()->supports(Capability::Joins)) {
+            $orders = 'agg_select_ungrouped_orders';
+            $this->createOrders($database, $orders);
+            $product = Query::join($collection, 'product_uid', '$id', '=', 'product');
+
+            foreach ([
+                ['product.name', [$product, Query::count('*', 'total'), Query::groupBy(['status']), Query::select(['product.name'])]],
+                ['status', [$product, Query::count('*', 'total'), Query::groupBy(['product.category']), Query::select(['status'])]],
+                ['product.*', [$product, Query::count('*', 'total'), Query::select(['product.*'])]],
+            ] as [$attribute, $queries]) {
+                $this->assertRejectedAsQueryShape(fn () => $database->find($orders, $queries), $this->ungroupedSelectMessage($attribute));
+            }
+
+            $database->deleteCollection($orders);
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testWildcardSelectNextToAnAggregateReturnsOnlyTheAggregates(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_select_wildcard';
+        $this->createProducts($database, $collection);
+
+        $totals = $database->find($collection, [Query::count('*', 'total'), Query::sum('price', 'revenue'), Query::select(['*'])]);
+        $this->assertCount(1, $totals);
+        $this->assertSame(['revenue', 'total'], $this->sortedAttributeNames($totals[0]));
+        $this->assertSame(9, $this->intAttribute($totals[0], 'total'));
+        $this->assertSame(2785, $this->intAttribute($totals[0], 'revenue'));
+
+        $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::select(['*']), Query::orderAsc('category')]);
+        $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $groups));
+        foreach ($groups as $group) {
+            $this->assertSame(['category', 'total'], $this->sortedAttributeNames($group));
+            $this->assertSame(3, $this->intAttribute($group, 'total'));
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testRelationshipWildcardsNextToAnAggregateAddNothingToTheRows(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $customers = 'agg_select_rel_customers';
+        $accounts = 'agg_select_rel_accounts';
+        $regions = 'agg_select_rel_regions';
+        $this->cleanupAggCollections($database, [$customers, $accounts, $regions]);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $regions, attributes: [Attribute::string(key: 'code', size: 16, required: true)], permissions: $permissions));
+        $database->createCollection(new Collection(id: $accounts, attributes: [Attribute::string(key: 'plan', size: 16, required: true)], permissions: $permissions));
+        $database->createCollection(new Collection(id: $customers, attributes: [Attribute::string(key: 'status', size: 16, required: true)], permissions: $permissions));
+        $database->createRelationship(Relationship::oneToOne(collection: $customers, relatedCollection: $accounts, key: 'account', twoWayKey: 'customer'));
+        $database->createRelationship(Relationship::manyToOne(collection: $accounts, relatedCollection: $regions, key: 'region', twoWayKey: 'accounts'));
+
+        $read = [Permission::read(Role::any())];
+        $database->createDocument($regions, new Document(['$id' => 'eu', 'code' => 'eu', '$permissions' => $read]));
+        $database->createDocument($accounts, new Document(['$id' => 'pro', 'plan' => 'pro', 'region' => 'eu', '$permissions' => $read]));
+        $database->createDocument($customers, new Document(['$id' => 'c1', 'status' => 'active', 'account' => 'pro', '$permissions' => $read]));
+        $database->createDocument($customers, new Document(['$id' => 'c2', 'status' => 'active', '$permissions' => $read]));
+        $database->createDocument($customers, new Document(['$id' => 'c3', 'status' => 'closed', '$permissions' => $read]));
+
+        foreach ([['*', 'account.*'], ['*', 'account.*', 'account.region.*']] as $selects) {
+            $totals = $database->find($customers, [Query::count('*', 'total'), Query::select($selects)]);
+            $this->assertCount(1, $totals);
+            $this->assertSame(['total'], $this->sortedAttributeNames($totals[0]));
+            $this->assertSame(3, $this->intAttribute($totals[0], 'total'));
+
+            $groups = $database->find($customers, [Query::count('*', 'total'), Query::groupBy(['status']), Query::select($selects), Query::orderAsc('status')]);
+            $this->assertSame(['active', 'closed'], \array_map(fn (Document $group): mixed => $group->getAttribute('status'), $groups));
+            $this->assertSame([2, 1], \array_map(fn (Document $group): int => $this->intAttribute($group, 'total'), $groups));
+            $this->assertSame(['status', 'total'], $this->sortedAttributeNames($groups[0]));
+
+            if ($adapter->supports(Capability::Joins)) {
+                $joined = $database->find($customers, [Query::fullOuterJoin($accounts, 'account', '$id', '=', 'owned'), Query::count('*', 'total'), Query::select($selects)]);
+                $this->assertCount(1, $joined);
+                $this->assertSame(['total'], $this->sortedAttributeNames($joined[0]));
+                $this->assertSame(3, $this->intAttribute($joined[0], 'total'));
+            }
+        }
+
+        $this->cleanupAggCollections($database, [$customers, $accounts, $regions]);
+    }
+
+    public function testGroupedSelectReturnsEachGroupOnceWithItsAggregate(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_select_grouped';
+        $this->createProducts($database, $collection);
+
+        foreach ([['category'], ['*', 'category']] as $selects) {
+            $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::select($selects), Query::orderAsc('category')]);
+            $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $groups));
+            foreach ($groups as $group) {
+                $this->assertSame(['category', 'total'], $this->sortedAttributeNames($group));
+                $this->assertSame(3, $this->intAttribute($group, 'total'));
+            }
+        }
+
+        $categories = $database->find($collection, [Query::groupBy(['category']), Query::select(['category']), Query::orderAsc('category')]);
+        $this->assertSame(
+            [['category' => 'books'], ['category' => 'clothing'], ['category' => 'electronics']],
+            \array_map(fn (Document $group): array => $group->getArrayCopy(), $categories),
+        );
+
+        if ($database->getAdapter()->supports(Capability::Joins)) {
+            $orders = 'agg_select_grouped_orders';
+            $this->createOrders($database, $orders);
+
+            foreach ([
+                'inner join' => [Query::join($collection, 'product_uid', '$id', '=', 'product'), [2, 3, 5]],
+                'full outer join' => [Query::fullOuterJoin($collection, 'product_uid', '$id', '=', 'product'), [3, 3, 5]],
+            ] as $type => [$product, $totals]) {
+                $groups = $database->find($orders, [$product, Query::count('*', 'total'), Query::groupBy(['product.category']), Query::select(['product.category']), Query::orderAsc('product.category')]);
+                $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $groups), $type);
+                $this->assertSame($totals, \array_map(fn (Document $group): int => $this->intAttribute($group, 'total'), $groups), $type);
+                $this->assertSame(['category', 'total'], $this->sortedAttributeNames($groups[0]), $type);
+            }
+
+            $database->deleteCollection($orders);
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    private function ungroupedSelectMessage(string $attribute): string
+    {
+        return 'Invalid query: Cannot select "'.$attribute.'": an aggregation query can only select the attributes it groups by';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sortedAttributeNames(Document $row): array
+    {
+        $names = \array_map(strval(...), \array_keys($row->getArrayCopy()));
+        \sort($names);
+
+        return $names;
     }
 }

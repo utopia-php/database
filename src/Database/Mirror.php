@@ -1294,21 +1294,26 @@ class Mirror extends Database
     }
 
     /**
+     * upsertDocument() and upsertDocuments() upsert through this method, so each of them writes,
+     * and fires its events, once on the source.
+     *
      * {@inheritdoc}
      */
-    public function upsertDocuments(
+    public function upsertDocumentsWithIncrease(
         string $collection,
+        string $attribute,
         array $documents,
-        int $batchSize = Database::INSERT_BATCH_SIZE,
         ?callable $onNext = null,
         ?callable $onError = null,
+        int $batchSize = self::INSERT_BATCH_SIZE,
     ): int {
-        $modified = $this->source->upsertDocuments(
+        $modified = $this->source->upsertDocumentsWithIncrease(
             $collection,
+            $attribute,
             $documents,
-            $batchSize,
             $onNext,
             $onError,
+            $batchSize,
         );
 
         if (
@@ -1341,13 +1346,14 @@ class Mirror extends Database
             $clones[] = $clone;
         }
 
-        Promise::async(function () use ($destination, $collection, $clones, $batchSize) {
+        Promise::async(function () use ($destination, $collection, $attribute, $clones, $batchSize) {
             try {
                 $destination->withPreserveDates(
-                    fn () => $destination->upsertDocuments(
+                    fn () => $destination->upsertDocumentsWithIncrease(
                         $collection,
+                        $attribute,
                         $clones,
-                        $batchSize,
+                        batchSize: $batchSize,
                     )
                 );
 
@@ -1362,7 +1368,7 @@ class Mirror extends Database
                     }
                 }
             } catch (Throwable $err) {
-                $this->logError('upsertDocuments', $err);
+                $this->logError($attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease', $err);
             }
         });
 

@@ -3265,7 +3265,7 @@ trait JoinTests
         $cols = [$col];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection(new Collection(id: $col, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: $col, permissions: [Permission::create(Role::any())]));
         $database->createAttribute($col, Attribute::string(key: 'payload', size: 100, required: true));
         $database->createAttribute($col, Attribute::string(key: 'code', size: 100, required: true));
         $database->createAttribute($col, Attribute::string(key: 'tag', size: 50, required: true));
@@ -3331,7 +3331,7 @@ trait JoinTests
         $database->createCollection(new Collection(id: $cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
         $database->createAttribute($cCol, Attribute::string(key: 'name', size: 100, required: true));
 
-        $database->createCollection(new Collection(id: $oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: $oCol, permissions: [Permission::create(Role::any())]));
         $database->createAttribute($oCol, Attribute::string(key: 'customerId', required: true));
         $database->createAttribute($oCol, Attribute::integer(key: 'amount', required: true));
 
@@ -3407,7 +3407,7 @@ trait JoinTests
         $database->createCollection(new Collection(id: $cCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
         $database->createAttribute($cCol, Attribute::string(key: 'name', size: 100, required: true));
 
-        $database->createCollection(new Collection(id: $oCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: $oCol, permissions: [Permission::create(Role::any())]));
         $database->createAttribute($oCol, Attribute::string(key: 'customerId', required: true));
         $database->createAttribute($oCol, Attribute::integer(key: 'amount', required: true));
 
@@ -4071,7 +4071,7 @@ trait JoinTests
         $database->createCollection(new Collection(id: $pCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
         $database->createAttribute($pCol, Attribute::string(key: 'name', size: 100, required: true));
 
-        $database->createCollection(new Collection(id: $rCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: $rCol, permissions: [Permission::create(Role::any())]));
         $database->createAttribute($rCol, Attribute::string(key: 'prod_uid', required: true));
         $database->createAttribute($rCol, Attribute::integer(key: 'score', required: true));
 
@@ -4521,7 +4521,7 @@ trait JoinTests
         $cols = [$mCol, $jCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+        $this->createJoinPermissionCollections($database, $mCol, $jCol, mainGranted: false);
 
         $database->createDocument($mCol, new Document([
             '$id' => 'm-public',
@@ -4595,7 +4595,7 @@ trait JoinTests
         $cols = [$mCol, $jCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $this->createJoinPermissionCollections($database, $mCol, $jCol);
+        $this->createJoinPermissionCollections($database, $mCol, $jCol, mainGranted: false);
 
         $database->createDocument($mCol, new Document([
             '$id' => 'm1',
@@ -5037,20 +5037,10 @@ trait JoinTests
         $cols = [$mCol, $jCol];
         $this->cleanupAggCollections($database, $cols);
 
-        $database->createCollection(new Collection(id: $mCol, permissions: [
-            Permission::create(Role::any()),
-            Permission::read(Role::any()),
-            Permission::read(Role::user('jp-acl')),
-            Permission::read(Role::guests()),
-        ]));
+        $database->createCollection(new Collection(id: $mCol, permissions: [Permission::create(Role::any())]));
         $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
 
-        $database->createCollection(new Collection(id: $jCol, permissions: [
-            Permission::create(Role::any()),
-            Permission::read(Role::any()),
-            Permission::read(Role::user('jp-acl')),
-            Permission::read(Role::guests()),
-        ]));
+        $database->createCollection(new Collection(id: $jCol, permissions: [Permission::create(Role::any())]));
         $database->createAttribute($jCol, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($jCol, Attribute::integer(key: 'score', required: true));
 
@@ -5530,12 +5520,19 @@ trait JoinTests
         }
     }
 
-    private function createJoinPermissionCollections(Database $database, string $main, string $joined): void
+    /**
+     * The joined collection grants no collection-level read, so its rows are
+     * filtered per document exactly as a direct list would filter them.
+     */
+    private function createJoinPermissionCollections(Database $database, string $main, string $joined, bool $mainGranted = true): void
     {
-        $database->createCollection(new Collection(id: $main, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $granted = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $documentLevel = [Permission::create(Role::any())];
+
+        $database->createCollection(new Collection(id: $main, permissions: $mainGranted ? $granted : $documentLevel));
         $database->createAttribute($main, Attribute::string(key: 'name', size: 100, required: true));
 
-        $database->createCollection(new Collection(id: $joined, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: $joined, permissions: $documentLevel));
         $database->createAttribute($joined, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($joined, Attribute::integer(key: 'score', required: true));
     }
@@ -5545,7 +5542,7 @@ trait JoinTests
         $database->createCollection(new Collection(id: $main, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
         $database->createAttribute($main, Attribute::string(key: 'name', size: 100, required: true));
 
-        $database->createCollection(new Collection(id: $joined, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createCollection(new Collection(id: $joined, permissions: [Permission::create(Role::any())]));
         $database->createAttribute($joined, Attribute::string(key: 'mainId', required: true));
         $database->createAttribute($joined, Attribute::integer(key: 'score', required: true));
     }
@@ -6485,5 +6482,228 @@ trait JoinTests
         }
 
         return [$customers, $orders, $refunds, $notes];
+    }
+
+    public function testJoinParityKeepsMainRowsReadableThroughCollectionGrant(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jpar_grant_m';
+        $jCol = 'jpar_grant_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $granted = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $mCol, permissions: $granted));
+        $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createAttribute($mCol, Attribute::integer(key: 'visits', required: true));
+        $database->createCollection(new Collection(id: $jCol, permissions: $granted));
+        $database->createAttribute($jCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($jCol, Attribute::string(key: 'bio', size: 100, required: true));
+
+        $database->createDocument($mCol, new Document(['$id' => 'open', 'name' => 'Open', 'visits' => 1, '$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($mCol, new Document(['$id' => 'bare', 'name' => 'Bare', 'visits' => 10, '$permissions' => []]));
+        $database->createDocument($jCol, new Document(['$id' => 'open-profile', 'mainId' => 'open', 'bio' => 'Hello', '$permissions' => [Permission::read(Role::any())]]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $join = Query::leftJoin($jCol, '$id', 'mainId', '=', 'profile');
+
+            $this->assertSame(['bare', 'open'], $this->joinParityIds($database->find($mCol)));
+            $this->assertSame(
+                ['bare', 'open'],
+                $this->joinParityIds($database->find($mCol, [$join, Query::select(['name', 'profile.bio'])])),
+                'A left join is additive: it must not hide a row the collection grant makes readable',
+            );
+            $this->assertSame(2, $database->count($mCol));
+            $this->assertSame(2, $database->count($mCol, [$join]));
+            $this->assertSame(11, (int) $database->sum($mCol, 'visits'));
+            $this->assertSame(11, (int) $database->sum($mCol, 'visits', [$join]));
+            $this->assertSame('bare', $database->getDocument($mCol, 'bare')->getId());
+            $this->assertSame('bare', $database->getDocument($mCol, 'bare', [$join])->getId());
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinParityShowsEveryRowOfAGrantedJoinedCollection(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jpar_all_m';
+        $jCol = 'jpar_all_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $granted = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $mCol, permissions: $granted));
+        $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createCollection(new Collection(id: $jCol, permissions: $granted));
+        $database->createAttribute($jCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($jCol, Attribute::integer(key: 'amount', required: true));
+
+        $database->createDocument($mCol, new Document(['$id' => 'customer', 'name' => 'Customer', '$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($jCol, new Document(['$id' => 'public-order', 'mainId' => 'customer', 'amount' => 100, '$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($jCol, new Document(['$id' => 'secret-order', 'mainId' => 'customer', 'amount' => 9999, '$permissions' => [Permission::read(Role::user('other'))]]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $join = Query::join($jCol, '$id', 'mainId', '=', 'ord');
+
+            $this->assertSame([100, 9999], $this->joinParityIntegers($database->find($jCol), 'amount'));
+            $this->assertSame(
+                [100, 9999],
+                $this->joinParityIntegers($database->find($mCol, [$join, Query::select(['name', 'ord.amount'])]), 'ord.amount'),
+                'The collection grant makes every order readable directly, so the join must show every order',
+            );
+            $this->assertSame($database->count($jCol), $database->count($mCol, [$join]));
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinParityFiltersAJoinedCollectionPerDocumentWithoutGrant(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jpar_doc_m';
+        $jCol = 'jpar_doc_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection(new Collection(id: $mCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createCollection(new Collection(id: $jCol, permissions: [Permission::create(Role::any())]));
+        $database->createAttribute($jCol, Attribute::string(key: 'mainId', required: true));
+        $database->createAttribute($jCol, Attribute::string(key: 'text', size: 100, required: true));
+
+        $database->createDocument($mCol, new Document(['$id' => 'customer', 'name' => 'Customer', '$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($jCol, new Document(['$id' => 'alice-note', 'mainId' => 'customer', 'text' => 'mine', '$permissions' => [Permission::read(Role::user('alice'))]]));
+        $database->createDocument($jCol, new Document(['$id' => 'bob-note', 'mainId' => 'customer', 'text' => 'theirs', '$permissions' => [Permission::read(Role::user('bob'))]]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString(), Role::user('alice')->toString()], function () use ($database, $mCol, $jCol): void {
+            $join = Query::join($jCol, '$id', 'mainId', '=', 'note');
+
+            $this->assertSame(['mine'], $this->joinParityStrings($database->find($jCol), 'text'));
+            $this->assertSame(
+                ['mine'],
+                $this->joinParityStrings($database->find($mCol, [$join, Query::select(['name', 'note.text'])]), 'note.text'),
+                'Without a collection grant the joined rows are filtered per document, exactly like a direct list',
+            );
+            $this->assertSame($database->count($jCol), $database->count($mCol, [$join]));
+            $this->assertSame(
+                'mine',
+                $database->getDocument($mCol, 'customer', [$join, Query::select(['name', 'note.text'])])->getAttribute('note.text'),
+            );
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testJoinParityRejectsAJoinedCollectionWithoutGrantOrDocumentSecurity(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $mCol = 'jpar_deny_m';
+        $jCol = 'jpar_deny_j';
+        $cols = [$mCol, $jCol];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection(new Collection(id: $mCol, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($mCol, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createAttribute($mCol, Attribute::integer(key: 'visits', required: true));
+        $database->createCollection(new Collection(id: $jCol, permissions: [Permission::create(Role::any())], documentSecurity: false));
+        $database->createAttribute($jCol, Attribute::string(key: 'mainId', required: true));
+
+        $database->createDocument($mCol, new Document(['$id' => 'customer', 'name' => 'Customer', 'visits' => 1, '$permissions' => [Permission::read(Role::any())]]));
+        $database->createDocument($jCol, new Document(['$id' => 'entry', 'mainId' => 'customer', '$permissions' => [Permission::read(Role::any())]]));
+
+        $this->withAuthorizationRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $jCol): void {
+            $join = Query::join($jCol, '$id', 'mainId', '=', 'ledger');
+            $reads = [
+                'direct find' => fn () => $database->find($jCol),
+                'find' => fn () => $database->find($mCol, [$join]),
+                'count' => fn () => $database->count($mCol, [$join]),
+                'sum' => fn () => $database->sum($mCol, 'visits', [$join]),
+                'getDocument' => fn () => $database->getDocument($mCol, 'customer', [$join]),
+            ];
+
+            foreach ($reads as $read => $callback) {
+                try {
+                    $callback();
+                    $this->fail("{$read} must reject a collection readable neither at collection nor at document level");
+                } catch (AuthorizationException $exception) {
+                    $this->assertNotSame('', $exception->getMessage());
+                }
+            }
+        });
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return list<string>
+     */
+    private function joinParityIds(array $documents): array
+    {
+        $ids = \array_values(\array_unique(\array_map(static fn (Document $document): string => $document->getId(), $documents)));
+        \sort($ids);
+
+        return $ids;
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return list<int>
+     */
+    private function joinParityIntegers(array $documents, string $attribute): array
+    {
+        $values = [];
+        foreach ($documents as $document) {
+            $value = $document->getAttribute($attribute);
+            if (\is_numeric($value)) {
+                $values[] = (int) $value;
+            }
+        }
+        \sort($values);
+
+        return $values;
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @return list<string>
+     */
+    private function joinParityStrings(array $documents, string $attribute): array
+    {
+        $values = [];
+        foreach ($documents as $document) {
+            $value = $document->getAttribute($attribute);
+            if (\is_string($value)) {
+                $values[] = $value;
+            }
+        }
+        \sort($values);
+
+        return $values;
     }
 }

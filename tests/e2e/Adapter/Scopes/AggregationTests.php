@@ -3,12 +3,14 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use Throwable;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -1655,4 +1657,48 @@ trait AggregationTests
         $database->deleteCollection('bit_xor');
     }
 
+    private function assertRejectedAsQueryShape(callable $call, string $message): void
+    {
+        $error = null;
+        try {
+            $call();
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(QueryException::class, $error, $error === null ? 'the query shape was accepted' : $error::class.': '.$error->getMessage());
+        $this->assertSame($message, $error->getMessage());
+    }
+
+    public function testJoinCountIsCappedAtEight(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'join_cap';
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'label', size: 20, required: true));
+        $database->createDocument($collection, new Document([
+            'label' => 'only',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $joins = fn (int $count): array => \array_map(fn (int $index): Query => Query::crossJoin($collection, 'joined'.$index), \range(1, $count));
+
+        $this->assertCount(1, $database->find($collection, $joins(8)));
+        $this->assertSame(1, $database->count($collection, $joins(8)));
+
+        $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $joins(9)), 'Too many joins: at most 8 are allowed');
+        $this->assertRejectedAsQueryShape(fn () => $database->find($collection, [...$joins(62), Query::limit(1)]), 'Too many joins: at most 8 are allowed');
+        $this->assertRejectedAsQueryShape(fn () => $database->count($collection, $joins(9)), 'Too many joins: at most 8 are allowed');
+
+        $database->deleteCollection($collection);
+    }
 }

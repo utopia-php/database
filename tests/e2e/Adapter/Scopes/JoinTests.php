@@ -7620,4 +7620,56 @@ trait JoinTests
 
         return $collections;
     }
+
+    public function testJoinColumnTheJoinedCollectionDoesNotDeclareIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, $orders] = $collections = $this->seedJoinedAttributeCollections($database, 'jcnd');
+        $join = Query::join($orders, '$id', 'customerId', '=', 'purchase');
+
+        $reads = [
+            'filter' => fn () => $database->find($customers, [$join, Query::equal('purchase.nothing', ['x'])]),
+            'select' => fn () => $database->find($customers, [$join, Query::select(['name', 'purchase.nothing'])]),
+            'order' => fn () => $database->find($customers, [$join, Query::orderAsc('purchase.nothing')]),
+            'count()' => fn () => $database->count($customers, [$join, Query::equal('purchase.nothing', ['x'])]),
+            'sum()' => fn () => $database->sum($customers, 'purchase.amount', [$join, Query::equal('purchase.nothing', ['x'])]),
+        ];
+        if ($database->getAdapter()->supports(Capability::Aggregations)) {
+            $reads['aggregate'] = fn () => $database->find($customers, [$join, Query::countDistinct('purchase.nothing', 'total')]);
+            $reads['groupBy'] = fn () => $database->find($customers, [$join, Query::count('*', 'rows'), Query::groupBy(['purchase.nothing'])]);
+        }
+
+        foreach ($reads as $type => $read) {
+            try {
+                $read();
+                $this->fail('A '.$type.' on a column the joined collection does not declare reached the engine');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute not found in schema: purchase.nothing', $error->getMessage(), $type);
+            }
+        }
+
+        try {
+            $database->find($customers, [$join, Query::equal('purchase.$permissions', ['read("any")'])]);
+            $this->fail('A filter on joined permissions was accepted although a filter on the main permissions is not');
+        } catch (QueryException $error) {
+            $this->assertSame('Invalid query: Attribute not found in schema: purchase.$permissions', $error->getMessage());
+        }
+
+        $results = $database->find($customers, [
+            $join,
+            Query::equal('purchase.$id', ['paid', 'open']),
+            Query::between('purchase.$createdAt', '1970-01-01', '2099-12-31'),
+            Query::between('purchase.amount', 10, 500),
+            Query::select(['name', 'purchase.$id', 'purchase.$permissions', 'purchase.$createdAt', 'purchase.$sequence']),
+            Query::orderAsc('purchase.amount'),
+        ]);
+        $this->assertSame(['open', 'paid'], \array_map(static fn (Document $document): mixed => $document->getAttribute('purchase.$id'), $results));
+
+        $this->cleanupAggCollections($database, $collections);
+    }
 }

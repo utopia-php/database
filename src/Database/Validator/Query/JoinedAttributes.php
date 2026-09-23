@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Document;
+
 /**
  * Resolution of attributes this collection does not declare, for validators that may legitimately
  * name an attribute of a joined collection.
@@ -9,11 +11,18 @@ namespace Utopia\Database\Validator\Query;
 trait JoinedAttributes
 {
     /**
-     * The attributes each join of the query set declares, one set per join.
+     * The joins of the query set whose collection is known, in query order.
      *
-     * @var list<array<string, true>>
+     * @var list<JoinedCollection>
      */
-    protected array $joinedAttributes = [];
+    protected array $joins = [];
+
+    /**
+     * The known join of each alias.
+     *
+     * @var array<string, JoinedCollection>
+     */
+    protected array $joinsByAlias = [];
 
     /**
      * @var array<string, true>
@@ -21,20 +30,28 @@ trait JoinedAttributes
     protected array $joinAliases = [];
 
     /**
-     * @param  list<array<string, true>>  $joins  The attributes each join of the query set declares
+     * Declare the joins of the query set whose collection is known: an `alias.column` under one of
+     * their aliases has to name a column of that collection, and a bare name may resolve to one.
+     *
+     * @param  list<JoinedCollection>  $joins
      */
-    public function allowJoinedAttributes(array $joins): void
+    public function allowJoins(array $joins): void
     {
-        $this->joinedAttributes = $joins;
-    }
+        $this->joins = $joins;
+        $this->joinsByAlias = [];
 
-    public function resetJoinedAttributes(): void
-    {
-        $this->joinedAttributes = [];
-        $this->joinAliases = [];
+        foreach ($joins as $join) {
+            if ($join->alias !== '') {
+                $this->joinsByAlias[$join->alias] ??= $join;
+                $this->joinAliases[$join->alias] = true;
+            }
+        }
     }
 
     /**
+     * Declare join aliases of the query set. Under an alias whose collection is not known, any
+     * plain column is accepted.
+     *
      * @param  array<string>  $aliases
      */
     public function allowJoinAliases(array $aliases): void
@@ -46,11 +63,45 @@ trait JoinedAttributes
         }
     }
 
+    public function resetJoinAliases(): void
+    {
+        $this->joins = [];
+        $this->joinsByAlias = [];
+        $this->joinAliases = [];
+    }
+
     /**
-     * An `alias.column` reference has to name a join alias the query set declared, so a typo in
-     * the alias is still rejected. A bare name has to be declared by exactly one join: by none it
-     * is not found, and by several it would silently pick one of them. Sets the message when the
-     * attribute does not resolve.
+     * Whether `alias.column` refers to a join: the alias is one the query set declared, and the
+     * column a plain identifier.
+     */
+    protected function isJoinColumnReference(string $alias, string $column): bool
+    {
+        return isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column);
+    }
+
+    /**
+     * A column under a join alias is valid exactly when it would be valid unaliased on the
+     * collection the alias joins: one of its attributes, or an internal attribute this validator
+     * accepts on the main collection. Sets the message when the column is not valid.
+     */
+    protected function isJoinedColumn(string $alias, string $column): bool
+    {
+        $join = $this->joinsByAlias[$alias] ?? null;
+
+        if ($join === null || isset($join->attributes[$column]) || $this->isJoinedInternalAttribute($column)) {
+            return true;
+        }
+
+        $this->message = 'Attribute not found in schema: '.$alias.'.'.$column;
+
+        return false;
+    }
+
+    /**
+     * An `alias.column` reference has to name a join alias the query set declared and a column of
+     * the collection it joins, so a typo in either is still rejected. A bare name has to be
+     * declared by exactly one join: by none it is not found, and by several it would silently
+     * pick one of them. Sets the message when the attribute does not resolve.
      */
     protected function isJoinedAttribute(string $attribute): bool
     {
@@ -58,8 +109,8 @@ trait JoinedAttributes
 
         if ($dot === false) {
             $joins = 0;
-            foreach ($this->joinedAttributes as $attributes) {
-                if (isset($attributes[$attribute])) {
+            foreach ($this->joins as $join) {
+                if (isset($join->attributes[$attribute])) {
                     $joins++;
                 }
             }
@@ -73,11 +124,13 @@ trait JoinedAttributes
 
                 return false;
             }
-        } elseif (
-            isset($this->joinAliases[\substr($attribute, 0, $dot)])
-            && $this->isAllowedJoinColumn(\substr($attribute, $dot + 1))
-        ) {
-            return true;
+        } else {
+            $alias = \substr($attribute, 0, $dot);
+            $column = \substr($attribute, $dot + 1);
+
+            if ($this->isJoinColumnReference($alias, $column)) {
+                return $this->isJoinedColumn($alias, $column);
+            }
         }
 
         $this->message = 'Attribute not found in schema: '.$attribute;
@@ -85,5 +138,21 @@ trait JoinedAttributes
         return false;
     }
 
+    /**
+     * Internal attributes are the same on every collection, except `$collection`: a read derives
+     * it from the collection it reads, and a joined row has no column for it.
+     */
+    private function isJoinedInternalAttribute(string $column): bool
+    {
+        return \str_starts_with($column, '$')
+            && $column !== Document::COLLECTION
+            && $this->acceptsMainAttribute($column);
+    }
+
     abstract protected function isAllowedJoinColumn(string $column): bool;
+
+    /**
+     * Whether this validator accepts the attribute unaliased on the main collection.
+     */
+    abstract protected function acceptsMainAttribute(string $attribute): bool;
 }

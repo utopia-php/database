@@ -23,15 +23,12 @@ use Utopia\Validator\Text;
  */
 class Filter extends Base
 {
+    use JoinedAttributes;
+
     /**
      * @var array<int|string, mixed>
      */
     protected array $schema = [];
-
-    /**
-     * @var array<string, true>
-     */
-    protected array $joinAliases = [];
 
     /**
      * @param  array<Document>  $attributes
@@ -83,8 +80,8 @@ class Filter extends Base
             $alias = \substr($attribute, 0, $dot);
             $column = \substr($attribute, $dot + 1);
 
-            if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
-                return true;
+            if ($this->isJoinColumnReference($alias, $column)) {
+                return ! $this->supportForAttributes || $this->isJoinedColumn($alias, $column);
             }
 
             // For relationships, just validate the top level.
@@ -120,7 +117,7 @@ class Filter extends Base
             $column = \substr($attribute, $dot + 1);
 
             // Joined columns are not in this collection's schema; skip local type checks.
-            if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
+            if ($this->isJoinColumnReference($alias, $column)) {
                 if (count($values) > $this->maxValuesCount) {
                     $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
 
@@ -568,7 +565,7 @@ class Filter extends Base
                     $alias = \substr($attributeKey, 0, $dot);
                     $column = \substr($attributeKey, $dot + 1);
 
-                    if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
+                    if ($this->isJoinColumnReference($alias, $column)) {
                         if (count($value->getValues()) != 1) {
                             $this->message = \ucfirst($method->value).' queries require exactly one vector value.';
 
@@ -698,21 +695,9 @@ class Filter extends Base
         }
     }
 
-    /**
-     * @param  array<string>  $aliases
-     */
-    public function allowJoinAliases(array $aliases): void
+    protected function acceptsMainAttribute(string $attribute): bool
     {
-        foreach ($aliases as $alias) {
-            if ($alias !== '') {
-                $this->joinAliases[$alias] = true;
-            }
-        }
-    }
-
-    public function resetJoinAliases(): void
-    {
-        $this->joinAliases = [];
+        return isset($this->schema[$attribute]);
     }
 
     /**

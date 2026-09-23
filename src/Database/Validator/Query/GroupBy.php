@@ -69,4 +69,9 @@ class GroupBy extends Base
 
         return true;
     }
+
+    protected function acceptsMainAttribute(string $attribute): bool
+    {
+        return isset($this->schema[$attribute]);
+    }
 }

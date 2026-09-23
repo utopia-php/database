@@ -22,7 +22,7 @@ use Utopia\Database\Validator\Authorization;
 
 /**
  * A joined column is valid exactly when the column would be valid unaliased on the joined
- * collection for the same query type, in find(), count() and sum().
+ * collection for the same query type, in find(), count(), sum() and getDocument().
  */
 final class JoinedColumnValidationTest extends TestCase
 {
@@ -75,6 +75,13 @@ final class JoinedColumnValidationTest extends TestCase
             'groupBy' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::count('*', 'rows'), Query::groupBy(['note.nothing'])])],
             'count() filter' => [static fn (Database $database): mixed => $database->count('customers', [self::join(), Query::equal('note.nothing', ['x'])])],
             'sum() filter' => [static fn (Database $database): mixed => $database->sum('customers', 'visits', [self::join(), Query::equal('note.nothing', ['x'])])],
+            'getDocument() join condition' => [static fn (Database $database): mixed => $database->getDocument('customers', 'first', [
+                Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.nothing', ['x'])]),
+            ])],
+            'getDocument() select' => [static fn (Database $database): mixed => $database->getDocument('customers', 'first', [
+                Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]),
+                Query::select(['name', 'note.nothing']),
+            ])],
         ];
     }
 
@@ -112,6 +119,12 @@ final class JoinedColumnValidationTest extends TestCase
                 static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::select(['name', 'note.$collection'])]),
                 'Invalid query: Attribute not found in schema: note.$collection',
             ],
+            '$permissions in a getDocument() join condition' => [
+                static fn (Database $database): mixed => $database->getDocument('customers', 'first', [
+                    Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.$permissions', ['x'])]),
+                ]),
+                'Invalid query: Attribute not found in schema: note.$permissions',
+            ],
         ];
     }
 
@@ -125,6 +138,25 @@ final class JoinedColumnValidationTest extends TestCase
         $this->expectExceptionMessage($message);
 
         $read($this->database);
+    }
+
+    public function testGetDocumentChecksJoinConditionValuesLikeFind(): void
+    {
+        $queries = [
+            Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('name', [5])]),
+        ];
+
+        foreach ([
+            'find' => fn (): mixed => $this->database->find('customers', $queries),
+            'getDocument' => fn (): mixed => $this->database->getDocument('customers', 'first', $queries),
+        ] as $method => $read) {
+            try {
+                $read();
+                $this->fail($method.'() accepted a join condition whose value does not fit the attribute');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Query value is invalid for attribute "name"', $error->getMessage(), $method);
+            }
+        }
     }
 
     /**
@@ -155,6 +187,13 @@ final class JoinedColumnValidationTest extends TestCase
             ])],
             'count() with a known column' => [static fn (Database $database): mixed => $database->count('customers', [self::join(), Query::equal('note.body', ['needle'])])],
             'sum() with a known column' => [static fn (Database $database): mixed => $database->sum('customers', 'visits', [self::join(), Query::equal('note.body', ['needle'])])],
+            'getDocument() join condition on a known column' => [static fn (Database $database): mixed => $database->getDocument('customers', 'first', [
+                Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.body', ['needle'])]),
+            ])],
+            'getDocument() select of joined columns' => [static fn (Database $database): mixed => $database->getDocument('customers', 'first', [
+                Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]),
+                Query::select(['name', 'note.body', 'note.$id', 'note.$permissions']),
+            ])],
         ];
     }
 
@@ -166,10 +205,27 @@ final class JoinedColumnValidationTest extends TestCase
     {
         $result = $read($this->database);
 
-        if (\is_array($result)) {
+        if ($result instanceof Document) {
+            $this->assertSame('first', $result->getId());
+        } elseif (\is_array($result)) {
             $this->assertCount(1, $result);
         } else {
             $this->assertSame(1, $result);
+        }
+    }
+
+    public function testTopLevelFilterInGetDocumentStaysAnInvalidMethod(): void
+    {
+        foreach ([
+            'without a join' => [Query::equal('name', ['First'])],
+            'with a join' => [Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId')]), Query::equal('name', ['First'])],
+        ] as $label => $queries) {
+            try {
+                $this->database->getDocument('customers', 'first', $queries);
+                $this->fail('getDocument() accepted a top-level filter '.$label);
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query method: equal', $error->getMessage(), $label);
+            }
         }
     }
 

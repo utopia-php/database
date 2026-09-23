@@ -7672,4 +7672,44 @@ trait JoinTests
 
         $this->cleanupAggCollections($database, $collections);
     }
+
+    public function testGetDocumentJoinConditionIsValidatedAsAListingValidatesIt(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        [$customers, , , $notes] = $collections = $this->seedJoinedAttributeCollections($database, 'jgdc');
+
+        foreach ([
+            'join condition' => [Query::leftJoin($notes, 'note', [Query::on('$id', 'customerId'), Query::equal('note.nothing', ['x'])])],
+            'select' => [Query::leftJoin($notes, 'note', [Query::on('$id', 'customerId')]), Query::select(['name', 'note.nothing'])],
+        ] as $type => $queries) {
+            try {
+                $database->getDocument($customers, 'first', $queries);
+                $this->fail('getDocument() sent a '.$type.' on a column the joined collection does not declare to the engine');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute not found in schema: note.nothing', $error->getMessage(), $type);
+            }
+        }
+
+        try {
+            $database->getDocument($customers, 'first', [
+                Query::leftJoin($notes, 'note', [Query::on('$id', 'customerId')]),
+                Query::equal('name', ['First']),
+            ]);
+            $this->fail('getDocument() accepted a filter outside a join condition');
+        } catch (QueryException $error) {
+            $this->assertSame('Invalid query method: equal', $error->getMessage());
+        }
+
+        $document = $database->getDocument($customers, 'first', [
+            Query::leftJoin($notes, 'note', [Query::on('$id', 'customerId'), Query::equal('note.body', ['a needle in a haystack'])]),
+        ]);
+        $this->assertSame('first', $document->getId());
+
+        $this->cleanupAggCollections($database, $collections);
+    }
 }

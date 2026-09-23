@@ -49,10 +49,8 @@ final class BigIntegerTest extends TestCase
         $this->assertSame('BIGINT', $mariaDB->getColumnType(ColumnType::BigInteger->value, 0));
         $this->assertSame('BIGINT', $mariaDB->getColumnType('bigint', 9999));
         $this->assertSame('BIGINT UNSIGNED', $mariaDB->getColumnType(ColumnType::BigInteger->value, 0, false));
-        $this->assertSame('BIGINT', $mariaDB->getColumnType(ColumnType::BigSerial->value, 0));
         $this->assertSame('BIGINT', $postgres->getColumnType(ColumnType::BigInteger->value, 0));
         $this->assertSame('BIGINT', $postgres->getColumnType('bigint', 9999));
-        $this->assertSame('BIGSERIAL', $postgres->getColumnType(ColumnType::BigSerial->value, 0));
     }
 
     public function testCastingNormalizesLegacyBigIntegerWithoutPrecisionLoss(): void

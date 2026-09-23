@@ -1558,7 +1558,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return "VARCHAR({$size})";
         }
 
-        if (\in_array($type, [ColumnType::Integer, ColumnType::BigInteger, ColumnType::BigSerial], true)) {
+        if (\in_array($type, [ColumnType::Integer, ColumnType::BigInteger], true)) {
             $suffix = $signed ? '' : ' UNSIGNED';
 
             return ($type === ColumnType::Integer && $size < 8 ? 'INT' : 'BIGINT').$suffix;

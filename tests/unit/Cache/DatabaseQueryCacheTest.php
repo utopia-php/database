@@ -12,6 +12,8 @@ use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Scope;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -94,46 +96,47 @@ final class DatabaseQueryCacheTest extends TestCase
 
         $queryAdapter->resetPurges();
         $database->createDocument('users', new Document(['$id' => 'a']));
-        $this->assertSame(2, $queryAdapter->getWrites('default:qcache:users#epoch'));
+        $this->assertSame(2, $queryAdapter->getWrites($this->collectionKey($database, 'users').'#epoch'));
 
         $database->setQueryCache(null);
         $queryAdapter->resetPurges();
         $database->createDocument('users', new Document(['$id' => 'b']));
-        $this->assertSame(0, $queryAdapter->getWrites('default:qcache:users#epoch'));
+        $this->assertSame(0, $queryAdapter->getWrites($this->collectionKey($database, 'users').'#epoch'));
     }
 
     public function testSchemaAndCollectionMutationsInvalidateQueries(): void
     {
         [$database, $queryAdapter] = $this->createDatabase();
         $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
+        $started = $this->collectionKey($database, 'users').'#started';
 
         $queryAdapter->resetPurges();
         $database->updateCollection('users', $this->permissions(), false);
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges($started));
 
         $queryAdapter->resetPurges();
         $database->createAttribute('users', Attribute::string(key: 'name'));
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges($started));
 
         $queryAdapter->resetPurges();
         $database->updateAttribute('users', 'name', size: 128);
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges($started));
 
         $queryAdapter->resetPurges();
         $database->createIndex('users', Index::key(key: 'name', attributes: ['name']));
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges($started));
 
         $queryAdapter->resetPurges();
         $database->renameIndex('users', 'name', 'renamed');
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges($started));
 
         $queryAdapter->resetPurges();
         $database->deleteIndex('users', 'renamed');
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges($started));
 
         $queryAdapter->resetPurges();
         $database->deleteAttribute('users', 'name');
-        $this->assertGreaterThan(0, $queryAdapter->getPurges('default:qcache:users#epoch'));
+        $this->assertGreaterThan(0, $queryAdapter->getPurges($started));
     }
 
     public function testDeleteAndRecreateCannotReuseOldCollectionResults(): void
@@ -358,8 +361,7 @@ final class DatabaseQueryCacheTest extends TestCase
         $database->setQueryCache(new QueryCache(new Cache($cache)));
         $database->createCollection(new Collection(id: 'users', permissions: $this->permissions(), documentSecurity: false));
         $database->find('users');
-        $cache->seedEpoch('users');
-        $cache->failPurges();
+        $cache->failBlocks();
 
         $this->expectException(\RuntimeException::class);
         $database->silent(fn () => $database->createDocument('users', new Document(['$id' => 'user'])));
@@ -427,7 +429,7 @@ final class DatabaseQueryCacheTest extends TestCase
 
             $duringCommit = [];
             $writerAdapter->pauseNextCommit(function () use ($reader, $cache, &$duringCommit): void {
-                $epoch = $cache->load('default:qcache:users#epoch', 3600);
+                $epoch = $cache->load($this->collectionKey($reader, 'users').'#epoch', 3600);
                 $this->assertIsString($epoch);
                 $this->assertStringStartsWith('blocked:', $epoch);
                 $duringCommit = $this->names($reader->find('users', [Query::orderAsc('$id')]));
@@ -469,7 +471,7 @@ final class DatabaseQueryCacheTest extends TestCase
                 $this->assertStringContainsString('activate query cache', $exception->getMessage());
             }
 
-            $epoch = $cache->load('default:qcache:users#epoch', 3600);
+            $epoch = $cache->load($this->collectionKey($reader, 'users').'#epoch', 3600);
             $this->assertIsString($epoch);
             $this->assertStringStartsWith('blocked:', $epoch);
 
@@ -589,8 +591,7 @@ final class DatabaseQueryCacheTest extends TestCase
             $this->names($database->find('users', [Query::orderAsc('$id')])),
         );
 
-        $cache->seedEpoch('users');
-        $cache->failPurges();
+        $cache->failBlocks();
         try {
             $mutation($database);
             $this->fail('Mandatory invalidation failure was not propagated');
@@ -598,12 +599,19 @@ final class DatabaseQueryCacheTest extends TestCase
             $this->assertStringContainsString('query cache epoch', $exception->getMessage());
         }
 
+        $this->assertSame(
+            ['existing' => 'original'],
+            $this->names($database->find('users', [Query::orderAsc('$id')])),
+            'A block that never landed must leave a cached result that still matches the rolled-back collection',
+        );
+
+        $database->setQueryCache(null);
         $adapter->observeFinds('users');
         $this->assertSame(
             ['existing' => 'original'],
             $this->names($database->find('users', [Query::orderAsc('$id')])),
         );
-        $this->assertSame(1, $adapter->getObservedFinds(), 'The stale cached query result must stay blocked');
+        $this->assertSame(1, $adapter->getObservedFinds(), 'The rollback must be confirmed by the database, not the query cache');
     }
 
     /**
@@ -660,6 +668,18 @@ final class DatabaseQueryCacheTest extends TestCase
                 \unlink($file);
             }
         }
+    }
+
+    private function collectionKey(Database $database, string $collection): string
+    {
+        $adapter = $database->getAdapter();
+
+        return (new QueryCache(new Cache(new None())))->getCollectionKey(new Scope(
+            hostname: $adapter->supports(Capability::Hostname) ? $adapter->getHostname() : '',
+            database: $adapter->getDatabase(),
+            namespace: $adapter->getNamespace(),
+            tenant: $adapter->getTenant(),
+        ), $collection);
     }
 
     /** @return array<string> */

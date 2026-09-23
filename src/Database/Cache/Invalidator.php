@@ -12,29 +12,38 @@ class Invalidator implements Lifecycle
 {
     public function __construct(
         private QueryCache $queryCache,
+        private Scope $scope = new Scope(),
     ) {
     }
 
     public function handle(Event $event, mixed $data): void
     {
-        $tokens = $this->tokens($event, $data);
+        $this->invalidate($event, $data, $this->scope);
+    }
+
+    public function invalidate(Event $event, mixed $data, Scope $scope): void
+    {
+        $tokens = $this->tokens($event, $data, $scope);
         $this->block($tokens);
         $this->activate($tokens);
     }
 
     /**
-     * @return array<string, string>
+     * @return array<string, string> Tokens by the collection key they invalidate
      */
-    public function tokens(Event $event, mixed $data): array
+    public function tokens(Event $event, mixed $data, ?Scope $scope = null): array
     {
         if (! $this->isMutation($event)) {
             return [];
         }
 
-        return \array_map(
-            static fn (): string => \bin2hex(\random_bytes(16)),
-            $this->extractCollections($event, $data),
-        );
+        $tokens = [];
+        foreach (\array_keys($this->extractCollections($event, $data)) as $collection) {
+            $key = $this->queryCache->getCollectionKey($scope ?? $this->scope, (string) $collection);
+            $tokens[$key] = \bin2hex(\random_bytes(16));
+        }
+
+        return $tokens;
     }
 
     /**
@@ -42,8 +51,8 @@ class Invalidator implements Lifecycle
      */
     public function block(array $tokens): void
     {
-        foreach ($tokens as $collection => $token) {
-            $this->queryCache->blockCollection($collection, $token);
+        foreach ($tokens as $key => $token) {
+            $this->queryCache->blockCollection($key, $token);
         }
     }
 
@@ -53,9 +62,9 @@ class Invalidator implements Lifecycle
     public function activate(array $tokens): void
     {
         $failure = null;
-        foreach ($tokens as $collection => $token) {
+        foreach ($tokens as $key => $token) {
             try {
-                $this->queryCache->activateCollection($collection, $token);
+                $this->queryCache->activateCollection($key, $token);
             } catch (Throwable $error) {
                 $failure ??= $error;
             }
@@ -66,7 +75,7 @@ class Invalidator implements Lifecycle
         }
     }
 
-    private function isMutation(Event $event): bool
+    public function isMutation(Event $event): bool
     {
         return \in_array($event, [
             Event::CollectionCreate,

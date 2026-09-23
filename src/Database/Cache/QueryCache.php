@@ -12,23 +12,23 @@ class QueryCache
 
     private const string INITIAL_EPOCH = self::ACTIVE_PREFIX.'initial';
 
-    private const string BLOCKED_GENERATION = 'blocked';
-
     private const string BLOCKED_PREFIX = 'blocked:';
+
+    private const string SEPARATOR = '@';
+
+    private const string NEVER_STARTED = '0';
+
+    private const int PERMANENT = \PHP_INT_MAX;
 
     private const int VERSION = 1;
 
     /** @var array<string, Region> */
     private array $regions = [];
 
-    private Cache $cache;
-
-    private string $cacheName;
-
-    public function __construct(Cache $cache, string $cacheName = 'default')
-    {
-        $this->cache = $cache;
-        $this->cacheName = $cacheName;
+    public function __construct(
+        private readonly Cache $cache,
+        private readonly string $cacheName = 'default',
+    ) {
     }
 
     public function setRegion(string $collection, Region $region): void
@@ -41,53 +41,58 @@ class QueryCache
         return $this->regions[$collection] ?? new Region();
     }
 
-    /**
-     * @param  array<mixed>  $queries
-     */
-    public function buildQueryKey(
-        string $collection,
-        array $queries,
-        string $namespace,
-        int|string|null $tenant,
-        string $context = '',
-    ): string {
-        $tenant = match (true) {
-            $tenant === null => ['type' => 'null'],
-            \is_int($tenant) => ['type' => 'integer', 'value' => $tenant],
-            default => ['type' => 'string', 'value' => $tenant],
-        };
+    public function getCollectionKey(Scope $scope, string $collection): string
+    {
+        $scopeHash = \md5(\serialize([
+            'hostname' => $scope->hostname,
+            'database' => $scope->database,
+            'namespace' => $scope->namespace,
+            'tenant' => $scope->tenant,
+            'collection' => $collection,
+        ]));
 
-        $queriesHash = \md5(\serialize([
-            'namespace' => $namespace,
-            'tenant' => $tenant,
+        return "{$this->cacheName}:qcache:{$collection}:{$scopeHash}";
+    }
+
+    /**
+     * Resolve a query's entry in the collection's current epoch; null while the
+     * collection's region is disabled or a write to it is in progress.
+     *
+     * @param  array<mixed>  $queries
+     *
+     * @phpstan-impure
+     */
+    public function getEntry(Scope $scope, string $collection, array $queries, string $context = ''): ?Entry
+    {
+        if (! $this->getRegion($collection)->enabled) {
+            return null;
+        }
+
+        $key = $this->getCollectionKey($scope, $collection);
+        $epoch = $this->getEpoch($key, $collection);
+        if ($epoch === null) {
+            return null;
+        }
+
+        $hash = \md5(\serialize([
             'queries' => $queries,
             'context' => $context,
         ]));
 
-        return "{$this->cacheName}:qcache:{$collection}#{$queriesHash}";
+        return new Entry($key.'#'.$epoch.':'.$hash, $collection);
     }
 
     /**
      * @return array<Document>|null
+     *
+     * @phpstan-impure
      */
-    public function get(string $key): ?array
+    public function get(Entry $entry): ?array
     {
-        [$cacheKey, $hash] = $this->splitKey($key);
-        $collection = $this->getCollectionFromKey($cacheKey);
-        $epoch = $this->getEpoch($cacheKey, $collection);
-        if ($epoch === null) {
-            return null;
-        }
-        $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
-
         /** @var mixed $data */
-        $data = $this->cache->load($physicalKey, $this->getRegion($collection)->ttl);
+        $data = $this->cache->load($entry->key, $this->getRegion($entry->collection)->ttl);
 
         if ($data === false || $data === null) {
-            return null;
-        }
-
-        if ($this->getEpoch($cacheKey, $collection) !== $epoch) {
             return null;
         }
 
@@ -96,7 +101,7 @@ class QueryCache
             || ($data['version'] ?? null) !== self::VERSION
             || ! \is_array($data['documents'] ?? null)
         ) {
-            $this->purgeLoadedKey($physicalKey);
+            $this->purgeLoadedKey($entry->key);
 
             return null;
         }
@@ -109,7 +114,7 @@ class QueryCache
             }
 
             if (! \is_array($item)) {
-                $this->purgeLoadedKey($physicalKey);
+                $this->purgeLoadedKey($entry->key);
 
                 return null;
             }
@@ -126,31 +131,16 @@ class QueryCache
         return $documents;
     }
 
-    public function getGeneration(string $key): string
+    public function getGeneration(Entry $entry): string
     {
-        [$cacheKey, $hash] = $this->splitKey($key);
-        $collection = $this->getCollectionFromKey($cacheKey);
-        $epoch = $this->getEpoch($cacheKey, $collection, true);
-        if ($epoch === null) {
-            return self::BLOCKED_GENERATION;
-        }
-        $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
-
-        return \base64_encode(\json_encode([
-            'epoch' => $epoch,
-            'lease' => $this->cache->getGeneration($physicalKey),
-        ], JSON_THROW_ON_ERROR));
+        return $this->cache->getGeneration($entry->key);
     }
 
     /**
      * @param  array<mixed>  $results
      */
-    public function set(string $key, array $results, string $generation = '0'): bool
+    public function set(Entry $entry, array $results, string $generation): bool
     {
-        if ($generation === self::BLOCKED_GENERATION) {
-            return false;
-        }
-
         $data = [];
         foreach ($results as $result) {
             if (! $result instanceof Document) {
@@ -160,139 +150,89 @@ class QueryCache
             $data[] = $result->getArrayCopy();
         }
 
-        [$cacheKey, $hash] = $this->splitKey($key);
-        $collection = $this->getCollectionFromKey($cacheKey);
-        $decoded = $this->decodeGeneration($generation, $cacheKey, $hash, $collection);
-        if ($decoded === null) {
-            return false;
-        }
-        [$epoch, $lease] = $decoded;
-        if ($this->getEpoch($cacheKey, $collection) !== $epoch) {
-            return false;
-        }
-        $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
-
-        return $this->cache->saveWithLease($physicalKey, [
+        return $this->cache->saveWithLease($entry->key, [
             'version' => self::VERSION,
             'documents' => $data,
-        ], '', $lease) !== false;
+        ], '', $generation) !== false;
     }
 
-    public function invalidateCollection(string $collection): void
+    public function invalidateCollection(Scope $scope, string $collection): void
     {
+        $key = $this->getCollectionKey($scope, $collection);
         $token = \bin2hex(\random_bytes(16));
-        $this->blockCollection($collection, $token);
-        $this->activateCollection($collection, $token);
+        $this->blockCollection($key, $token);
+        $this->activateCollection($key, $token);
     }
 
     /**
      * Publish a shared tombstone before a mutation starts.
      */
-    public function blockCollection(string $collection, string $token): void
+    public function blockCollection(string $key, string $token): void
     {
-        $cacheKey = $this->getCollectionKey($collection);
-        $ownerKey = $this->getOwnerKey($cacheKey, $token);
-        if ($this->cache->save($ownerKey, $token) === false) {
-            throw new RuntimeException("Failed to register query cache owner for collection '{$collection}'");
+        if ($this->cache->save($this->getOwnerKey($key, $token), $token) === false) {
+            throw new RuntimeException("Failed to register query cache owner for '{$key}'");
         }
 
-        $startedKey = $this->getStartedKey($cacheKey);
-        $started = $this->cache->getGeneration($startedKey);
-        $this->cache->purge($startedKey);
-        $advanced = $this->cache->getGeneration($startedKey) !== $started;
-
-        $epochKey = $this->getEpochKey($cacheKey);
-        $existing = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
-
-        $purged = $existing === false || $existing === null || $this->cache->purge($epochKey);
-
-        if ($this->cache->save($epochKey, self::BLOCKED_PREFIX.$token) === false) {
-            throw new RuntimeException("Failed to block query cache for collection '{$collection}'");
+        if ($this->cache->save($this->getEpochKey($key), self::BLOCKED_PREFIX.$token.self::SEPARATOR.\time()) === false) {
+            throw new RuntimeException("Failed to block query cache epoch for '{$key}'");
         }
 
-        if (! $purged) {
-            throw new RuntimeException("Failed to purge query cache epoch for collection '{$collection}'");
-        }
-
-        if (! $advanced) {
-            return;
-        }
+        $this->cache->purge($this->getStartedKey($key));
     }
 
     /**
-     * Replace this mutation's shared tombstone with a fresh usable epoch.
+     * Replace this mutation's shared tombstone with a fresh usable epoch once no
+     * other mutation of the collection is in progress.
      */
-    public function activateCollection(string $collection, string $token): void
+    public function activateCollection(string $key, string $token): void
     {
-        $cacheKey = $this->getCollectionKey($collection);
-        $ownerKey = $this->getOwnerKey($cacheKey, $token);
-        $owner = $this->cache->load($ownerKey, $this->getRegion($collection)->ttl);
+        $ownerKey = $this->getOwnerKey($key, $token);
+        $owner = $this->cache->load($ownerKey, self::PERMANENT);
         if ($owner !== false && $owner !== null && $owner !== $token) {
-            throw new RuntimeException("Invalid query cache owner for collection '{$collection}'");
+            throw new RuntimeException("Invalid query cache owner for '{$key}'");
         }
         $owned = $owner === $token;
         if ($owned && ! $this->cache->purge($ownerKey)) {
-            $owner = $this->cache->load($ownerKey, $this->getRegion($collection)->ttl);
+            $owner = $this->cache->load($ownerKey, self::PERMANENT);
             if ($owner !== false && $owner !== null) {
-                throw new RuntimeException("Failed to release query cache owner for collection '{$collection}'");
+                throw new RuntimeException("Failed to release query cache owner for '{$key}'");
             }
             $owned = false;
         }
 
-        $startedKey = $this->getStartedKey($cacheKey);
-        $finishedKey = $this->getFinishedKey($cacheKey);
+        $epochKey = $this->getEpochKey($key);
+        $startedKey = $this->getStartedKey($key);
+        $finishedKey = $this->getFinishedKey($key);
         $started = $this->cache->getGeneration($startedKey);
         $finished = $this->cache->getGeneration($finishedKey);
-        $epochKey = $this->getEpochKey($cacheKey);
-        $current = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
-        $blocked = self::BLOCKED_PREFIX.$token;
+        $current = $this->cache->load($epochKey, self::PERMANENT);
+        $ours = $this->isTombstoneOf($current, $token);
 
         if ($started === $finished) {
-            if (
-                \is_string($current)
-                && \str_starts_with($current, self::BLOCKED_PREFIX)
-                && $current !== $blocked
-            ) {
-                return;
+            if (! $owned && ($ours || ! $this->isTombstone($current))) {
+                $this->publish($key, $finished);
             }
-            if ($owned) {
-                return;
-            }
-        } elseif (! $owned && $current !== $blocked) {
+
             return;
         }
 
-        $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
-        if ($this->cache->save($epochKey, $epoch) === false) {
-            throw new RuntimeException("Failed to activate query cache for collection '{$collection}'");
-        }
-
-        if ($started === $finished) {
+        if (! $owned && ! $ours) {
             return;
         }
 
         $this->cache->purge($finishedKey);
-        if ($this->cache->getGeneration($finishedKey) === $finished) {
-            $nextStarted = $this->cache->getGeneration($startedKey);
-            $nextFinished = $this->cache->getGeneration($finishedKey);
-            $nextEpoch = $this->cache->load($epochKey, $this->getRegion($collection)->ttl);
-            if ($nextStarted === $nextFinished || $nextEpoch !== $epoch) {
-                return;
-            }
+        $nextStarted = $this->cache->getGeneration($startedKey);
+        $nextFinished = $this->cache->getGeneration($finishedKey);
 
-            throw new RuntimeException("Failed to finish query cache invalidation for collection '{$collection}'");
-        }
-    }
+        if ($nextStarted === $nextFinished) {
+            $this->publish($key, $nextFinished);
 
-    public function isEnabled(string $collection): bool
-    {
-        $region = $this->getRegion($collection);
-
-        if (! $region->enabled) {
-            return false;
+            return;
         }
 
-        return $this->getEpoch($this->getCollectionKey($collection), $collection) !== null;
+        if ($nextFinished === $finished && $this->isTombstoneOf($this->cache->load($epochKey, self::PERMANENT), $token)) {
+            throw new RuntimeException("Failed to finish query cache invalidation for '{$key}'");
+        }
     }
 
     public function flush(): void
@@ -302,121 +242,102 @@ class QueryCache
         }
     }
 
-    private function getCollectionKey(string $collection): string
+    /**
+     * Epochs never expire in the cache, so one cannot vanish under a transaction that
+     * outlives the region TTL. An active epoch carries the finished generation it was
+     * published at: while the started generation still equals it, no mutation has
+     * begun since, so a reader needs one generation read. A tombstone carries its
+     * write time and lapses with the region, but only once no mutation is in flight.
+     */
+    private function getEpoch(string $key, string $collection): ?string
     {
-        return "{$this->cacheName}:qcache:{$collection}";
-    }
+        $value = $this->cache->load($this->getEpochKey($key), self::PERMANENT);
 
-    private function getCollectionFromKey(string $key): string
-    {
-        $prefix = "{$this->cacheName}:qcache:";
+        if ($value === false || $value === null) {
+            return $this->cache->getGeneration($this->getStartedKey($key)) === self::NEVER_STARTED
+                ? self::INITIAL_EPOCH
+                : null;
+        }
 
-        return \str_starts_with($key, $prefix) ? \substr($key, \strlen($prefix)) : '';
-    }
+        if (! \is_string($value) || $value === '') {
+            throw new RuntimeException("Invalid query cache epoch for '{$key}'");
+        }
 
-    /** @return array{string, string} */
-    private function splitKey(string $key): array
-    {
-        $parts = \explode('#', $key, 2);
-
-        return [$parts[0], $parts[1] ?? ''];
-    }
-
-    private function getEpoch(string $cacheKey, string $collection, bool $initialize = false): ?string
-    {
-        $startedKey = $this->getStartedKey($cacheKey);
-        $finishedKey = $this->getFinishedKey($cacheKey);
-        $started = $this->cache->getGeneration($startedKey);
-        $finished = $this->cache->getGeneration($finishedKey);
-        if ($started !== $finished) {
+        $separator = \strrpos($value, self::SEPARATOR);
+        if ($separator === false) {
             return null;
         }
+        $marker = \substr($value, 0, $separator);
+        $stamp = \substr($value, $separator + 1);
 
-        $epoch = $this->cache->load(
-            $this->getEpochKey($cacheKey),
-            $this->getRegion($collection)->ttl,
-        );
-
-        if ($epoch === false || $epoch === null) {
-            $epoch = self::INITIAL_EPOCH;
-        }
-
-        if (! \is_string($epoch) || $epoch === '') {
-            throw new RuntimeException("Invalid query cache epoch for collection '{$collection}'");
-        }
-
-        $nextStarted = $this->cache->getGeneration($startedKey);
-        $nextFinished = $this->cache->getGeneration($finishedKey);
-        if (
-            $started !== $nextStarted
-            || $finished !== $nextFinished
-            || $nextStarted !== $nextFinished
-            || ! \str_starts_with($epoch, self::ACTIVE_PREFIX)
-        ) {
-            return null;
-        }
-
-        return $epoch;
-    }
-
-    private function getEpochKey(string $cacheKey): string
-    {
-        return $cacheKey.'#epoch';
-    }
-
-    private function getFinishedKey(string $cacheKey): string
-    {
-        return $cacheKey.'#finished';
-    }
-
-    private function getOwnerKey(string $cacheKey, string $token): string
-    {
-        return $cacheKey.'#owner:'.$token;
-    }
-
-    private function getStartedKey(string $cacheKey): string
-    {
-        return $cacheKey.'#started';
-    }
-
-    private function getPhysicalKey(string $cacheKey, string $hash, string $epoch): string
-    {
-        return $cacheKey.'#'.$epoch.':'.$hash;
-    }
-
-    private function purgeLoadedKey(string $physicalKey): void
-    {
-        if (! $this->cache->purge($physicalKey)) {
-            throw new RuntimeException("Failed to purge invalid query cache entry '{$physicalKey}'");
-        }
-    }
-
-    /** @return array{string, string}|null */
-    private function decodeGeneration(
-        string $generation,
-        string $cacheKey,
-        string $hash,
-        string $collection,
-    ): ?array {
-        if ($generation === '0') {
-            $epoch = $this->getEpoch($cacheKey, $collection, true);
-            if ($epoch === null) {
+        if (\str_starts_with($value, self::BLOCKED_PREFIX)) {
+            if ((int) $stamp + $this->getRegion($collection)->ttl > \time() || ! $this->isQuiescent($key)) {
                 return null;
             }
-            $physicalKey = $this->getPhysicalKey($cacheKey, $hash, $epoch);
 
-            return [$epoch, $this->cache->getGeneration($physicalKey)];
+            return self::INITIAL_EPOCH;
         }
 
-        $encoded = \base64_decode($generation, true);
-        $decoded = $encoded === false ? null : \json_decode($encoded, true);
-        $epoch = \is_array($decoded) ? ($decoded['epoch'] ?? null) : null;
-        $lease = \is_array($decoded) ? ($decoded['lease'] ?? null) : null;
-
-        if (! \is_string($epoch) || $epoch === '' || ! \is_string($lease)) {
-            throw new RuntimeException('Invalid query cache generation');
+        if (! \str_starts_with($value, self::ACTIVE_PREFIX)) {
+            return null;
         }
 
-        return [$epoch, $lease];
+        $started = $this->cache->getGeneration($this->getStartedKey($key));
+        if ($started !== $stamp && $started !== $this->cache->getGeneration($this->getFinishedKey($key))) {
+            return null;
+        }
+
+        return $marker;
+    }
+
+    private function isQuiescent(string $key): bool
+    {
+        return $this->cache->getGeneration($this->getStartedKey($key)) === $this->cache->getGeneration($this->getFinishedKey($key));
+    }
+
+    private function isTombstone(mixed $value): bool
+    {
+        return \is_string($value) && \str_starts_with($value, self::BLOCKED_PREFIX);
+    }
+
+    private function isTombstoneOf(mixed $value, string $token): bool
+    {
+        return \is_string($value) && \str_starts_with($value, self::BLOCKED_PREFIX.$token.self::SEPARATOR);
+    }
+
+    private function publish(string $key, string $finished): void
+    {
+        $epoch = self::ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::SEPARATOR.$finished;
+
+        if ($this->cache->save($this->getEpochKey($key), $epoch) === false) {
+            throw new RuntimeException("Failed to activate query cache for '{$key}'");
+        }
+    }
+
+    private function getEpochKey(string $key): string
+    {
+        return $key.'#epoch';
+    }
+
+    private function getFinishedKey(string $key): string
+    {
+        return $key.'#finished';
+    }
+
+    private function getOwnerKey(string $key, string $token): string
+    {
+        return $key.'#owner:'.$token;
+    }
+
+    private function getStartedKey(string $key): string
+    {
+        return $key.'#started';
+    }
+
+    private function purgeLoadedKey(string $key): void
+    {
+        if (! $this->cache->purge($key)) {
+            throw new RuntimeException("Failed to purge invalid query cache entry '{$key}'");
+        }
     }
 }

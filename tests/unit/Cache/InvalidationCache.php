@@ -27,16 +27,16 @@ final class InvalidationCache extends Cache
     #[\Override]
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
-        if (isset($this->values[$key])) {
-            return $this->values[$key];
-        }
-
-        return \str_ends_with($key, '#epoch') ? 'active:epoch' : false;
+        return $this->values[$key] ?? false;
     }
 
     #[\Override]
-    public function save(string $key, mixed $data, string $hash = ''): string|array
+    public function save(string $key, mixed $data, string $hash = ''): bool|string|array
     {
+        if (isset($this->failures[$key])) {
+            return false;
+        }
+
         if (\is_string($data)) {
             $this->values[$key] = $data;
         }

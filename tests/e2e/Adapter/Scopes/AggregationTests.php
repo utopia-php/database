@@ -1780,4 +1780,107 @@ trait AggregationTests
 
         $database->deleteCollection($collection);
     }
+
+    public function testEmptySetAggregatesAreZeroForCountsAndNullOtherwise(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'empty_set_aggregates';
+        $this->createProducts($database, $collection);
+
+        $others = [
+            'total' => Query::sum('price', 'total'),
+            'mean' => Query::avg('price', 'mean'),
+            'least' => Query::min('price', 'least'),
+            'most' => Query::max('price', 'most'),
+        ];
+        if (! $database->getAdapter() instanceof SQLite) {
+            $others += [
+                'spread' => Query::stddev('price', 'spread'),
+                'spread_population' => Query::stddevPop('price', 'spread_population'),
+                'spread_sample' => Query::stddevSamp('price', 'spread_sample'),
+                'variance' => Query::variance('price', 'variance'),
+                'variance_population' => Query::varPop('price', 'variance_population'),
+                'variance_sample' => Query::varSamp('price', 'variance_sample'),
+                'all_bits' => Query::bitAnd('price', 'all_bits'),
+                'any_bits' => Query::bitOr('price', 'any_bits'),
+                'odd_bits' => Query::bitXor('price', 'odd_bits'),
+            ];
+        }
+
+        $results = $database->find($collection, [
+            Query::equal('category', ['nonexistent']),
+            Query::count('*', 'rows'),
+            Query::countDistinct('category', 'categories'),
+            ...\array_values($others),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame(0, $this->intAttribute($results[0], 'rows'));
+        $this->assertSame(0, $this->intAttribute($results[0], 'categories'));
+        foreach (\array_keys($others) as $alias) {
+            $this->assertTrue($results[0]->offsetExists($alias), $alias.' must be returned');
+            $this->assertNull($results[0]->getAttribute($alias), $alias.' over no rows must be null, got '.\var_export($results[0]->getAttribute($alias), true));
+        }
+
+        $expected = ['rows', 'categories', ...\array_keys($others)];
+        $returned = \array_keys($results[0]->getArrayCopy());
+        \sort($expected);
+        \sort($returned);
+        $this->assertSame($expected, $returned, 'only the requested aliases may be returned');
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testBitwiseAggregatesOfOnlyNullValuesAreNull(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'null_bitwise_inputs';
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'kind', size: 20, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'flags', required: false));
+
+        foreach ([['empty', null], ['empty', null], ['set', 6], ['set', 3]] as [$kind, $flags]) {
+            $database->createDocument($collection, new Document([
+                'kind' => $kind,
+                'flags' => $flags,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $bitwise = [Query::bitAnd('flags', 'all_bits'), Query::bitOr('flags', 'any_bits'), Query::bitXor('flags', 'odd_bits')];
+
+        $ungrouped = $database->find($collection, [Query::equal('kind', ['empty']), ...$bitwise]);
+        $this->assertCount(1, $ungrouped);
+        foreach (['all_bits', 'any_bits', 'odd_bits'] as $alias) {
+            $this->assertNull($ungrouped[0]->getAttribute($alias), $alias.' of only null values must be null, got '.\var_export($ungrouped[0]->getAttribute($alias), true));
+        }
+
+        $grouped = $database->find($collection, [...$bitwise, Query::groupBy(['kind']), Query::orderAsc('kind')]);
+        $this->assertCount(2, $grouped);
+        $this->assertSame('empty', $grouped[0]->getAttribute('kind'));
+        foreach (['all_bits', 'any_bits', 'odd_bits'] as $alias) {
+            $this->assertNull($grouped[0]->getAttribute($alias), $alias.' of a group of null values must be null');
+        }
+        $this->assertSame('set', $grouped[1]->getAttribute('kind'));
+        $this->assertSame(2, $this->intAttribute($grouped[1], 'all_bits'));
+        $this->assertSame(7, $this->intAttribute($grouped[1], 'any_bits'));
+        $this->assertSame(5, $this->intAttribute($grouped[1], 'odd_bits'));
+
+        $database->deleteCollection($collection);
+    }
 }

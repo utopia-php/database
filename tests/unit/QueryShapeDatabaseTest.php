@@ -181,4 +181,29 @@ final class QueryShapeDatabaseTest extends TestCase
 
         $this->assertCount(1, $rows);
     }
+
+    public function testEmptySetAggregatesFollowTheContract(): void
+    {
+        $database = $this->database();
+
+        $queries = [
+            Query::equal('status', ['nonexistent']),
+            Query::count('*', 'rows'),
+            Query::countDistinct('status', 'statuses'),
+            Query::sum('amount', 'total'),
+            Query::avg('amount', 'mean'),
+            Query::min('amount', 'least'),
+            Query::max('amount', 'most'),
+        ];
+
+        $results = $database->find(self::COLLECTION, $queries);
+
+        $this->assertCount(1, $results);
+        $this->assertSame(0, $results[0]->getAttribute('rows'));
+        $this->assertSame(0, $results[0]->getAttribute('statuses'));
+        foreach (['total', 'mean', 'least', 'most'] as $alias) {
+            $this->assertTrue($results[0]->offsetExists($alias), $alias.' must be present');
+            $this->assertNull($results[0]->getAttribute($alias), $alias.' over no rows must be null');
+        }
+    }
 }

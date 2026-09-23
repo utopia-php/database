@@ -5,6 +5,8 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -710,6 +712,135 @@ trait IndexTests
         $this->assertCount(2, $database->find($collection, [
             Query::equal('email', ['chester@example.com']),
         ]), '$sequence is unique on its own, so a unique index containing it never conflicts. A duplicate here means the index was built without the $sequence column');
+    }
+
+    public function testCompositeIndexKeepsArrayAttributePosition(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! ($adapter instanceof MariaDB || $adapter instanceof Postgres) || ! $adapter->supports(Capability::IndexArray)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $attributes = [
+            Attribute::string(key: 'tags', size: 64, array: true),
+            Attribute::string(key: 'status', size: 32),
+            Attribute::string(key: 'name', size: 128),
+        ];
+        $index = Index::key(key: 'tagsfirst', attributes: ['tags', 'status', 'name'], lengths: [255, null, 16], orders: [null, null, Order::Desc]);
+
+        $tenant = $database->getSharedTables() ? ['_tenant'] : [];
+        $expected = match (true) {
+            $adapter instanceof Postgres => [...$tenant, 'tags', 'status', 'name DESC'],
+            $adapter->supports(Capability::CastIndexArray) => [...$tenant, '', 'status', 'name(16)'],
+            default => [...$tenant, 'tags(255)', 'status', 'name(16)'],
+        };
+
+        $database->createCollection(new Collection(id: 'index_array_position_created', attributes: $attributes, indexes: [$index]));
+        try {
+            $this->assertSame($expected, $this->getIndexKeyParts($database, 'index_array_position_created', 'tagsfirst'));
+        } finally {
+            $database->deleteCollection('index_array_position_created');
+        }
+
+        $database->createCollection(new Collection(id: 'index_array_position_added'));
+        try {
+            $this->assertTrue($database->createAttributes('index_array_position_added', $attributes));
+            $this->assertTrue($database->createIndex('index_array_position_added', $index));
+            $this->assertSame($expected, $this->getIndexKeyParts($database, 'index_array_position_added', 'tagsfirst'));
+        } finally {
+            $database->deleteCollection('index_array_position_added');
+        }
+    }
+
+    public function testCompositeIndexKeepsObjectPathPosition(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof Postgres || ! $adapter->supports(Capability::Objects)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'index_object_path_position';
+        $database->createCollection(new Collection(id: $collection));
+
+        try {
+            $this->assertTrue($database->createAttribute($collection, Attribute::object(key: 'data')));
+            $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'status', size: 32)));
+            $this->assertTrue($database->createIndex($collection, Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [Order::Desc, null])));
+
+            $parts = $this->getIndexKeyParts($database, $collection, 'countryfirst');
+            $tenant = $database->getSharedTables() ? ['_tenant'] : [];
+
+            $this->assertSame([...$tenant, "(data ->> 'country'::text) DESC", 'status'], $parts);
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * Key parts of an index in the order the engine stores them: MariaDB and MySQL prefix lengths as "column(length)",
+     * PostgreSQL descending parts as "part DESC".
+     *
+     * @return list<string>
+     */
+    private function getIndexKeyParts(Database $database, string $collection, string $index): array
+    {
+        $adapter = $database->getAdapter();
+
+        if ($adapter instanceof Postgres) {
+            $rows = $adapter->rawQuery(
+                'SELECT c.relname AS "index", pg_get_indexdef(i.indexrelid, k.position, true) || CASE WHEN i.indoption[k.position - 1] & 1 = 1 THEN \' DESC\' ELSE \'\' END AS "part"
+                FROM pg_index i
+                JOIN pg_class c ON c.oid = i.indexrelid
+                CROSS JOIN LATERAL generate_series(1, i.indnkeyatts) AS k(position)
+                WHERE i.indrelid = to_regclass(?)
+                ORDER BY c.relname, k.position',
+                ['"'.$database->getDatabase().'"."'.$database->getNamespace().'_'.$collection.'"'],
+            );
+
+            $parts = [];
+            foreach ($rows as $row) {
+                $name = $row->getAttribute('index');
+                $part = $row->getAttribute('part');
+                $this->assertIsString($name);
+                $this->assertIsString($part);
+                if (\str_ends_with($name, '_'.$index)) {
+                    $parts[] = $part;
+                }
+            }
+            $this->assertNotEmpty($parts, 'Index '.$index.' was not found on '.$collection);
+
+            return $parts;
+        }
+
+        foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
+            if ($schemaIndex->getId() !== $index) {
+                continue;
+            }
+
+            $columns = $schemaIndex->getAttribute('columns');
+            $lengths = $schemaIndex->getAttribute('lengths');
+            $this->assertIsArray($columns);
+            $this->assertIsArray($lengths);
+
+            $parts = [];
+            foreach (\array_values($columns) as $position => $column) {
+                $this->assertIsString($column);
+                $length = $lengths[$position] ?? null;
+                $parts[] = \is_int($length) ? $column.'('.$length.')' : $column;
+            }
+
+            return $parts;
+        }
+
+        $this->fail('Index '.$index.' was not found on '.$collection);
     }
 
     public function testExceptionIndexLimit(): void

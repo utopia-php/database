@@ -388,72 +388,6 @@ class Attribute extends Document
      * @param  array<string>  $filters
      * @param  array<string, mixed>|null  $options
      */
-    public static function tinyInteger(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\TinyInteger {
-        return new Attribute\TinyInteger(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function smallInteger(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\SmallInteger {
-        return new Attribute\SmallInteger(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
     public static function integer(
         string $key = '',
         int $size = 0,
@@ -586,39 +520,6 @@ class Attribute extends Document
      * @param  array<string>  $filters
      * @param  array<string, mixed>|null  $options
      */
-    public static function decimal(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Decimal {
-        return new Attribute\Decimal(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
     public static function boolean(
         string $key = '',
         int $size = 0,
@@ -666,138 +567,6 @@ class Attribute extends Document
         ?array $options = null,
     ): Attribute\Datetime {
         return new Attribute\Datetime(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function timestamp(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Timestamp {
-        return new Attribute\Timestamp(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function json(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Json {
-        return new Attribute\Json(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function binary(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Binary {
-        return new Attribute\Binary(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function enum(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\EnumType {
-        return new Attribute\EnumType(
             key: $key,
             size: $size,
             required: $required,
@@ -982,72 +751,6 @@ class Attribute extends Document
      * @param  array<string>  $filters
      * @param  array<string, mixed>|null  $options
      */
-    public static function uuid(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Uuid {
-        return new Attribute\Uuid(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function uuid7(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Uuid7 {
-        return new Attribute\Uuid7(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
     public static function object(
         string $key = '',
         int $size = 0,
@@ -1095,171 +798,6 @@ class Attribute extends Document
         ?array $options = null,
     ): Attribute\Relationship {
         return new Attribute\Relationship(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function serial(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Serial {
-        return new Attribute\Serial(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function bigSerial(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\BigSerial {
-        return new Attribute\BigSerial(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function smallSerial(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\SmallSerial {
-        return new Attribute\SmallSerial(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function array(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\ArrayType {
-        return new Attribute\ArrayType(
-            key: $key,
-            size: $size,
-            required: $required,
-            default: $default,
-            signed: $signed,
-            array: $array,
-            format: $format,
-            formatOptions: $formatOptions,
-            filters: $filters,
-            status: $status,
-            options: $options,
-        );
-    }
-
-    /**
-     * @param  array<string, mixed>  $formatOptions
-     * @param  array<string>  $filters
-     * @param  array<string, mixed>|null  $options
-     */
-    public static function tuple(
-        string $key = '',
-        int $size = 0,
-        bool $required = false,
-        mixed $default = null,
-        bool $signed = true,
-        bool $array = false,
-        ?string $format = null,
-        array $formatOptions = [],
-        array $filters = [],
-        ?string $status = null,
-        ?array $options = null,
-    ): Attribute\Tuple {
-        return new Attribute\Tuple(
             key: $key,
             size: $size,
             required: $required,
@@ -1608,32 +1146,6 @@ class Attribute extends Document
                 status: $status,
                 options: $options,
             ),
-            ColumnType::TinyInteger => new Attribute\TinyInteger(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::SmallInteger => new Attribute\SmallInteger(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
             ColumnType::Integer => new Attribute\Integer(
                 key: $key,
                 size: $size,
@@ -1686,19 +1198,6 @@ class Attribute extends Document
                 status: $status,
                 options: $options,
             ),
-            ColumnType::Decimal => new Attribute\Decimal(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
             ColumnType::Boolean => new Attribute\Boolean(
                 key: $key,
                 size: $size,
@@ -1713,58 +1212,6 @@ class Attribute extends Document
                 options: $options,
             ),
             ColumnType::Datetime => new Attribute\Datetime(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Timestamp => new Attribute\Timestamp(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Json => new Attribute\Json(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Binary => new Attribute\Binary(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Enum => new Attribute\EnumType(
                 key: $key,
                 size: $size,
                 required: $required,
@@ -1842,32 +1289,6 @@ class Attribute extends Document
                 status: $status,
                 options: $options,
             ),
-            ColumnType::Uuid => new Attribute\Uuid(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Uuid7 => new Attribute\Uuid7(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
             ColumnType::Object => new Attribute\ObjectType(
                 key: $key,
                 size: $size,
@@ -1894,60 +1315,9 @@ class Attribute extends Document
                 status: $status,
                 options: $options,
             ),
-            ColumnType::Serial => new Attribute\Serial(
+            default => new self(
                 key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::BigSerial => new Attribute\BigSerial(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::SmallSerial => new Attribute\SmallSerial(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Array => new Attribute\ArrayType(
-                key: $key,
-                size: $size,
-                required: $required,
-                default: $default,
-                signed: $signed,
-                array: $array,
-                format: $format,
-                formatOptions: $formatOptions,
-                filters: $filters,
-                status: $status,
-                options: $options,
-            ),
-            ColumnType::Tuple => new Attribute\Tuple(
-                key: $key,
+                type: $type,
                 size: $size,
                 required: $required,
                 default: $default,

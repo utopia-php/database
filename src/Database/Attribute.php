@@ -1279,7 +1279,6 @@ class Attribute extends Document
             ColumnType::BigInteger,
             ColumnType::Float,
             ColumnType::Double,
-            ColumnType::BigSerial,
         ], true);
     }
 
@@ -1290,7 +1289,6 @@ class Attribute extends Document
         return \in_array($type, [
             ColumnType::Integer,
             ColumnType::BigInteger,
-            ColumnType::BigSerial,
         ], true);
     }
 
@@ -1306,8 +1304,7 @@ class Attribute extends Document
                 'min' => $signed ? Database::MIN_INT : 0,
                 'max' => Database::MAX_INT,
             ],
-            ColumnType::BigInteger,
-            ColumnType::BigSerial => [
+            ColumnType::BigInteger => [
                 'min' => $signed ? \PHP_INT_MIN : 0,
                 'max' => $signed ? Database::MAX_BIG_INT : BigInt::UNSIGNED_MAX,
             ],

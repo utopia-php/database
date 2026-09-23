@@ -33,30 +33,6 @@ final class AddTableColumnTest extends TestCase
         $this->assertSame($size, $column->dimensions);
     }
 
-    public function testBigSerialOnMySQLTableIsAutoIncrement(): void
-    {
-        $column = $this->addTableColumn((new MySQLSchema())->table('t'), 'seq', ColumnType::BigSerial, 0);
-
-        $this->assertSame(ColumnType::BigSerial, $column->type);
-        $this->assertSame(true, $column->isAutoIncrement);
-    }
-
-    public function testBigSerialOnPostgreSQLTableIsAutoIncrement(): void
-    {
-        $column = $this->addTableColumn((new PostgreSQLSchema())->table('t'), 'seq', ColumnType::BigSerial, 0);
-
-        $this->assertSame(ColumnType::BigSerial, $column->type);
-        $this->assertSame(true, $column->isAutoIncrement);
-    }
-
-    public function testBigSerialOnBaseTableThrowsDatabaseException(): void
-    {
-        $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('Serial columns are not supported on this dialect');
-
-        $this->addTableColumn(new Table(), 'seq', ColumnType::BigSerial, 0);
-    }
-
     private function addTableColumn(Table $table, string $id, ColumnType $type, int $size): Column
     {
         $adapter = new MariaDB(new stdClass());

@@ -3130,7 +3130,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             foreach ($value as $index => $node) {
                 switch ($type) {
                     case ColumnType::BigInteger:
-                    case ColumnType::BigSerial:
                     case ColumnType::Integer:
                         $node = \is_int($node)
                             ? $node
@@ -4032,8 +4031,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             ColumnType::LongText,
             ColumnType::Id,
             ColumnType::Uuid7 => 'string',
-            ColumnType::BigInteger,
-            ColumnType::BigSerial => 'long',
+            ColumnType::BigInteger => 'long',
             ColumnType::Integer => 'int',
             ColumnType::Float,
             ColumnType::Double => 'double',

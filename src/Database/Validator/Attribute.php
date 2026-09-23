@@ -548,15 +548,7 @@ class Attribute extends Validator
                     throw new DatabaseException($this->message);
                 }
                 break;
-            case ColumnType::Serial:
-            case ColumnType::SmallSerial:
-                if ($defaultType !== 'integer') {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
-                    throw new DatabaseException($this->message);
-                }
-                break;
             case ColumnType::BigInteger:
-            case ColumnType::BigSerial:
                 if (! (new BigInt($signed, $this->supportUnsignedBigInt))->isValid($default)) {
                     $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);
@@ -570,7 +562,6 @@ class Attribute extends Validator
                 }
                 break;
             case ColumnType::Datetime:
-            case ColumnType::Timestamp:
                 if ($defaultType !== 'string') {
                     $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
                     throw new DatabaseException($this->message);

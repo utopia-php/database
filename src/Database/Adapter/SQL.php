@@ -4362,7 +4362,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             );
         }
 
-        $quote = $this->getIdentifierQuoteChar();
         $joinAliases = \array_column($joinTablePrefixes, 'alias');
         foreach ($orderAttributes as $i => $attribute) {
             $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
@@ -4370,19 +4369,23 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            $qualified = $this->qualifyOrderAttribute($attribute, $joinAliases);
-            $dot = \strpos($qualified, '.');
-            if ($dot !== false) {
-                $prefix = \substr($qualified, 0, $dot);
-                $column = \substr($qualified, $dot + 1);
-                $expression = $quote.$prefix.$quote.'.'.$quote.$column.$quote;
-            } else {
-                $expression = $quote.$alias.$quote.'.'.$quote.$qualified.$quote;
-            }
-
-            $output = self::FOJ_ORDER_ALIAS_PREFIX.$i;
-            $builder->selectRaw($expression.' AS '.$quote.$output.$quote);
+            $expression = $this->quoteOrderColumn($this->qualifyOrderAttribute($attribute, $joinAliases), $alias);
+            $builder->selectRaw($expression.' AS '.$this->quote(self::FOJ_ORDER_ALIAS_PREFIX.$i));
         }
+    }
+
+    /**
+     * Quote an order key from qualifyOrderAttribute() as a table-qualified column: a join-qualified key
+     * keeps its join alias, any other key belongs to the main table.
+     */
+    private function quoteOrderColumn(string $key, string $alias): string
+    {
+        $dot = \strpos($key, '.');
+        if ($dot === false) {
+            return $this->quote($alias).'.'.$this->quote($key);
+        }
+
+        return $this->quote(\substr($key, 0, $dot)).'.'.$this->quote(\substr($key, $dot + 1));
     }
 
     /**
@@ -5733,7 +5736,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $bindings = [];
         \array_push($bindings, ...$vector['bindings']);
         $bindings[] = $distance;
-        $quotedAlias = $this->quote($alias);
 
         foreach ($orderAttributes as $index => $attribute) {
             if (! \array_key_exists($attribute, $cursor)) {
@@ -5751,8 +5753,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     throw new QueryException("Vector cursor is missing order attribute '{$previousAttribute}'");
                 }
 
-                $previousColumn = $this->quote($resolveInternalKey($previousAttribute));
-                $parts[] = "{$quotedAlias}.{$previousColumn} = ?";
+                $previousColumn = $this->quoteOrderColumn($resolveInternalKey($previousAttribute), $alias);
+                $parts[] = "{$previousColumn} = ?";
                 $clauseBindings[] = $cursor[$previousAttribute];
             }
 
@@ -5763,8 +5765,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     : OrderDirection::Asc;
             }
             $operator = $direction === OrderDirection::Desc ? '<' : '>';
-            $column = $this->quote($resolveInternalKey($attribute));
-            $parts[] = "{$quotedAlias}.{$column} {$operator} ?";
+            $column = $this->quoteOrderColumn($resolveInternalKey($attribute), $alias);
+            $parts[] = "{$column} {$operator} ?";
             $clauseBindings[] = $cursor[$attribute];
             $clauses[] = '('.\implode(' AND ', $parts).')';
             \array_push($bindings, ...$clauseBindings);

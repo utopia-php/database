@@ -5788,6 +5788,71 @@ trait JoinTests
         $this->cleanupAggCollections($database, [$main, $first, $second]);
     }
 
+    public function testVectorSearchPagesByAJoinedAttributeWithACursor(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Joins) || ! $adapter->supports(Capability::Vectors)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $main = 'vjc_main';
+        $meta = 'vjc_meta';
+        $this->cleanupAggCollections($database, [$main, $meta]);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $main, permissions: $permissions));
+        $database->createAttribute($main, Attribute::vector(key: 'embedding', size: 3, required: true));
+        $database->createCollection(new Collection(id: $meta, permissions: $permissions));
+        $database->createAttribute($meta, Attribute::string(key: 'mainId', size: 64, required: true));
+        $database->createAttribute($meta, Attribute::integer(key: 'score', required: true));
+
+        foreach ([
+            'near-high' => [[1.0, 0.0, 0.0], 20],
+            'near-low' => [[1.0, 0.0, 0.0], 10],
+            'side-low' => [[0.0, 1.0, 0.0], 5],
+            'side-high' => [[0.0, 1.0, 0.0], 50],
+            'far' => [[-1.0, 0.0, 0.0], 1],
+        ] as $id => [$embedding, $score]) {
+            $database->createDocument($main, new Document([
+                '$id' => $id,
+                'embedding' => $embedding,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $database->createDocument($meta, new Document([
+                'mainId' => $id,
+                'score' => $score,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $queries = [
+            Query::vectorCosine('embedding', [1.0, 0.0, 0.0]),
+            Query::join($meta, '$id', 'mainId', '=', 'meta'),
+            Query::orderAsc('meta.score'),
+            Query::limit(2),
+        ];
+
+        $ids = [];
+        $cursor = null;
+        for ($page = 0; $page < 4; $page++) {
+            $rows = $database->find($main, $cursor === null ? $queries : [...$queries, Query::cursorAfter($cursor)]);
+            if ($rows === []) {
+                break;
+            }
+            foreach ($rows as $row) {
+                $ids[] = $row->getId();
+            }
+            $cursor = $rows[\count($rows) - 1];
+        }
+
+        $this->assertSame(['near-low', 'near-high', 'side-low', 'side-high', 'far'], $ids);
+
+        $this->cleanupAggCollections($database, [$main, $meta]);
+    }
+
     /**
      * @return list<string>
      */

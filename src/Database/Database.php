@@ -3433,16 +3433,36 @@ class Database
 
         $this->updateMetadata(
             collection: $collectionDoc,
-            rollbackOperation: fn () => $this->adapter->updateAttribute(
+            rollbackOperation: function () use (
                 $collection,
-                $newKey ?? $id,
+                $collectionDoc,
+                $id,
+                $newKey,
                 $originalType,
-                (int)$originalSize,
+                $originalSize,
                 $originalSigned,
                 $originalArray,
                 $originalKey,
                 $originalRequired
-            ),
+            ) {
+                $this->adapter->updateAttribute(
+                    $collection,
+                    $newKey ?? $id,
+                    $originalType,
+                    (int)$originalSize,
+                    $originalSigned,
+                    $originalArray,
+                    $originalKey,
+                    $originalRequired
+                );
+
+                // Only when the rename half actually ran; see the repoint above.
+                if (!\is_null($newKey) && $newKey !== $id) {
+                    foreach ($this->adapter->renameColumnPermissions($collectionDoc, $newKey, $id) as $documentId) {
+                        $this->purgeCachedDocument($collection, $documentId);
+                    }
+                }
+            },
             shouldRollback: $updated,
             operationDescription: "attribute update '{$id}'",
             silentRollback: true
@@ -3734,9 +3754,21 @@ class Database
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
 
+        // The grants above are already committed, so the rollback has to walk them
+        // back alongside the column. Reversing only the schema would leave the schema
+        // on the old key and the grants on the new one -- access lost now, and
+        // inherited later by whatever is created under the new name. The collection's
+        // own grants need no undoing: they live on $collection, which this call is what
+        // persists, so a failure here means they were never written.
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: fn () => $this->adapter->renameAttribute($collection->getId(), $new, $old),
+            rollbackOperation: function () use ($collection, $old, $new) {
+                $this->adapter->renameAttribute($collection->getId(), $new, $old);
+
+                foreach ($this->adapter->renameColumnPermissions($collection, $new, $old) as $documentId) {
+                    $this->purgeCachedDocument($collection->getId(), $documentId);
+                }
+            },
             shouldRollback: $renamed,
             operationDescription: "attribute rename '{$old}' to '{$new}'"
         );

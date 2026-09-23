@@ -208,13 +208,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $this->readHooks = [];
 
-        if ($this->sharedTables) {
-            $this->readHooks[] = new MongoTenantFilter(
-                $this->sharedTables,
-                fn (string $collection, array $tenants = []) => $this->getTenantFilters($collection, $tenants),
-            );
-        }
-
         if ($this->hasPermissionHook()) {
             $this->readHooks[] = new MongoPermissionFilter($this->authorization);
         }
@@ -224,8 +217,24 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * @param  array<string, mixed>  $filters
      * @return array<string, mixed>
      */
-    protected function applyReadFilters(array $filters, string $collection, string $forPermission = 'read'): array
+    protected function applyTenantFilter(array $filters, string $collection): array
     {
+        $tenantFilter = new MongoTenantFilter(
+            $this->sharedTables,
+            fn (string $collection, array $tenants = []) => $this->getTenantFilters($collection, $tenants),
+        );
+
+        return $tenantFilter->applyFilters($filters, $collection);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    protected function applyReadFilters(array $filters, string $collection, PermissionType $forPermission): array
+    {
+        $filters = $this->applyTenantFilter($filters, $collection);
+
         $this->syncReadHooks();
         foreach ($this->readHooks as $hook) {
             $filters = $hook->applyFilters($filters, $collection, $forPermission);
@@ -1333,9 +1342,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
         $filters = [Storage::UID => $id];
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection->getId());
+        $filters = $this->applyTenantFilter($filters, $collection->getId());
 
         $options = $this->getTransactionOptions();
 
@@ -1517,9 +1524,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $record = $this->replaceChars('$', '_', $record);
 
         $filters = [Storage::UID => $id];
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection->getId());
+        $filters = $this->applyTenantFilter($filters, $collection->getId());
 
         try {
             unset($record[Storage::SEQUENCE]); // Don't update _id
@@ -1562,9 +1567,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection->getId());
+        $filters = $this->applyTenantFilter($filters, $collection->getId());
 
         $record = $updates->getArrayCopy();
         $record = $this->replaceChars('$', '_', $record);
@@ -1916,7 +1919,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         $this->syncWriteHooks();
-        $this->syncReadHooks();
 
         try {
             $name = $this->getNamespace().'_'.$this->filter($collection->getId());
@@ -1943,7 +1945,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 // Build filter for upsert
                 $filters = [Storage::UID => $document->getId()];
-                $filters = $this->applyReadFilters($filters, $collection->getId());
+                $filters = $this->applyTenantFilter($filters, $collection->getId());
 
                 unset($record[Storage::SEQUENCE]); // Don't update _id
 
@@ -2035,9 +2037,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $name = $this->getNamespace().'_'.$this->filter($collection);
 
         $filters = [Storage::UID => $id];
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection);
+        $filters = $this->applyTenantFilter($filters, $collection);
 
         $options = $this->getTransactionOptions();
         $result = $this->client->delete($name, $filters, 1, [], $options);
@@ -2063,9 +2063,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters([new Query(Method::Equal, Storage::SEQUENCE, $sequences)]);
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection);
+        $filters = $this->applyTenantFilter($filters, $collection);
 
         $filters = $this->replaceInternalIdsKeys($filters, '$', '_', $this->operators);
 
@@ -2098,9 +2096,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         $attribute = $this->filter($attribute);
         $filters = [Storage::UID => $id];
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection);
+        $filters = $this->applyTenantFilter($filters, $collection);
 
         if ($max !== null || $min !== null) {
             /** @var array<string, int|float> $attributeFilter */
@@ -2169,9 +2165,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection->getId(), $forPermission->value);
+        $filters = $this->applyReadFilters($filters, $collection->getId(), $forPermission);
 
         $options = [];
 
@@ -2394,9 +2388,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // Build filters from queries
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection->getId());
+        $filters = $this->applyReadFilters($filters, $collection->getId(), PermissionType::Read);
 
         /**
          * Use MongoDB aggregation pipeline for accurate counting
@@ -2490,9 +2482,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $queries = array_map(fn ($query) => clone $query, $queries);
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
-
-        $this->syncReadHooks();
-        $filters = $this->applyReadFilters($filters, $collection->getId());
+        $filters = $this->applyReadFilters($filters, $collection->getId(), PermissionType::Read);
 
         // using aggregation to get sum an attribute as described in
         // https://docs.mongodb.com/manual/reference/method/db.collection.aggregate/

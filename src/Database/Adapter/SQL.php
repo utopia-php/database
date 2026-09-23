@@ -1589,7 +1589,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($hasAggregation) {
             foreach ($results as $row) {
                 /** @var array<string, mixed> $row */
-                $documents[] = Document::fromRow($row);
+                $documents[] = Document::fromRow($this->bitwiseResults($row));
             }
 
             return $documents;
@@ -2002,6 +2002,35 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return [];
+    }
+
+    private const array BITWISE_AGGREGATES = [Method::BitAnd, Method::BitOr, Method::BitXor];
+
+    private const string BITWISE_INPUTS = '$inputs:';
+
+    /**
+     * Answer NULL for each bitwise aggregate that had no input values, and
+     * drop the input counts populationStatistics() added.
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function bitwiseResults(array $row): array
+    {
+        foreach ($row as $key => $value) {
+            if (! \str_starts_with($key, self::BITWISE_INPUTS)) {
+                continue;
+            }
+
+            unset($row[$key]);
+
+            $alias = \substr($key, \strlen(self::BITWISE_INPUTS));
+            if (\array_key_exists($alias, $row) && \is_numeric($value) && (int) $value === 0) {
+                $row[$alias] = null;
+            }
+        }
+
+        return $row;
     }
 
     /**
@@ -4157,7 +4186,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     /**
      * Rewrite the two ambiguous statistical aggregates to their explicit
-     * population forms.
+     * population forms, and count the inputs of every bitwise aggregate.
      *
      * Bare `STDDEV` and `VARIANCE` are not portable: MySQL and MariaDB read
      * both as the population statistic, PostgreSQL reads both as the sample
@@ -4168,6 +4197,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * returned, and what the ClickHouse builder already chose. Callers who
      * want the sample statistic ask for it by name with stddevSamp() or
      * varSamp(), which were always unambiguous.
+     *
+     * Over no input values MySQL and MariaDB answer `BIT_AND` with every bit
+     * set and `BIT_OR` / `BIT_XOR` with zero, where PostgreSQL answers NULL
+     * as every engine does for each aggregate but count. The input count
+     * lets bitwiseResults() answer NULL on every engine.
      *
      * @param  array<BaseQuery>  $queries
      * @return array<BaseQuery>
@@ -4183,6 +4217,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             if ($method !== null) {
                 $queries[$index] = (clone $query)->setMethod($method);
+            }
+
+            $alias = $query->getValue('');
+            if (\in_array($query->getMethod(), self::BITWISE_AGGREGATES, true) && \is_string($alias) && $alias !== '') {
+                $queries[] = Query::count($query->getAttribute(), self::BITWISE_INPUTS.$alias);
             }
         }
 

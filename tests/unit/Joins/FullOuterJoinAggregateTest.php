@@ -14,6 +14,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -88,6 +89,22 @@ final class FullOuterJoinAggregateTest extends TestCase
         $this->assertSame([['rows' => 6, 'total' => 22]], \array_map(static fn (Document $row): array => $row->getArrayCopy(), $rows));
     }
 
+    public function testDistinctReturnsAValueBothHalvesHoldOnce(): void
+    {
+        $database = $this->database(native: false, documentSecurity: false, sharedTables: false);
+
+        $rows = $database->find('main', [
+            Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
+            Query::distinct(),
+            Query::select(['b.category']),
+        ]);
+
+        $categories = \array_map(static fn (Document $row): mixed => $row->getAttribute('b.category'), $rows);
+        \sort($categories);
+
+        $this->assertSame([null, 'p', 'q'], $categories);
+    }
+
     /**
      * Every chain of one or two joins holding one full outer join, with the main rows readable
      * through the collection and through their own permissions, answers every aggregate, group,
@@ -149,6 +166,27 @@ final class FullOuterJoinAggregateTest extends TestCase
 
         $this->assertCount(3, $expected);
         $this->assertSame($expected, $this->rows($emulated, $queries, ordered: false));
+    }
+
+    /**
+     * The halves' UNION compares every projected column, an order column among them, where the single
+     * statement compares the selected columns only, so this order has no emulation.
+     */
+    public function testDistinctOrderedByAnUnselectedAttributeIsRejectedWhenEmulated(): void
+    {
+        $queries = [
+            Query::fullOuterJoin('b', self::LINK, self::LINK, '=', 'b'),
+            Query::distinct(),
+            Query::select(['b.category']),
+            Query::orderAsc(self::SCORE),
+        ];
+
+        $this->assertCount(3, $this->database(native: true, documentSecurity: false, sharedTables: false)->find('main', $queries));
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('A distinct() query over a full outer join can only be ordered by a selected attribute on this database, and score is not selected');
+
+        $this->database(native: false, documentSecurity: false, sharedTables: false)->find('main', $queries);
     }
 
     /**
@@ -267,6 +305,21 @@ final class FullOuterJoinAggregateTest extends TestCase
             Query::avg($score, 'mean'),
             Query::max($score, 'high'),
         ], false];
+        yield 'distinct joined values' => [[
+            Query::distinct(),
+            Query::select([$category]),
+        ], false];
+        yield 'distinct main and joined values' => [[
+            Query::distinct(),
+            Query::select([self::CATEGORY, $category]),
+        ], false];
+        yield 'distinct values ordered and paged' => [[
+            Query::distinct(),
+            Query::select([$category]),
+            Query::orderAsc($category),
+            Query::limit(2),
+            Query::offset(1),
+        ], true];
     }
 
     /**

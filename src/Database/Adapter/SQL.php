@@ -1443,6 +1443,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $resolveInternalKey,
             );
         } elseif ($emulatesFullOuterJoin) {
+            if ($hasDistinct) {
+                $this->assertDistinctOrderIsSelected($queries, $orderAttributes, $orderTypes, $joinAliases);
+            }
+
             [$leftQueries, $rightQueries] = $this->emulateFullOuterJoin($queries, $alias);
             $leftPreserving = $this->keepsUnmatchedRows($leftQueries);
 
@@ -1512,7 +1516,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $resolveInternalKey,
             );
 
-            $left->unionAll($right);
+            if ($hasDistinct) {
+                $left->union($right);
+            } else {
+                $left->unionAll($right);
+            }
             $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
             $results = $this->executeSelect($left, Event::DocumentFind);
         } else {
@@ -4864,6 +4872,53 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $rows;
+    }
+
+    /**
+     * distinct() over an emulated full outer join removes a row both halves return with UNION, which
+     * compares every projected column, the order columns among them. A single statement compares the
+     * selected columns only, so ordering by an attribute the selection leaves out has no emulation.
+     * Without a select every row carries each table's `$id`, so no order column can tell two rows apart
+     * that the selection would not.
+     *
+     * @param  array<BaseQuery>  $queries
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string>  $joinAliases
+     *
+     * @throws QueryException
+     */
+    private function assertDistinctOrderIsSelected(array $queries, array $orderAttributes, array $orderTypes, array $joinAliases): void
+    {
+        $selected = [];
+        foreach ($queries as $query) {
+            if ($query->getMethod() !== Method::Select) {
+                continue;
+            }
+
+            foreach ($query->getValues() as $value) {
+                if ($value === '*') {
+                    return;
+                }
+                if (\is_string($value)) {
+                    $selected[$this->qualifyOrderAttribute($value, $joinAliases)] = true;
+                }
+            }
+        }
+
+        if ($selected === []) {
+            return;
+        }
+
+        foreach ($orderAttributes as $i => $attribute) {
+            if (($orderTypes[$i] ?? OrderDirection::Asc) === OrderDirection::Random) {
+                continue;
+            }
+
+            if (! isset($selected[$this->qualifyOrderAttribute($attribute, $joinAliases)])) {
+                throw new QueryException("A distinct() query over a full outer join can only be ordered by a selected attribute on this database, and {$attribute} is not selected");
+            }
+        }
     }
 
     /**

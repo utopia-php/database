@@ -2,19 +2,32 @@
 
 namespace Tests\Unit;
 
+use Closure;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\Event\RecordingLifecycle;
+use Tests\Unit\Support\CountingMemory;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Cache\Invalidator;
+use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Mirror;
+use Utopia\Database\Query;
 
 class MirrorTest extends TestCase
 {
+    private const string COLLECTION = 'posts';
+
     public function testSetDatabaseUpdatesMirrorAndChildren(): void
     {
         [$mirror, $source, $destination] = $this->pair();
@@ -146,6 +159,140 @@ class MirrorTest extends TestCase
         $this->expectExceptionMessage('destination create failed');
 
         $mirror->setDatabase('utopiaTests')->setNamespace('myapp')->create();
+    }
+
+    public function testUpdateThroughMirrorInvalidatesItsQueryCache(): void
+    {
+        $adapter = new CountingMemory();
+        $mirror = $this->seed(new Mirror(
+            new Database($adapter, new Cache(new None())),
+            new Database(new Memory(), new Cache(new None())),
+        ));
+        $mirror->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+
+        $this->assertSame('first', $this->title($mirror));
+        $finds = $adapter->finds;
+        $this->assertSame('first', $this->title($mirror));
+        $this->assertSame($finds, $adapter->finds, 'The repeated read must be served from the query cache');
+
+        $mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']));
+
+        $this->assertSame('updated', $this->title($mirror));
+    }
+
+    public function testTriggerInvalidatesTheMirrorQueryCacheAndDispatchesOnce(): void
+    {
+        $source = new Database(new Memory(), new Cache(new None()));
+        $mirror = new class ($source) extends Mirror {
+            public function fire(Event $event, mixed $data): void
+            {
+                $this->trigger($event, $data);
+            }
+        };
+        $this->seed($mirror);
+        $mirror->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $source->setQueryCache(null);
+
+        $this->assertSame('first', $this->title($mirror));
+        $source->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']));
+        $this->assertSame('first', $this->title($mirror), 'Only the mirror holds the query cache, so the source write must not reach it');
+
+        $updated = $source->getDocument(self::COLLECTION, 'first');
+        $recorder = new RecordingLifecycle();
+        $mirror->addHook($recorder);
+        $mirror->fire(Event::DocumentUpdate, $updated);
+
+        $this->assertSame([Event::DocumentUpdate], $recorder->getEvents());
+        $this->assertSame('updated', $this->title($mirror));
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror, Invalidator): mixed}>
+     */
+    public static function invalidatorRegistrations(): iterable
+    {
+        yield 'addHook' => [
+            static fn (Mirror $mirror, Invalidator $invalidator): mixed => $mirror->addHook($invalidator),
+        ];
+        yield 'addLifecycleHook' => [
+            static fn (Mirror $mirror, Invalidator $invalidator): mixed => $mirror->addLifecycleHook($invalidator),
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror, Invalidator): mixed  $register
+     */
+    #[DataProvider('invalidatorRegistrations')]
+    public function testInvalidatorAddedThroughMirrorInvalidatesOnPurge(Closure $register): void
+    {
+        $mirror = $this->seed(new Mirror(new Database(new Memory(), new Cache(new None()))));
+        $queryCache = new QueryCache(new Cache(new MemoryCache()));
+        $register($mirror, new Invalidator($queryCache));
+
+        $this->assertStaleUntilPurgedThroughMirror($mirror, $this->sibling($mirror)->setQueryCache($queryCache));
+    }
+
+    public function testPurgeThroughMirrorInvalidatesTheSourceQueryCache(): void
+    {
+        $source = new Database(new Memory(), new Cache(new None()));
+        $mirror = $this->seed(new Mirror($source));
+        $source->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+
+        $this->assertStaleUntilPurgedThroughMirror($mirror, $source);
+    }
+
+    private function assertStaleUntilPurgedThroughMirror(Mirror $mirror, Database $reader): void
+    {
+        $this->assertSame('first', $this->title($reader));
+        $this->sibling($mirror)->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']));
+        $this->assertSame('first', $this->title($reader), 'A write that invalidates nothing must leave the cached read in place');
+
+        $mirror->purgeCachedDocument(self::COLLECTION, 'first');
+
+        $this->assertSame('updated', $this->title($reader));
+    }
+
+    /**
+     * A database on the mirror's adapter and authorization that shares none of its caches or hooks.
+     */
+    private function sibling(Mirror $mirror): Database
+    {
+        return (new Database($mirror->getAdapter(), new Cache(new None())))->setAuthorization($mirror->getAuthorization());
+    }
+
+    private function title(Database $database): mixed
+    {
+        return $database->findOne(self::COLLECTION, [Query::equal(Document::ID, ['first'])])->getAttribute('title');
+    }
+
+    private function seed(Mirror $mirror): Mirror
+    {
+        $mirror
+            ->setDatabase('mirror')
+            ->setNamespace('mirror_'.\uniqid())
+            ->create();
+
+        $mirror->createCollection(new Collection(
+            id: self::COLLECTION,
+            attributes: [
+                Attribute::string(key: 'title', size: 64),
+                Attribute::integer(key: 'views'),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ));
+
+        $mirror->createDocument(self::COLLECTION, new Document([
+            Document::ID => 'first',
+            'title' => 'first',
+            'views' => 1,
+        ]));
+
+        return $mirror;
     }
 
     /**

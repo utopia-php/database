@@ -3953,4 +3953,83 @@ trait RelationshipTests
         $database->deleteCollection('authorsOrder');
         $database->deleteCollection('postsOrder');
     }
+
+    /**
+     * @return array<string, array{RelationType, ForeignKeyAction}>
+     */
+    public static function relatedDocumentsBeyondQueryValueLimitProvider(): array
+    {
+        return [
+            'oneToMany cascade' => [RelationType::OneToMany, ForeignKeyAction::Cascade],
+            'manyToOne cascade' => [RelationType::ManyToOne, ForeignKeyAction::Cascade],
+            'manyToMany cascade' => [RelationType::ManyToMany, ForeignKeyAction::Cascade],
+            'manyToMany setNull' => [RelationType::ManyToMany, ForeignKeyAction::SetNull],
+        ];
+    }
+
+    #[DataProvider('relatedDocumentsBeyondQueryValueLimitProvider')]
+    public function testDeleteReachesMoreRelatedDocumentsThanTheQueryValueLimit(RelationType $type, ForeignKeyAction $onDelete): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection(new Collection(id: $parents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $children, permissions: $permissions));
+        $database->createRelationship($type === RelationType::ManyToOne
+            ? new Relationship(collection: $children, relatedCollection: $parents, type: $type, twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: $onDelete)
+            : new Relationship(collection: $parents, relatedCollection: $children, type: $type, twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete));
+
+        $childIds = ['child1', 'child2', 'child3'];
+        if ($type === RelationType::ManyToMany) {
+            foreach ($childIds as $id) {
+                $database->createDocument($children, new Document(['$id' => $id, '$permissions' => [Permission::read(Role::any())]]));
+            }
+            $database->createDocument($parents, new Document(['$id' => 'parent1', 'children' => $childIds]));
+        } else {
+            $database->createDocument($parents, new Document(['$id' => 'parent1']));
+            foreach ($childIds as $id) {
+                $database->createDocument($children, new Document(['$id' => $id, 'parent' => 'parent1', '$permissions' => [Permission::read(Role::any())]]));
+            }
+        }
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(2);
+
+        try {
+            $this->assertTrue($database->deleteDocument($parents, 'parent1'));
+        } finally {
+            $database->setMaxQueryValues($max);
+        }
+
+        $this->assertTrue($database->getDocument($parents, 'parent1')->isEmpty());
+
+        $remaining = \array_map(fn (Document $child) => $child->getId(), $database->find($children));
+        \sort($remaining);
+
+        if ($onDelete === ForeignKeyAction::Cascade) {
+            $this->assertSame([], $remaining);
+        } else {
+            $this->assertSame($childIds, $remaining);
+            foreach ($childIds as $id) {
+                $this->assertSame([], $database->getDocument($children, $id)->getAttribute('parent'));
+            }
+        }
+
+        $database->deleteCollection($parents);
+        $database->deleteCollection($children);
+    }
 }

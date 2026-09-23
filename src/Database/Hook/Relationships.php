@@ -2037,13 +2037,8 @@ class Relationships implements Hook
                     Query::limit(PHP_INT_MAX),
                 ]);
 
-                if (! empty($junctions)) {
-                    $junctionIds = \array_map(fn (Document $junctionDoc) => $junctionDoc->getId(), $junctions);
-                    $this->db->skipRelationships(fn () => $this->db->deleteDocuments(
-                        $junction,
-                        [Query::equal(Document::ID, $junctionIds)],
-                    ));
-                }
+                $junctionIds = \array_map(fn (Document $junctionDocument) => $junctionDocument->getId(), $junctions);
+                $this->db->skipRelationships(fn () => $this->deleteRelatedDocuments($junction, $junctionIds));
                 break;
         }
     }
@@ -2052,37 +2047,22 @@ class Relationships implements Hook
     {
         switch ($relationType) {
             case RelationType::OneToOne:
-                if ($value !== null) {
-                    $this->deleteStack[] = $relationship;
-
-                    $deleteId = ($value instanceof Document) ? $value->getId() : (\is_string($value) ? $value : null);
-                    if ($deleteId !== null) {
-                        $this->db->deleteDocument(
-                            $relatedCollection->getId(),
-                            $deleteId
-                        );
-                    }
-
-                    \array_pop($this->deleteStack);
+                $deleteId = ($value instanceof Document) ? $value->getId() : (\is_string($value) ? $value : null);
+                if ($deleteId !== null) {
+                    $this->cascade($relationship, fn () => $this->db->deleteDocument(
+                        $relatedCollection->getId(),
+                        $deleteId
+                    ));
                 }
                 break;
             case RelationType::OneToMany:
-                if ($side === RelationSide::Child) {
+                if ($side === RelationSide::Child || empty($value)) {
                     break;
                 }
 
-                $this->deleteStack[] = $relationship;
-
                 /** @var array<Document> $value */
-                if (! empty($value)) {
-                    $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                    $this->db->deleteDocuments(
-                        $relatedCollection->getId(),
-                        [Query::equal(Document::ID, $relationIds)],
-                    );
-                }
-
-                \array_pop($this->deleteStack);
+                $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
+                $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relationIds));
 
                 break;
             case RelationType::ManyToOne:
@@ -2096,17 +2076,8 @@ class Relationships implements Hook
                     Query::limit(PHP_INT_MAX),
                 ]);
 
-                $this->deleteStack[] = $relationship;
-
-                if (! empty($value)) {
-                    $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                    $this->db->deleteDocuments(
-                        $relatedCollection->getId(),
-                        [Query::equal(Document::ID, $relationIds)],
-                    );
-                }
-
-                \array_pop($this->deleteStack);
+                $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
+                $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relationIds));
 
                 break;
             case RelationType::ManyToMany:
@@ -2118,37 +2089,48 @@ class Relationships implements Hook
                     Query::limit(PHP_INT_MAX),
                 ]));
 
-                $this->deleteStack[] = $relationship;
-
-                if (! empty($junctions)) {
-                    $junctionIds = [];
-                    $relatedIds = [];
-                    foreach ($junctions as $junctionDoc) {
-                        $junctionIds[] = $junctionDoc->getId();
-                        if ($side === RelationSide::Parent) {
-                            $relatedAttr = $junctionDoc->getAttribute($key);
-                            $relatedId = $relatedAttr instanceof Document ? $relatedAttr->getId() : (\is_string($relatedAttr) ? $relatedAttr : null);
-                            if ($relatedId !== null) {
-                                $relatedIds[] = $relatedId;
-                            }
+                $junctionIds = [];
+                $relatedIds = [];
+                foreach ($junctions as $junctionDocument) {
+                    $junctionIds[] = $junctionDocument->getId();
+                    if ($side === RelationSide::Parent) {
+                        $relatedAttribute = $junctionDocument->getAttribute($key);
+                        $relatedId = $relatedAttribute instanceof Document ? $relatedAttribute->getId() : (\is_string($relatedAttribute) ? $relatedAttribute : null);
+                        if ($relatedId !== null) {
+                            $relatedIds[] = $relatedId;
                         }
                     }
-
-                    if (! empty($relatedIds)) {
-                        $this->db->deleteDocuments(
-                            $relatedCollection->getId(),
-                            [Query::equal(Document::ID, $relatedIds)],
-                        );
-                    }
-
-                    $this->db->deleteDocuments(
-                        $junction,
-                        [Query::equal(Document::ID, $junctionIds)],
-                    );
                 }
 
-                \array_pop($this->deleteStack);
+                $this->cascade($relationship, function () use ($relatedCollection, $relatedIds, $junction, $junctionIds): void {
+                    $this->deleteRelatedDocuments($relatedCollection->getId(), $relatedIds);
+                    $this->deleteRelatedDocuments($junction, $junctionIds);
+                });
                 break;
+        }
+    }
+
+    /**
+     * @param  callable(): mixed  $callback
+     */
+    private function cascade(Document $relationship, callable $callback): void
+    {
+        $this->deleteStack[] = $relationship;
+
+        try {
+            $callback();
+        } finally {
+            \array_pop($this->deleteStack);
+        }
+    }
+
+    /**
+     * @param  array<string>  $ids
+     */
+    private function deleteRelatedDocuments(string $collection, array $ids): void
+    {
+        foreach (\array_chunk(\array_values(\array_unique($ids)), $this->relationQueryChunkSize()) as $chunk) {
+            $this->db->deleteDocuments($collection, [Query::equal(Document::ID, $chunk)]);
         }
     }
 

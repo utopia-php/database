@@ -11,6 +11,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception;
+use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
@@ -1967,6 +1968,156 @@ trait SpatialTests
         }
     }
 
+    public function testSpatialAttributeDefaults(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionName = 'spatial_defaults_';
+        $database->createCollection(new Collection(id: $collectionName));
+
+        try {
+            $this->assertTrue($database->createAttribute($collectionName, Attribute::point(key: 'pt', default: [1.0, 2.0])));
+            $this->assertTrue($database->createAttribute($collectionName, Attribute::linestring(key: 'ln', default: [[0.0, 0.0], [1.0, 1.0]])));
+            $this->assertTrue($database->createAttribute($collectionName, Attribute::polygon(key: 'pg', default: [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]])));
+
+            $this->assertTrue($database->createAttribute($collectionName, Attribute::string(key: 'title', size: 255, default: 'Untitled')));
+            $this->assertTrue($database->createAttribute($collectionName, Attribute::integer(key: 'count', default: 0)));
+            $this->assertTrue($database->createAttribute($collectionName, Attribute::double(key: 'rating')));
+            $this->assertTrue($database->createAttribute($collectionName, Attribute::boolean(key: 'active', default: true)));
+
+            $defaults = [
+                'pt' => [1.0, 2.0],
+                'ln' => [[0.0, 0.0], [1.0, 1.0]],
+                'pg' => [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]],
+                'title' => 'Untitled',
+                'count' => 0,
+                'rating' => null,
+                'active' => true,
+            ];
+
+            $document = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d1'),
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            ]));
+            $this->assertSpatialDefaults($defaults, $document, 'created');
+
+            $database->purgeCachedDocument($collectionName, 'd1');
+            $this->assertSpatialDefaults($defaults, $database->getDocument($collectionName, 'd1'), 'stored');
+
+            $updated = $database->updateDocument($collectionName, 'd1', new Document(['count' => 1]));
+            $this->assertSame(1, $updated->getAttribute('count'));
+            $database->purgeCachedDocument($collectionName, 'd1');
+            $this->assertSpatialDefaults(['count' => 1] + $defaults, $database->getDocument($collectionName, 'd1'), 'updated');
+
+            $overrides = [
+                'pt' => [9.0, 9.0],
+                'ln' => [[2.0, 2.0], [3.0, 3.0]],
+                'pg' => [[[1.0, 1.0], [1.0, 3.0], [3.0, 3.0], [1.0, 1.0]]],
+                'title' => 'Custom',
+                'count' => 5,
+                'rating' => 4.5,
+                'active' => false,
+            ];
+            $overridden = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d2'),
+                '$permissions' => [Permission::read(Role::any())],
+                ...$overrides,
+            ]));
+            $this->assertSpatialDefaults($overrides, $overridden, 'overridden');
+
+            $database->updateAttributeDefault($collectionName, 'pt', [5.0, 6.0]);
+            $database->updateAttributeDefault($collectionName, 'ln', [[10.0, 10.0], [20.0, 20.0]]);
+            $database->updateAttributeDefault($collectionName, 'pg', [[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]]);
+            $database->updateAttributeDefault($collectionName, 'title', 'Updated');
+            $database->updateAttributeDefault($collectionName, 'count', 10);
+            $database->updateAttributeDefault($collectionName, 'active', false);
+
+            $newDefaults = [
+                'pt' => [5.0, 6.0],
+                'ln' => [[10.0, 10.0], [20.0, 20.0]],
+                'pg' => [[[5.0, 5.0], [5.0, 7.0], [7.0, 7.0], [5.0, 5.0]]],
+                'title' => 'Updated',
+                'count' => 10,
+                'rating' => null,
+                'active' => false,
+            ];
+            $document = $database->createDocument($collectionName, new Document([
+                '$id' => ID::custom('d3'),
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+            $this->assertSpatialDefaults($newDefaults, $document, 'created after the defaults changed');
+
+            $database->purgeCachedDocument($collectionName, 'd3');
+            $this->assertSpatialDefaults($newDefaults, $database->getDocument($collectionName, 'd3'), 'stored after the defaults changed');
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $expected
+     */
+    private function assertSpatialDefaults(array $expected, Document $document, string $stage): void
+    {
+        foreach ($expected as $key => $value) {
+            $this->assertSame($value, $document->getAttribute($key), "Attribute \"{$key}\" of the {$stage} document");
+        }
+    }
+
+    public function testInvalidSpatialTypes(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionName = 'test_invalid_spatial_types';
+
+        $database->createCollection(new Collection(id: $collectionName, attributes: [
+            Attribute::point(key: 'pointAttr'),
+            Attribute::linestring(key: 'lineAttr'),
+            Attribute::polygon(key: 'polyAttr'),
+        ]));
+
+        $invalidDocuments = [
+            'point with one coordinate' => ['pointAttr' => [10.0]],
+            'line with one point' => ['lineAttr' => [[10.0, 20.0]]],
+            'line that is not an array of points' => ['lineAttr' => [10.0, 20.0]],
+            'polygon that is not an array of rings' => ['polyAttr' => [10.0, 20.0]],
+            'polygon ring with three points' => ['polyAttr' => [[0, 0], [1, 1], [0, 1]]],
+            'polygon ring with a non-numeric coordinate' => ['polyAttr' => [[0, 0], ['a', 1], [1, 1], [0, 0]]],
+            'polygon ring that is not closed' => ['polyAttr' => [[0, 0], [1, 0], [1, 1], [0, 1]]],
+            'empty polygon' => ['polyAttr' => []],
+            'polygon ring with three-dimensional points' => ['polyAttr' => [[0, 0, 5], [1, 0, 5], [1, 1, 5], [0, 0, 5]]],
+            'polygon with a three-dimensional inner ring' => ['polyAttr' => [
+                [[0, 0], [2, 0], [2, 2], [0, 0]],
+                [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 0, 1]],
+            ]],
+        ];
+
+        try {
+            foreach ($invalidDocuments as $case => $attributes) {
+                try {
+                    $database->createDocument($collectionName, new Document($attributes));
+                    $this->fail("Expected StructureException for {$case}");
+                } catch (\Throwable $exception) {
+                    $this->assertInstanceOf(StructureException::class, $exception, $case);
+                }
+            }
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
     public function testSpatialDistanceInMeter(): void
     {
         /** @var Database $database */
@@ -2237,6 +2388,46 @@ trait SpatialTests
         $this->assertEquals($result->getAttribute('poly'), null);
     }
 
+    public function testSpatialIndexSingleAttributeOnly(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionName = 'spatial_idx_single_attr';
+        $database->createCollection(new Collection(id: $collectionName));
+
+        try {
+            $database->createAttribute($collectionName, Attribute::point(key: 'loc', required: true));
+            $database->createAttribute($collectionName, Attribute::point(key: 'loc2', required: true));
+            $database->createAttribute($collectionName, Attribute::string(key: 'title', size: 255, required: true));
+
+            $this->assertTrue($database->createIndex($collectionName, Index::spatial(key: 'idx_loc', attributes: ['loc'])));
+
+            $invalidIndexes = [
+                'spatial index on multiple attributes' => Index::spatial(key: 'idx_multi', attributes: ['loc', 'loc2']),
+                'non-spatial index on a spatial attribute' => Index::key(key: 'idx_wrong_type', attributes: ['loc']),
+                'spatial index mixing spatial and non-spatial attributes' => Index::spatial(key: 'idx_mix', attributes: ['loc', 'title']),
+            ];
+            foreach ($invalidIndexes as $case => $index) {
+                try {
+                    $database->createIndex($collectionName, $index);
+                    $this->fail("Expected exception when creating a {$case}");
+                } catch (\Throwable $exception) {
+                    $this->assertInstanceOf(IndexException::class, $exception, $case);
+                }
+            }
+
+            $this->assertSame(['idx_loc'], array_map(fn (Index $index) => $index->getId(), $database->getCollection($collectionName)->indexes));
+        } finally {
+            $database->deleteCollection($collectionName);
+        }
+    }
+
     public function testSpatialIndexRequiredToggling(): void
     {
         /** @var Database $database */
@@ -2271,6 +2462,46 @@ trait SpatialTests
             $database->createDocument($collUpdateNull, new Document(['loc' => null]));
         } finally {
             $database->deleteCollection($collUpdateNull);
+        }
+    }
+
+    public function testSpatialIndexOnNonSpatial(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        if (! ($database->getAdapter()->hasFeature(Feature\Spatial::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionName = 'spatial_idx_non_spatial';
+        $database->createCollection(new Collection(id: $collectionName));
+
+        try {
+            $database->createAttribute($collectionName, Attribute::point(key: 'loc', required: true));
+            $database->createAttribute($collectionName, Attribute::string(key: 'name', size: 4, required: true));
+
+            $invalidIndexes = [
+                'spatial index on a string attribute' => Index::spatial(key: 'idx_loc', attributes: ['name']),
+                'key index on a spatial attribute' => Index::key(key: 'idx_loc', attributes: ['loc']),
+                'key index on "loc,name"' => Index::key(key: 'idx_loc', attributes: ['loc,name']),
+                'key index on "name,loc"' => Index::key(key: 'idx_loc', attributes: ['name,loc']),
+                'spatial index on "name,loc"' => Index::spatial(key: 'idx_loc', attributes: ['name,loc']),
+                'spatial index on "loc,name"' => Index::spatial(key: 'idx_loc', attributes: ['loc,name']),
+            ];
+            foreach ($invalidIndexes as $case => $index) {
+                try {
+                    $database->createIndex($collectionName, $index);
+                    $this->fail("Expected exception when creating a {$case}");
+                } catch (\Throwable $exception) {
+                    $this->assertInstanceOf(IndexException::class, $exception, $case);
+                }
+            }
+
+            $this->assertSame([], $database->getCollection($collectionName)->indexes);
+        } finally {
+            $database->deleteCollection($collectionName);
         }
     }
 

@@ -222,6 +222,17 @@ class QueriesTest extends TestCase
             new GroupBy($attributes),
             new Join(),
         ]);
+        $validator->setJoinedCollections([new Document([
+            '$id' => 'reviews',
+            'attributes' => [
+                new Document([
+                    '$id' => 'score',
+                    'key' => 'score',
+                    'type' => ColumnType::Integer->value,
+                    'array' => false,
+                ]),
+            ],
+        ])]);
 
         $this->assertTrue($validator->isValid([
             Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),
@@ -330,6 +341,17 @@ class QueriesTest extends TestCase
             new GroupBy($attributes),
             new Join(),
         ]);
+        $validator->setJoinedCollections([new Document([
+            '$id' => 'reviews',
+            'attributes' => [
+                new Document([
+                    '$id' => 'score',
+                    'key' => 'score',
+                    'type' => ColumnType::Integer->value,
+                    'array' => false,
+                ]),
+            ],
+        ])]);
 
         $this->assertTrue($validator->isValid([
             Query::leftJoin('reviews', 'productId', '$id', '=', 'rev'),

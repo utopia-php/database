@@ -3,12 +3,17 @@
 namespace Utopia\Database\Validator\Query;
 
 /**
- * Schema tolerance for validators that may legitimately name an attribute of a
- * joined collection, whose schema is not available to the validator.
+ * Resolution of attributes this collection does not declare, for validators that may legitimately
+ * name an attribute of a joined collection.
  */
 trait JoinedAttributes
 {
-    protected bool $joinedAttributes = false;
+    /**
+     * The attributes each join of the query set declares, one set per join.
+     *
+     * @var list<array<string, true>>
+     */
+    protected array $joinedAttributes = [];
 
     /**
      * @var array<string, true>
@@ -16,17 +21,16 @@ trait JoinedAttributes
     protected array $joinAliases = [];
 
     /**
-     * Stand the schema check down for a query set that joins: the joined collection's
-     * attributes are legitimate operands here and are not in this collection's schema.
+     * @param  list<array<string, true>>  $joins  The attributes each join of the query set declares
      */
-    public function allowJoinedAttributes(): void
+    public function allowJoinedAttributes(array $joins): void
     {
-        $this->joinedAttributes = true;
+        $this->joinedAttributes = $joins;
     }
 
     public function resetJoinedAttributes(): void
     {
-        $this->joinedAttributes = false;
+        $this->joinedAttributes = [];
         $this->joinAliases = [];
     }
 
@@ -43,24 +47,42 @@ trait JoinedAttributes
     }
 
     /**
-     * An `alias.column` reference has to name a join alias the query set actually
-     * declared, so a typo in the alias is still rejected. A bare name can only be
-     * taken on trust: the joined collection's schema never reaches this validator.
+     * An `alias.column` reference has to name a join alias the query set declared, so a typo in
+     * the alias is still rejected. A bare name has to be declared by exactly one join: by none it
+     * is not found, and by several it would silently pick one of them. Sets the message when the
+     * attribute does not resolve.
      */
     protected function isJoinedAttribute(string $attribute): bool
     {
-        if (! $this->joinedAttributes) {
-            return false;
-        }
-
         $dot = \strpos($attribute, '.');
 
         if ($dot === false) {
+            $joins = 0;
+            foreach ($this->joinedAttributes as $attributes) {
+                if (isset($attributes[$attribute])) {
+                    $joins++;
+                }
+            }
+
+            if ($joins === 1) {
+                return true;
+            }
+
+            if ($joins > 1) {
+                $this->message = 'Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias';
+
+                return false;
+            }
+        } elseif (
+            isset($this->joinAliases[\substr($attribute, 0, $dot)])
+            && $this->isAllowedJoinColumn(\substr($attribute, $dot + 1))
+        ) {
             return true;
         }
 
-        return isset($this->joinAliases[\substr($attribute, 0, $dot)])
-            && $this->isAllowedJoinColumn(\substr($attribute, $dot + 1));
+        $this->message = 'Attribute not found in schema: '.$attribute;
+
+        return false;
     }
 
     abstract protected function isAllowedJoinColumn(string $column): bool;

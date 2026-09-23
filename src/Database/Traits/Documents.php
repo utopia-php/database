@@ -3045,10 +3045,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = $this->getDocumentsValidator($collection);
-            if (! $validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
+            $this->validateDocumentsQueries($collection, $queries);
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3498,10 +3495,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = $this->getDocumentsValidator($collection);
-            if (! $validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
+            $this->validateDocumentsQueries($collection, $queries);
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3561,10 +3555,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = $this->getDocumentsValidator($collection);
-            if (! $validator->isValid($queries)) {
-                throw new QueryException($validator->getDescription());
-            }
+            $this->validateDocumentsQueries($collection, $queries);
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3663,6 +3654,58 @@ trait Documents
         }
 
         return \substr($order, $dot + 1);
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException
+     */
+    private function validateDocumentsQueries(Document $collection, array $queries): void
+    {
+        $joinedCollections = $this->resolveJoinedCollections($queries);
+        $validator = $this->getDocumentsValidator($collection, $joinedCollections);
+
+        if ($joinedCollections !== []) {
+            $validator->setJoinedCollections($joinedCollections);
+        }
+
+        if (! $validator->isValid($queries)) {
+            throw new QueryException($validator->getDescription());
+        }
+    }
+
+    /**
+     * The collections the join queries name, each once.
+     *
+     * @param  array<Query>  $queries
+     * @return list<Document>
+     *
+     * @throws QueryException
+     */
+    private function resolveJoinedCollections(array $queries): array
+    {
+        $collections = [];
+
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
+            }
+
+            $id = $query->getAttribute();
+            if ($id === '' || isset($collections[$id])) {
+                continue;
+            }
+
+            $collection = $this->silent(fn () => $this->getCollection($id));
+            if ($collection->isEmpty()) {
+                throw new QueryException("Joined collection '{$id}' not found");
+            }
+
+            $collections[$id] = $collection;
+        }
+
+        return \array_values($collections);
     }
 
     /**

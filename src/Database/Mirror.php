@@ -502,6 +502,49 @@ class Mirror extends Database
     }
 
     /**
+     * Writes through the mirror run on the source, so the scope opens there too. The destination
+     * keeps its own state: a replicated write can still be running on it after the scope closes.
+     *
+     * {@inheritdoc}
+     */
+    public function withTenant(int|string|null $tenant, callable $callback): mixed
+    {
+        return parent::withTenant($tenant, fn (): mixed => $this->source->withTenant($tenant, $callback));
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function withPreserveDates(callable $callback): mixed
+    {
+        return parent::withPreserveDates(fn (): mixed => $this->source->withPreserveDates($callback));
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function withPreserveSequence(callable $callback): mixed
+    {
+        return parent::withPreserveSequence(fn (): mixed => $this->source->withPreserveSequence($callback));
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function skipRelationships(callable $callback): mixed
+    {
+        return parent::skipRelationships(fn (): mixed => $this->source->skipRelationships($callback));
+    }
+
+    /**
+     * {@inheritdoc}
+     */
+    public function skipRelationshipsExistCheck(callable $callback): mixed
+    {
+        return parent::skipRelationshipsExistCheck(fn (): mixed => $this->source->skipRelationshipsExistCheck($callback));
+    }
+
+    /**
      * {@inheritdoc}
      */
     public function addLifecycleHook(Lifecycle $hook): static
@@ -557,11 +600,16 @@ class Mirror extends Database
     }
 
     /**
+     * Scoped to the mirror and its source, like withTenant(), so the callback runs once.
+     *
      * {@inheritdoc}
      */
     public function withRequestTimestamp(?DateTime $requestTimestamp, callable $callback): mixed
     {
-        return $this->delegate(__FUNCTION__, \func_get_args());
+        return parent::withRequestTimestamp(
+            $requestTimestamp,
+            fn (): mixed => $this->source->withRequestTimestamp($requestTimestamp, $callback),
+        );
     }
 
     /**

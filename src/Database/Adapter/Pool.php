@@ -89,9 +89,13 @@ class Pool extends Adapter
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($method, $args, $feature) {
-            $this->syncBorrowedAdapter($adapter);
+            try {
+                $this->syncBorrowedAdapter($adapter);
 
-            return $this->invokeDelegated($adapter, $method, $args, $feature);
+                return $this->invokeDelegated($adapter, $method, $args, $feature);
+            } finally {
+                $this->releaseBorrowedAdapter($adapter);
+            }
         });
     }
 
@@ -164,6 +168,16 @@ class Pool extends Adapter
             $adapter->addTransform($tName, $tTransform);
         }
         $this->syncWriteHooks($adapter);
+    }
+
+    /**
+     * Take back what syncBorrowedAdapter() lent the connection for one checkout.
+     * A subclass that checks connections out itself calls this before handing
+     * the connection back to the pool.
+     */
+    protected function releaseBorrowedAdapter(Adapter $adapter): void
+    {
+        $adapter->setProfiler(null);
     }
 
     public function getDriver(): mixed
@@ -371,10 +385,10 @@ class Pool extends Adapter
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($callback) {
-            $this->syncBorrowedAdapter($adapter);
-
-            $this->pinnedAdapter = $adapter;
             try {
+                $this->syncBorrowedAdapter($adapter);
+
+                $this->pinnedAdapter = $adapter;
                 if ($this->skipDuplicates) {
                     return $adapter->skipDuplicates(
                         fn () => $adapter->withTransaction($callback)
@@ -383,6 +397,7 @@ class Pool extends Adapter
                 return $adapter->withTransaction($callback);
             } finally {
                 $this->pinnedAdapter = null;
+                $this->releaseBorrowedAdapter($adapter);
             }
         });
     }

@@ -2,7 +2,9 @@
 
 namespace Tests\Unit\Profiler;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Profiler\QueryLog;
 use Utopia\Database\Profiler\QueryProfiler;
 
 class QueryProfilerTest extends TestCase
@@ -119,5 +121,106 @@ class QueryProfilerTest extends TestCase
 
         $this->assertCount(0, $this->profiler->getLogs());
         $this->assertEquals(0, $this->profiler->getQueryCount());
+    }
+
+    public function testLogsKeepOnlyTheNewestEntriesWithinTheCapacity(): void
+    {
+        $this->profiler->enable();
+        $this->profiler->setCapacity(3);
+
+        foreach (['Q1', 'Q2', 'Q3', 'Q4', 'Q5'] as $query) {
+            $this->profiler->log($query, [], 1.0);
+        }
+
+        $this->assertSame(['Q3', 'Q4', 'Q5'], $this->loggedQueries());
+        $this->assertSame(3, $this->profiler->getCapacity());
+    }
+
+    public function testDefaultCapacityBoundsTheLogs(): void
+    {
+        $this->profiler->enable();
+
+        for ($index = 0; $index <= QueryProfiler::DEFAULT_CAPACITY; $index++) {
+            $this->profiler->log("Q{$index}", [], 1.0);
+        }
+
+        $logs = $this->profiler->getLogs();
+        $this->assertCount(QueryProfiler::DEFAULT_CAPACITY, $logs);
+        $this->assertSame('Q1', $logs[0]->query);
+        $this->assertSame('Q'.QueryProfiler::DEFAULT_CAPACITY, $logs[QueryProfiler::DEFAULT_CAPACITY - 1]->query);
+    }
+
+    public function testCountAndTotalTimeCoverEntriesPastTheCapacity(): void
+    {
+        $this->profiler->enable();
+        $this->profiler->setCapacity(2);
+
+        $this->profiler->log('Q1', [], 1.0);
+        $this->profiler->log('Q2', [], 2.0);
+        $this->profiler->log('Q3', [], 4.0);
+
+        $this->assertSame(['Q2', 'Q3'], $this->loggedQueries());
+        $this->assertSame(3, $this->profiler->getQueryCount());
+        $this->assertSame(7.0, $this->profiler->getTotalTime());
+    }
+
+    public function testShrinkingTheCapacityKeepsTheNewestEntries(): void
+    {
+        $this->profiler->enable();
+        $this->profiler->setCapacity(3);
+
+        foreach (['Q1', 'Q2', 'Q3', 'Q4'] as $query) {
+            $this->profiler->log($query, [], 1.0);
+        }
+
+        $this->profiler->setCapacity(2);
+        $this->assertSame(['Q3', 'Q4'], $this->loggedQueries());
+
+        $this->profiler->log('Q5', [], 1.0);
+        $this->assertSame(['Q4', 'Q5'], $this->loggedQueries());
+    }
+
+    public function testGrowingTheCapacityKeepsTheOrder(): void
+    {
+        $this->profiler->enable();
+        $this->profiler->setCapacity(2);
+
+        foreach (['Q1', 'Q2', 'Q3'] as $query) {
+            $this->profiler->log($query, [], 1.0);
+        }
+
+        $this->profiler->setCapacity(3);
+        $this->profiler->log('Q4', [], 1.0);
+        $this->assertSame(['Q2', 'Q3', 'Q4'], $this->loggedQueries());
+
+        $this->profiler->log('Q5', [], 1.0);
+        $this->assertSame(['Q3', 'Q4', 'Q5'], $this->loggedQueries());
+    }
+
+    public function testCapacityMustBeAtLeastOne(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        $this->profiler->setCapacity(0);
+    }
+
+    public function testDisableStopsRecordingAndKeepsTheLogsForInspection(): void
+    {
+        $this->profiler->enable();
+        $this->profiler->log('Q1', [], 1.0);
+
+        $this->profiler->disable();
+        $this->profiler->log('Q2', [], 1.0);
+
+        $this->assertSame(['Q1'], $this->loggedQueries());
+        $this->assertSame(1, $this->profiler->getQueryCount());
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function loggedQueries(): array
+    {
+        return \array_map(static fn (QueryLog $log): string => $log->query, $this->profiler->getLogs());
     }
 }

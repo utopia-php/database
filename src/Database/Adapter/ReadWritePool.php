@@ -105,9 +105,13 @@ class ReadWritePool extends Pool
 
         if ($this->isReadOperation($method) && ! $this->isSticky()) {
             return $this->readPool->use(function (Adapter $adapter) use ($method, $args, $feature) {
-                $this->syncBorrowedAdapter($adapter);
+                try {
+                    $this->syncBorrowedAdapter($adapter);
 
-                return $this->invokeDelegated($adapter, $method, $args, $feature);
+                    return $this->invokeDelegated($adapter, $method, $args, $feature);
+                } finally {
+                    $this->releaseBorrowedAdapter($adapter);
+                }
             });
         }
 

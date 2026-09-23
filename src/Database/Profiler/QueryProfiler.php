@@ -2,10 +2,22 @@
 
 namespace Utopia\Database\Profiler;
 
+use InvalidArgumentException;
+
 class QueryProfiler
 {
-    /** @var array<QueryLog> */
+    public const int DEFAULT_CAPACITY = 1000;
+
+    /** @var array<int, QueryLog> */
     private array $logs = [];
+
+    private int $oldest = 0;
+
+    private int $capacity = self::DEFAULT_CAPACITY;
+
+    private int $queryCount = 0;
+
+    private float $totalTime = 0.0;
 
     private float $slowThreshold = 100.0;
 
@@ -34,6 +46,27 @@ class QueryProfiler
     public function setSlowThreshold(float $milliseconds): void
     {
         $this->slowThreshold = $milliseconds;
+    }
+
+    /**
+     * Keep at most this many of the newest entries.
+     *
+     * @throws InvalidArgumentException
+     */
+    public function setCapacity(int $capacity): void
+    {
+        if ($capacity < 1) {
+            throw new InvalidArgumentException('Profiler capacity must be at least 1');
+        }
+
+        $this->logs = \array_slice($this->getLogs(), -$capacity);
+        $this->oldest = 0;
+        $this->capacity = $capacity;
+    }
+
+    public function getCapacity(): int
+    {
+        return $this->capacity;
     }
 
     public function enableBacktrace(bool $enabled = true): void
@@ -73,7 +106,7 @@ class QueryProfiler
             backtrace: $backtrace,
         );
 
-        $this->logs[] = $entry;
+        $this->record($entry);
 
         if ($durationMs >= $this->slowThreshold && $this->onSlowQuery !== null) {
             ($this->onSlowQuery)($entry);
@@ -81,11 +114,16 @@ class QueryProfiler
     }
 
     /**
-     * @return array<QueryLog>
+     * The newest entries up to the capacity, oldest first.
+     *
+     * @return list<QueryLog>
      */
     public function getLogs(): array
     {
-        return $this->logs;
+        return [
+            ...\array_slice($this->logs, $this->oldest),
+            ...\array_slice($this->logs, 0, $this->oldest),
+        ];
     }
 
     /**
@@ -93,17 +131,25 @@ class QueryProfiler
      */
     public function getSlowQueries(): array
     {
-        return \array_filter($this->logs, fn (QueryLog $log) => $log->durationMs >= $this->slowThreshold);
+        return \array_filter($this->getLogs(), fn (QueryLog $log) => $log->durationMs >= $this->slowThreshold);
     }
 
+    /**
+     * Every query logged since the last reset, including those the capacity
+     * has since dropped.
+     */
     public function getQueryCount(): int
     {
-        return \count($this->logs);
+        return $this->queryCount;
     }
 
+    /**
+     * The time of every query logged since the last reset, including those
+     * the capacity has since dropped.
+     */
     public function getTotalTime(): float
     {
-        return \array_sum(\array_map(fn (QueryLog $log) => $log->durationMs, $this->logs));
+        return $this->totalTime;
     }
 
     /**
@@ -131,5 +177,23 @@ class QueryProfiler
     public function reset(): void
     {
         $this->logs = [];
+        $this->oldest = 0;
+        $this->queryCount = 0;
+        $this->totalTime = 0.0;
+    }
+
+    private function record(QueryLog $entry): void
+    {
+        $this->queryCount++;
+        $this->totalTime += $entry->durationMs;
+
+        if (\count($this->logs) < $this->capacity) {
+            $this->logs[] = $entry;
+
+            return;
+        }
+
+        $this->logs[$this->oldest] = $entry;
+        $this->oldest = ($this->oldest + 1) % $this->capacity;
     }
 }

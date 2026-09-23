@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Adapter;
 
+use PDO;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -12,13 +13,16 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Tenancy;
+use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
@@ -256,6 +260,60 @@ final class PoolTest extends TestCase
         $pool->setTimeout(300000);
 
         $this->assertSame(300000, $pinned->getTimeout(), 'The connection the open transaction is running on must get the new bound');
+    }
+
+    public function testBorrowedAdapterDoesNotKeepTheProfilerAfterTheCall(): void
+    {
+        $adapter = new ProfilerProbeAdapter();
+        $pool = $this->createPool($adapter);
+        $profiler = new QueryProfiler();
+        $pool->setProfiler($profiler);
+
+        $this->assertTrue($pool->ping());
+
+        $this->assertSame($profiler, $adapter->profiled, 'The borrowed connection must profile the call it served');
+        $this->assertNull($adapter->getProfiler(), 'The connection went back to the pool still holding the handle\'s profiler');
+    }
+
+    public function testPinnedAdapterDoesNotKeepTheProfilerAfterTheTransaction(): void
+    {
+        $adapter = new ProfilerProbeAdapter();
+        $pool = $this->createPool($adapter);
+        $profiler = new QueryProfiler();
+        $pool->setProfiler($profiler);
+
+        $this->assertTrue($pool->withTransaction(static fn (): bool => $pool->ping()));
+
+        $this->assertSame($profiler, $adapter->profiled, 'The pinned connection must profile the calls of the transaction');
+        $this->assertNull($adapter->getProfiler(), 'The connection went back to the pool still holding the handle\'s profiler');
+    }
+
+    public function testDisablingProfilingDetachesPooledConnections(): void
+    {
+        $connection = new SQLite(new PDO('sqlite::memory:'));
+        $database = new Database($this->createPool($connection), new Cache(new NoCache()));
+        $database
+            ->setDatabase('profiling')
+            ->setNamespace('profiling')
+            ->setAuthorization(new Authorization());
+        $database->enableProfiling();
+        $database->create();
+        $database->createCollection(new Collection(id: 'posts'));
+
+        $profiler = $database->getProfiler();
+        $this->assertInstanceOf(QueryProfiler::class, $profiler);
+        $captured = $profiler->getQueryCount();
+        $this->assertGreaterThan(0, $captured, 'The pooled SQLite connection must profile its statements');
+
+        $database->disableProfiling();
+
+        $this->assertNull($database->getAdapter()->getProfiler(), 'The pool must not keep the profiler once profiling is off');
+        $this->assertNull($connection->getProfiler(), 'The pooled connection must not keep the profiler once profiling is off');
+
+        $database->getDocument('posts', 'missing');
+
+        $this->assertSame($captured, $profiler->getQueryCount(), 'Statements run after profiling was disabled must not be captured');
+        $this->assertNotSame([], $profiler->getLogs(), 'The statements captured before disabling must stay readable');
     }
 
     private function createPool(Adapter $adapter): Pool

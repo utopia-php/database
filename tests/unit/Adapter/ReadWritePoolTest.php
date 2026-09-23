@@ -13,6 +13,7 @@ use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Document;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Write;
+use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -368,6 +369,34 @@ class ReadWritePoolTest extends TestCase
             ->willReturn(1);
 
         $this->pool->delegate('rawMutation', ['UPDATE t SET a = 1', []]);
+    }
+
+    public function testReplicaDoesNotKeepTheProfilerAfterARead(): void
+    {
+        $replica = new ProfilerProbeAdapter();
+        $pool = new ReadWritePool($this->createConnections(new Memory()), $this->createConnections($replica));
+        $pool->setAuthorization(new Authorization());
+        $profiler = new QueryProfiler();
+        $pool->setProfiler($profiler);
+
+        $this->assertTrue($pool->ping());
+
+        $this->assertSame($profiler, $replica->profiled, 'The replica must profile the read it served');
+        $this->assertNull($replica->getProfiler(), 'The replica kept the profiler of the handle that borrowed it');
+    }
+
+    /**
+     * @return UtopiaPool<Adapter>
+     */
+    private function createConnections(Adapter $adapter): UtopiaPool
+    {
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            static fn (callable $callback): mixed => $callback($adapter),
+        );
+
+        return $connections;
     }
 
     /**

@@ -188,6 +188,24 @@ class IndexedQueriesTest extends TestCase
                 new Join(),
             ]
         );
+        $validator->setJoinedCollections([new Document([
+            '$id' => 'meta',
+            'attributes' => [
+                new Document([
+                    '$id' => 'body',
+                    'key' => 'body',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => 'body_fulltext',
+                    'type' => IndexType::Fulltext->value,
+                    'attributes' => ['body'],
+                ]),
+            ],
+        ])]);
 
         $this->assertTrue($validator->isValid([
             Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
@@ -222,6 +240,24 @@ class IndexedQueriesTest extends TestCase
                 new Join(),
             ]
         );
+        $validator->setJoinedCollections([new Document([
+            '$id' => 'meta',
+            'attributes' => [
+                new Document([
+                    '$id' => 'body',
+                    'key' => 'body',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                ]),
+            ],
+            'indexes' => [
+                new Document([
+                    '$id' => 'body_fulltext',
+                    'type' => IndexType::Fulltext->value,
+                    'attributes' => ['body'],
+                ]),
+            ],
+        ])]);
 
         $this->assertFalse($validator->isValid([
             Query::leftJoin('meta', 'meta', [

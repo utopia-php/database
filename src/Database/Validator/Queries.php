@@ -59,8 +59,8 @@ class Queries extends Validator
 
     /**
      * The collections the query sets may join. A bare aggregate or groupBy attribute resolves
-     * through the one join whose collection declares it; a join whose collection is not given
-     * declares nothing.
+     * through the one join whose collection declares it, and a search on a join alias needs a
+     * fulltext index on that collection; a join whose collection is not given declares nothing.
      *
      * @param  array<Document>  $collections
      */

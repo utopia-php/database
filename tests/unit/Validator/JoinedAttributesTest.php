@@ -181,6 +181,59 @@ class JoinedAttributesTest extends TestCase
         ]), $validator->getDescription());
     }
 
+    public function testSearchOnAJoinAliasRequiresAFulltextIndexOnTheJoinedAttribute(): void
+    {
+        $validator = $this->validator([$this->orders, $this->notes]);
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::search('purchase.memo', 'gift'),
+        ]));
+        $this->assertSame('Searching by attribute "purchase.memo" requires a fulltext index.', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('orders', '$id', 'customerId', '=', 'purchase'),
+            Query::notSearch('purchase.memo', 'gift'),
+        ]));
+        $this->assertSame('Searching by attribute "purchase.memo" requires a fulltext index.', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('notes', '$id', 'customerId', '=', 'note'),
+            Query::search('note.body', 'needle'),
+        ]), $validator->getDescription());
+    }
+
+    public function testSearchInAJoinConditionRequiresAFulltextIndexOnTheJoinedAttribute(): void
+    {
+        $validator = $this->validator([$this->orders, $this->notes]);
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('orders', 'purchase', [
+                Query::on('$id', 'customerId'),
+                Query::search('purchase.memo', 'gift'),
+            ]),
+        ]));
+        $this->assertSame('Searching by attribute "purchase.memo" requires a fulltext index.', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid([
+            Query::leftJoin('notes', 'note', [
+                Query::on('$id', 'customerId'),
+                Query::search('note.body', 'needle'),
+            ]),
+        ]), $validator->getDescription());
+    }
+
+    public function testSearchOnAJoinAliasIsInvalidWhenTheJoinedIndexesAreUnknown(): void
+    {
+        $validator = $this->validator();
+
+        $this->assertFalse($validator->isValid([
+            Query::leftJoin('notes', '$id', 'customerId', '=', 'note'),
+            Query::search('note.body', 'needle'),
+        ]));
+        $this->assertSame('Searching by attribute "note.body" requires a fulltext index.', $validator->getDescription());
+    }
+
     public function testJoinedCollectionsDoNotWidenAQuerySetWithoutJoins(): void
     {
         $validator = $this->validator([$this->orders]);

@@ -15,6 +15,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Query\Method;
 
 trait JoinTests
 {
@@ -6803,5 +6804,272 @@ trait JoinTests
         \sort($values);
 
         return $values;
+    }
+
+    public function testSharedTablesJoinsReadOnlyTheSelectedTenantsRows(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collections = ['jtn_authors', 'jtn_books', 'jtn_reviews'];
+        [$authors, $books] = $collections;
+        $tenant = $database->getTenant();
+
+        $rowsByJoin = [
+            [Method::Join, [
+                1 => [['one-a1', 11]],
+                2 => [['two-a1', 21], ['two-a2', 22]],
+            ]],
+            [Method::LeftJoin, [
+                1 => [['one-a1', 11], ['one-a2', null]],
+                2 => [['two-a1', 21], ['two-a2', 22], ['two-shared', null]],
+            ]],
+            [Method::RightJoin, [
+                1 => [['one-a1', 11], [null, 12], [null, 13]],
+                2 => [['two-a1', 21], ['two-a2', 22]],
+            ]],
+            [Method::FullOuterJoin, [
+                1 => [['one-a1', 11], ['one-a2', null], [null, 12], [null, 13]],
+                2 => [['two-a1', 21], ['two-a2', 22], ['two-shared', null]],
+            ]],
+            [Method::CrossJoin, [
+                1 => [['one-a1', 11], ['one-a1', 12], ['one-a1', 13], ['one-a2', 11], ['one-a2', 12], ['one-a2', 13]],
+                2 => [['two-a1', 21], ['two-a1', 22], ['two-a2', 21], ['two-a2', 22], ['two-shared', 21], ['two-shared', 22]],
+            ]],
+        ];
+
+        try {
+            $this->seedJoinTenancyFixture($database, ...$collections);
+
+            foreach ($rowsByJoin as [$method, $rowsByTenant]) {
+                foreach ($rowsByTenant as $selected => $rows) {
+                    $database->setTenant($selected);
+                    $join = fn (): Query => $this->joinTenancyJoin($method, $books, 'book');
+
+                    $this->assertSame(
+                        $this->joinTenancySorted($rows),
+                        $this->joinTenancyRows($database->find($authors, [$join(), Query::select(['name', 'book.pages'])]), ['book.pages']),
+                        "Tenant {$selected} must read exactly its own rows through a {$method->value}",
+                    );
+                    $this->assertSame(
+                        \count($rows),
+                        $database->count($authors, [$join()]),
+                        "Tenant {$selected} must count exactly its own rows through a {$method->value}",
+                    );
+                    $this->assertSame(
+                        \array_sum(\array_map(static fn (array $row): int => $row[1] ?? 0, $rows)),
+                        $database->sum($authors, 'book.pages', [$join()]),
+                        "Tenant {$selected} must sum exactly its own rows through a {$method->value}",
+                    );
+                }
+
+                $database->setTenant(1);
+                $queries = fn (): array => [$this->joinTenancyJoin($method, $books, 'book'), Query::select(['name', 'book.pages'])];
+                $this->assertSame('one-a1', $database->getDocument($authors, 'a1', $queries())->getAttribute('name'));
+                $this->assertTrue(
+                    $database->getDocument($authors, 'shared', $queries())->isEmpty(),
+                    "Tenant 1 must not read tenant 2's document through a {$method->value}",
+                );
+                $this->assertTrue(
+                    $database->getDocument($authors, 'legacy', $queries())->isEmpty(),
+                    "Tenant 1 must not read a tenantless document through a {$method->value}",
+                );
+            }
+        } finally {
+            $database->setTenant(null);
+            $this->cleanupAggCollections($database, $collections);
+            $database->setTenant($tenant);
+        }
+    }
+
+    public function testSharedTablesChainedJoinsKeepTheSelectedTenantsUnmatchedRows(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getSharedTables() || ! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collections = ['jtc_authors', 'jtc_books', 'jtc_reviews'];
+        [$authors, $books, $reviews] = $collections;
+        $tenant = $database->getTenant();
+
+        $rowsByChain = [
+            [Method::Join, Method::RightJoin, [
+                1 => [['one-a1', 11, 5], [null, null, 4], [null, null, 3], [null, null, 2]],
+                2 => [[null, null, 1]],
+            ]],
+            [Method::RightJoin, Method::RightJoin, [
+                1 => [['one-a1', 11, 5], [null, null, 4], [null, null, 3], [null, null, 2]],
+                2 => [[null, null, 1]],
+            ]],
+            [Method::LeftJoin, Method::FullOuterJoin, [
+                1 => [['one-a1', 11, 5], ['one-a2', null, 4], [null, null, 3], [null, null, 2]],
+                2 => [['two-a1', 21, null], ['two-a2', 22, null], ['two-shared', null, 1]],
+            ]],
+            [Method::CrossJoin, Method::RightJoin, [
+                1 => [
+                    ['one-a1', 11, 5], ['one-a1', 12, 5], ['one-a1', 13, 5],
+                    ['one-a2', 11, 4], ['one-a2', 12, 4], ['one-a2', 13, 4],
+                    [null, null, 3], [null, null, 2],
+                ],
+                2 => [['two-shared', 21, 1], ['two-shared', 22, 1]],
+            ]],
+        ];
+
+        try {
+            $this->seedJoinTenancyFixture($database, ...$collections);
+
+            foreach ($rowsByChain as [$first, $second, $rowsByTenant]) {
+                foreach ($rowsByTenant as $selected => $rows) {
+                    $database->setTenant($selected);
+                    $joins = fn (): array => [
+                        $this->joinTenancyJoin($first, $books, 'book'),
+                        $this->joinTenancyJoin($second, $reviews, 'review'),
+                    ];
+                    $label = "{$first->value} books then {$second->value} reviews";
+
+                    $this->assertSame(
+                        $this->joinTenancySorted($rows),
+                        $this->joinTenancyRows(
+                            $database->find($authors, [...$joins(), Query::select(['name', 'book.pages', 'review.stars'])]),
+                            ['book.pages', 'review.stars'],
+                        ),
+                        "Tenant {$selected} must read exactly its own rows through {$label}",
+                    );
+                    $this->assertSame(
+                        \count($rows),
+                        $database->count($authors, $joins()),
+                        "Tenant {$selected} must count exactly its own rows through {$label}",
+                    );
+                }
+            }
+        } finally {
+            $database->setTenant(null);
+            $this->cleanupAggCollections($database, $collections);
+            $database->setTenant($tenant);
+        }
+    }
+
+    /**
+     * Two tenants reusing the same document ids, plus one legacy row per collection that has no
+     * tenant at all. Tenant 1's book b2 names an author only tenant 2 has, b3 the tenantless author,
+     * and review r4 an author only tenant 2 has; its author a2 has books only in tenant 2.
+     */
+    private function seedJoinTenancyFixture(Database $database, string $authors, string $books, string $reviews): void
+    {
+        $database->setTenant(null);
+        $this->cleanupAggCollections($database, [$authors, $books, $reviews]);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $authors, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($authors, Attribute::string(key: 'name', size: 64, required: true));
+        foreach ([$books => 'pages', $reviews => 'stars'] as $collection => $number) {
+            $database->createCollection(new Collection(id: $collection, permissions: $permissions, documentSecurity: false));
+            $database->createAttribute($collection, Attribute::string(key: 'authorId', size: 64, required: true));
+            $database->createAttribute($collection, Attribute::integer(key: $number, required: true));
+        }
+
+        $tenantless = 3;
+        $rows = [
+            1 => [
+                $authors => ['a1' => ['name' => 'one-a1'], 'a2' => ['name' => 'one-a2']],
+                $books => [
+                    'b1' => ['authorId' => 'a1', 'pages' => 11],
+                    'b2' => ['authorId' => 'shared', 'pages' => 12],
+                    'b3' => ['authorId' => 'legacy', 'pages' => 13],
+                ],
+                $reviews => [
+                    'r1' => ['authorId' => 'a1', 'stars' => 5],
+                    'r2' => ['authorId' => 'a2', 'stars' => 4],
+                    'r3' => ['authorId' => 'ghost', 'stars' => 3],
+                    'r4' => ['authorId' => 'shared', 'stars' => 2],
+                ],
+            ],
+            2 => [
+                $authors => ['a1' => ['name' => 'two-a1'], 'a2' => ['name' => 'two-a2'], 'shared' => ['name' => 'two-shared']],
+                $books => [
+                    'b1' => ['authorId' => 'a1', 'pages' => 21],
+                    'b2' => ['authorId' => 'a2', 'pages' => 22],
+                ],
+                $reviews => ['r1' => ['authorId' => 'shared', 'stars' => 1]],
+            ],
+            $tenantless => [
+                $authors => ['legacy' => ['name' => 'no-tenant']],
+                $books => ['orphan' => ['authorId' => 'a1', 'pages' => 99]],
+                $reviews => ['stale' => ['authorId' => 'a2', 'stars' => 9]],
+            ],
+        ];
+
+        foreach ($rows as $owner => $documentsByCollection) {
+            $database->setTenant($owner);
+            foreach ($documentsByCollection as $collection => $documents) {
+                foreach ($documents as $id => $attributes) {
+                    $database->createDocument($collection, new Document([
+                        '$id' => $id,
+                        '$permissions' => [Permission::read(Role::any())],
+                        ...$attributes,
+                    ]));
+                }
+            }
+        }
+
+        $database->setTenant($tenantless);
+        $database->getAuthorization()->skip(function () use ($database, $rows, $tenantless): void {
+            foreach ($rows[$tenantless] as $collection => $documents) {
+                $database->from($collection)
+                    ->set([Document::TENANT => null])
+                    ->filter([Query::equal(Document::ID, \array_keys($documents)), Query::equal(Document::TENANT, [$tenantless])])
+                    ->update()
+                    ->execute();
+            }
+        });
+    }
+
+    private function joinTenancyJoin(Method $method, string $collection, string $alias): Query
+    {
+        return match ($method) {
+            Method::Join => Query::join($collection, '$id', 'authorId', '=', $alias),
+            Method::LeftJoin => Query::leftJoin($collection, '$id', 'authorId', '=', $alias),
+            Method::RightJoin => Query::rightJoin($collection, '$id', 'authorId', '=', $alias),
+            Method::FullOuterJoin => Query::fullOuterJoin($collection, '$id', 'authorId', '=', $alias),
+            Method::CrossJoin => Query::crossJoin($collection, $alias),
+            default => throw new \InvalidArgumentException("{$method->value} is not a join"),
+        };
+    }
+
+    /**
+     * @param array<Document> $documents
+     * @param list<string> $numbers
+     * @return list<list<string|int|null>>
+     */
+    private function joinTenancyRows(array $documents, array $numbers): array
+    {
+        return $this->joinTenancySorted(\array_map(static function (Document $document) use ($numbers): array {
+            $name = $document->getAttribute('name');
+            $row = [\is_string($name) && $name !== '' ? $name : null];
+            foreach ($numbers as $number) {
+                $value = $document->getAttribute($number);
+                $row[] = \is_numeric($value) ? (int) $value : null;
+            }
+
+            return $row;
+        }, $documents));
+    }
+
+    /**
+     * @param array<list<string|int|null>> $rows
+     * @return list<list<string|int|null>>
+     */
+    private function joinTenancySorted(array $rows): array
+    {
+        \usort($rows, static fn (array $left, array $right): int => \json_encode($left) <=> \json_encode($right));
+
+        return $rows;
     }
 }

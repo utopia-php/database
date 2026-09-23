@@ -3712,6 +3712,19 @@ class Database
             }
         }
 
+        // A column-scoped permission names its column, in _perms._column and again
+        // inside the $permissions JSON, so a rename has to repoint both -- the same
+        // migration updateAttribute() runs for its own rename. Left alone, the grants
+        // stay attached to the old key: the caller loses the renamed column, and a
+        // column later created under the old name inherits authority it never earned.
+        if ($collection->getAttribute('columnSecurity', false)) {
+            $this->repointCollectionColumnPermissions($collection, $old, $new);
+
+            foreach ($this->adapter->renameColumnPermissions($collection, $old, $new) as $documentId) {
+                $this->purgeCachedDocument($collection->getId(), $documentId);
+            }
+        }
+
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
 

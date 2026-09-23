@@ -201,6 +201,50 @@ class ColumnPermissionEnforcementTest extends TestCase
         });
     }
 
+    /**
+     * renameAttribute() is a second rename path, separate from updateAttribute()'s
+     * newKey. It has to run the same permission migration: without it the grant stays
+     * on the old key, so the caller loses the renamed column -- and a column later
+     * created under the old name inherits authority nobody granted it.
+     */
+    public function testGrantFollowsRenameAttributeAndDoesNotOutliveTheOldKey(): void
+    {
+        $this->authorization->skip(function () {
+            $this->database->createCollection('renamed', documentSecurity: true, columnSecurity: true, permissions: []);
+            $this->database->createAttribute('renamed', 'name', Database::VAR_STRING, 128, false);
+            $this->database->createAttribute('renamed', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $this->database->createDocument('renamed', new Document([
+                '$id' => 'r1',
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 5,
+            ]));
+
+            $this->database->renameAttribute('renamed', 'salary', 'pay');
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        // the grant moved with the column
+        $this->assertSame(5, $this->database->getDocument('renamed', 'r1')->getAttribute('pay'));
+
+        // ...and a column recreated under the old key inherits nothing
+        $this->authorization->skip(function () {
+            $this->database->createAttribute('renamed', 'salary', Database::VAR_INTEGER, 8, false);
+            $this->database->updateDocument('renamed', 'r1', new Document(['salary' => 999]));
+        });
+
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
+
+        $document = $this->database->getDocument('renamed', 'r1');
+
+        $this->assertSame(5, $document->getAttribute('pay'));
+        $this->assertNull($document->getAttribute('salary'), 'stale grant authorized a recreated column');
+    }
+
     public function testUpdateOfGrantedColumnIsAllowed(): void
     {
         $this->authorization->cleanRoles();

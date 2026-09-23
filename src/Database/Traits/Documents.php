@@ -244,6 +244,20 @@ trait Documents
     }
 
     /**
+     * @param  array<mixed>  $queries
+     *
+     * @throws QueryException
+     */
+    private function rejectJoins(array $queries, string $message): void
+    {
+        foreach ($queries as $query) {
+            if ($query instanceof Query && $query->getMethod()->isJoin()) {
+                throw new QueryException($message);
+            }
+        }
+    }
+
+    /**
      * @param  array<Document>  $documents
      * @param  array<Query>  $selections
      * @return array<Document>
@@ -1234,6 +1248,8 @@ trait Documents
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        $this->rejectJoins($queries, 'Join queries are not supported for bulk updates');
+
         if ($updates->isEmpty()) {
             return 0;
         }
@@ -2271,6 +2287,7 @@ trait Documents
      *
      * @throws AuthorizationException
      * @throws DatabaseException
+     * @throws QueryException
      * @throws RestrictedException
      * @throws Throwable
      */
@@ -2281,6 +2298,8 @@ trait Documents
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        $this->rejectJoins($queries, 'Join queries are not supported for bulk deletes');
+
         if ($this->adapter->getSharedTables() && empty($this->adapter->getTenant())) {
             throw new DatabaseException('Missing tenant. Tenant must be set when table sharing is enabled.');
         }

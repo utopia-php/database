@@ -13,15 +13,12 @@ use Utopia\Query\Method;
  */
 class Select extends Base
 {
+    use JoinedAttributes;
+
     /**
      * @var array<int|string, true>
      */
     protected array $schema = [];
-
-    /**
-     * @var array<string, true>
-     */
-    protected array $joinAliases = [];
 
     /**
      * @param  array<Document>  $attributes
@@ -54,10 +51,7 @@ class Select extends Base
             return false;
         }
 
-        $internalKeys = \array_map(
-            fn (Attribute $attr): string => $attr->key,
-            Database::internalAttributes()
-        );
+        $internalKeys = self::internalKeys();
 
         if (\count($value->getValues()) === 0) {
             $this->message = 'No attributes selected';
@@ -96,7 +90,11 @@ class Select extends Base
                 $alias = \substr($attribute, 0, $dot);
                 $column = \substr($attribute, $dot + 1);
 
-                if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
+                if ($this->isJoinColumnReference($alias, $column)) {
+                    if ($this->supportForAttributes && ! $this->isJoinedColumn($alias, $column)) {
+                        return false;
+                    }
+
                     continue;
                 }
 
@@ -120,21 +118,20 @@ class Select extends Base
         return true;
     }
 
-    /**
-     * @param array<string> $aliases
-     */
-    public function allowJoinAliases(array $aliases): void
+    protected function acceptsMainAttribute(string $attribute): bool
     {
-        foreach ($aliases as $alias) {
-            if ($alias !== '') {
-                $this->joinAliases[$alias] = true;
-            }
-        }
+        return isset($this->schema[$attribute]) || \in_array($attribute, self::internalKeys(), true);
     }
 
-    public function resetJoinAliases(): void
+    /**
+     * @return array<string>
+     */
+    private static function internalKeys(): array
     {
-        $this->joinAliases = [];
+        return \array_map(
+            fn (Attribute $attribute): string => $attribute->key,
+            Database::internalAttributes()
+        );
     }
 
     /**

@@ -12,6 +12,7 @@ use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\GroupBy;
 use Utopia\Database\Validator\Query\Having;
 use Utopia\Database\Validator\Query\Join;
+use Utopia\Database\Validator\Query\JoinedCollection;
 use Utopia\Database\Validator\Query\Order;
 use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Method;
@@ -58,9 +59,11 @@ class Queries extends Validator
     }
 
     /**
-     * The collections the query sets may join. A bare aggregate or groupBy attribute resolves
+     * The collections the query sets may join. A column under a join alias has to be valid on the
+     * alias's collection for its query type, a bare aggregate or groupBy attribute resolves
      * through the one join whose collection declares it, and a search on a join alias needs a
-     * fulltext index on that collection; a join whose collection is not given declares nothing.
+     * fulltext index on that collection. A join whose collection is not given declares nothing,
+     * and accepts any plain column under its alias.
      *
      * @param  array<Document>  $collections
      */
@@ -108,11 +111,10 @@ class Queries extends Validator
                 $validator instanceof Select
                 || $validator instanceof Filter
                 || $validator instanceof Order
+                || $validator instanceof Aggregate
+                || $validator instanceof GroupBy
             ) {
                 $validator->resetJoinAliases();
-            }
-            if ($validator instanceof Aggregate || $validator instanceof GroupBy) {
-                $validator->resetJoinedAttributes();
             }
             if ($validator->getMethodType() === Base::METHOD_TYPE_FILTER) {
                 $hasFilterValidator = true;
@@ -161,16 +163,17 @@ class Queries extends Validator
         }
 
         if ($hasJoins) {
-            $joinedAttributes = [];
-            foreach ($parsedQueries as $parsedQuery) {
-                if ($parsedQuery->getMethod()->isJoin()) {
-                    $joinedAttributes[] = $this->joinedAttributes($parsedQuery->getAttribute());
-                }
-            }
+            $joins = $this->joins($parsedQueries);
 
             foreach ($this->validators as $validator) {
-                if ($validator instanceof Aggregate || $validator instanceof GroupBy) {
-                    $validator->allowJoinedAttributes($joinedAttributes);
+                if (
+                    $validator instanceof Select
+                    || $validator instanceof Filter
+                    || $validator instanceof Order
+                    || $validator instanceof Aggregate
+                    || $validator instanceof GroupBy
+                ) {
+                    $validator->allowJoins($joins);
                 }
             }
         }
@@ -340,24 +343,40 @@ class Queries extends Validator
     }
 
     /**
-     * The attributes a joined collection declares. Relationship attributes are left out: only some
-     * sides of a relationship have a column.
+     * The collection each join of the query set reads, for the joins whose collection is given.
+     * Relationship attributes are left out: only some sides of a relationship have a column.
      *
-     * @return array<string, true>
+     * @param  list<Query>  $queries
+     * @return list<JoinedCollection>
      */
-    private function joinedAttributes(string $collection): array
+    private function joins(array $queries): array
     {
-        /** @var array<Attribute|Document> $definitions */
-        $definitions = $this->getJoinedCollection($collection)?->getAttribute('attributes', []) ?? [];
+        $joins = [];
 
-        $attributes = [];
-        foreach ($definitions as $definition) {
-            if (! Attribute::isRelationship($definition)) {
-                $attributes[$definition->getId()] = true;
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin()) {
+                continue;
             }
+
+            $collection = $this->getJoinedCollection($query->getAttribute());
+            if ($collection === null) {
+                continue;
+            }
+
+            /** @var array<Attribute|Document> $definitions */
+            $definitions = $collection->getAttribute('attributes', []);
+
+            $attributes = [];
+            foreach ($definitions as $definition) {
+                if (! Attribute::isRelationship($definition)) {
+                    $attributes[$definition->getId()] = true;
+                }
+            }
+
+            $joins[] = new JoinedCollection($query->getJoinAlias(), $attributes);
         }
 
-        return $attributes;
+        return $joins;
     }
 
     /**

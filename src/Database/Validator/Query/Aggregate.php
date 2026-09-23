@@ -170,4 +170,9 @@ class Aggregate extends Base
 
         return $types;
     }
+
+    protected function acceptsMainAttribute(string $attribute): bool
+    {
+        return isset($this->schema[$attribute]);
+    }
 }

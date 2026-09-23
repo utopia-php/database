@@ -11,6 +11,8 @@ use Utopia\Query\Method;
  */
 class Order extends Base
 {
+    use JoinedAttributes;
+
     /**
      * @var array<int|string, true>
      */
@@ -26,11 +28,6 @@ class Order extends Base
      * @var array<string, true>
      */
     protected array $aggregationAliases = [];
-
-    /**
-     * @var array<string, true>
-     */
-    protected array $joinAliases = [];
 
     /**
      * @param  array<Document>  $attributes
@@ -56,8 +53,8 @@ class Order extends Base
             $alias = \substr($attribute, 0, $dot);
             $column = \substr($attribute, $dot + 1);
 
-            if (isset($this->joinAliases[$alias]) && $this->isAllowedJoinColumn($column)) {
-                return true;
+            if ($this->isJoinColumnReference($alias, $column)) {
+                return ! $this->supportForAttributes || $this->isJoinedColumn($alias, $column);
             }
 
             // For relationships, just validate the top level.
@@ -115,21 +112,9 @@ class Order extends Base
         return false;
     }
 
-    /**
-     * @param array<string> $aliases
-     */
-    public function allowJoinAliases(array $aliases): void
+    protected function acceptsMainAttribute(string $attribute): bool
     {
-        foreach ($aliases as $alias) {
-            if ($alias !== '') {
-                $this->joinAliases[$alias] = true;
-            }
-        }
-    }
-
-    public function resetJoinAliases(): void
-    {
-        $this->joinAliases = [];
+        return isset($this->schema[$attribute]);
     }
 
     /**

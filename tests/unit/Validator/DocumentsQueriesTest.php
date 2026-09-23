@@ -195,7 +195,8 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value
+            ColumnType::Integer->value,
+            supportForJoins: true,
         );
 
         $this->assertTrue($validator->isValid([
@@ -209,7 +210,8 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value
+            ColumnType::Integer->value,
+            supportForJoins: true,
         );
 
         $this->assertTrue($validator->isValid([
@@ -223,7 +225,8 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value
+            ColumnType::Integer->value,
+            supportForJoins: true,
         );
 
         $this->assertFalse($validator->isValid([
@@ -238,7 +241,8 @@ class DocumentsQueriesTest extends TestCase
         $validator = new Documents(
             $this->attributes,
             $this->indexes,
-            ColumnType::Integer->value
+            ColumnType::Integer->value,
+            supportForJoins: true,
         );
 
         $this->assertTrue($validator->isValid([

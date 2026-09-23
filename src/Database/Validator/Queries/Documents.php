@@ -19,7 +19,8 @@ use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Schema\ColumnType;
 
 /**
- * Validates queries for document listing, supporting filters, ordering, pagination, aggregation, and joins.
+ * Validates queries for document listing: filters, ordering, selection and pagination, plus joins
+ * and aggregations (aggregate functions, group by, having and distinct) when enabled.
  */
 class Documents extends IndexedQueries
 {
@@ -38,7 +39,9 @@ class Documents extends IndexedQueries
         DateTime $minAllowedDate = new DateTime('0000-01-01'),
         DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         bool $supportForAttributes = true,
-        bool $supportUnsignedBigInt = true
+        bool $supportUnsignedBigInt = true,
+        bool $supportForJoins = false,
+        bool $supportForAggregations = false,
     ) {
         $attributes[] = new Document([
             Document::ID => Document::ID,
@@ -80,12 +83,21 @@ class Documents extends IndexedQueries
             ),
             new Order($attributes, $supportForAttributes),
             new Select($attributes, $supportForAttributes),
-            new Join(),
-            new Aggregate($attributes, $supportForAttributes),
-            new GroupBy($attributes, $supportForAttributes),
-            new Having(),
-            new Distinct(),
         ];
+
+        if ($supportForJoins) {
+            $validators[] = new Join();
+        }
+
+        if ($supportForAggregations) {
+            \array_push(
+                $validators,
+                new Aggregate($attributes, $supportForAttributes),
+                new GroupBy($attributes, $supportForAttributes),
+                new Having(),
+                new Distinct(),
+            );
+        }
 
         parent::__construct($attributes, $indexes, $validators);
     }

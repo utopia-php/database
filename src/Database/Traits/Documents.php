@@ -173,8 +173,11 @@ trait Documents
      */
     protected function getDocumentsValidator(Document $collection): DocumentsValidator
     {
+        $supportForJoins = $this->adapter->supports(Capability::Joins);
+        $supportForAggregations = $this->adapter->supports(Capability::Aggregations);
+
         $context = $this->getCollectionMetadataCacheKey($collection->getId());
-        $key = $this->documentsValidatorCacheKey($collection, $context);
+        $key = $this->documentsValidatorCacheKey($collection, $context, $supportForJoins, $supportForAggregations);
 
         if (isset($this->documentsValidatorCache[$key])) {
             return $this->documentsValidatorCache[$key];
@@ -194,7 +197,9 @@ trait Documents
             $this->adapter->getMinDateTime(),
             $this->adapter->getMaxDateTime(),
             $this->adapter->supports(Capability::DefinedAttributes),
-            $this->adapter->supports(Capability::UnsignedBigInt)
+            $this->adapter->supports(Capability::UnsignedBigInt),
+            $supportForJoins,
+            $supportForAggregations,
         );
 
         if (\count($this->documentsValidatorCache) >= self::DOCUMENTS_VALIDATOR_CACHE_LIMIT) {
@@ -207,11 +212,13 @@ trait Documents
 
     /**
      * Build the composite cache key for the DocumentsValidator cache. Scoping
-     * by namespace + tenant + max-query-values keeps two collections that
-     * share an id (different tenant schemas, different namespace prefixes,
-     * or different per-request limits) from aliasing onto the same validator.
+     * by namespace + tenant + max-query-values + the join and aggregation
+     * grammar keeps two collections that share an id (different tenant
+     * schemas, different namespace prefixes, different per-request limits or
+     * adapters with different capabilities) from aliasing onto the same
+     * validator.
      */
-    private function documentsValidatorCacheKey(Document $collection, string $context): string
+    private function documentsValidatorCacheKey(Document $collection, string $context, bool $supportForJoins, bool $supportForAggregations): string
     {
         $fingerprint = \hash('sha256', \serialize([
             'attributes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('attributes', [])),
@@ -220,7 +227,7 @@ trait Documents
             'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
         ]));
 
-        return $context.'::'.$this->maxQueryValues.'::'.$fingerprint;
+        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.'::'.$fingerprint;
     }
 
     /**

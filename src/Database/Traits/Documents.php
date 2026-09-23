@@ -3089,6 +3089,19 @@ trait Documents
             throw new QueryException('Aggregation queries are not supported by this adapter');
         }
 
+        foreach ($aggregations as $aggregation) {
+            $method = $aggregation->getMethod();
+            $capability = match ($method) {
+                Method::Stddev, Method::StddevPop, Method::StddevSamp, Method::Variance, Method::VarPop, Method::VarSamp => Capability::StatisticalAggregates,
+                Method::BitAnd, Method::BitOr, Method::BitXor => Capability::BitwiseAggregates,
+                default => null,
+            };
+
+            if ($capability !== null && ! $this->adapter->supports($capability)) {
+                throw new QueryException('Aggregate '.$method->value.' is not supported by this adapter');
+            }
+        }
+
         if (! empty($joins) && ! $this->adapter->supports(Capability::Joins)) {
             throw new QueryException('Join queries are not supported by this adapter');
         }

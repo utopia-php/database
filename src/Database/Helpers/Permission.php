@@ -8,6 +8,15 @@ use Utopia\Database\Exception as DatabaseException;
 
 class Permission
 {
+    /**
+     * Sentinel column value meaning "every column".
+     *
+     * Stored as an empty string rather than NULL: MySQL and MariaDB treat NULLs
+     * as distinct in a UNIQUE index, so a nullable _column would let duplicate
+     * permission rows through the _perms uniqueness guarantee.
+     */
+    public const COLUMN_ALL = '';
+
     private Role $role;
 
     /**
@@ -26,6 +35,7 @@ class Permission
         string $role,
         string $identifier = '',
         string $dimension = '',
+        private string $column = self::COLUMN_ALL,
     ) {
         $this->role = new Role($role, $identifier, $dimension);
     }
@@ -37,7 +47,31 @@ class Permission
      */
     public function toString(): string
     {
-        return $this->permission . '("' . $this->role->toString() . '")';
+        $permission = $this->permission . '("' . $this->role->toString() . '"';
+
+        if ($this->column !== self::COLUMN_ALL) {
+            $permission .= ', "' . $this->column . '"';
+        }
+
+        return $permission . ')';
+    }
+
+    /**
+     * The column this permission is scoped to, or COLUMN_ALL for every column.
+     *
+     * @return string
+     */
+    public function getColumn(): string
+    {
+        return $this->column;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isForAllColumns(): bool
+    {
+        return $this->column === self::COLUMN_ALL;
     }
 
     /**
@@ -82,6 +116,24 @@ class Permission
      */
     public static function parse(string $permission): self
     {
+        $column = self::COLUMN_ALL;
+
+        // Peel off an optional second argument: type("role", "column").
+        // Role identifiers and dimensions never contain a comma, so the lazy
+        // match cannot swallow part of the role.
+        if (\preg_match('/^(.*?)\s*,\s*"([^"]*)"\)$/', $permission, $matches) === 1) {
+            $permission = $matches[1] . ')';
+            $column = $matches[2];
+
+            if ($column === self::COLUMN_ALL) {
+                throw new DatabaseException('Column must not be empty. Omit the argument to grant every column.');
+            }
+
+            if ($column === '*') {
+                throw new DatabaseException('Wildcard column "*" is not supported. Omit the argument to grant every column.');
+            }
+        }
+
         $permissionParts = \explode('("', $permission);
 
         if (\count($permissionParts) !== 2) {
@@ -101,12 +153,12 @@ class Permission
         $hasDimension = \str_contains($fullRole, '/');
 
         if (!$hasIdentifier && !$hasDimension) {
-            return new self($permission, $role);
+            return new self($permission, $role, column: $column);
         }
 
         if ($hasIdentifier && !$hasDimension) {
             $identifier = $roleParts[1];
-            return new self($permission, $role, $identifier);
+            return new self($permission, $role, $identifier, column: $column);
         }
 
         if (!$hasIdentifier) {
@@ -121,7 +173,7 @@ class Permission
             if (empty($dimension)) {
                 throw new DatabaseException('Dimension must not be empty');
             }
-            return new self($permission, $role, '', $dimension);
+            return new self($permission, $role, '', $dimension, $column);
         }
 
         // Has both identifier and dimension
@@ -137,7 +189,7 @@ class Permission
             throw new DatabaseException('Dimension must not be empty');
         }
 
-        return new self($permission, $role, $identifier, $dimension);
+        return new self($permission, $role, $identifier, $dimension, $column);
     }
 
     /**
@@ -169,7 +221,8 @@ class Permission
                         $subType,
                         $permission->getRole(),
                         $permission->getIdentifier(),
-                        $permission->getDimension()
+                        $permission->getDimension(),
+                        $permission->getColumn()
                     ))->toString();
                 }
             }
@@ -181,15 +234,17 @@ class Permission
      * Create a read permission string from the given Role
      *
      * @param Role $role
+     * @param string $column Restrict to a single column, or COLUMN_ALL for every column
      * @return string
      */
-    public static function read(Role $role): string
+    public static function read(Role $role, string $column = self::COLUMN_ALL): string
     {
         $permission = new self(
             'read',
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
         return $permission->toString();
     }
@@ -198,15 +253,17 @@ class Permission
      * Create a create permission string from the given Role
      *
      * @param Role $role
+     * @param string $column Restrict to a single column, or COLUMN_ALL for every column
      * @return string
      */
-    public static function create(Role $role): string
+    public static function create(Role $role, string $column = self::COLUMN_ALL): string
     {
         $permission = new self(
             'create',
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
         return $permission->toString();
     }
@@ -215,15 +272,17 @@ class Permission
      * Create an update permission string from the given Role
      *
      * @param Role $role
+     * @param string $column Restrict to a single column, or COLUMN_ALL for every column
      * @return string
      */
-    public static function update(Role $role): string
+    public static function update(Role $role, string $column = self::COLUMN_ALL): string
     {
         $permission = new self(
             'update',
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
         return $permission->toString();
     }
@@ -232,15 +291,17 @@ class Permission
      * Create a delete permission string from the given Role
      *
      * @param Role $role
+     * @param string $column Restrict to a single column, or COLUMN_ALL for every column
      * @return string
      */
-    public static function delete(Role $role): string
+    public static function delete(Role $role, string $column = self::COLUMN_ALL): string
     {
         $permission = new self(
             'delete',
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
         return $permission->toString();
     }
@@ -249,15 +310,17 @@ class Permission
      * Create a write permission string from the given Role
      *
      * @param Role $role
+     * @param string $column Restrict to a single column, or COLUMN_ALL for every column
      * @return string
      */
-    public static function write(Role $role): string
+    public static function write(Role $role, string $column = self::COLUMN_ALL): string
     {
         $permission = new self(
             'write',
             $role->getRole(),
             $role->getIdentifier(),
-            $role->getDimension()
+            $role->getDimension(),
+            $column
         );
         return $permission->toString();
     }

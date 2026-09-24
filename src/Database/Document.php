@@ -5,6 +5,7 @@ namespace Utopia\Database;
 use ArrayObject;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Helpers\Permission;
 
 /**
  * @extends ArrayObject<string, mixed>
@@ -154,14 +155,46 @@ class Document extends ArrayObject
     {
         $typePermissions = [];
 
+        foreach ($this->getPermissionsByTypeWithColumns($type) as $permission) {
+            $typePermissions[] = $permission['role'];
+        }
+
+        return \array_unique($typePermissions);
+    }
+
+    /**
+     * Permissions of the given type, split into the role and the column it is scoped to.
+     *
+     * A column of Permission::COLUMN_ALL means the role is granted every column,
+     * which is how every permission written before column-level permissions reads.
+     *
+     * @param string $type
+     * @return array<array{role: string, column: string}>
+     */
+    public function getPermissionsByTypeWithColumns(string $type): array
+    {
+        $typePermissions = [];
+
         foreach ($this->getPermissions() as $permission) {
             if (!\str_starts_with($permission, $type)) {
                 continue;
             }
-            $typePermissions[] = \str_replace([$type . '(', ')', '"', ' '], '', $permission);
+
+            $column = Permission::COLUMN_ALL;
+
+            // Peel off an optional second argument: type("role", "column").
+            if (\preg_match('/^(.*?)\s*,\s*"([^"]*)"\)$/', $permission, $matches) === 1) {
+                $permission = $matches[1] . ')';
+                $column = $matches[2];
+            }
+
+            $typePermissions[] = [
+                'role' => \str_replace([$type . '(', ')', '"', ' '], '', $permission),
+                'column' => $column,
+            ];
         }
 
-        return \array_unique($typePermissions);
+        return $typePermissions;
     }
 
     /**

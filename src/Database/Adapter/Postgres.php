@@ -256,25 +256,33 @@ class Postgres extends SQL
                 _tenant INTEGER DEFAULT NULL,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
-                _document VARCHAR(255) NOT NULL
+                _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
+                _document VARCHAR(255) NOT NULL,
+                \"_documentInternalId\" BIGINT NOT NULL DEFAULT 0
             );
         ";
 
         if ($this->sharedTables) {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_tenant,_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
             ";
         } else {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
-                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission);
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";
@@ -1046,11 +1054,14 @@ class Postgres extends SQL
         }
 
         $permissions = [];
+        $permissionBinds = [];
         foreach (Database::PERMISSIONS as $type) {
-            foreach ($document->getPermissionsByType($type) as $permission) {
-                $permission = \str_replace('"', '', $permission);
+            foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
+                $role = \str_replace('"', '', $permission['role']);
                 $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                $permissions[] = "('{$type}', '{$permission}', :_uid {$sqlTenant})";
+                $columnBind = ":_column_{$type}_{$i}";
+                $permissionBinds[$columnBind] = $permission['column'];
+                $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$sqlTenant})";
             }
         }
 
@@ -1060,7 +1071,7 @@ class Postgres extends SQL
             $sqlTenant = $this->sharedTables ? ', _tenant' : '';
 
             $queryPermissions = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$sqlTenant})
 				VALUES {$permissions}
 			";
 
@@ -1069,6 +1080,9 @@ class Postgres extends SQL
             $stmtPermissions->bindValue(':_uid', $document->getId());
             if ($sqlTenant) {
                 $stmtPermissions->bindValue(':_tenant', $document->getTenant());
+            }
+            foreach ($permissionBinds as $key => $value) {
+                $stmtPermissions->bindValue($key, $value);
             }
         }
 
@@ -1133,10 +1147,12 @@ class Postgres extends SQL
             $values = [];
             $binds = [];
             foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $sqlTenant = $this->sharedTables ? ', :_tenant' : '';
-                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$sqlTenant})";
-                    $binds[":_add_{$type}_{$i}"] = $permission;
+                    $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$sqlTenant})";
+                    $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
+
+                    $binds[":_add_{$type}_{$i}"] = $permission['role'];
                 }
             }
 
@@ -1144,7 +1160,7 @@ class Postgres extends SQL
                 $sqlTenant = $this->sharedTables ? ', _tenant' : '';
 
                 $sql = "
-				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$sqlTenant})
+				INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column {$sqlTenant})
 				VALUES " . \implode(', ', $values);
 
                 $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -1825,7 +1841,8 @@ class Postgres extends SQL
         string $collection,
         array $roles,
         string $alias,
-        string $type = Database::PERMISSION_READ
+        string $type = Database::PERMISSION_READ,
+        bool $columnSecurity = false
     ): string {
         if (!\in_array($type, Database::PERMISSIONS)) {
             throw new DatabaseException('Unknown permission type: ' . $type);
@@ -1845,6 +1862,39 @@ class Postgres extends SQL
         if ($permissions === []) {
             return 'FALSE';
         }
+
+        // The containment list above is built from the assembled string read("role"),
+        // so it can only ever match an UNSCOPED grant. A column-scoped grant is stored
+        // as read("role", "column") and is not contained by it, which would make a
+        // document whose only read grant is column-scoped vanish from find() while
+        // getDocument() -- which carries no permission filter -- still returned it.
+        //
+        // Only when the collection enabled column security. Otherwise no permission
+        // can be column-scoped, the containment list above is complete, and reads stay
+        // answerable from the row alone -- which is the whole point of the jsonb path.
+        if (!$columnSecurity) {
+            return '(' . \implode(' OR ', $permissions) . ')';
+        }
+
+        // Rather than enumerate a containment check per role per column, which would
+        // multiply the BitmapOr branches by the width of the collection, fall back to
+        // the _perms table for exactly the rows the jsonb path cannot answer. The
+        // probe is driven by _index1, which leads with _document, and only runs for
+        // rows the cheap indexed path already missed.
+        $perms = $this->quote('_rp');
+
+        $permissions[] = "EXISTS (
+            SELECT 1
+            FROM {$this->getSQLTable($collection . '_perms')} AS {$perms}
+            WHERE {$perms}.{$this->quote('_document')} = {$this->quote($alias)}.{$this->quote('_uid')}
+              AND {$perms}.{$this->quote('_permission')} IN (" . \implode(', ', \array_map(
+            fn ($role) => $this->getPDO()->quote($role),
+            $roles
+        )) . ")
+              AND {$perms}.{$this->quote('_type')} = '{$type}'
+              AND {$perms}.{$this->quote('_column')} <> ''
+              {$this->getTenantQuery($collection, '_rp')}
+        )";
 
         return '(' . \implode(' OR ', $permissions) . ')';
     }
@@ -2090,6 +2140,11 @@ class Postgres extends SQL
      *
      * @return bool
      */
+    public function getSupportForColumnPermissions(): bool
+    {
+        return true;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return false;
@@ -2355,11 +2410,13 @@ class Postgres extends SQL
             return '';
         }
 
-        $conflictTarget = $this->sharedTables
-            ? '("_type", "_permission", "_document", "_tenant")'
-            : '("_type", "_permission", "_document")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        // No conflict target on purpose. Postgres resolves a target against a real
+        // unique index and demands an exact column match, so naming one would tie this
+        // statement to whether the table has been widened for column permissions --
+        // and a table created before that existed carries the narrower index. Omitting
+        // the target skips a row on any unique violation, which is what
+        // skipDuplicates asks for, and works against either shape.
+        return 'ON CONFLICT DO NOTHING';
     }
 
     public function decodePoint(string $wkb): array

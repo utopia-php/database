@@ -826,4 +826,156 @@ final class SQLFindTest extends TestCase
 
         return $sql;
     }
+
+    public function testDistinctNextToSearchLeavesRelevanceOut(): void
+    {
+        $sql = $this->captureFindSql([Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop')]);
+
+        $this->assertStringStartsWith('SELECT DISTINCT `category` FROM ', $sql);
+        $this->assertStringContainsString('WHERE MATCH(`name`) AGAINST(? IN BOOLEAN MODE)', $sql);
+        $this->assertStringNotContainsString('_relevance', $sql);
+        $this->assertStringNotContainsString('ORDER BY', $sql);
+    }
+
+    public function testPostgresDistinctNextToSearchLeavesRelevanceOut(): void
+    {
+        $sql = $this->capturePostgresFindSql([Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop')]);
+
+        $this->assertStringStartsWith('SELECT DISTINCT "category" FROM ', $sql);
+        $this->assertStringContainsString('@@ websearch_to_tsquery(?)', $sql);
+        $this->assertStringNotContainsString('_relevance', $sql);
+        $this->assertStringNotContainsString('ORDER BY', $sql);
+    }
+
+    public function testExplicitOrderOnADistinctReadNextToSearchOrdersByItAlone(): void
+    {
+        $queries = [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop')];
+
+        $mysql = $this->captureFindSql($queries, orderAttributes: ['category'], orderTypes: [OrderDirection::Desc]);
+
+        $this->assertStringStartsWith('SELECT DISTINCT `category` FROM ', $mysql);
+        $this->assertStringEndsWith(' ORDER BY `category` DESC LIMIT ?', $mysql);
+
+        $postgres = $this->capturePostgresFindSql($queries, ['category'], [OrderDirection::Desc]);
+
+        $this->assertStringStartsWith('SELECT DISTINCT "category" FROM ', $postgres);
+        $this->assertStringEndsWith(' ORDER BY "category" DESC LIMIT ?', $postgres);
+    }
+
+    public function testSelectionWithoutDistinctKeepsRelevanceAndDistanceOrders(): void
+    {
+        $search = $this->captureFindSql(
+            [Query::select(['category']), Query::search('name', 'Laptop')],
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+        );
+
+        $this->assertStringContainsString(' MATCH(`table_main`.`name`) AGAINST (? IN BOOLEAN MODE) AS `_relevance` FROM ', $search);
+        $this->assertStringContainsString('ORDER BY `_relevance` DESC, `_id` ASC', $search);
+
+        $vector = $this->capturePostgresFindSql([Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+
+        $this->assertStringContainsString(' ("table_main"."embedding" <=> ?::vector)::text AS "_distance" FROM ', $vector);
+        $this->assertStringContainsString('ORDER BY ("table_main"."embedding" <=> ?::vector)', $vector);
+    }
+
+    /**
+     * @param  list<string>  $orderAttributes
+     * @param  list<OrderDirection>  $orderTypes
+     * @param  non-empty-string  $clauses
+     */
+    #[DataProvider('distinctVectorOrders')]
+    public function testPostgresDistinctNextToVectorQueryLeavesDistanceOut(array $orderAttributes, array $orderTypes, string $clauses): void
+    {
+        $sql = $this->capturePostgresFindSql(
+            [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
+            $orderAttributes,
+            $orderTypes,
+        );
+
+        $this->assertStringStartsWith('SELECT DISTINCT "category" FROM ', $sql);
+        $this->assertStringEndsWith($clauses, $sql);
+        $this->assertStringNotContainsString('<=>', $sql);
+    }
+
+    /**
+     * @return iterable<string, array{list<string>, list<OrderDirection>, non-empty-string}>
+     */
+    public static function distinctVectorOrders(): iterable
+    {
+        yield 'no order' => [[], [], ' WHERE "table_main"."embedding" IS NOT NULL LIMIT ?'];
+        yield 'an explicit order' => [['category'], [OrderDirection::Asc], ' WHERE "table_main"."embedding" IS NOT NULL ORDER BY "category" ASC LIMIT ?'];
+    }
+
+    /**
+     * @param  array<string, mixed>  $cursor
+     */
+    #[DataProvider('distinctVectorCursors')]
+    public function testPostgresDistinctNextToVectorQueryPagesAlongItsOrder(array $cursor): void
+    {
+        $sql = $this->capturePostgresCursorFindSql(
+            [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
+            ['category'],
+            [OrderDirection::Asc],
+            $cursor,
+        );
+
+        $this->assertStringStartsWith('SELECT DISTINCT "category" FROM ', $sql);
+        $this->assertStringEndsWith(' WHERE "category" > ? AND "table_main"."embedding" IS NOT NULL ORDER BY "category" ASC LIMIT ?', $sql);
+        $this->assertStringNotContainsString('<=>', $sql);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function distinctVectorCursors(): iterable
+    {
+        yield 'a cursor without a distance' => [['category' => 'clothing']];
+        yield 'a cursor with a distance' => [['category' => 'clothing', Document::DISTANCE => 0.25]];
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<string, mixed>  $cursor
+     */
+    private function capturePostgresCursorFindSql(array $queries, array $orderAttributes, array $orderTypes, array $cursor): string
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdo->expects($this->once())
+            ->method('prepare')
+            ->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+                $sql = $query;
+
+                return $statement;
+            });
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(
+            new Document(['$id' => 'collection']),
+            $queries,
+            orderAttributes: $orderAttributes,
+            orderTypes: $orderTypes,
+            cursor: $cursor,
+        );
+
+        $this->assertNotSame('', $sql);
+
+        return $sql;
+    }
 }

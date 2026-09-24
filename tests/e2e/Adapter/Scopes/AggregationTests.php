@@ -2469,4 +2469,115 @@ trait AggregationTests
 
         return $totals;
     }
+
+    public function testDistinctNextToASearchReturnsEachSelectionOnce(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'distinct_search_relevance';
+        $this->createProducts($database, $collection);
+        $database->createDocument($collection, new Document([
+            '$id' => 'dock',
+            'name' => 'Laptop Laptop Dock',
+            'category' => 'electronics',
+            'price' => 90,
+            'stock' => 5,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+
+        $categories = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop')]);
+        $this->assertSame(['electronics'], $this->categoriesOf($categories));
+        $this->assertArrayNotHasKey('_relevance', $categories[0]->getArrayCopy());
+
+        $ordered = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop'), Query::orderAsc('category')]);
+        $this->assertSame(['electronics'], $this->categoriesOf($ordered));
+        $this->assertArrayNotHasKey('_relevance', $ordered[0]->getArrayCopy());
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testDistinctNextToAVectorQueryReturnsEachSelectionOnce(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'distinct_vector_distance';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 100, required: true),
+                Attribute::string(key: 'category', size: 50, required: true),
+                Attribute::vector(key: 'embedding', size: 3, required: true),
+            ],
+            indexes: [Index::fullText(key: 'name_search', attributes: ['name'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([
+            ['laptop', 'Laptop', 'electronics', [1.0, 0.0, 0.0]],
+            ['dock', 'Laptop Laptop Dock', 'electronics', [0.0, 1.0, 0.0]],
+            ['sleeve', 'Laptop Sleeve', 'clothing', [0.0, 0.0, 1.0]],
+            ['novel', 'Novel', 'books', [1.0, 1.0, 0.0]],
+        ] as [$id, $name, $category, $embedding]) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'name' => $name,
+                'category' => $category,
+                'embedding' => $embedding,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $unordered = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $categories = $this->categoriesOf($unordered);
+        \sort($categories);
+        $this->assertSame(['books', 'clothing', 'electronics'], $categories);
+        foreach ($unordered as $row) {
+            $this->assertArrayNotHasKey(Document::DISTANCE, $row->getArrayCopy());
+        }
+
+        $this->assertSame(
+            ['books', 'clothing', 'electronics'],
+            $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category')])),
+        );
+        $this->assertSame(
+            ['electronics', 'clothing', 'books'],
+            $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderDesc('category')])),
+        );
+
+        $matches = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category')]);
+        $this->assertSame(['clothing', 'electronics'], $this->categoriesOf($matches));
+        foreach ($matches as $row) {
+            $this->assertArrayNotHasKey('_relevance', $row->getArrayCopy());
+            $this->assertArrayNotHasKey(Document::DISTANCE, $row->getArrayCopy());
+        }
+
+        $sleeve = $database->getDocument($collection, 'sleeve');
+        $this->assertSame(
+            ['electronics'],
+            $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category'), Query::cursorAfter($sleeve)])),
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<mixed>
+     */
+    private function categoriesOf(array $rows): array
+    {
+        return \array_values(\array_map(fn (Document $row): mixed => $row->getAttribute('category'), $rows));
+    }
 }

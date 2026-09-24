@@ -1559,7 +1559,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             // Cursor pagination - build nested Query objects for complex multi-attribute cursor conditions
-            if (! empty($cursor) && $vectorDistance !== null) {
+            if (! empty($cursor) && $vectorDistance !== null && ! $hasDistinct) {
                 $distance = $cursor[Document::DISTANCE] ?? null;
                 if (! \is_numeric($distance)) {
                     throw new QueryException('Vector cursor is missing its distance');
@@ -1581,7 +1581,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
             }
 
-            if ($vectorDistance === null) {
+            if ($vectorDistance === null || $hasDistinct) {
                 $this->applyFindCursor(
                     $builder,
                     $orderAttributes,
@@ -1593,7 +1593,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             // Vector ordering (comes first for similarity search)
-            if ($vectorDistance !== null && ! $hasAggregation) {
+            if ($vectorDistance !== null && ! $hasAggregation && ! $hasDistinct) {
                 $vectorOrder = $vectorDistance['expression'];
                 if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
                     $vectorOrder .= ' DESC';
@@ -1624,7 +1624,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 || (count($orderAttributes) === 1 && $orderAttributes[0] === Document::SEQUENCE)
             );
 
-            if (! empty($searchQueries) && ! $hasAggregation && $shouldAutoOrderByRelevance) {
+            if (! empty($searchQueries) && ! $hasAggregation && ! $hasDistinct && $shouldAutoOrderByRelevance) {
                 $builder->select(['*']);
                 foreach ($searchQueries as $searchQuery) {
                     $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);

@@ -6084,29 +6084,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return 'RANDOM()';
     }
 
-    protected function getFulltextValue(string $value): string
-    {
-        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
-
-        /** Keep only unicode letters, numbers, underscores, and whitespace. */
-        $value = preg_replace('/[^\p{L}\p{N}_\s]/u', ' ', $value) ?? '';
-        $value = preg_replace('/\s+/', ' ', $value) ?? '';
-        $value = trim($value);
-
-        if (empty($value)) {
-            return '';
-        }
-
-        if ($exact) {
-            $value = '"'.$value.'"';
-        } else {
-            /** Prepend wildcard by default on the back. */
-            $value .= '*';
-        }
-
-        return $value;
-    }
-
     /**
      * Get vector distance ORDER BY expression with positional bindings.
      *
@@ -6267,24 +6244,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function processException(PDOException $e): Exception
     {
         return $e;
-    }
-
-    /**
-     * Extract search queries from the query list (non-destructive).
-     *
-     * @param array<Query> $queries
-     * @return array<Query>
-     */
-    protected function extractSearchQueries(array $queries): array
-    {
-        $searchQueries = [];
-        foreach ($queries as $query) {
-            if ($query->getMethod() === Method::Search) {
-                $searchQueries[] = $query;
-            }
-        }
-
-        return $searchQueries;
     }
 
     /**

@@ -1578,20 +1578,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return 32;
     }
 
-    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
-    {
-        [$quotedAlias, $quotedAttribute] = $this->quoteSearchAttribute($query->getAttribute(), $alias);
-        $column = $quotedAlias.'.'.$quotedAttribute;
-        $searchVal = $query->getValue();
-        $term = $this->getFulltextValue(\is_string($searchVal) ? $searchVal : '');
-
-        return [
-            'expression' => "ts_rank(to_tsvector(regexp_replace({$column}, '[^\w]+',' ','g')), websearch_to_tsquery(?)) AS \"_relevance\"",
-            'order' => '"_relevance" DESC',
-            'bindings' => [$term],
-        ];
-    }
-
     protected function processException(PDOException $e): Exception
     {
         // Timeout
@@ -2002,22 +1988,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 parent::bindOperatorParams($stmt, $operator, $bindIndex);
                 break;
         }
-    }
-
-    protected function getFulltextValue(string $value): string
-    {
-        $exact = str_ends_with($value, '"') && str_starts_with($value, '"');
-
-        /** Keep only unicode letters, numbers, underscores, and whitespace. */
-        $value = preg_replace('/[^\p{L}\p{N}_\s]/u', ' ', $value) ?? '';
-        $value = preg_replace('/\s+/', ' ', $value) ?? '';
-        $value = trim($value);
-
-        if (! $exact) {
-            $value = str_replace(' ', ' or ', $value);
-        }
-
-        return "'".$value."'";
     }
 
     protected function getOperatorBuilderExpression(string $column, Operator $operator): array

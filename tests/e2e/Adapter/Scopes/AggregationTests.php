@@ -2580,4 +2580,73 @@ trait AggregationTests
     {
         return \array_values(\array_map(fn (Document $row): mixed => $row->getAttribute('category'), $rows));
     }
+
+    public function testSearchPagedWithACursorListsEachMatchOnce(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'search_cursor_pages';
+        $this->createProducts($database, $collection);
+        foreach (['dock' => 'Laptop Laptop Dock', 'sleeve' => 'Laptop Sleeve', 'bag' => 'Laptop Bag'] as $id => $name) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'name' => $name,
+                'category' => 'electronics',
+                'price' => 90,
+                'stock' => 5,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+
+        $matches = ['laptop', 'dock', 'sleeve', 'bag'];
+        $search = Query::search('name', 'Laptop');
+        $after = $this->pageOneByOne($database, $collection, $search, null, Query::cursorAfter(...), \count($matches));
+        $before = $this->pageOneByOne($database, $collection, $search, $database->getDocument($collection, 'bag'), Query::cursorBefore(...), \count($matches));
+
+        $this->assertSame(
+            ['after' => $matches, 'before' => ['sleeve', 'dock', 'laptop']],
+            [
+                'after' => \array_map(fn (Document $document): string => $document->getId(), $after),
+                'before' => \array_map(fn (Document $document): string => $document->getId(), $before),
+            ],
+        );
+        foreach ([...$after, ...$before] as $document) {
+            $this->assertArrayNotHasKey('_relevance', $document->getArrayCopy());
+        }
+
+        $unpaged = $database->find($collection, [$search]);
+        $this->assertSame($matches, \array_map(fn (Document $document): string => $document->getId(), $unpaged));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  callable(Document): Query  $cursorQuery
+     * @return list<Document>
+     */
+    private function pageOneByOne(Database $database, string $collection, Query $search, ?Document $cursor, callable $cursorQuery, int $matches): array
+    {
+        $documents = [];
+        while (\count($documents) <= $matches) {
+            $queries = [$search, Query::limit(1)];
+            if ($cursor !== null) {
+                $queries[] = $cursorQuery($cursor);
+            }
+
+            $cursor = $database->find($collection, $queries)[0] ?? null;
+            if ($cursor === null) {
+                break;
+            }
+
+            $documents[] = $cursor;
+        }
+
+        return $documents;
+    }
 }

@@ -1341,9 +1341,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         // Single pass partitioning: pull vector queries out for ORDER BY and
         // detect aggregation/join shape in the same walk. Each Method::value
-        // is checked once per query rather than three times. Search queries
-        // are picked up here too so we don't need a second pass via
-        // `extractSearchQueries` later in this method.
+        // is checked once per query rather than three times.
         // Defer the defensive `clone` until we know the query path will mutate
         // the Query objects (joins or aggregations-with-joins). The vast
         // majority of finds take neither path and don't need a per-query
@@ -1351,7 +1349,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $vectorQueries = [];
         $otherQueries = [];
         $adapterFilterQueries = [];
-        $searchQueries = [];
         $hasAggregation = false;
         $hasJoins = false;
         $hasDistinct = false;
@@ -1372,10 +1369,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             $otherQueries[] = $query;
-
-            if ($method === Method::Search) {
-                $searchQueries[] = $query;
-            }
 
             if ($method->isAggregate() || $method === Method::GroupBy) {
                 $hasAggregation = true;
@@ -1593,32 +1586,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $this->getSQLReadableDistance($vectorDistance['expression']).' AS '.$this->quote(Storage::DISTANCE),
                     $vectorDistance['bindings']
                 );
-            }
-
-            // Full-text search relevance scoring.
-            //
-            // Skip the second MATCH compilation (and its ORDER BY) when the caller
-            // already asked for an explicit order. The Documents trait auto-appends
-            // the sequence attribute as a tiebreaker, so a single sequence-only
-            // signal — with no entries before it — means "caller did not specify
-            // an order" and is the only case where we should auto-order by
-            // relevance. Anything else (multiple entries, or a leading attribute
-            // other than sequence) means the caller has an explicit order and
-            // relevance ordering would silently override it.
-            $shouldAutoOrderByRelevance = (
-                count($orderAttributes) === 0
-                || (count($orderAttributes) === 1 && $orderAttributes[0] === Document::SEQUENCE)
-            );
-
-            if (! empty($searchQueries) && ! $hasAggregation && ! $hasDistinct && $shouldAutoOrderByRelevance) {
-                $builder->select(['*']);
-                foreach ($searchQueries as $searchQuery) {
-                    $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);
-                    if ($relevanceRaw !== null) {
-                        $builder->selectRaw($relevanceRaw['expression'], $relevanceRaw['bindings']);
-                        $builder->orderByRaw($relevanceRaw['order']);
-                    }
-                }
             }
 
             $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
@@ -6342,16 +6309,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $this->quote($alias),
             $this->quote($this->filter($this->getInternalKeyForAttribute($attribute))),
         ];
-    }
-
-    /**
-     * Get the raw SQL expression for full-text search relevance scoring.
-     *
-     * @return array{expression: string, order: string, bindings: list<mixed>}|null
-     */
-    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
-    {
-        return null;
     }
 
     /**

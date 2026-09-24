@@ -257,25 +257,32 @@ class Postgres extends SQL
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
                 _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
-                _document VARCHAR(255) NOT NULL
+                _document VARCHAR(255) NOT NULL,
+                \"_documentInternalId\" BIGINT NOT NULL DEFAULT 0
             );
         ";
 
         if ($this->sharedTables) {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_document,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_tenant,_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_tenant,_permission,_type); 
             ";
         } else {
             $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$id}_ukey");
             $permissionIndex = $this->getShortKey("{$namespace}_{$id}_permission");
+            $documentIndex = $this->getShortKey("{$namespace}_{$id}_docint");
             $permissions .= "
                 CREATE UNIQUE INDEX \"{$uniquePermissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_document COLLATE utf8_ci_ai,_type,_permission,_column);
+                CREATE INDEX \"{$documentIndex}\" 
+                    ON {$this->getSQLTable($id . '_perms')} USING btree (\"_documentInternalId\",_type,_permission,_column);
                 CREATE INDEX \"{$permissionIndex}\" 
                     ON {$this->getSQLTable($id . '_perms')} USING btree (_permission,_type); 
             ";

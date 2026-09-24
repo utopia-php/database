@@ -209,6 +209,7 @@ class MariaDB extends SQL
                 _permission VARCHAR(255) NOT NULL,
                 _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
                 _document VARCHAR(255) NOT NULL,
+                _documentInternalId BIGINT UNSIGNED NOT NULL DEFAULT 0,
                 PRIMARY KEY (_id),
         ";
 
@@ -216,11 +217,13 @@ class MariaDB extends SQL
             $permissions .= "
                 _tenant INT(11) UNSIGNED DEFAULT NULL,
                 UNIQUE INDEX " . static::PERMISSIONS_INDEX . " (_document, _tenant, _type, _permission, _column),
+                INDEX " . static::PERMISSIONS_INDEX_DOCUMENT . " (_documentInternalId, _tenant, _type, _permission, _column),
                 INDEX _permission (_tenant, _permission, _type)
             ";
         } else {
             $permissions .= "
                 UNIQUE INDEX " . static::PERMISSIONS_INDEX . " (_document, _type, _permission, _column),
+                INDEX " . static::PERMISSIONS_INDEX_DOCUMENT . " (_documentInternalId, _type, _permission, _column),
                 INDEX _permission (_permission, _type)
             ";
         }

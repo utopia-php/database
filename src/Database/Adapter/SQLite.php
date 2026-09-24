@@ -428,7 +428,8 @@ class SQLite extends MariaDB
 				`_type` VARCHAR(12) NOT NULL,
 				`_permission` VARCHAR(255) NOT NULL,
 				`_column` VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
-				`_document` VARCHAR(255) NOT NULL
+				`_document` VARCHAR(255) NOT NULL,
+				`_documentInternalId` BIGINT NOT NULL DEFAULT 0
 			)
 		";
 
@@ -448,6 +449,7 @@ class SQLite extends MariaDB
             $this->createIndex($id, '_updated_at', Database::INDEX_KEY, [ '_updatedAt'], [], []);
 
             $this->createIndex("{$id}_perms", static::PERMISSIONS_INDEX, Database::INDEX_UNIQUE, ['_document', '_type', '_permission', '_column'], [], []);
+            $this->createIndex("{$id}_perms", static::PERMISSIONS_INDEX_DOCUMENT, Database::INDEX_KEY, ['_documentInternalId', '_type', '_permission', '_column'], [], []);
             $this->createIndex("{$id}_perms", '_index_2', Database::INDEX_KEY, ['_permission', '_type'], [], []);
 
             if ($this->sharedTables) {

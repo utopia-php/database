@@ -39,6 +39,27 @@ abstract class SQL extends Adapter
      */
     protected const PERMISSIONS_INDEX_LEGACY = '_index1';
 
+    /**
+     * Index over _documentInternalId.
+     *
+     * Groundwork. Permissions correlate on _document today -- a VARCHAR(255), which is
+     * 1020 bytes of the unique index and the comparison every correlated EXISTS makes
+     * per outer row. _documentInternalId is the same fact as an 8-byte integer, so the
+     * intended redesign repoints that correlation at it. The column ships unpopulated:
+     * the batch insert builds its permission binds before the rows exist, and
+     * lastInsertId() plus an offset is wrong once skipDuplicates leaves gaps, so
+     * filling it needs a sequence read-back that belongs with the redesign rather than
+     * ahead of it.
+     *
+     * Shaped like PERMISSIONS_INDEX so the probe stays index-only once it is used: the
+     * correlated EXISTS reads _type, _permission and _column too, and an index on the
+     * id alone would seek and then fetch the row for each of those. Deliberately NOT
+     * unique -- every row holds the default 0 until the backfill, so uniqueness would
+     * collide on the second document. It becomes the unique index, and _unique goes
+     * away, when the column is populated.
+     */
+    protected const PERMISSIONS_INDEX_DOCUMENT = '_document_internal';
+
     protected mixed $pdo;
 
     /**

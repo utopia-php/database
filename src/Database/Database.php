@@ -7976,10 +7976,23 @@ class Database
      * Delete Document
      *
      * $onRelated is called once per document on the other side of a relationship whose
-     * relationship changed because of this delete, after the transaction commits. That
-     * covers documents this delete wrote, such as a set-null peer, and documents left
-     * holding a reference that is now gone, which are not written at all. Documents the
-     * delete cascaded away are not reported.
+     * relationship changed because of this delete, after this delete's own transaction
+     * ends. That covers documents this delete wrote, such as a set-null peer, and
+     * documents left holding a reference that is now gone, which are not written at all.
+     * Documents the delete cascaded away are not reported.
+     *
+     * Timing matches the bulk $onNext callbacks: it is not deferred past an enclosing
+     * transaction. A caller that wraps this in its own withTransaction() is called back
+     * before that transaction commits, is called again for every retried attempt, and is
+     * told nothing if the caller then rolls back. Throwing from $onRelated propagates, so
+     * a caller inside its own transaction can use it to abort. For a signal that only
+     * fires on durable state, act after your own withTransaction() returns.
+     *
+     * The reported document is the copy the delete itself worked with: read and written
+     * with permissions skipped, like the rest of the delete path, and handed over without
+     * a read check on the principal running the delete. A peer that principal cannot read
+     * still has its reference cleared, so it is still reported. Treat $onRelated as
+     * privileged, the same as an EVENT_DOCUMENT_DELETE listener.
      *
      * @param string $collection
      * @param string $id
@@ -7996,10 +8009,20 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        // A cascade re-enters this method, so only the outermost call owns the buffer.
-        $collecting = $this->relatedDocuments === null;
+        // Collect only for a call that asked for a report, so every other delete keeps its
+        // memory. A cascade re-enters this method without a callback and keeps feeding the
+        // buffer it found; anything else that re-enters gets none, so it cannot report into
+        // the buffer of the delete running around it.
+        $collecting = $onRelated !== null;
+        $isolated = !$collecting && empty($this->relationshipDeleteStack);
+        $outerRelated = $this->relatedDocuments;
+        $outerRemoved = $this->relatedDocumentsRemoved;
         $related = [];
         $removed = [];
+
+        if ($isolated) {
+            $this->relatedDocuments = null;
+        }
 
         try {
             $deleted = $this->withTransaction(function () use ($collection, $id, $collecting, &$document) {
@@ -8045,7 +8068,7 @@ class Database
 
                 $result = $this->adapter->deleteDocument($collection->getId(), $id);
 
-                if ($result) {
+                if ($result && $this->relatedDocuments !== null) {
                     $this->relatedDocumentsRemoved[$this->relatedDocumentKey($collection->getId(), $id)] = true;
                 }
 
@@ -8057,8 +8080,13 @@ class Database
             if ($collecting) {
                 $related = $this->relatedDocuments ?? [];
                 $removed = $this->relatedDocumentsRemoved;
-                $this->relatedDocuments = null;
-                $this->relatedDocumentsRemoved = [];
+            }
+
+            // A cascade leaves the buffer it was handed alone, so what it recorded and
+            // what it removed both survive into the report of the delete that called it.
+            if ($collecting || $isolated) {
+                $this->relatedDocuments = $outerRelated;
+                $this->relatedDocumentsRemoved = $outerRemoved;
             }
         }
 
@@ -8067,7 +8095,8 @@ class Database
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
-            // After the commit, so nothing is reported for a transaction that rolled back.
+            // After this delete's own transaction, so a delete that rolled back on its own
+            // reports nothing. An enclosing caller transaction commits later, see above.
             if ($onRelated !== null) {
                 foreach ($related as $key => $entry) {
                     if (isset($removed[$key])) {
@@ -8139,11 +8168,9 @@ class Database
             // Documents on the other side hold a reference to this one, so their relationship
             // changes whether or not the delete writes to them. A write below replaces these
             // with the copy it returned, and a cascade drops them again.
-            if ($twoWay) {
-                foreach (\is_array($value) ? $value : [$value] as $relation) {
-                    if ($relation instanceof Document) {
-                        $this->recordRelatedDocument($relatedCollection, $relation);
-                    }
+            foreach (\is_array($value) ? $value : [$value] as $relation) {
+                if ($relation instanceof Document) {
+                    $this->recordRelatedDocument($relatedCollection, $relation);
                 }
             }
 

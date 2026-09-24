@@ -4987,14 +4987,16 @@ trait RelationshipTests
         // reference already cleared.
         $reported = [];
         $database->deleteDocument('related_parent', 'parent1', function (Document $related, Document $collection) use (&$reported) {
-            $reported[$related->getId()] = $collection->getId();
-            $this->assertNull($related->getAttribute('parent'));
+            $reported[$related->getId()] = $related;
+            $this->assertEquals('related_child', $collection->getId());
         });
 
-        $this->assertEquals([
-            'child1' => 'related_child',
-            'child2' => 'related_child',
-        ], $reported);
+        $this->assertEqualsCanonicalizing(['child1', 'child2'], \array_keys($reported));
+
+        // A child read off the deleted parent carries no 'parent' key at all, so only the
+        // copy the set-null write returned can satisfy both of these.
+        $this->assertArrayHasKey('parent', $reported['child1']->getArrayCopy());
+        $this->assertNull($reported['child1']->getAttribute('parent'));
 
         // Deleting a child writes nothing to the parent -- the foreign key lived on the
         // deleted row -- but the parent's relationship changed, so it is still reported.

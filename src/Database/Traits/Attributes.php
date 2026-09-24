@@ -576,7 +576,7 @@ trait Attributes
      * @throws ConflictException
      * @throws DatabaseException
      */
-    protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback): Attribute
+    protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
@@ -608,10 +608,12 @@ trait Attributes
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
 
-        $this->triggerHooks(
-            Event::AttributeUpdate,
-            $attribute->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
-        );
+        if ($triggerEvent) {
+            $this->triggerHooks(
+                Event::AttributeUpdate,
+                $attribute->toDocument()->setAttribute(Document::COLLECTION, $collection->getId()),
+            );
+        }
 
         return $attribute;
     }

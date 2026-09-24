@@ -526,8 +526,10 @@ trait Relationships
             }
         }
 
+        $updatedAttributes = [];
+
         try {
-            $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $oldRel) {
+            $updatedAttributes[] = [$collection->getId(), $this->updateAttributeMeta($collection->getId(), $id, function ($attribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete, $relatedCollection, $oldRel) {
                 $attribute->setAttribute(Document::ID, $actualNewKey);
                 $attribute->setAttribute('key', $actualNewKey);
                 $attribute->setAttribute('options', [
@@ -538,9 +540,9 @@ trait Relationships
                     'onDelete' => $actualOnDelete,
                     'side' => $oldRel->side,
                 ]);
-            });
+            }, triggerEvent: false)];
 
-            $this->updateAttributeMeta($relatedCollection->getId(), $oldTwoWayKey, function (Document $twoWayAttribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete) {
+            $updatedAttributes[] = [$relatedCollection->getId(), $this->updateAttributeMeta($relatedCollection->getId(), $oldTwoWayKey, function (Document $twoWayAttribute) use ($actualNewKey, $actualNewTwoWayKey, $actualTwoWay, $actualOnDelete) {
                 /** @var array<string, mixed> $options */
                 $options = $twoWayAttribute->getAttribute('options', []);
                 $options['twoWayKey'] = $actualNewKey;
@@ -550,19 +552,19 @@ trait Relationships
                 $twoWayAttribute->setAttribute(Document::ID, $actualNewTwoWayKey);
                 $twoWayAttribute->setAttribute('key', $actualNewTwoWayKey);
                 $twoWayAttribute->setAttribute('options', $options);
-            });
+            }, triggerEvent: false)];
 
             if ($oldRel->type === RelationType::ManyToMany) {
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $oldRel->side);
 
-                $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($actualNewKey) {
+                $updatedAttributes[] = [$junction, $this->updateAttributeMeta($junction, $id, function ($junctionAttribute) use ($actualNewKey) {
                     $junctionAttribute->setAttribute(Document::ID, $actualNewKey);
                     $junctionAttribute->setAttribute('key', $actualNewKey);
-                });
-                $this->updateAttributeMeta($junction, $oldTwoWayKey, function ($junctionAttribute) use ($actualNewTwoWayKey) {
+                }, triggerEvent: false)];
+                $updatedAttributes[] = [$junction, $this->updateAttributeMeta($junction, $oldTwoWayKey, function ($junctionAttribute) use ($actualNewTwoWayKey) {
                     $junctionAttribute->setAttribute(Document::ID, $actualNewTwoWayKey);
                     $junctionAttribute->setAttribute('key', $actualNewTwoWayKey);
-                });
+                }, triggerEvent: false)];
 
                 $this->withRetries(fn () => $this->purgeCachedCollection($junction));
             }
@@ -676,7 +678,7 @@ trait Relationships
                     $attribute->setAttribute(Document::ID, $id);
                     $attribute->setAttribute('key', $id);
                     $attribute->setAttribute('options', $oldRel->toDocument()->getArrayCopy());
-                });
+                }, triggerEvent: false);
             } catch (Throwable) {
                 // Best effort
             }
@@ -691,7 +693,7 @@ trait Relationships
                     $twoWayAttribute->setAttribute(Document::ID, $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('options', $options);
-                });
+                }, triggerEvent: false);
             } catch (Throwable) {
                 // Best effort
             }
@@ -702,7 +704,7 @@ trait Relationships
                     $this->updateAttributeMeta($junctionId, $actualNewKey, function ($attr) use ($id) {
                         $attr->setAttribute(Document::ID, $id);
                         $attr->setAttribute('key', $id);
-                    });
+                    }, triggerEvent: false);
                 } catch (Throwable) {
                     // Best effort
                 }
@@ -710,7 +712,7 @@ trait Relationships
                     $this->updateAttributeMeta($junctionId, $actualNewTwoWayKey, function ($attr) use ($oldTwoWayKey) {
                         $attr->setAttribute(Document::ID, $oldTwoWayKey);
                         $attr->setAttribute('key', $oldTwoWayKey);
-                    });
+                    }, triggerEvent: false);
                 } catch (Throwable) {
                     // Best effort
                 }
@@ -744,6 +746,13 @@ trait Relationships
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedCollection($relatedCollection->getId()));
+
+        foreach ($updatedAttributes as [$updatedCollection, $attribute]) {
+            $this->triggerHooks(
+                Event::AttributeUpdate,
+                $attribute->toDocument()->setAttribute(Document::COLLECTION, $updatedCollection),
+            );
+        }
 
         return true;
     }

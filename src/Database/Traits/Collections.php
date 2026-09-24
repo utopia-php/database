@@ -537,11 +537,11 @@ trait Collections
             }
         }
 
+        $this->purgeCachedCollection($id);
+
         if ($deleted) {
             $this->triggerHooks(Event::CollectionDelete, $collection);
         }
-
-        $this->purgeCachedCollection($id);
 
         return $deleted;
     }

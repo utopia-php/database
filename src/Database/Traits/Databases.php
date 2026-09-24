@@ -80,12 +80,12 @@ trait Databases
 
         $deleted = $this->adapter->delete($database);
 
+        $this->cache->flush();
+
         $this->trigger(Event::DatabaseDelete, [
             'name' => $database,
             'deleted' => $deleted,
         ]);
-
-        $this->cache->flush();
 
         return $deleted;
     }

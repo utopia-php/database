@@ -502,19 +502,6 @@ class Database
     protected array $relatedDocumentsRemoved = [];
 
     /**
-     * How deep withTransaction() is nested, so a delete can tell whether the transaction
-     * it just left was really committed or is still someone else's to commit.
-     */
-    protected int $transactionDepth = 0;
-
-    /**
-     * Related-document reports waiting for the outermost transaction to commit.
-     *
-     * @var array<array{0: callable, 1: Document, 2: Document}>
-     */
-    protected array $pendingRelated = [];
-
-    /**
      * Type mapping for collections to custom document classes
      * @var array<string, class-string<Document>>
      */
@@ -1733,50 +1720,7 @@ class Database
      */
     public function withTransaction(callable $callback): mixed
     {
-        $outermost = $this->transactionDepth === 0;
-        $this->transactionDepth++;
-
-        $queued = $this->pendingRelated;
-
-        try {
-            $result = $this->adapter->withTransaction(function () use ($callback, $queued) {
-                // Every attempt starts from what was queued before this transaction, so an
-                // attempt the adapter abandons takes its own reports with it. Resetting
-                // here rather than on the way out also covers a commit that fails after
-                // the callback already returned.
-                $this->pendingRelated = $queued;
-
-                return $callback();
-            });
-        } catch (\Throwable $th) {
-            $this->pendingRelated = $queued;
-
-            throw $th;
-        } finally {
-            $this->transactionDepth--;
-        }
-
-        if ($outermost && !empty($this->pendingRelated)) {
-            $pending = $this->pendingRelated;
-            $this->pendingRelated = [];
-            $failure = null;
-
-            // The transaction is already committed, so one report that throws must not
-            // cost the others theirs. The first failure surfaces once they have all run.
-            foreach ($pending as [$onRelated, $related, $collection]) {
-                try {
-                    $onRelated($related, $collection);
-                } catch (\Throwable $th) {
-                    $failure ??= $th;
-                }
-            }
-
-            if ($failure !== null) {
-                throw $failure;
-            }
-        }
-
-        return $result;
+        return $this->adapter->withTransaction($callback);
     }
 
     /**
@@ -8037,10 +7981,12 @@ class Database
      * documents left holding a reference that is now gone, which are not written at all.
      * Documents the delete cascaded away are not reported.
      *
-     * Delivery waits for the outermost transaction, so a caller that wraps this in its
-     * own withTransaction() is called back once, after that transaction commits, and not
-     * at all if it rolls back or if a retried attempt is abandoned. Throwing from
-     * $onRelated therefore cannot abort the delete: by then it is durable.
+     * Timing matches the bulk $onNext callbacks: it is not deferred past an enclosing
+     * transaction. A caller that wraps this in its own withTransaction() is called back
+     * before that transaction commits, is called again for every retried attempt, and is
+     * told nothing if the caller then rolls back. Throwing from $onRelated propagates, so
+     * a caller inside its own transaction can use it to abort. For a signal that only
+     * fires on durable state, act after your own withTransaction() returns.
      *
      * The reported document is the copy the delete itself worked with: read and written
      * with permissions skipped, like the rest of the delete path, and handed over without
@@ -8153,16 +8099,11 @@ class Database
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
             $this->trigger(self::EVENT_DOCUMENT_DELETE, $document);
 
+            // After this delete's own transaction, so a delete that rolled back on its own
+            // reports nothing. An enclosing caller transaction commits later, see above.
             if ($onRelated !== null) {
                 foreach ($related as $key => $entry) {
                     if (isset($removed[$key])) {
-                        continue;
-                    }
-
-                    // Still inside a caller's transaction, so this delete is not durable
-                    // yet. Hold the report until whoever owns that transaction commits.
-                    if ($this->transactionDepth > 0) {
-                        $this->pendingRelated[] = [$onRelated, $entry['document'], $entry['collection']];
                         continue;
                     }
 

@@ -868,6 +868,14 @@ class Mirror extends Database
         return $modified;
     }
 
+    public function withTransaction(callable $callback): mixed
+    {
+        // The source runs the writes and owns the transaction, so its bookkeeping is the
+        // one that has to see this nesting. A mirror shares the source's adapter, so the
+        // transaction itself is the same either way.
+        return $this->source->withTransaction($callback);
+    }
+
     public function deleteDocument(string $collection, string $id, ?callable $onRelated = null): bool
     {
         // Only the source reports related documents; the destination is a mirror of the same write.

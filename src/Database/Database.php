@@ -1737,21 +1737,20 @@ class Database
         $this->transactionDepth++;
 
         try {
-            $result = $this->adapter->withTransaction(function () use ($callback, $outermost) {
-                // Cleared per attempt: the adapter retries this closure, and a retry must
-                // not report what an abandoned attempt queued.
-                if ($outermost) {
-                    $this->pendingRelated = [];
+            $result = $this->adapter->withTransaction(function () use ($callback) {
+                // Every attempt starts from what was already queued before it, at every
+                // level of nesting, so an attempt the adapter abandons and retries takes
+                // the reports it queued away with it.
+                $queued = $this->pendingRelated;
+
+                try {
+                    return $callback();
+                } catch (\Throwable $th) {
+                    $this->pendingRelated = $queued;
+
+                    throw $th;
                 }
-
-                return $callback();
             });
-        } catch (\Throwable $th) {
-            if ($outermost) {
-                $this->pendingRelated = [];
-            }
-
-            throw $th;
         } finally {
             $this->transactionDepth--;
         }

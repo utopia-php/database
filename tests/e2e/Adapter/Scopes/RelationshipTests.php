@@ -5132,16 +5132,19 @@ trait RelationshipTests
             $reported[] = $related->getId();
         };
 
+        $abandoned = null;
+
         try {
             $database->withTransaction(function () use ($database, $collect) {
                 $database->deleteDocument('outer_parent', 'parent_dropped', $collect);
+
                 throw new Exception('abandon the transaction');
             });
-            $this->fail('The transaction should have propagated its exception');
         } catch (Exception $e) {
-            $this->assertEquals('abandon the transaction', $e->getMessage());
+            $abandoned = $e->getMessage();
         }
 
+        $this->assertEquals('abandon the transaction', $abandoned);
         $this->assertEquals([], $reported);
         $this->assertFalse($database->getDocument('outer_parent', 'parent_dropped')->isEmpty());
 

@@ -225,24 +225,6 @@ class Select extends Base
             && ! isset($this->joinAliases[$key]);
     }
 
-    /**
-     * The column an attribute names: a bare name the collection does not declare is the column of
-     * the one join that declares it, any other name is its own.
-     */
-    private function column(string $attribute): string
-    {
-        if (\str_contains($attribute, '.') || $this->acceptsMainAttribute($attribute)) {
-            return $attribute;
-        }
-
-        $declaring = \array_values(\array_filter(
-            $this->joins,
-            static fn (JoinedCollection $join): bool => isset($join->attributes[$attribute]),
-        ));
-
-        return \count($declaring) === 1 ? $declaring[0]->alias.'.'.$attribute : $attribute;
-    }
-
     protected function acceptsMainAttribute(string $attribute): bool
     {
         return isset($this->schema[$attribute]) || \in_array($attribute, $this->internalKeys(), true);

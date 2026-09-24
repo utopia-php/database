@@ -192,6 +192,24 @@ trait JoinedAttributes
     abstract protected function isAllowedJoinColumn(string $column): bool;
 
     /**
+     * The column an attribute names: a bare name the collection does not declare is the column of
+     * the one join that declares it, any other name is its own.
+     */
+    protected function column(string $attribute): string
+    {
+        if (\str_contains($attribute, '.') || $this->acceptsMainAttribute($attribute)) {
+            return $attribute;
+        }
+
+        $declaring = \array_values(\array_filter(
+            $this->joins,
+            static fn (JoinedCollection $join): bool => isset($join->attributes[$attribute]),
+        ));
+
+        return \count($declaring) === 1 ? $declaring[0]->alias.'.'.$attribute : $attribute;
+    }
+
+    /**
      * Whether this validator accepts the attribute unaliased on the main collection.
      */
     abstract protected function acceptsMainAttribute(string $attribute): bool;

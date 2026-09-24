@@ -5,6 +5,7 @@ namespace Utopia\Database\Validator\Query;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 
 /**
  * Validates order query methods ensuring referenced attributes exist in the schema.
@@ -28,6 +29,13 @@ class Order extends Base
      * @var array<string, true>
      */
     protected array $aggregationAliases = [];
+
+    private bool $aggregates = false;
+
+    /**
+     * @var list<string>
+     */
+    private array $groupBy = [];
 
     /**
      * @param  array<Document>  $attributes
@@ -102,7 +110,7 @@ class Order extends Base
         $attribute = $value->getAttribute();
 
         if ($method === Method::OrderAsc || $method === Method::OrderDesc) {
-            return $this->isValidAttribute($attribute);
+            return $this->isValidAttribute($attribute) && $this->isGroupedOrder($attribute);
         }
 
         if ($method === Method::OrderRandom) {
@@ -137,6 +145,48 @@ class Order extends Base
     public function resetAggregationAliases(): void
     {
         $this->aggregationAliases = [];
+    }
+
+    /**
+     * The aggregates of the query set. With one, or with a groupBy, the query returns a row per
+     * group, so an order can name only an aggregate alias or an attribute the query groups by.
+     *
+     * @param  array<BaseQuery>  $aggregations
+     */
+    public function setAggregations(array $aggregations): void
+    {
+        $this->aggregates = $aggregations !== [];
+    }
+
+    /**
+     * @param  array<mixed>  $attributes  the groupBy attributes of the query set
+     */
+    public function setGroupBy(array $attributes): void
+    {
+        $this->groupBy = [];
+
+        foreach ($attributes as $attribute) {
+            if (\is_string($attribute) && $attribute !== '') {
+                $this->groupBy[] = $attribute;
+            }
+        }
+    }
+
+    private function isGroupedOrder(string $attribute): bool
+    {
+        if ((! $this->aggregates && $this->groupBy === []) || isset($this->aggregationAliases[$attribute])) {
+            return true;
+        }
+
+        foreach ($this->groupBy as $group) {
+            if ($this->column($group) === $this->column($attribute)) {
+                return true;
+            }
+        }
+
+        $this->message = 'Cannot order by "'.$attribute.'": an aggregation query can only order by its groups and aggregates';
+
+        return false;
     }
 
     /**

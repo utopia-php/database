@@ -443,6 +443,7 @@ class Queries extends Validator
         $having = [];
         $aggregates = [];
         $selects = [];
+        $orders = [];
         foreach ($this->validators as $validator) {
             if ($validator instanceof Filter) {
                 $filter ??= $validator;
@@ -452,6 +453,8 @@ class Queries extends Validator
                 $aggregates[] = $validator;
             } elseif ($validator instanceof Select) {
                 $selects[] = $validator;
+            } elseif ($validator instanceof Order) {
+                $orders[] = $validator;
             }
         }
 
@@ -481,7 +484,7 @@ class Queries extends Validator
             $validator->setGroupBy($groupBy);
         }
 
-        foreach ($selects as $validator) {
+        foreach ([...$selects, ...$orders] as $validator) {
             $validator->setAggregations($aggregations);
             $validator->setGroupBy($groupBy);
         }

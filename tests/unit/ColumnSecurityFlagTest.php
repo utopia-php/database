@@ -77,6 +77,30 @@ class ColumnSecurityFlagTest extends TestCase
         });
     }
 
+    /**
+     * $columnSecurity is required, like $documentSecurity beside it: the value passed
+     * is the value stored, in both directions, with no inference from what the
+     * collection already held.
+     */
+    public function testTheFlagPassedIsTheFlagStored(): void
+    {
+        $this->collection('secured', true);
+        $this->collection('plain', false);
+
+        $this->authorization->skip(function () {
+            $this->database->updateCollection('secured', [], true, false);
+            $this->database->updateCollection('plain', [], true, true);
+        });
+
+        $collections = $this->authorization->skip(fn () => [
+            $this->database->getCollection('secured'),
+            $this->database->getCollection('plain'),
+        ]);
+
+        $this->assertFalse($collections[0]->getAttribute('columnSecurity'));
+        $this->assertTrue($collections[1]->getAttribute('columnSecurity'));
+    }
+
     public function testDefaultsToOff(): void
     {
         $this->collection('plain', false);

@@ -2108,6 +2108,10 @@ class Database
             throw new NotFoundException('Collection not found');
         }
 
+        // Required, like $documentSecurity beside it: the value passed is the value
+        // stored, so a caller always states both flags rather than leaving one to be
+        // inferred.
+        //
         // Validated against the flag this call is setting, not the one the collection
         // currently carries: enabling and writing a column-scoped permission in the
         // same call has to be accepted, and disabling in the same call as one has to be

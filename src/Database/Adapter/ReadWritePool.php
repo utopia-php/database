@@ -3,6 +3,7 @@
 namespace Utopia\Database\Adapter;
 
 use Utopia\Database\Adapter;
+use Utopia\Database\PermissionType;
 use Utopia\Pools\Pool as UtopiaPool;
 
 class ReadWritePool extends Pool
@@ -164,7 +165,7 @@ class ReadWritePool extends Pool
      */
     private function isWrite(string $method, array $args): bool
     {
-        if ($this->locksRow($method, $args)) {
+        if ($this->decidesWrite($method, $args)) {
             return true;
         }
 
@@ -174,11 +175,18 @@ class ReadWritePool extends Pool
     }
 
     /**
+     * A read whose result decides a write must see the primary: a lagging replica would select
+     * rows the primary has already changed, or miss rows it has already written.
+     *
      * @param  array<mixed>  $args
      */
-    private function locksRow(string $method, array $args): bool
+    private function decidesWrite(string $method, array $args): bool
     {
-        return $method === 'getDocument' && ($args[3] ?? $args['forUpdate'] ?? false) === true;
+        return match ($method) {
+            'getDocument' => ($args[3] ?? $args['forUpdate'] ?? false) === true,
+            'find' => ($args[8] ?? $args['forPermission'] ?? PermissionType::Read) !== PermissionType::Read,
+            default => false,
+        };
     }
 
     private function stick(): void

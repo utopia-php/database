@@ -1961,7 +1961,7 @@ trait Documents
                 $read = fn (): array => $this->authorization->skip(fn () => $this->silent(fn () => $this->find($collection, [
                     Query::equal(Document::ID, $chunk),
                     Query::limit($this->maxQueryValues),
-                ])));
+                ], forPermission: PermissionType::Update)));
 
                 $found = $perTenant
                     ? $this->withTenant($batch['tenant'], $read)

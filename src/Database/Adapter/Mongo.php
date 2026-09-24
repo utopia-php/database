@@ -1936,12 +1936,16 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $attributes[Storage::SEQUENCE] = $document->getSequence();
                 }
 
+                $filters = [Storage::UID => $document->getId()];
+
+                if ($this->sharedTables) {
+                    $tenant = $document->getTenant() ?? $this->getTenant();
+                    $attributes[Storage::TENANT] = $tenant;
+                    $filters[Storage::TENANT] = $this->getTenantFilters($collection->getId(), [$tenant]);
+                }
+
                 $record = $this->replaceChars('$', '_', $attributes);
                 $record = $this->decorateRow($record, $this->documentMetadata($document));
-
-                // Build filter for upsert
-                $filters = [Storage::UID => $document->getId()];
-                $filters = $this->applyTenantFilter($filters, $collection->getId());
 
                 unset($record[Storage::SEQUENCE]); // Don't update _id
 

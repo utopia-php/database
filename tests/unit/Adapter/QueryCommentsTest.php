@@ -35,7 +35,6 @@ final class QueryCommentsTest extends TestCase
 {
     private const string NAMESPACE = 'comments';
 
-    private const string TABLE = self::NAMESPACE.'_movies';
 
     /**
      * @var list<string>

@@ -1767,7 +1767,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         // Build inner query: SELECT 1 FROM table WHERE ... LIMIT
         $innerBuilder = $this->newBuilder($name, $alias);
         $innerBuilder->selectRaw('1');
-        $innerBuilder->filter($otherQueries);
+        $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
 
         // Permission subquery
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
@@ -1859,7 +1859,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         // Build inner query: SELECT attribute FROM table WHERE ... LIMIT
         $innerBuilder = $this->newBuilder($name, $alias);
         $innerBuilder->select([$attribute]);
-        $innerBuilder->filter($otherQueries);
+        $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
 
         // Permission subquery
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
@@ -4522,6 +4522,31 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         );
 
         return $hasSelectionProjection;
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     */
+    private function applyFilters(SQLBuilder $builder, array $queries, string $name, string $alias): void
+    {
+        $builderQueries = [];
+        $adapterFilters = [];
+        foreach ($queries as $query) {
+            if ($this->isAdapterFilterQuery($query)) {
+                $adapterFilters[] = $this->compileAdapterFilter($query, $name, $alias);
+
+                continue;
+            }
+            $builderQueries[] = $query;
+        }
+
+        $builder->filter($builderQueries);
+
+        foreach ($adapterFilters as $filter) {
+            if ($filter !== null) {
+                $builder->whereRaw($filter['expression'], $filter['bindings']);
+            }
+        }
     }
 
     /**

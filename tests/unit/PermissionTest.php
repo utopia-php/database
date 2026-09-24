@@ -289,11 +289,35 @@ class PermissionTest extends TestCase
         }
     }
 
+    public function testCompositeRole(): void
+    {
+        $role = Role::allOf([
+            Role::member('membership-id'),
+            Role::team('team-id', 'admin'),
+        ]);
+        $permission = Permission::read($role);
+
+        $this->assertEquals('read("allOf(member:membership-id,team:team-id/admin)")', $permission);
+        $this->assertEquals($permission, Permission::parse($permission)->toString());
+        $this->assertCount(2, Permission::parse($permission)->getRoles());
+    }
+
     /**
      * @throws \Exception
      */
     public function testAggregation(): void
     {
+        $permissions = [Permission::write(Role::allOf([
+            Role::member('membership-id'),
+            Role::team('team-id', 'admin'),
+        ]))];
+        $parsed = Permission::aggregate($permissions);
+        $this->assertEquals([
+            'create("allOf(member:membership-id,team:team-id/admin)")',
+            'update("allOf(member:membership-id,team:team-id/admin)")',
+            'delete("allOf(member:membership-id,team:team-id/admin)")',
+        ], $parsed);
+
         $permissions = ['write("any")'];
         $parsed = Permission::aggregate($permissions);
         $this->assertEquals(['create("any")', 'update("any")', 'delete("any")'], $parsed);

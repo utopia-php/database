@@ -5034,7 +5034,43 @@ trait RelationshipTests
         $this->assertEquals([], $reported);
         $this->assertTrue($database->getDocument('related_child', 'child3')->isEmpty());
 
+        // A one-way peer exposes no relationship of its own, so clearing its internal
+        // foreign key changes nothing a caller can observe and it is not reported.
+        $database->createCollection('related_oneway', permissions: $collectionPermissions, documentSecurity: true);
+
+        $database->createRelationship(
+            collection: 'related_parent',
+            relatedCollection: 'related_oneway',
+            type: Database::RELATION_ONE_TO_MANY,
+            twoWay: false,
+            id: 'strays',
+            onDelete: Database::RELATION_MUTATE_SET_NULL,
+        );
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent3',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->createDocument('related_oneway', new Document([
+            '$id' => 'stray1',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->updateDocument('related_parent', 'parent3', new Document([
+            'strays' => ['stray1'],
+        ]));
+
+        $reported = [];
+        $database->deleteDocument('related_parent', 'parent3', function (Document $related) use (&$reported) {
+            $reported[] = $related->getId();
+        });
+
+        $this->assertEquals([], $reported);
+        $this->assertFalse($database->getDocument('related_oneway', 'stray1')->isEmpty());
+
         $database->deleteCollection('related_parent');
         $database->deleteCollection('related_child');
+        $database->deleteCollection('related_oneway');
     }
 }

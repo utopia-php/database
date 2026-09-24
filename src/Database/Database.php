@@ -1759,9 +1759,20 @@ class Database
         if ($outermost && !empty($this->pendingRelated)) {
             $pending = $this->pendingRelated;
             $this->pendingRelated = [];
+            $failure = null;
 
+            // The transaction is already committed, so one report that throws must not
+            // cost the others theirs. The first failure surfaces once they have all run.
             foreach ($pending as [$onRelated, $related, $collection]) {
-                $onRelated($related, $collection);
+                try {
+                    $onRelated($related, $collection);
+                } catch (\Throwable $th) {
+                    $failure ??= $th;
+                }
+            }
+
+            if ($failure !== null) {
+                throw $failure;
             }
         }
 

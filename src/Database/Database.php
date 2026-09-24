@@ -6235,6 +6235,17 @@ class Database
         // Try to get the related document
         $related = $this->getDocument($relatedCollection->getId(), $relation->getId());
 
+        if ($related->isEmpty() && !empty($relation->getId())) {
+            // A related document the caller cannot read comes back empty, which is
+            // indistinguishable from one that does not exist. Creating it would hit
+            // the unique _uid key and report "Document already exists", so read it
+            // again without permissions and relate to what is already there. The
+            // update below still enforces the caller's update permission.
+            $related = $this->authorization->skip(
+                fn () => $this->getDocument($relatedCollection->getId(), $relation->getId())
+            );
+        }
+
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
             if (!isset($relation['$permissions'])) {

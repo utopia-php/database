@@ -8034,8 +8034,12 @@ class Database
      * The reported document is the copy the delete itself worked with: read and written
      * with permissions skipped, like the rest of the delete path, and handed over without
      * a read check on the principal running the delete. A peer that principal cannot read
-     * still has its reference cleared, so it is still reported. Treat $onRelated as
-     * privileged, the same as an EVENT_DOCUMENT_DELETE listener.
+     * still has its reference cleared, so it is still reported: whoever can read the peer
+     * is who needs to hear that it changed, and that is rarely whoever deleted the other
+     * side. Treat $onRelated as privileged, the same trust level the bulk callbacks
+     * already carry - deleteDocuments() selects its batch by DELETE and hands $onNext the
+     * whole document, and upsertDocuments() hands it a pre-image read with permissions
+     * skipped behind an UPDATE check.
      *
      * @param string $collection
      * @param string $id

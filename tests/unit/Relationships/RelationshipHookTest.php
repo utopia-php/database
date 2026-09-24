@@ -326,6 +326,52 @@ final class RelationshipHookTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]
+    public function testLinkingAChildGivenAsADocumentThroughANestedUpdateNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('grandparent', 'grandparent1', new Document([
+            'parent' => new Document(['$id' => 'parent1', 'children' => [new Document(['$id' => 'readonly'])]]),
+        ])));
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingExistingChildrenThroughANestedCreateNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+
+        $this->assertLinkRejected(fn () => $database->createDocument('grandparent', new Document([
+            '$id' => 'grandparent2',
+            'parent' => new Document(['$id' => 'parent2', 'children' => ['readonly']]),
+        ])));
+
+        $this->assertNull($database->getDocument('child', 'readonly')->getAttribute('parent'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAPartnerThroughANestedTwoWayOneToOneUpdateNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('grandparent', 'grandparent1', new Document([
+            'parent' => new Document(['$id' => 'parent1', 'partner' => 'readonly']),
+        ])));
+
+        $this->assertNull($database->getDocument('child', 'readonly')->getAttribute('parent'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
     public function testRelinkingAnUnchangedChildNeedsOnlyReadPermission(Closure $adapter): void
     {
         $database = $this->database($adapter);
@@ -434,6 +480,33 @@ final class RelationshipHookTest extends TestCase
         $database->createCollection(new Collection(id: 'parent', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
         $database->createCollection(new Collection(id: 'child', permissions: $childPermissions === [] ? $this->permissions() : $childPermissions, documentSecurity: $childDocumentSecurity));
         $database->createRelationship($relationship);
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    private function nestedLinkDatabase(Closure $adapter, Relationship $relationship): Database
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, $relationship, [Permission::create(Role::any()), Permission::read(Role::any())]);
+        $database->createCollection(new Collection(id: 'grandparent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::oneToOne(collection: 'grandparent', relatedCollection: 'parent', key: 'parent', onDelete: ForeignKeyAction::SetNull));
+
+        $database->createDocument('child', new Document(['$id' => 'readonly', '$permissions' => [Permission::update(Role::user('admin'))]]));
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('grandparent', new Document(['$id' => 'grandparent1', 'parent' => 'parent1']));
+
+        return $database;
+    }
+
+    private function assertLinkRejected(callable $write): void
+    {
+        try {
+            $write();
+            $this->fail('Linking a document the caller may not update was accepted');
+        } catch (AuthorizationException $exception) {
+            $this->assertStringContainsString('"update"', $exception->getMessage());
+        }
     }
 
     /**

@@ -1043,13 +1043,17 @@ trait Documents
                     }
 
                     if (\array_key_exists($key, $relationships)) {
-                        if ($this->relationshipHook !== null && $this->relationshipHook->getWriteStackCount() >= Database::RELATION_MAX_DEPTH - 1) {
-                            continue;
-                        }
-
                         $rel = Relationship::fromArray(['collection' => $collection->getId()] + $relationships[$key]->getArrayCopy());
                         $relationType = $rel->type;
                         $side = $rel->side;
+                        $storesKey = $relationType === RelationType::OneToOne
+                            || ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent)
+                            || ($relationType === RelationType::OneToMany && $side === RelationSide::Child);
+
+                        if (! $storesKey && $this->relationshipHook !== null && $this->relationshipHook->getWriteStackCount() >= Database::RELATION_MAX_DEPTH - 1) {
+                            continue;
+                        }
+
                         switch ($relationType) {
                             case RelationType::OneToOne:
                                 $oldValue = $old->getAttribute($key) instanceof Document

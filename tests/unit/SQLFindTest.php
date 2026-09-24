@@ -377,7 +377,7 @@ final class SQLFindTest extends TestCase
         $this->assertStringContainsString('`table_main`.`_uid`', $sql);
     }
 
-    public function testJoinSideSearchRelevanceUsesJoinAlias(): void
+    public function testJoinSideSearchUsesJoinAlias(): void
     {
         $sql = $this->captureFindSql([
             Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
@@ -696,7 +696,7 @@ final class SQLFindTest extends TestCase
         ];
     }
 
-    public function testRowSearchWithoutAnOrderProjectsAndOrdersByRelevance(): void
+    public function testRowSearchWithoutAnOrderIsOrderedBySequence(): void
     {
         $sql = $this->captureFindSql(
             [Query::search('name', 'Laptop')],
@@ -704,11 +704,11 @@ final class SQLFindTest extends TestCase
             orderTypes: [OrderDirection::Asc],
         );
 
-        $this->assertStringStartsWith('SELECT *, MATCH(`table_main`.`name`) AGAINST (? IN BOOLEAN MODE) AS `_relevance` FROM ', $sql);
-        $this->assertStringContainsString('ORDER BY `_relevance` DESC, `_id` ASC', $sql);
+        $this->assertStringStartsWith('SELECT * FROM ', $sql);
+        $this->assertStringEndsWith(' WHERE MATCH(`name`) AGAINST(? IN BOOLEAN MODE) ORDER BY `_id` ASC LIMIT ?', $sql);
     }
 
-    public function testPostgresRowSearchWithoutAnOrderProjectsAndOrdersByRelevance(): void
+    public function testPostgresRowSearchWithoutAnOrderIsOrderedBySequence(): void
     {
         $sql = $this->capturePostgresFindSql(
             [Query::search('name', 'Laptop')],
@@ -716,8 +716,8 @@ final class SQLFindTest extends TestCase
             orderTypes: [OrderDirection::Asc],
         );
 
-        $this->assertMatchesRegularExpression('/^SELECT \*, ts_rank\(.+\) AS "_relevance" FROM /', $sql);
-        $this->assertStringContainsString('ORDER BY "_relevance" DESC, "_id" ASC', $sql);
+        $this->assertStringStartsWith('SELECT * FROM ', $sql);
+        $this->assertStringEndsWith(' @@ websearch_to_tsquery(?) ORDER BY "_id" ASC LIMIT ?', $sql);
     }
 
     public function testExplicitOrderNextToSearchLeavesRelevanceOut(): void
@@ -862,7 +862,7 @@ final class SQLFindTest extends TestCase
         $this->assertStringEndsWith(' ORDER BY "category" DESC LIMIT ?', $postgres);
     }
 
-    public function testSelectionWithoutDistinctKeepsRelevanceAndDistanceOrders(): void
+    public function testSelectionWithoutDistinctKeepsTheSequenceAndDistanceOrders(): void
     {
         $search = $this->captureFindSql(
             [Query::select(['category']), Query::search('name', 'Laptop')],
@@ -870,8 +870,9 @@ final class SQLFindTest extends TestCase
             orderTypes: [OrderDirection::Asc],
         );
 
-        $this->assertStringContainsString(' MATCH(`table_main`.`name`) AGAINST (? IN BOOLEAN MODE) AS `_relevance` FROM ', $search);
-        $this->assertStringContainsString('ORDER BY `_relevance` DESC, `_id` ASC', $search);
+        $this->assertStringStartsWith('SELECT `category`, ', $search);
+        $this->assertStringNotContainsString('_relevance', $search);
+        $this->assertStringEndsWith(' WHERE MATCH(`name`) AGAINST(? IN BOOLEAN MODE) ORDER BY `_id` ASC LIMIT ?', $search);
 
         $vector = $this->capturePostgresFindSql([Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
 
@@ -977,5 +978,55 @@ final class SQLFindTest extends TestCase
         $this->assertNotSame('', $sql);
 
         return $sql;
+    }
+
+    public function testRowSearchWithNoOrderAttributesAddsNoOrder(): void
+    {
+        $sql = $this->captureFindSql([Query::search('name', 'Laptop')]);
+
+        $this->assertStringStartsWith('SELECT * FROM ', $sql);
+        $this->assertStringEndsWith(' WHERE MATCH(`name`) AGAINST(? IN BOOLEAN MODE) LIMIT ?', $sql);
+    }
+
+    public function testPostgresRowSearchWithNoOrderAttributesAddsNoOrder(): void
+    {
+        $sql = $this->capturePostgresFindSql([Query::search('name', 'Laptop')]);
+
+        $this->assertStringStartsWith('SELECT * FROM ', $sql);
+        $this->assertStringEndsWith(' @@ websearch_to_tsquery(?) LIMIT ?', $sql);
+    }
+
+    public function testRowSearchPagesAlongTheSequenceCursor(): void
+    {
+        $sql = $this->captureFindSql(
+            [Query::search('name', 'Laptop')],
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+            cursor: [Document::SEQUENCE => 10],
+        );
+
+        $this->assertStringStartsWith('SELECT * FROM ', $sql);
+        $this->assertStringEndsWith(' WHERE MATCH(`name`) AGAINST(? IN BOOLEAN MODE) AND `_id` > ? ORDER BY `_id` ASC LIMIT ?', $sql);
+    }
+
+    public function testPostgresRowSearchPagesAlongTheSequenceCursor(): void
+    {
+        $sql = $this->capturePostgresCursorFindSql(
+            [Query::search('name', 'Laptop')],
+            [Document::SEQUENCE],
+            [OrderDirection::Asc],
+            [Document::SEQUENCE => 10],
+        );
+
+        $this->assertStringStartsWith('SELECT * FROM ', $sql);
+        $this->assertStringEndsWith(' @@ websearch_to_tsquery(?) AND "_id" > ? ORDER BY "_id" ASC LIMIT ?', $sql);
+    }
+
+    public function testPostgresRowVectorQueryNextToSearchOrdersByDistanceAlone(): void
+    {
+        $sql = $this->capturePostgresFindSql([Query::search('name', 'Laptop'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+
+        $this->assertStringStartsWith('SELECT *, ("table_main"."embedding" <=> ?::vector)::text AS "_distance" FROM ', $sql);
+        $this->assertStringEndsWith(' AND "table_main"."embedding" IS NOT NULL ORDER BY ("table_main"."embedding" <=> ?::vector) LIMIT ?', $sql);
     }
 }

@@ -1693,11 +1693,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
     }
 
-    protected function getSearchRelevanceRaw(Query $query, string $alias): ?array
-    {
-        return null;
-    }
-
     #[\Override]
     protected function isAdapterFilterQuery(Query $query): bool
     {

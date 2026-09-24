@@ -4373,6 +4373,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     includeInternal: ! $hasDistinct,
                     joinAliases: \array_column($joinTablePrefixes, 'alias'),
                 );
+                // The projection replaces the select; forwarded as well, the builder would compile the caller's
+                // raw attribute names whenever the projection holds only aliased joined columns.
+                $queries = \array_values(\array_filter($queries, static fn (BaseQuery $query): bool => $query->getMethod() !== Method::Select));
                 $hasSelectionProjection = true;
             } elseif (! empty($joinTablePrefixes)) {
                 $this->applyJoinProjection($builder, $collection, $joinTablePrefixes, $alias);

@@ -115,6 +115,9 @@ class Filter extends Base
         }
 
         $originalAttribute = $attribute;
+        /** @var array<string, mixed>|null $attributeSchema */
+        $attributeSchema = null;
+        $joined = false;
         // isset check if for special symbols "." in the attribute name
         // same for nested path on object
         $dot = \strpos($attribute, '.');
@@ -122,20 +125,30 @@ class Filter extends Base
             $alias = \substr($attribute, 0, $dot);
             $column = \substr($attribute, $dot + 1);
 
-            // Joined columns are not in this collection's schema; skip local type checks.
             if ($this->isJoinColumnReference($alias, $column)) {
-                if (count($values) > $this->maxValuesCount) {
-                    $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
+                if ($method->isVector()) {
+                    $this->message = 'Vector queries cannot be used on a joined attribute: '.$attribute;
 
                     return false;
                 }
 
-                return true;
-            }
+                $joined = true;
+                $attributeSchema = $this->joinedSchema($alias, $column);
 
-            // For relationships, just validate the top level.
-            // Utopia will validate each nested level during the recursive calls.
-            $attribute = $alias;
+                if ($attributeSchema === null) {
+                    if (count($values) > $this->maxValuesCount) {
+                        $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
+
+                        return false;
+                    }
+
+                    return true;
+                }
+            } else {
+                // For relationships, just validate the top level.
+                // Utopia will validate each nested level during the recursive calls.
+                $attribute = $alias;
+            }
         }
 
         // exists and notExists queries don't require values, just attribute validation
@@ -144,18 +157,20 @@ class Filter extends Base
             return $this->isValidAttribute($attribute);
         }
 
-        if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
-            // First check maxValuesCount guard for any IN-style value arrays
-            if (count($values) > $this->maxValuesCount) {
-                $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
+        if ($attributeSchema === null) {
+            if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
+                // First check maxValuesCount guard for any IN-style value arrays
+                if (count($values) > $this->maxValuesCount) {
+                    $this->message = 'Query on attribute has greater than '.$this->maxValuesCount.' values: '.$attribute;
 
-                return false;
+                    return false;
+                }
+
+                return true;
             }
-
-            return true;
+            /** @var array<string, mixed> $attributeSchema */
+            $attributeSchema = $this->schema[$attribute];
         }
-        /** @var array<string, mixed> $attributeSchema */
-        $attributeSchema = $this->schema[$attribute];
 
         // Skip value validation for nested relationship queries (e.g., author.age)
         // The values will be validated when querying the related collection
@@ -174,7 +189,7 @@ class Filter extends Base
         /** @var ColumnType|null $attributeType */
         $attributeType = $attributeSchema['type'] ?? null;
 
-        $isDottedOnObject = \str_contains($originalAttribute, '.') && $attributeType === ColumnType::Object;
+        $isDottedOnObject = ! $joined && \str_contains($originalAttribute, '.') && $attributeType === ColumnType::Object;
 
         // If the query method is spatial-only, the attribute must be a spatial type
         $query = new Query($method);
@@ -414,6 +429,26 @@ class Filter extends Base
         }
 
         return true;
+    }
+
+    /**
+     * The definition a joined column is checked against: the joined collection's own, or the main
+     * collection's for an internal attribute, which every collection declares alike. Null when the
+     * joined collection is unknown to the validator, as under a bare alias or without attributes.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function joinedSchema(string $alias, string $column): ?array
+    {
+        /** @var array<string, mixed>|null $schema */
+        $schema = isset($this->joinsByAlias[$alias]) ? ($this->joinsByAlias[$alias]->schema[$column] ?? null) : null;
+
+        if ($schema === null && \str_starts_with($column, '$')) {
+            /** @var array<string, mixed>|null $schema */
+            $schema = $this->schema[$column] ?? null;
+        }
+
+        return $schema;
     }
 
     /**

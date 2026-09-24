@@ -709,6 +709,9 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   `Utopia\Database\Exception\Query` (`Too many joins: at most 8 are allowed`).
 - Join aliases must be identifiers, unique within the query regardless of case, and different from
   `Query::DEFAULT_ALIAS`; anything else throws `Utopia\Database\Exception\Query`.
+- A filter on a joined column (`alias.attribute`) is checked against the joined collection's attribute exactly as a
+  filter on the main collection is checked against its own: type, size, array-ness and the `contains` rules. A vector
+  query cannot target a joined attribute (`Vector queries cannot be used on a joined attribute: <alias.attribute>`).
 - `Database::updateDocuments()` and `Database::deleteDocuments()` do not accept join queries. They throw
   `Utopia\Database\Exception\Query` with `Join queries are not supported for bulk updates` or
   `Join queries are not supported for bulk deletes`.

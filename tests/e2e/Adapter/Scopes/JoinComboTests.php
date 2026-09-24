@@ -1134,7 +1134,7 @@ trait JoinComboTests
         $this->withComboRoles($database, [Role::any()->toString()], function () use ($database, $mCol, $metaCol): void {
             $results = $database->find($mCol, [
                 Query::join($metaCol, '$id', 'mainId', '=', 'meta'),
-                Query::equal('meta.score', ['8686']),
+                Query::equal('meta.score', [8686]),
                 Query::select(['name', 'meta.score', 'meta.secret']),
             ]);
 

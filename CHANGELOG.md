@@ -271,6 +271,10 @@ not change anything for an upgrade from 7.x.
   - On SQLite, `count()` and `sum()` next to a fulltext `search()` apply the search instead of throwing.
   - A `distinct()` read whose select names only joined columns returns each of them once, under its alias, and
     accepts a joined internal attribute (`alias.$id`).
+  - A filter on a joined column is checked against the joined collection's attribute as a filter on the main
+    collection is checked against its own: a value of the wrong type, a comparison an array attribute does not take,
+    or `contains` on a number is rejected as `Exception\Query` instead of failing in the engine (PostgreSQL 22P02,
+    22007, 42883) or as `Unknown PDO Type`. Vector queries cannot target a joined attribute.
   - `Validator\Queries` with a `length` caps every nested query group again, as in 7.x.
 - **Query cache:**
   - The `find()` query cache no longer switches off or discards other tenants' (namespaces', databases') cached

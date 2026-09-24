@@ -19,6 +19,9 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Query\Filter;
+use Utopia\Query\Method;
+use Utopia\Query\Schema\ColumnType;
 
 /**
  * A joined column is valid exactly when the column would be valid unaliased on the joined
@@ -282,6 +285,108 @@ final class JoinedColumnValidationTest extends TestCase
         $this->assertSame(3, $results[0]->getAttribute('total'));
         $this->assertSame(0.5, $results[0]->getAttribute('average'));
         $this->assertSame(3, $results[0]->getAttribute('bare'));
+    }
+
+    /**
+     * @return array<string, array{0: Closure(Database): mixed, 1: string}>
+     */
+    public static function invalidJoinedValueProvider(): array
+    {
+        return [
+            'a word for an integer' => [
+                static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.score', ['abc'])]),
+                'Invalid query: Query value is invalid for attribute "note.score"',
+            ],
+            'a word for a joined internal datetime' => [
+                static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::greaterThan('note.$createdAt', 'not a date')]),
+                'Invalid query: Query value is invalid for attribute "note.$createdAt"',
+            ],
+            'a list for a string' => [
+                static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.body', [['x']])]),
+                'Invalid query: Query value is invalid for attribute "note.body"',
+            ],
+            'a prefix match on an integer' => [
+                static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::startsWith('note.score', '1')]),
+                'Invalid query: Query value is invalid for attribute "note.score"',
+            ],
+            'equal on an array attribute' => [
+                static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.tags', ['a'])]),
+                'Invalid query: Cannot query equal on attribute "note.tags" because it is an array.',
+            ],
+            'contains on a number' => [
+                static fn (Database $database): mixed => $database->find('customers', [self::join(), new Query(Method::Contains, 'note.score', [1])]),
+                'Invalid query: Cannot query contains on attribute "note.score" because it is not an array, string, or object.',
+            ],
+            'a vector query on a joined attribute' => [
+                static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::vectorCosine('note.score', [1.0])]),
+                'Invalid query: Vector queries cannot be used on a joined attribute: note.score',
+            ],
+            'count() with a word for an integer' => [
+                static fn (Database $database): mixed => $database->count('customers', [self::join(), Query::equal('note.score', ['abc'])]),
+                'Invalid query: Query value is invalid for attribute "note.score"',
+            ],
+            'getDocument() join condition with a word for an integer' => [
+                static fn (Database $database): mixed => $database->getDocument('customers', 'first', [
+                    Query::leftJoin('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.score', ['abc'])]),
+                ]),
+                'Invalid query: Query value is invalid for attribute "note.score"',
+            ],
+        ];
+    }
+
+    /**
+     * A filter on a joined column is checked against the joined collection's attribute, as a filter
+     * on the main collection is checked against its own, so an invalid value never reaches the engine.
+     *
+     * @param  Closure(Database): mixed  $read
+     */
+    #[DataProvider('invalidJoinedValueProvider')]
+    public function testInvalidValueForAJoinedColumnIsRejectedBeforeTheEngine(Closure $read, string $message): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage($message);
+
+        $read($this->database);
+    }
+
+    /**
+     * @return array<string, array{0: Closure(Database): mixed}>
+     */
+    public static function validJoinedValueProvider(): array
+    {
+        return [
+            'an integer' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.score', [3])])],
+            'a float' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::lessThan('note.ratio', 0.75)])],
+            'a string' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::startsWith('note.body', 'need')])],
+            'a joined internal datetime' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::greaterThan('note.$createdAt', '2000-01-01T00:00:00.000+00:00')])],
+            'a joined id' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::equal('note.$id', ['note'])])],
+            'containsAny on an array attribute' => [static fn (Database $database): mixed => $database->find('customers', [self::join(), Query::containsAny('note.tags', ['a'])])],
+            'count() with an integer' => [static fn (Database $database): mixed => $database->count('customers', [self::join(), Query::equal('note.score', [3])])],
+        ];
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $read
+     */
+    #[DataProvider('validJoinedValueProvider')]
+    public function testValidValueForAJoinedColumnStaysValid(Closure $read): void
+    {
+        $result = $read($this->database);
+
+        if (\is_array($result)) {
+            $this->assertCount(1, $result);
+        } else {
+            $this->assertSame(1, $result);
+        }
+    }
+
+    public function testAJoinedColumnWithoutASchemaIsNotTypeChecked(): void
+    {
+        $filter = new Filter([], ColumnType::String->value, supportForAttributes: false);
+        $filter->allowJoinAliases(['note']);
+
+        $this->assertTrue($filter->isValid(Query::equal('note.anything', ['x'])), $filter->getDescription());
+        $this->assertTrue($filter->isValid(Query::equal('note.anything', [['x']])), $filter->getDescription());
     }
 
     private static function join(): Query

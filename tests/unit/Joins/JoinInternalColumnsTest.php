@@ -292,8 +292,7 @@ final class JoinInternalColumnsTest extends TestCase
 
     /**
      * What a join could already read stays readable: internal attributes under an alias where they
-     * are valid on the main collection, every declared joined attribute, and joined filter values
-     * that are not type-checked.
+     * are valid on the main collection, and every declared joined attribute.
      */
     public function testWhatJoinsAlreadyReadStaysReadable(): void
     {
@@ -304,7 +303,7 @@ final class JoinInternalColumnsTest extends TestCase
             Query::equal('note.$id', ['n1', 'n3']),
             Query::between('note.$createdAt', '1970-01-01', '2099-12-31'),
             Query::between('note.score', 0, 10),
-            Query::equal('note.score', ['1', '3']),
+            Query::equal('note.score', [1, 3]),
             Query::select(['name', 'note.$id', 'note.$permissions', 'note.$createdAt', 'note.$sequence', 'note.body']),
             Query::orderAsc('note.score'),
         ]);

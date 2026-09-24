@@ -22,6 +22,7 @@ final readonly class JoinedCollection
      * @param  array<string, true>  $encrypted  The attributes whose values are stored encrypted
      * @param  array<string, bool>  $columns  Every attribute the collection declares, and whether it holds a column a join condition can compare
      * @param  string  $collection  The id of the collection the join reads
+     * @param  array<string, array<string, mixed>>  $schema  The definition of each attribute in $attributes, its type a ColumnType, as Filter holds the main collection's
      */
     public function __construct(
         public string $alias,
@@ -30,6 +31,7 @@ final readonly class JoinedCollection
         public array $encrypted = [],
         public array $columns = [],
         public string $collection = '',
+        public array $schema = [],
     ) {
     }
 
@@ -43,9 +45,11 @@ final readonly class JoinedCollection
 
         $attributes = [];
         $encrypted = [];
+        $schema = [];
         foreach ($definitions as $definition) {
             if (! Attribute::isRelationship($definition)) {
                 $attributes[$definition->getId()] = true;
+                $schema[$definition->getId()] = self::definition($definition);
             }
 
             $filters = $definition->getAttribute('filters', []);
@@ -61,7 +65,21 @@ final readonly class JoinedCollection
             $encrypted,
             self::columns($definitions),
             $collection->getId(),
+            $schema,
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function definition(Document $attribute): array
+    {
+        $copy = $attribute->getArrayCopy();
+        if (isset($copy['type']) && \is_string($copy['type'])) {
+            $copy['type'] = Attribute::tryNormalizeType($copy['type']) ?? $copy['type'];
+        }
+
+        return $copy;
     }
 
     /**

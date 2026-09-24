@@ -447,6 +447,77 @@ final class RelationshipHookTest extends TestCase
     /**
      * @param  Closure(): Adapter  $adapter
      */
+    #[DataProvider('adapters')]
+    public function testCascadeDeletesAGrandchildTheCallerCannotRead(Closure $adapter): void
+    {
+        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::any())], ForeignKeyAction::Cascade);
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+
+        $this->assertSame([], $this->ids($database, 'child'));
+        $this->assertSame([], $this->ids($database, 'grandchild'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCascadeIsRestrictedByAGrandchildTheCallerCannotRead(Closure $adapter): void
+    {
+        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::any())], ForeignKeyAction::Restrict);
+
+        try {
+            $database->deleteDocument('parent', 'parent1');
+            $this->fail('Cascading into a document whose relationship restricts its delete must be rejected');
+        } catch (RestrictedException) {
+        }
+
+        $this->assertSame(['parent1'], $this->ids($database, 'parent'));
+        $this->assertSame(['child1'], $this->ids($database, 'child'));
+        $this->assertSame(['grandchild1'], $this->ids($database, 'grandchild'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCascadeRollsBackWhenAGrandchildTheCallerCannotReadIsProtected(Closure $adapter): void
+    {
+        $database = $this->nestedCascadeDatabase($adapter, [Permission::create(Role::any()), Permission::delete(Role::user('admin'))], ForeignKeyAction::Cascade);
+
+        $this->assertDeleteRejected($database, 'parent', 'parent1');
+
+        $this->assertSame(['parent1'], $this->ids($database, 'parent'));
+        $this->assertSame(['child1'], $this->ids($database, 'child'));
+        $this->assertSame(['grandchild1'], $this->ids($database, 'grandchild'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  array<string>  $grandchildPermissions
+     */
+    private function nestedCascadeDatabase(Closure $adapter, array $grandchildPermissions, ForeignKeyAction $onDelete): Database
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade),
+        );
+        $database->createCollection(new Collection(id: 'grandchild', permissions: $grandchildPermissions, documentSecurity: false));
+        $database->createRelationship(Relationship::oneToMany(collection: 'child', relatedCollection: 'grandchild', twoWay: true, key: 'grandchildren', twoWayKey: 'child', onDelete: $onDelete));
+
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createDocument('parent', new Document(['$id' => 'parent1']));
+            $database->createDocument('child', new Document(['$id' => 'child1', 'parent' => 'parent1']));
+            $database->createDocument('grandchild', new Document(['$id' => 'grandchild1', 'child' => 'child1']));
+        });
+
+        return $database;
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
     private function database(Closure $adapter, bool $sharedTables = false): Database
     {
         $authorization = new Authorization();

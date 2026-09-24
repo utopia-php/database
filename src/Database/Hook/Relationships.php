@@ -2121,34 +2121,23 @@ class Relationships implements Hook
     }
 
     /**
-     * Delete the related documents with the given IDs.
-     *
-     * deleteDocuments() leaves out every document the caller may not delete,
-     * so a chunk that comes back short is finished one document at a time
-     * through deleteDocument(): it throws AuthorizationException for such a
-     * document, which rolls back the delete that started the cascade, and
-     * skips a document that is already gone.
+     * Delete the related documents with the given IDs, one at a time through
+     * deleteDocument(). A bulk delete selects its batch under the caller's
+     * read permission, so a related document the caller may not read is
+     * left behind, together with everything below it, and its own
+     * relationships are never checked. deleteDocument() loads the document
+     * without reading it, checks only the caller's delete permission, and
+     * cascades below it, so it throws AuthorizationException or
+     * RestrictedException for a document that cannot go, which rolls back
+     * the delete that started the cascade, and skips one that is already
+     * gone.
      *
      * @param  array<string>  $ids
      */
     private function deleteRelatedDocuments(string $collection, array $ids): void
     {
-        foreach (\array_chunk(\array_values(\array_unique($ids)), $this->relationQueryChunkSize()) as $chunk) {
-            $deleted = $this->db->deleteDocuments($collection, [Query::equal(Document::ID, $chunk)]);
-
-            if ($deleted === \count($chunk)) {
-                continue;
-            }
-
-            $remaining = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->find($collection, [
-                Query::select([Document::ID]),
-                Query::equal(Document::ID, $chunk),
-                Query::limit(\count($chunk)),
-            ])));
-
-            foreach ($remaining as $related) {
-                $this->db->deleteDocument($collection, $related->getId());
-            }
+        foreach (\array_values(\array_unique($ids)) as $id) {
+            $this->db->deleteDocument($collection, $id);
         }
     }
 

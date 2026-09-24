@@ -18,6 +18,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 
@@ -2362,5 +2363,110 @@ trait AggregationTests
         \sort($names);
 
         return $names;
+    }
+
+    public function testAggregateNextToASearchWithoutAnOrderCountsTheMatches(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_search_relevance';
+        $this->createProducts($database, $collection);
+        $database->createDocument($collection, new Document([
+            '$id' => 'sleeve',
+            'name' => 'Laptop Sleeve',
+            'category' => 'clothing',
+            'price' => 25,
+            'stock' => 60,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+
+        $totals = $database->find($collection, [Query::count('*', 'total'), Query::search('name', 'Laptop')]);
+        $this->assertSame([['total']], \array_map($this->sortedAttributeNames(...), $totals));
+        $this->assertSame(2, $this->intAttribute($totals[0], 'total'));
+
+        $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::search('name', 'Laptop')]);
+        $this->assertSame([['category', 'total'], ['category', 'total']], \array_map($this->sortedAttributeNames(...), $groups));
+        $this->assertSame(['clothing' => 1, 'electronics' => 1], $this->totalsByCategory($groups));
+
+        $categories = $database->find($collection, [Query::groupBy(['category']), Query::search('name', 'Laptop')]);
+        $this->assertSame([['category'], ['category']], \array_map($this->sortedAttributeNames(...), $categories));
+        $names = \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $categories);
+        \sort($names);
+        $this->assertSame(['clothing', 'electronics'], $names);
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testAggregateNextToAVectorQueryWithoutAnOrderCountsTheMatches(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_vector_distance';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 100, required: true),
+                Attribute::string(key: 'category', size: 50, required: true),
+                Attribute::vector(key: 'embedding', size: 3, required: true),
+            ],
+            indexes: [Index::fullText(key: 'name_search', attributes: ['name'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([
+            ['Laptop', 'electronics', [1.0, 0.0, 0.0]],
+            ['Laptop Sleeve', 'clothing', [0.0, 1.0, 0.0]],
+            ['Phone', 'electronics', [0.0, 0.0, 1.0]],
+        ] as [$name, $category, $embedding]) {
+            $database->createDocument($collection, new Document([
+                'name' => $name,
+                'category' => $category,
+                'embedding' => $embedding,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $totals = $database->find($collection, [Query::count('*', 'total'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $this->assertSame([['total']], \array_map($this->sortedAttributeNames(...), $totals));
+        $this->assertSame(3, $this->intAttribute($totals[0], 'total'));
+
+        $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $this->assertSame([['category', 'total'], ['category', 'total']], \array_map($this->sortedAttributeNames(...), $groups));
+        $this->assertSame(['clothing' => 1, 'electronics' => 2], $this->totalsByCategory($groups));
+
+        $matches = $database->find($collection, [Query::count('*', 'total'), Query::search('name', 'Laptop'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $this->assertSame([['total']], \array_map($this->sortedAttributeNames(...), $matches));
+        $this->assertSame(2, $this->intAttribute($matches[0], 'total'));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  array<Document>  $groups
+     * @return array<string, int>
+     */
+    private function totalsByCategory(array $groups): array
+    {
+        $totals = [];
+        foreach ($groups as $group) {
+            $category = $group->getAttribute('category');
+            $this->assertIsString($category);
+            $totals[$category] = $this->intAttribute($group, 'total');
+        }
+        \ksort($totals);
+
+        return $totals;
     }
 }

@@ -1593,15 +1593,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             // Vector ordering (comes first for similarity search)
-            if ($vectorDistance !== null) {
+            if ($vectorDistance !== null && ! $hasAggregation) {
                 $vectorOrder = $vectorDistance['expression'];
                 if (! empty($cursor) && $cursorDirection === CursorDirection::Before) {
                     $vectorOrder .= ' DESC';
                 }
                 $builder->orderByRaw($vectorOrder, $vectorDistance['bindings']);
-            }
 
-            if ($vectorDistance !== null && ! $hasAggregation) {
                 if (! $hasSelectionProjection) {
                     $builder->select(['*']);
                 }
@@ -1626,7 +1624,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 || (count($orderAttributes) === 1 && $orderAttributes[0] === Document::SEQUENCE)
             );
 
-            if (! empty($searchQueries) && $shouldAutoOrderByRelevance) {
+            if (! empty($searchQueries) && ! $hasAggregation && $shouldAutoOrderByRelevance) {
                 $builder->select(['*']);
                 foreach ($searchQueries as $searchQuery) {
                     $relevanceRaw = $this->getSearchRelevanceRaw($searchQuery, $alias);

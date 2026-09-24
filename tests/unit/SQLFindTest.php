@@ -11,6 +11,7 @@ use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -646,5 +647,183 @@ final class SQLFindTest extends TestCase
         $exception->errorInfo = ['HY000', 3024, 'Query execution was interrupted'];
 
         return $exception;
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('aggregationsNextToSearch')]
+    public function testAggregationNextToSearchLeavesRelevanceOut(array $queries, string $projection): void
+    {
+        $sql = $this->captureFindSql($queries);
+
+        $this->assertStringStartsWith('SELECT '.$projection.' FROM ', $sql);
+        $this->assertStringContainsString('WHERE MATCH(`name`) AGAINST(? IN BOOLEAN MODE)', $sql);
+        $this->assertStringNotContainsString('_relevance', $sql);
+        $this->assertStringNotContainsString('ORDER BY', $sql);
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('aggregationsNextToSearch')]
+    public function testPostgresAggregationNextToSearchLeavesRelevanceOut(array $queries, string $projection): void
+    {
+        $sql = $this->capturePostgresFindSql($queries);
+
+        $this->assertStringStartsWith('SELECT '.\str_replace('`', '"', $projection).' FROM ', $sql);
+        $this->assertStringContainsString('@@ websearch_to_tsquery(?)', $sql);
+        $this->assertStringNotContainsString('_relevance', $sql);
+        $this->assertStringNotContainsString('ORDER BY', $sql);
+    }
+
+    /**
+     * @return iterable<string, array{list<Query>, string}>
+     */
+    public static function aggregationsNextToSearch(): iterable
+    {
+        yield 'an aggregate' => [
+            [Query::count('*', 'total'), Query::search('name', 'Laptop')],
+            'COUNT(*) AS `total`',
+        ];
+        yield 'an aggregate and a groupBy' => [
+            [Query::count('*', 'total'), Query::groupBy(['category']), Query::search('name', 'Laptop')],
+            'COUNT(*) AS `total`, `category`',
+        ];
+        yield 'a groupBy' => [
+            [Query::groupBy(['category']), Query::search('name', 'Laptop')],
+            '`category`',
+        ];
+    }
+
+    public function testRowSearchWithoutAnOrderProjectsAndOrdersByRelevance(): void
+    {
+        $sql = $this->captureFindSql(
+            [Query::search('name', 'Laptop')],
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+        );
+
+        $this->assertStringStartsWith('SELECT *, MATCH(`table_main`.`name`) AGAINST (? IN BOOLEAN MODE) AS `_relevance` FROM ', $sql);
+        $this->assertStringContainsString('ORDER BY `_relevance` DESC, `_id` ASC', $sql);
+    }
+
+    public function testPostgresRowSearchWithoutAnOrderProjectsAndOrdersByRelevance(): void
+    {
+        $sql = $this->capturePostgresFindSql(
+            [Query::search('name', 'Laptop')],
+            orderAttributes: [Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc],
+        );
+
+        $this->assertMatchesRegularExpression('/^SELECT \*, ts_rank\(.+\) AS "_relevance" FROM /', $sql);
+        $this->assertStringContainsString('ORDER BY "_relevance" DESC, "_id" ASC', $sql);
+    }
+
+    public function testExplicitOrderNextToSearchLeavesRelevanceOut(): void
+    {
+        $rows = $this->captureFindSql(
+            [Query::search('name', 'Laptop')],
+            orderAttributes: ['name', Document::SEQUENCE],
+            orderTypes: [OrderDirection::Asc, OrderDirection::Asc],
+        );
+
+        $this->assertStringStartsWith('SELECT * FROM ', $rows);
+        $this->assertStringNotContainsString('_relevance', $rows);
+        $this->assertStringContainsString('ORDER BY `name` ASC, `_id` ASC', $rows);
+
+        $totals = $this->captureFindSql(
+            [Query::count('*', 'total'), Query::search('name', 'Laptop')],
+            orderAttributes: ['total'],
+            orderTypes: [OrderDirection::Desc],
+        );
+
+        $this->assertStringStartsWith('SELECT COUNT(*) AS `total` FROM ', $totals);
+        $this->assertStringNotContainsString('_relevance', $totals);
+        $this->assertStringContainsString('ORDER BY `total` DESC', $totals);
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('aggregationsNextToVectorQuery')]
+    public function testPostgresAggregationNextToVectorQueryLeavesDistanceOrderOut(array $queries, string $projection): void
+    {
+        $sql = $this->capturePostgresFindSql($queries);
+
+        $this->assertStringStartsWith('SELECT '.$projection.' FROM ', $sql);
+        $this->assertStringContainsString('"table_main"."embedding" IS NOT NULL', $sql);
+        $this->assertStringNotContainsString('<=>', $sql);
+        $this->assertStringNotContainsString('ORDER BY', $sql);
+    }
+
+    /**
+     * @return iterable<string, array{list<Query>, string}>
+     */
+    public static function aggregationsNextToVectorQuery(): iterable
+    {
+        yield 'an aggregate' => [
+            [Query::count('*', 'total'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
+            'COUNT(*) AS "total"',
+        ];
+        yield 'an aggregate and a groupBy' => [
+            [Query::count('*', 'total'), Query::groupBy(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
+            'COUNT(*) AS "total", "category"',
+        ];
+        yield 'an aggregate next to a search' => [
+            [Query::count('*', 'total'), Query::search('name', 'Laptop'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])],
+            'COUNT(*) AS "total"',
+        ];
+    }
+
+    public function testPostgresRowVectorQueryOrdersByDistance(): void
+    {
+        $sql = $this->capturePostgresFindSql([Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+
+        $this->assertStringStartsWith('SELECT *, ("table_main"."embedding" <=> ?::vector)::text AS "_distance" FROM ', $sql);
+        $this->assertStringContainsString('ORDER BY ("table_main"."embedding" <=> ?::vector)', $sql);
+    }
+
+    /**
+     * @param  array<Query>  $queries
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     */
+    private function capturePostgresFindSql(array $queries, array $orderAttributes = [], array $orderTypes = []): string
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = $this->getMockBuilder(\PDO::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $pdo->expects($this->once())
+            ->method('prepare')
+            ->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+                $sql = $query;
+
+                return $statement;
+            });
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(
+            new Document(['$id' => 'collection']),
+            $queries,
+            orderAttributes: $orderAttributes,
+            orderTypes: $orderTypes,
+        );
+
+        $this->assertNotSame('', $sql);
+
+        return $sql;
     }
 }

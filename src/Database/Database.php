@@ -1736,21 +1736,22 @@ class Database
         $outermost = $this->transactionDepth === 0;
         $this->transactionDepth++;
 
+        $queued = $this->pendingRelated;
+
         try {
-            $result = $this->adapter->withTransaction(function () use ($callback) {
-                // Every attempt starts from what was already queued before it, at every
-                // level of nesting, so an attempt the adapter abandons and retries takes
-                // the reports it queued away with it.
-                $queued = $this->pendingRelated;
+            $result = $this->adapter->withTransaction(function () use ($callback, $queued) {
+                // Every attempt starts from what was queued before this transaction, so an
+                // attempt the adapter abandons takes its own reports with it. Resetting
+                // here rather than on the way out also covers a commit that fails after
+                // the callback already returned.
+                $this->pendingRelated = $queued;
 
-                try {
-                    return $callback();
-                } catch (\Throwable $th) {
-                    $this->pendingRelated = $queued;
-
-                    throw $th;
-                }
+                return $callback();
             });
+        } catch (\Throwable $th) {
+            $this->pendingRelated = $queued;
+
+            throw $th;
         } finally {
             $this->transactionDepth--;
         }

@@ -4932,7 +4932,7 @@ trait RelationshipTests
     }
 
     /**
-     * deleteDocument() fires an event for every document on the other side of a two-way relationship
+     * deleteDocument() fires an update for every document on the other side of a two-way relationship
      * whose relationship the delete changed, including the ones it never writes to.
      */
     public function testDeleteDocumentRelatedUpdateEvent(): void
@@ -4986,18 +4986,23 @@ trait RelationshipTests
         // By id for looking a peer up, and in order so a peer fired twice fails the test.
         $reported = [];
         $fired = [];
-        $database->on(Database::EVENT_DOCUMENT_RELATED_UPDATE, 'related-test', function (string $event, Document $related) use (&$reported, &$fired) {
+        $database->on(Database::EVENT_DOCUMENT_UPDATE, 'related-test', function (string $event, Document $related) use (&$reported, &$fired) {
             $reported[$related->getId()] = $related;
             $fired[] = $related->getId();
         });
 
         // The Database is shared across the suite, so the listener must not outlive a failure.
         try {
-            // Deleting the parent clears every child's reference, so each one is reported once.
+            // Deleting the parent clears every child's reference, so each one is reported once,
+            // as the delete left it.
             $database->deleteDocument('related_parent', 'parent1');
 
             $this->assertEqualsCanonicalizing(['child1', 'child2'], $fired);
             $this->assertEquals('related_child', $reported['child1']->getCollection());
+            $this->assertEquals(
+                $database->getDocument('related_child', 'child1')->getUpdatedAt(),
+                $reported['child1']->getUpdatedAt(),
+            );
 
             // Deleting a child writes nothing to the parent -- the foreign key lived on the
             // deleted row -- but the parent's relationship changed, so it is still reported.
@@ -5065,7 +5070,7 @@ trait RelationshipTests
             $this->assertEquals([], $fired);
             $this->assertFalse($database->getDocument('related_oneway', 'stray1')->isEmpty());
         } finally {
-            $database->on(Database::EVENT_DOCUMENT_RELATED_UPDATE, 'related-test', null);
+            $database->on(Database::EVENT_DOCUMENT_UPDATE, 'related-test', null);
         }
 
         $database->deleteCollection('related_parent');

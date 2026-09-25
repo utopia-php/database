@@ -8862,7 +8862,8 @@ class Database
      * @param string|null $namespace
      * @return bool
      */
-    public function purgeCachedQueries(string $collection, ?string $namespace = null): bool
+    /** @phpstan-ignore-next-line exercised through query cache tests */
+    private function purgeCachedQueries(string $collection, ?string $namespace = null): bool
     {
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
         $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
@@ -10078,7 +10079,7 @@ class Database
      * @param string|null $namespace
      * @return string
      */
-    public function getQueryCacheKey(string $collectionId, ?string $namespace = null): string
+    private function getQueryCacheKey(string $collectionId, ?string $namespace = null): string
     {
         $hostname = $this->adapter->getSupportForHostname()
             ? $this->adapter->getHostname()
@@ -10103,7 +10104,8 @@ class Database
      * @param string $forPermission
      * @return string|null
      */
-    public function getQueryCacheField(
+    /** @phpstan-ignore-next-line exercised through query cache tests */
+    private function getQueryCacheField(
         ?Document $collection = null,
         array $queries = [],
         string $field = 'documents',

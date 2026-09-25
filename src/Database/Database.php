@@ -7975,8 +7975,12 @@ class Database
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        // Only gather the related documents when a listener would hear about them.
+        // Only gather the related documents when there can be some and a listener would hear about them.
         $report = $this->silentListeners !== null
+            && !empty(\array_filter(
+                $collection->getAttribute('attributes', []),
+                fn ($attribute) => $attribute['type'] === self::VAR_RELATIONSHIP && $attribute['options']['twoWay'],
+            ))
             && !empty(\array_diff_key(
                 ($this->listeners[self::EVENT_DOCUMENT_UPDATE] ?? []) + $this->listeners[self::EVENT_ALL],
                 $this->silentListeners,

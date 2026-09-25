@@ -5037,6 +5037,30 @@ trait RelationshipTests
             $this->assertEquals([], $fired);
             $this->assertTrue($database->getDocument('related_child', 'child3')->isEmpty());
 
+            // Restrict only blocks a delete that would orphan something. Deleting a child is
+            // allowed, and the parent still loses its reference to it.
+            $database->updateRelationship(
+                collection: 'related_parent',
+                id: 'children',
+                onDelete: Database::RELATION_MUTATE_RESTRICT,
+            );
+
+            $database->createDocument('related_parent', new Document([
+                '$id' => 'parent4',
+                '$permissions' => $documentPermissions,
+            ]));
+
+            $database->createDocument('related_child', new Document([
+                '$id' => 'child4',
+                '$permissions' => $documentPermissions,
+                'parent' => 'parent4',
+            ]));
+
+            $fired = [];
+            $database->deleteDocument('related_child', 'child4');
+
+            $this->assertEquals(['parent4'], $fired);
+
             // A one-way peer exposes no relationship of its own, so clearing its internal
             // foreign key changes nothing a caller can observe and it is not reported.
             $database->createCollection('related_oneway', permissions: $collectionPermissions, documentSecurity: true);

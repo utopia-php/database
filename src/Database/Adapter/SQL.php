@@ -2157,6 +2157,14 @@ abstract class SQL extends Adapter
     abstract protected function getRandomOrder(): string;
 
     /**
+     * Sort direction that places null values before non-null values.
+     */
+    protected function getNullOrder(): string
+    {
+        return Database::ORDER_ASC;
+    }
+
+    /**
      * Returns default PDO configuration
      *
      * @return array<int, mixed>
@@ -3047,6 +3055,11 @@ abstract class SQL extends Adapter
                     $prevOriginal = $orderAttributes[$j];
                     $prevAttr = $this->filter($this->getInternalKeyForAttribute($prevOriginal));
 
+                    if (($cursor[$prevOriginal] ?? null) === null) {
+                        $conditions[] = "{$this->quote($alias)}.{$this->quote($prevAttr)} IS NULL";
+                        continue;
+                    }
+
                     $bindName = ":cursor_{$j}";
                     $binds[$bindName] = $cursor[$prevOriginal];
 
@@ -3058,10 +3071,21 @@ abstract class SQL extends Adapter
                     ? Query::TYPE_LESSER
                     : Query::TYPE_GREATER;
 
-                $bindName = ":cursor_{$i}";
-                $binds[$bindName] = $cursor[$originalAttribute];
+                $column = "{$this->quote($alias)}.{$this->quote($attribute)}";
+                $nullsFirst = $direction === $this->getNullOrder();
 
-                $conditions[] = "{$this->quote($alias)}.{$this->quote($attribute)} {$this->getSQLOperator($operator)} {$bindName}";
+                if (($cursor[$originalAttribute] ?? null) === null) {
+                    if (!$nullsFirst) {
+                        // Only a later tie-breaker can follow a null sorted last.
+                        continue;
+                    }
+                    $conditions[] = "{$column} IS NOT NULL";
+                } else {
+                    $bindName = ":cursor_{$i}";
+                    $binds[$bindName] = $cursor[$originalAttribute];
+                    $comparison = "{$column} {$this->getSQLOperator($operator)} {$bindName}";
+                    $conditions[] = $nullsFirst ? $comparison : "({$comparison} OR {$column} IS NULL)";
+                }
 
                 $cursorWhere[] = '(' . implode(' AND ', $conditions) . ')';
             }

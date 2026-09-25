@@ -1293,12 +1293,16 @@ trait CollectionTests
 
         $database->setMetadata('scope', 'api.users');
 
-        $hook = new class () implements Transform {
+        $hook = new class ($database->getNamespace().'_docs') implements Transform {
             public string $query = '';
+
+            public function __construct(private readonly string $table)
+            {
+            }
 
             public function transform(Event $event, string $query): string
             {
-                if ($event !== Event::DocumentRead) {
+                if ($event !== Event::DocumentRead || ! \str_contains($query, $this->table)) {
                     return $query;
                 }
 
@@ -1310,6 +1314,10 @@ trait CollectionTests
         $database->addHook($hook);
 
         try {
+            // getDocument() resolves an uncached collection with a DocumentRead of the metadata table, which the
+            // transform must leave alone. Evicting the definition makes that read reach the transform on every run.
+            $database->purgeCachedDocument(Database::METADATA, 'docs');
+
             $this->assertTrue($database->getDocument('docs', 'doc1')->isEmpty());
             $this->assertStringContainsString('/* scope: api.users */', $hook->query);
         } finally {

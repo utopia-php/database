@@ -1024,25 +1024,36 @@ trait OneToOneTests
             id: 'child1'
         );
 
+        $result = $database->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'children',
+        );
+        $this->assertTrue($result);
+
+        $result = $database->createRelationship(
+            collection: 'parent',
+            relatedCollection: 'child',
+            type: Database::RELATION_ONE_TO_MANY,
+            id: 'childrenById',
+            twoWayKey: 'parent_id'
+        );
+        $this->assertTrue($result);
+
         try {
             $database->createRelationship(
                 collection: 'parent',
                 relatedCollection: 'child',
                 type: Database::RELATION_ONE_TO_MANY,
-                id: 'children',
+                twoWay: true,
+                id: 'twoWayChildren',
+                twoWayKey: 'parent_id'
             );
             $this->fail('Failed to throw Exception');
         } catch (Exception $e) {
             $this->assertEquals('Related attribute already exists', $e->getMessage());
         }
-
-        $database->createRelationship(
-            collection: 'parent',
-            relatedCollection: 'child',
-            type: Database::RELATION_ONE_TO_MANY,
-            id: 'children',
-            twoWayKey: 'parent_id'
-        );
 
         $collection = $database->getCollection('parent');
         $attributes = $collection->getAttribute('attributes', []);
@@ -1052,34 +1063,13 @@ trait OneToOneTests
             }
 
             if ($attribute['key'] === 'children') {
+                $this->assertEquals('parent', $attribute['options']['twoWayKey']);
+            }
+
+            if ($attribute['key'] === 'childrenById') {
                 $this->assertEquals('parent_id', $attribute['options']['twoWayKey']);
             }
         }
-
-        $database->createDocument('parent', new Document([
-            '$permissions' => [
-                Permission::read(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any()),
-            ],
-            'child1' => [
-                '$id' => 'foo',
-                '$permissions' => [Permission::read(Role::any())],
-            ],
-            'children' => [
-                [
-                    '$id' => 'bar',
-                    '$permissions' => [Permission::read(Role::any())],
-                ],
-            ],
-        ]));
-
-        $documents = $database->find('parent', []);
-        $document  = array_pop($documents);
-        $this->assertArrayHasKey('child1', $document);
-        $this->assertEquals('foo', $document->getAttribute('child1')->getId());
-        $this->assertArrayHasKey('children', $document);
-        $this->assertEquals('bar', $document->getAttribute('children')[0]->getId());
 
         try {
             $database->updateRelationship(

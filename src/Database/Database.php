@@ -206,6 +206,7 @@ class Database
     public const EVENT_DOCUMENTS_UPDATE = 'documents_update';
     public const EVENT_DOCUMENTS_UPSERT = 'documents_upsert';
     public const EVENT_DOCUMENT_DELETE = 'document_delete';
+    public const EVENT_DOCUMENT_RELATED_UPDATE = 'document_related_update';
     public const EVENT_DOCUMENTS_DELETE = 'documents_delete';
     public const EVENT_DOCUMENT_COUNT = 'document_count';
     public const EVENT_DOCUMENT_SUM = 'document_sum';
@@ -487,15 +488,16 @@ class Database
 
     /**
      * Documents on the other side of a relationship that a delete changed, keyed by
-     * collection and document id. Only collected while a delete is running.
+     * collection and document id. Only collected while a delete that something is
+     * listening to is running.
      *
-     * @var array<string, array{collection: Document, document: Document}>|null
+     * @var array<string, Document>|null
      */
     protected ?array $relatedDocuments = null;
 
     /**
-     * Ids removed by the delete that is currently running, so cascaded documents are
-     * not reported as changed.
+     * Collection-and-id keys removed by the delete that is currently running, so
+     * cascaded documents are not reported as changed.
      *
      * @var array<string, true>
      */
@@ -7975,38 +7977,40 @@ class Database
     /**
      * Delete Document
      *
-     * $onRelated is called once per document on the other side of a two-way relationship
-     * whose relationship changed because of this delete, after this delete's own transaction
-     * ends. That covers documents this delete wrote, such as a set-null peer, and
-     * documents left holding a reference that is now gone, which are not written at all.
-     * Documents the delete cascaded away are not reported.
+     * Fires EVENT_DOCUMENT_RELATED_UPDATE once per document on the other side of a two-way
+     * relationship whose relationship changed because of this delete, after this delete's
+     * own transaction ends. That covers documents this delete wrote, such as a set-null
+     * peer, and documents left holding a reference that is now gone, which are not written
+     * at all. Documents the delete cascaded away are not reported. The peers are only
+     * gathered when a listener that is not silenced is registered for that event.
+     * deleteDocuments() clears the same relationships but does not fire it.
      *
-     * Timing matches the bulk $onNext callbacks: it is not deferred past an enclosing
-     * transaction. A caller that wraps this in its own withTransaction() is called back
-     * before that transaction commits, is called again for every retried attempt, and is
-     * told nothing if the caller then rolls back. Throwing from $onRelated propagates, so
-     * a caller inside its own transaction can use it to abort. For a signal that only
-     * fires on durable state, act after your own withTransaction() returns.
+     * Like EVENT_DOCUMENT_DELETE, which fires just before it, the event is not deferred
+     * past an enclosing transaction. Wrapped in a caller's own withTransaction(), it fires
+     * before that transaction commits, again for every retried attempt, and whether or not
+     * the caller then rolls back. A listener that needs durable state should hold what it
+     * receives until that withTransaction() returns. A listener that throws propagates out
+     * of this call after the delete has committed, so the throw does not undo it; peers
+     * after it are not reported, and neither is any if an EVENT_DOCUMENT_DELETE listener
+     * throws first.
      *
-     * The reported document is the copy the delete itself worked with: read and written
-     * with permissions skipped, like the rest of the delete path, and handed over without
-     * a read check on the principal running the delete. A peer that principal cannot read
-     * still has its reference cleared, so it is still reported: whoever can read the peer
-     * is who needs to hear that it changed, and that is rarely whoever deleted the other
-     * side. Treat $onRelated as privileged, the same trust level the bulk callbacks
-     * already carry - deleteDocuments() selects its batch by DELETE and hands $onNext the
-     * whole document, and upsertDocuments() hands it a pre-image read with permissions
-     * skipped behind an UPDATE check.
+     * The document a listener receives is the copy the delete itself worked with: read and
+     * written with permissions skipped, like the rest of the delete path, and handed over
+     * without a read check on the principal running the delete. A peer that principal
+     * cannot read still has its reference cleared, so it is still reported: whoever can
+     * read the peer is who needs to hear that it changed, and that is rarely whoever
+     * deleted the other side. Treat the listener as privileged. EVENT_DOCUMENT_DELETE is
+     * already handed these same peers inside the deleted document, read the same way.
      *
      * How the delete reached a peer decides the shape it arrives in. One the delete wrote
      * is the copy that write returned, carrying the key it cleared. One it did not write
      * is the copy read off the deleted document, and relationship population has already
-     * stripped the back-reference from it, so that key is absent rather than null. Read a
-     * peer back if you need more of it than its identity.
+     * stripped the back-reference from it, so that key is absent rather than null. Either
+     * shape names its collection through getCollection(). Read a peer back if you need
+     * more of it than its identity.
      *
      * @param string $collection
      * @param string $id
-     * @param (callable(Document $related, Document $collection): void)|null $onRelated
      *
      * @return bool
      *
@@ -8015,15 +8019,20 @@ class Database
      * @throws DatabaseException
      * @throws RestrictedException
      */
-    public function deleteDocument(string $collection, string $id, ?callable $onRelated = null): bool
+    public function deleteDocument(string $collection, string $id): bool
     {
         $collection = $this->silent(fn () => $this->getCollection($collection));
 
-        // Collect only for a call that asked for a report, so every other delete keeps its
-        // memory. A cascade re-enters this method without a callback and keeps feeding the
-        // buffer it found; anything else that re-enters gets none, so it cannot report into
-        // the buffer of the delete running around it.
-        $collecting = $onRelated !== null;
+        // Gather peers only when a listener would actually receive them, so every other delete
+        // keeps its memory. Relationship teardown runs with every listener silenced, so a
+        // cascade re-entering this method finds nobody to report to and keeps feeding the
+        // buffer it was handed. A separate delete started from a listener collects into its
+        // own buffer, and the one around it is restored below.
+        $collecting = $this->silentListeners !== null
+            && !empty(\array_diff_key(
+                ($this->listeners[self::EVENT_DOCUMENT_RELATED_UPDATE] ?? []) + $this->listeners[self::EVENT_ALL],
+                $this->silentListeners,
+            ));
         $isolated = !$collecting && empty($this->relationshipDeleteStack);
         $outerRelated = $this->relatedDocuments;
         $outerRemoved = $this->relatedDocumentsRemoved;
@@ -8107,14 +8116,12 @@ class Database
 
             // After this delete's own transaction, so a delete that rolled back on its own
             // reports nothing. An enclosing caller transaction commits later, see above.
-            if ($onRelated !== null) {
-                foreach ($related as $key => $entry) {
-                    if (isset($removed[$key])) {
-                        continue;
-                    }
-
-                    $onRelated($entry['document'], $entry['collection']);
+            foreach ($related as $key => $peer) {
+                if (isset($removed[$key])) {
+                    continue;
                 }
+
+                $this->trigger(self::EVENT_DOCUMENT_RELATED_UPDATE, $peer);
             }
         }
 
@@ -8137,10 +8144,7 @@ class Database
             return;
         }
 
-        $this->relatedDocuments[$this->relatedDocumentKey($collection->getId(), $document->getId())] = [
-            'collection' => $collection,
-            'document' => $document,
-        ];
+        $this->relatedDocuments[$this->relatedDocumentKey($collection->getId(), $document->getId())] = $document;
     }
 
     private function relatedDocumentKey(string $collection, string $id): string
@@ -8288,7 +8292,7 @@ class Database
             && $side === Database::RELATION_SIDE_CHILD
             && !$twoWay
         ) {
-            $this->authorization->skip(function () use ($document, $relatedCollection, $twoWayKey, $twoWay) {
+            $this->authorization->skip(function () use ($document, $relatedCollection, $twoWayKey) {
                 $related = $this->findOne($relatedCollection->getId(), [
                     Query::select(['$id']),
                     Query::equal($twoWayKey, [$document->getId()])
@@ -8298,15 +8302,13 @@ class Database
                     return;
                 }
 
-                $updated = $this->skipRelationships(fn () => $this->updateDocument(
+                $this->skipRelationships(fn () => $this->updateDocument(
                     $relatedCollection->getId(),
                     $related->getId(),
                     new Document([
                         $twoWayKey => null
                     ])
                 ));
-
-                $this->recordRelatedDocument($relatedCollection, $updated, $twoWay);
             });
         }
 
@@ -8562,6 +8564,8 @@ class Database
      * Delete Documents
      *
      * Deletes all documents which match the given query, will respect the relationship's onDelete optin.
+     * Unlike deleteDocument(), it does not fire EVENT_DOCUMENT_RELATED_UPDATE for the related
+     * documents it changes.
      *
      * @param string $collection
      * @param array<Query> $queries

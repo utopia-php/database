@@ -4932,10 +4932,10 @@ trait RelationshipTests
     }
 
     /**
-     * deleteDocument() reports every document on the other side of a two-way relationship
+     * deleteDocument() fires an event for every document on the other side of a two-way relationship
      * whose relationship the delete changed, including the ones it never writes to.
      */
-    public function testDeleteDocumentRelatedCallback(): void
+    public function testDeleteDocumentRelatedUpdateEvent(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
@@ -4983,91 +4983,96 @@ trait RelationshipTests
             'children' => ['child1', 'child2'],
         ]));
 
-        // Deleting the parent writes every child, so each one is reported with its
-        // reference already cleared.
+        // By id for looking a peer up, and in order so a peer fired twice fails the test.
         $reported = [];
-        $database->deleteDocument('related_parent', 'parent1', function (Document $related, Document $collection) use (&$reported) {
+        $fired = [];
+        $database->on(Database::EVENT_DOCUMENT_RELATED_UPDATE, 'related-test', function (string $event, Document $related) use (&$reported, &$fired) {
             $reported[$related->getId()] = $related;
-            $this->assertEquals('related_child', $collection->getId());
+            $fired[] = $related->getId();
         });
 
-        $this->assertEqualsCanonicalizing(['child1', 'child2'], \array_keys($reported));
+        // The Database is shared across the suite, so the listener must not outlive a failure.
+        try {
+            // Deleting the parent writes every child, so each one is reported with its
+            // reference already cleared.
+            $database->deleteDocument('related_parent', 'parent1');
 
-        // A child read off the deleted parent carries no 'parent' key at all, so only the
-        // copy the set-null write returned can satisfy both of these.
-        $this->assertArrayHasKey('parent', $reported['child1']->getArrayCopy());
-        $this->assertNull($reported['child1']->getAttribute('parent'));
+            $this->assertEqualsCanonicalizing(['child1', 'child2'], $fired);
+            $this->assertEquals('related_child', $reported['child1']->getCollection());
 
-        // Deleting a child writes nothing to the parent -- the foreign key lived on the
-        // deleted row -- but the parent's relationship changed, so it is still reported.
-        $database->createDocument('related_parent', new Document([
-            '$id' => 'parent2',
-            '$permissions' => $documentPermissions,
-            'children' => ['child1'],
-        ]));
+            // A child read off the deleted parent carries no 'parent' key at all, so only the
+            // copy the set-null write returned can satisfy both of these.
+            $this->assertArrayHasKey('parent', $reported['child1']->getArrayCopy());
+            $this->assertNull($reported['child1']->getAttribute('parent'));
 
-        $reported = [];
-        $database->deleteDocument('related_child', 'child1', function (Document $related) use (&$reported) {
-            $reported[] = $related->getId();
-        });
+            // Deleting a child writes nothing to the parent -- the foreign key lived on the
+            // deleted row -- but the parent's relationship changed, so it is still reported.
+            $database->createDocument('related_parent', new Document([
+                '$id' => 'parent2',
+                '$permissions' => $documentPermissions,
+                'children' => ['child1'],
+            ]));
 
-        $this->assertEquals(['parent2'], $reported);
+            $fired = [];
+            $database->deleteDocument('related_child', 'child1');
 
-        // A cascaded document is gone, so it is not reported as changed.
-        $database->updateRelationship(
-            collection: 'related_parent',
-            id: 'children',
-            onDelete: Database::RELATION_MUTATE_CASCADE,
-        );
+            $this->assertEquals(['parent2'], $fired);
+            $this->assertEquals('related_parent', $reported['parent2']->getCollection());
 
-        $database->createDocument('related_child', new Document([
-            '$id' => 'child3',
-            '$permissions' => $documentPermissions,
-            'parent' => 'parent2',
-        ]));
+            // A cascaded document is gone, so it is not reported as changed.
+            $database->updateRelationship(
+                collection: 'related_parent',
+                id: 'children',
+                onDelete: Database::RELATION_MUTATE_CASCADE,
+            );
 
-        $reported = [];
-        $database->deleteDocument('related_parent', 'parent2', function (Document $related) use (&$reported) {
-            $reported[] = $related->getId();
-        });
+            $database->createDocument('related_child', new Document([
+                '$id' => 'child3',
+                '$permissions' => $documentPermissions,
+                'parent' => 'parent2',
+            ]));
 
-        $this->assertEquals([], $reported);
-        $this->assertTrue($database->getDocument('related_child', 'child3')->isEmpty());
+            $fired = [];
+            $database->deleteDocument('related_parent', 'parent2');
 
-        // A one-way peer exposes no relationship of its own, so clearing its internal
-        // foreign key changes nothing a caller can observe and it is not reported.
-        $database->createCollection('related_oneway', permissions: $collectionPermissions, documentSecurity: true);
+            $this->assertEquals([], $fired);
+            $this->assertTrue($database->getDocument('related_child', 'child3')->isEmpty());
 
-        $database->createRelationship(
-            collection: 'related_parent',
-            relatedCollection: 'related_oneway',
-            type: Database::RELATION_ONE_TO_MANY,
-            twoWay: false,
-            id: 'strays',
-            onDelete: Database::RELATION_MUTATE_SET_NULL,
-        );
+            // A one-way peer exposes no relationship of its own, so clearing its internal
+            // foreign key changes nothing a caller can observe and it is not reported.
+            $database->createCollection('related_oneway', permissions: $collectionPermissions, documentSecurity: true);
 
-        $database->createDocument('related_parent', new Document([
-            '$id' => 'parent3',
-            '$permissions' => $documentPermissions,
-        ]));
+            $database->createRelationship(
+                collection: 'related_parent',
+                relatedCollection: 'related_oneway',
+                type: Database::RELATION_ONE_TO_MANY,
+                twoWay: false,
+                id: 'strays',
+                onDelete: Database::RELATION_MUTATE_SET_NULL,
+            );
 
-        $database->createDocument('related_oneway', new Document([
-            '$id' => 'stray1',
-            '$permissions' => $documentPermissions,
-        ]));
+            $database->createDocument('related_parent', new Document([
+                '$id' => 'parent3',
+                '$permissions' => $documentPermissions,
+            ]));
 
-        $database->updateDocument('related_parent', 'parent3', new Document([
-            'strays' => ['stray1'],
-        ]));
+            $database->createDocument('related_oneway', new Document([
+                '$id' => 'stray1',
+                '$permissions' => $documentPermissions,
+            ]));
 
-        $reported = [];
-        $database->deleteDocument('related_parent', 'parent3', function (Document $related) use (&$reported) {
-            $reported[] = $related->getId();
-        });
+            $database->updateDocument('related_parent', 'parent3', new Document([
+                'strays' => ['stray1'],
+            ]));
 
-        $this->assertEquals([], $reported);
-        $this->assertFalse($database->getDocument('related_oneway', 'stray1')->isEmpty());
+            $fired = [];
+            $database->deleteDocument('related_parent', 'parent3');
+
+            $this->assertEquals([], $fired);
+            $this->assertFalse($database->getDocument('related_oneway', 'stray1')->isEmpty());
+        } finally {
+            $database->on(Database::EVENT_DOCUMENT_RELATED_UPDATE, 'related-test', null);
+        }
 
         $database->deleteCollection('related_parent');
         $database->deleteCollection('related_child');

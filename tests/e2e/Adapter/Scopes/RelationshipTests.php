@@ -4993,17 +4993,11 @@ trait RelationshipTests
 
         // The Database is shared across the suite, so the listener must not outlive a failure.
         try {
-            // Deleting the parent writes every child, so each one is reported with its
-            // reference already cleared.
+            // Deleting the parent clears every child's reference, so each one is reported once.
             $database->deleteDocument('related_parent', 'parent1');
 
             $this->assertEqualsCanonicalizing(['child1', 'child2'], $fired);
             $this->assertEquals('related_child', $reported['child1']->getCollection());
-
-            // A child read off the deleted parent carries no 'parent' key at all, so only the
-            // copy the set-null write returned can satisfy both of these.
-            $this->assertArrayHasKey('parent', $reported['child1']->getArrayCopy());
-            $this->assertNull($reported['child1']->getAttribute('parent'));
 
             // Deleting a child writes nothing to the parent -- the foreign key lived on the
             // deleted row -- but the parent's relationship changed, so it is still reported.

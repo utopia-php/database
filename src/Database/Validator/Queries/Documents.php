@@ -59,6 +59,12 @@ class Documents extends IndexedQueries
             'type' => Database::VAR_DATETIME,
             'array' => false,
         ]);
+        $attributes[] = new Document([
+            '$id' => '$permissions',
+            'key' => '$permissions',
+            'type' => Database::VAR_STRING,
+            'array' => true,
+        ]);
 
         $validators = [
             new Limit(),

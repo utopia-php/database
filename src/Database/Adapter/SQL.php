@@ -3275,6 +3275,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * @param  array<string>  $roles
+     */
+    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins): PermissionFilter
+    {
+        return $this->newPermissionHook($collection, $roles, $type, $documentColumn);
+    }
+
+    /**
      * Re-register the write hooks this adapter owns.
      *
      * Only Tenancy, and only while shared tables are active. It takes each
@@ -4572,11 +4580,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     continue;
                 }
 
-                $permissionHook = $this->newPermissionHook(
+                $permissionHook = $this->newJoinPermissionHook(
                     $this->filter($join['table']),
                     $roles,
                     $forPermission->value,
-                    $join['alias'].'.'.Storage::UID
+                    $join['alias'].'.'.Storage::UID,
+                    \count($joinTablePrefixes),
                 );
                 if ($preserving) {
                     $permissionConditions[$join['alias']] = $permissionHook->filter($join['alias']);

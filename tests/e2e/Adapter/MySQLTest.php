@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
+use Tests\E2E\Adapter\Scopes\MySQLJoinPlanTests;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MySQL;
@@ -14,6 +15,8 @@ use Utopia\Database\PDO;
 
 class MySQLTest extends Base
 {
+    use MySQLJoinPlanTests;
+
     public static ?Database $database = null;
 
     protected static ?PDO $pdo = null;

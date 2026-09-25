@@ -359,5 +359,5 @@ not change anything for an upgrade from 7.x.
 
 - The test suite fails on PHP warnings, notices and deprecations, on risky tests, and on PHPUnit's own notices and
   deprecations, raised in `src/` or `tests/`.
-- `composer.json` declares `8.0.x-dev` as the branch alias of `dev-main`, so `"utopia-php/database": "8.*"` resolves
+- `composer.json` declares `8.0.x-dev` as the branch alias of `dev-main`, so `"utopia-php/database": "^8.0"` resolves
   before 8.0.0 is tagged (with `"minimum-stability": "dev"` and `"prefer-stable": true` in the root package).

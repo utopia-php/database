@@ -334,6 +334,9 @@ not change anything for an upgrade from 7.x.
   - On SQLite, pattern queries match `_`, `%` and `\` literally again, and index names use the filtered tenant again.
   - Batch `createAttributes()` works for spatial attributes on MariaDB, required spatial attributes on PostgreSQL
     are nullable columns again, and composite indexes keep the caller's column order.
+  - On MySQL, a read with five or more joins no longer spends seconds choosing a join order: the joined collections'
+    document permission checks stay subqueries instead of each joining the optimizer's search, which built about ten
+    million partial plans for eight checked joins. Reads with up to four joins are planned as before.
 - **Pools:**
   - `ReadWritePool` serves reads from the primary after a write or transaction commits, routes locking reads,
     `rawQuery()` and the reads that decide a write (the batch of `updateDocuments()` and `deleteDocuments()`, the

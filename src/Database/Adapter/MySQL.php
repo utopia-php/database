@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Storage;
@@ -125,6 +126,21 @@ class MySQL extends MariaDB
     protected function createBuilder(): SQLBuilder
     {
         return new MySQLBuilder();
+    }
+
+    /**
+     * MySQL merges each permission check into the join as a semi-join, one more table for its join
+     * order search, which grows about tenfold with each table past ten. From this many joins every
+     * joined table's check stays a subquery.
+     */
+    private const int LARGE_JOIN = 5;
+
+    #[\Override]
+    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins): PermissionFilter
+    {
+        $hook = parent::newJoinPermissionHook($collection, $roles, $type, $documentColumn, $joins);
+
+        return $joins >= self::LARGE_JOIN ? $hook->withoutSemiJoin() : $hook;
     }
 
     /**

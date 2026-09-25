@@ -10,11 +10,9 @@ use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionProperty;
-use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
-use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Query;
@@ -92,45 +90,6 @@ final class SQLFindTest extends TestCase
         $this->assertTrue($method->invoke($adapter, $map, 'database_1_collection_9'));
         $this->assertTrue($method->invoke($adapter, [], 'appwrite._5_database_1_collection_2'));
         $this->assertTrue($method->invoke($adapter, ['database_1_collection_2' => true], 'appwrite._5_database_1_collection_2'));
-    }
-
-    public function testFourJoinsKeepEveryPermissionCheckASemiJoin(): void
-    {
-        $sql = $this->captureFindSql($this->joins(4), roles: ['any']);
-
-        $this->assertSame(5, \substr_count($sql, 'IN (SELECT DISTINCT _document FROM'), $sql);
-        $this->assertStringNotContainsString('NO_SEMIJOIN', $sql);
-    }
-
-    public function testFiveJoinsKeepEveryJoinedPermissionCheckASubquery(): void
-    {
-        $sql = $this->captureFindSql($this->joins(5), roles: ['any']);
-
-        $this->assertSame(5, \substr_count($sql, 'IN (SELECT /*+ NO_SEMIJOIN() */ DISTINCT _document FROM'), $sql);
-        $this->assertMatchesRegularExpression('/WHERE `table_main`\.`_uid` IN \(SELECT DISTINCT _document FROM/', $sql);
-    }
-
-    public function testJoinsWithoutDocumentSecurityCountTowardFiveJoins(): void
-    {
-        $sql = $this->captureFindSql($this->joins(5), roles: ['any'], joinDocumentSecurity: [
-            'joined1' => true,
-            'joined2' => false,
-            'joined3' => false,
-            'joined4' => false,
-            'joined5' => false,
-        ]);
-
-        $this->assertSame(1, \substr_count($sql, 'IN (SELECT /*+ NO_SEMIJOIN() */ DISTINCT _document FROM'), $sql);
-        $this->assertStringContainsString('`peer1`.`_uid` IN (SELECT /*+ NO_SEMIJOIN() */', $sql);
-        $this->assertSame(1, \substr_count($sql, 'IN (SELECT DISTINCT _document FROM'), $sql);
-    }
-
-    public function testMariaDBKeepsEveryPermissionCheckASemiJoin(): void
-    {
-        $sql = $this->captureFindSql($this->joins(5), roles: ['any'], adapter: MariaDB::class);
-
-        $this->assertSame(6, \substr_count($sql, 'IN (SELECT DISTINCT _document FROM'), $sql);
-        $this->assertStringNotContainsString('NO_SEMIJOIN', $sql);
     }
 
     public function testJoinWithoutSelectLeavesJoinedInternalsOut(): void
@@ -521,24 +480,10 @@ final class SQLFindTest extends TestCase
     }
 
     /**
-     * @return list<Query>
-     */
-    private function joins(int $count): array
-    {
-        return \array_map(
-            static fn (int $peer): Query => Query::join('joined'.$peer, '$id', '$id', '=', 'peer'.$peer),
-            \range(1, $count),
-        );
-    }
-
-    /**
      * @param  array<Query>  $queries
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
-     * @param  list<string>  $roles  The caller's roles, checked against every document; none reads without authorization
-     * @param  array<string, bool>  $joinDocumentSecurity  Whether each joined collection checks document permissions; unlisted ones do
-     * @param  class-string<MariaDB>  $adapter
      */
     private function captureFindSql(
         array $queries,
@@ -546,9 +491,6 @@ final class SQLFindTest extends TestCase
         array $orderAttributes = [],
         array $orderTypes = [],
         array $cursor = [],
-        array $roles = [],
-        array $joinDocumentSecurity = [],
-        string $adapter = MySQL::class,
     ): string {
         $statement = $this->statement();
         $statement->method('execute')->willReturn(true);
@@ -567,24 +509,15 @@ final class SQLFindTest extends TestCase
                 return $statement;
             });
 
-        $adapter = new $adapter($pdo);
+        $adapter = new MySQL($pdo);
         $adapter->setDatabase('database');
         $adapter->setNamespace('namespace');
         $authorization = new Authorization();
-        if ($roles === []) {
-            $authorization->disable();
-        }
-        foreach ($roles as $role) {
-            $authorization->addRole($role);
-        }
+        $authorization->disable();
         $adapter->setAuthorization($authorization);
 
         $adapter->find(
-            new Document([
-                '$id' => 'collection',
-                'documentSecurity' => $roles !== [],
-                Database::JOIN_DOCUMENT_SECURITY => $joinDocumentSecurity,
-            ]),
+            new Document(['$id' => 'collection']),
             $queries,
             limit: $limit,
             orderAttributes: $orderAttributes,

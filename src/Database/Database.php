@@ -6299,6 +6299,14 @@ class Database
         $related = $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId));
 
         if ($related->isEmpty() && $this->checkRelationshipsExist) {
+            $exists = $this->authorization->skip(
+                fn () => $this->skipRelationships(fn () => $this->getDocument($relatedCollection->getId(), $relationId))
+            );
+            if (!$exists->isEmpty()) {
+                throw new AuthorizationException('Missing read permission for the related document.');
+            }
+
+            // A nested write may reference its parent before it is inserted.
             return;
         }
 

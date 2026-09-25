@@ -7998,6 +7998,12 @@ class Database
      * whole document, and upsertDocuments() hands it a pre-image read with permissions
      * skipped behind an UPDATE check.
      *
+     * How the delete reached a peer decides the shape it arrives in. One the delete wrote
+     * is the copy that write returned, carrying the key it cleared. One it did not write
+     * is the copy read off the deleted document, and relationship population has already
+     * stripped the back-reference from it, so that key is absent rather than null. Read a
+     * peer back if you need more of it than its identity.
+     *
      * @param string $collection
      * @param string $id
      * @param (callable(Document $related, Document $collection): void)|null $onRelated

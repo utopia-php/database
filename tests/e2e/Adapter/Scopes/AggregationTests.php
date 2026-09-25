@@ -1,0 +1,2652 @@
+<?php
+
+namespace Tests\E2E\Adapter\Scopes;
+
+use PHPUnit\Framework\Attributes\DataProvider;
+use Throwable;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\MySQL;
+use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
+use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+
+trait AggregationTests
+{
+    /** @var array<string, bool> */
+    private static array $createdProductCollections = [];
+    private static string $aggWorkerSuffix = '';
+
+    private function getAggSuffix(): string
+    {
+        if (self::$aggWorkerSuffix === '') {
+            self::$aggWorkerSuffix = '_' . substr(uniqid(), -6);
+        }
+
+        return self::$aggWorkerSuffix;
+    }
+
+    private function numericAttribute(Document $document, string $key): float
+    {
+        $value = $document->getAttribute($key);
+        $this->assertIsNumeric($value);
+
+        return (float) $value;
+    }
+
+    private function intAttribute(Document $document, string $key): int
+    {
+        $value = $document->getAttribute($key);
+        $this->assertIsNumeric($value);
+
+        return (int) $value;
+    }
+
+    private function createProducts(Database $database, string $collection = 'agg_products'): void
+    {
+        if (isset(self::$createdProductCollections[$collection])) {
+            return;
+        }
+
+        if ($database->exists($database->getDatabase(), $collection)) {
+            self::$createdProductCollections[$collection] = true;
+            return;
+        }
+
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'category', size: 50, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'price', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'stock', required: true));
+        $database->createAttribute($collection, Attribute::double(key: 'rating', default: 0.0));
+
+        $products = [
+            ['$id' => 'laptop', 'name' => 'Laptop', 'category' => 'electronics', 'price' => 1200, 'stock' => 50, 'rating' => 4.5],
+            ['$id' => 'phone', 'name' => 'Phone', 'category' => 'electronics', 'price' => 800, 'stock' => 100, 'rating' => 4.2],
+            ['$id' => 'tablet', 'name' => 'Tablet', 'category' => 'electronics', 'price' => 500, 'stock' => 75, 'rating' => 3.8],
+            ['$id' => 'shirt', 'name' => 'Shirt', 'category' => 'clothing', 'price' => 30, 'stock' => 200, 'rating' => 4.0],
+            ['$id' => 'pants', 'name' => 'Pants', 'category' => 'clothing', 'price' => 50, 'stock' => 150, 'rating' => 3.5],
+            ['$id' => 'jacket', 'name' => 'Jacket', 'category' => 'clothing', 'price' => 120, 'stock' => 80, 'rating' => 4.7],
+            ['$id' => 'novel', 'name' => 'Novel', 'category' => 'books', 'price' => 15, 'stock' => 300, 'rating' => 4.8],
+            ['$id' => 'textbook', 'name' => 'Textbook', 'category' => 'books', 'price' => 60, 'stock' => 40, 'rating' => 3.2],
+            ['$id' => 'comic', 'name' => 'Comic', 'category' => 'books', 'price' => 10, 'stock' => 500, 'rating' => 4.1],
+        ];
+
+        foreach ($products as $product) {
+            $database->createDocument($collection, new Document(array_merge($product, [
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ])));
+        }
+    }
+
+    private function createOrders(Database $database, string $collection = 'agg_orders'): void
+    {
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'product_uid', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'customer_uid', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'quantity', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'total', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'status', size: 20, required: true));
+
+        $orders = [
+            ['$id' => 'ord1', 'product_uid' => 'laptop', 'customer_uid' => 'alice', 'quantity' => 1, 'total' => 1200, 'status' => 'completed'],
+            ['$id' => 'ord2', 'product_uid' => 'phone', 'customer_uid' => 'alice', 'quantity' => 2, 'total' => 1600, 'status' => 'completed'],
+            ['$id' => 'ord3', 'product_uid' => 'shirt', 'customer_uid' => 'alice', 'quantity' => 3, 'total' => 90, 'status' => 'pending'],
+            ['$id' => 'ord4', 'product_uid' => 'laptop', 'customer_uid' => 'bob', 'quantity' => 1, 'total' => 1200, 'status' => 'completed'],
+            ['$id' => 'ord5', 'product_uid' => 'novel', 'customer_uid' => 'bob', 'quantity' => 5, 'total' => 75, 'status' => 'completed'],
+            ['$id' => 'ord6', 'product_uid' => 'tablet', 'customer_uid' => 'charlie', 'quantity' => 1, 'total' => 500, 'status' => 'cancelled'],
+            ['$id' => 'ord7', 'product_uid' => 'jacket', 'customer_uid' => 'charlie', 'quantity' => 2, 'total' => 240, 'status' => 'completed'],
+            ['$id' => 'ord8', 'product_uid' => 'phone', 'customer_uid' => 'diana', 'quantity' => 1, 'total' => 800, 'status' => 'pending'],
+            ['$id' => 'ord9', 'product_uid' => 'pants', 'customer_uid' => 'diana', 'quantity' => 4, 'total' => 200, 'status' => 'completed'],
+            ['$id' => 'ord10', 'product_uid' => 'comic', 'customer_uid' => 'diana', 'quantity' => 10, 'total' => 100, 'status' => 'completed'],
+        ];
+
+        foreach ($orders as $order) {
+            $database->createDocument($collection, new Document(array_merge($order, [
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ])));
+        }
+    }
+
+    private function createCustomers(Database $database, string $collection = 'agg_customers'): void
+    {
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 100, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'email', size: 200, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'country', size: 50, required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'tier', size: 20, required: true));
+
+        $customers = [
+            ['$id' => 'alice', 'name' => 'Alice', 'email' => 'alice@test.com', 'country' => 'US', 'tier' => 'premium'],
+            ['$id' => 'bob', 'name' => 'Bob', 'email' => 'bob@test.com', 'country' => 'US', 'tier' => 'basic'],
+            ['$id' => 'charlie', 'name' => 'Charlie', 'email' => 'charlie@test.com', 'country' => 'UK', 'tier' => 'vip'],
+            ['$id' => 'diana', 'name' => 'Diana', 'email' => 'diana@test.com', 'country' => 'UK', 'tier' => 'premium'],
+            ['$id' => 'eve', 'name' => 'Eve', 'email' => 'eve@test.com', 'country' => 'DE', 'tier' => 'basic'],
+        ];
+
+        foreach ($customers as $customer) {
+            $database->createDocument($collection, new Document(array_merge($customer, [
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ])));
+        }
+    }
+
+    private function createReviews(Database $database, string $collection = 'agg_reviews'): void
+    {
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'product_uid', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'customer_uid', required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'score', required: true));
+        $database->createAttribute($collection, Attribute::string(key: 'comment', size: 500, default: ''));
+
+        $reviews = [
+            ['product_uid' => 'laptop', 'customer_uid' => 'alice', 'score' => 5, 'comment' => 'Excellent'],
+            ['product_uid' => 'laptop', 'customer_uid' => 'bob', 'score' => 4, 'comment' => 'Good'],
+            ['product_uid' => 'laptop', 'customer_uid' => 'charlie', 'score' => 3, 'comment' => 'Average'],
+            ['product_uid' => 'phone', 'customer_uid' => 'alice', 'score' => 4, 'comment' => 'Nice'],
+            ['product_uid' => 'phone', 'customer_uid' => 'diana', 'score' => 5, 'comment' => 'Great'],
+            ['product_uid' => 'shirt', 'customer_uid' => 'bob', 'score' => 2, 'comment' => 'Poor fit'],
+            ['product_uid' => 'shirt', 'customer_uid' => 'charlie', 'score' => 4, 'comment' => 'Nice fabric'],
+            ['product_uid' => 'novel', 'customer_uid' => 'diana', 'score' => 5, 'comment' => 'Loved it'],
+            ['product_uid' => 'novel', 'customer_uid' => 'alice', 'score' => 5, 'comment' => 'Must read'],
+            ['product_uid' => 'novel', 'customer_uid' => 'eve', 'score' => 4, 'comment' => 'Good story'],
+            ['product_uid' => 'jacket', 'customer_uid' => 'charlie', 'score' => 5, 'comment' => 'Perfect'],
+            ['product_uid' => 'textbook', 'customer_uid' => 'eve', 'score' => 1, 'comment' => 'Boring'],
+        ];
+
+        foreach ($reviews as $review) {
+            $database->createDocument($collection, new Document(array_merge($review, [
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ])));
+        }
+    }
+
+    /**
+     * @param  array<string>  $collections
+     */
+    private function cleanupAggCollections(Database $database, array $collections): void
+    {
+        foreach ($collections as $col) {
+            if ($database->exists($database->getDatabase(), $col)) {
+                $database->deleteCollection($col);
+            }
+        }
+    }
+
+    public function testCountAll(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'cnt_all');
+        $results = $database->find('cnt_all', [Query::count('*', 'total')]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(9, $results[0]->getAttribute('total'));
+        $database->deleteCollection('cnt_all');
+    }
+
+    public function testCountWithAlias(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'cnt_alias');
+        $results = $database->find('cnt_alias', [Query::count('*', 'num_products')]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(9, $results[0]->getAttribute('num_products'));
+        $database->deleteCollection('cnt_alias');
+    }
+
+    public function testCountWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'cnt_filter');
+
+        $results = $database->find('cnt_filter', [
+            Query::equal('category', ['electronics']),
+            Query::count('*', 'total'),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(3, $results[0]->getAttribute('total'));
+
+        $results = $database->find('cnt_filter', [
+            Query::equal('category', ['clothing']),
+            Query::count('*', 'total'),
+        ]);
+        $this->assertEquals(3, $results[0]->getAttribute('total'));
+
+        $results = $database->find('cnt_filter', [
+            Query::greaterThan('price', 100),
+            Query::count('*', 'total'),
+        ]);
+        $this->assertEquals(4, $results[0]->getAttribute('total'));
+
+        $database->deleteCollection('cnt_filter');
+    }
+
+    public function testCountEmptyCollection(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'cnt_empty';
+        if ($database->exists($database->getDatabase(), $col)) {
+            $database->deleteCollection($col);
+        }
+        $database->createCollection(new Collection(id: $col, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($col, Attribute::integer(key: 'value', required: true));
+
+        $results = $database->find($col, [Query::count('*', 'total')]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(0, $results[0]->getAttribute('total'));
+
+        $database->deleteCollection($col);
+    }
+
+    public function testCountWithMultipleFilters(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'cnt_multi');
+
+        $results = $database->find('cnt_multi', [
+            Query::equal('category', ['electronics']),
+            Query::greaterThan('price', 600),
+            Query::count('*', 'total'),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(2, $results[0]->getAttribute('total'));
+
+        $database->deleteCollection('cnt_multi');
+    }
+
+    public function testCountDistinct(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'cnt_distinct');
+        $results = $database->find('cnt_distinct', [Query::countDistinct('category', 'unique_cats')]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(3, $results[0]->getAttribute('unique_cats'));
+        $database->deleteCollection('cnt_distinct');
+    }
+
+    public function testCountDistinctWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'cnt_dist_f');
+        $results = $database->find('cnt_dist_f', [
+            Query::greaterThan('price', 50),
+            Query::countDistinct('category', 'unique_cats'),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(3, $results[0]->getAttribute('unique_cats'));
+        $database->deleteCollection('cnt_dist_f');
+    }
+
+    public function testSumAll(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'sum_all');
+        $results = $database->find('sum_all', [Query::sum('price', 'total_price')]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(2785, $results[0]->getAttribute('total_price'));
+        $database->deleteCollection('sum_all');
+    }
+
+    public function testSumWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'sum_filt');
+        $results = $database->find('sum_filt', [
+            Query::equal('category', ['electronics']),
+            Query::sum('price', 'total'),
+        ]);
+        $this->assertEquals(2500, $results[0]->getAttribute('total'));
+        $database->deleteCollection('sum_filt');
+    }
+
+    public function testSumEmptyResult(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'sum_empty');
+        $results = $database->find('sum_empty', [
+            Query::equal('category', ['nonexistent']),
+            Query::sum('price', 'total'),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertNull($results[0]->getAttribute('total'));
+        $database->deleteCollection('sum_empty');
+    }
+
+    public function testSumOfStock(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'sum_stock');
+        $results = $database->find('sum_stock', [Query::sum('stock', 'total_stock')]);
+        $this->assertEquals(1495, $results[0]->getAttribute('total_stock'));
+        $database->deleteCollection('sum_stock');
+    }
+
+    public function testAvgAll(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'avg_all');
+        $results = $database->find('avg_all', [Query::avg('price', 'avg_price')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(309.44, $this->numericAttribute($results[0], 'avg_price'), 1.0);
+        $database->deleteCollection('avg_all');
+    }
+
+    public function testAvgWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'avg_filt');
+        $results = $database->find('avg_filt', [
+            Query::equal('category', ['electronics']),
+            Query::avg('price', 'avg_price'),
+        ]);
+        $this->assertEqualsWithDelta(833.33, $this->numericAttribute($results[0], 'avg_price'), 1.0);
+        $database->deleteCollection('avg_filt');
+    }
+
+    public function testAvgOfRating(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'avg_rating');
+        $results = $database->find('avg_rating', [Query::avg('rating', 'avg_rating')]);
+        $this->assertEqualsWithDelta(4.09, $this->numericAttribute($results[0], 'avg_rating'), 0.1);
+        $database->deleteCollection('avg_rating');
+    }
+
+    public function testMinAll(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'min_all');
+        $results = $database->find('min_all', [Query::min('price', 'min_price')]);
+        $this->assertEquals(10, $results[0]->getAttribute('min_price'));
+        $database->deleteCollection('min_all');
+    }
+
+    public function testMinWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'min_filt');
+        $results = $database->find('min_filt', [
+            Query::equal('category', ['electronics']),
+            Query::min('price', 'cheapest'),
+        ]);
+        $this->assertEquals(500, $results[0]->getAttribute('cheapest'));
+        $database->deleteCollection('min_filt');
+    }
+
+    public function testMaxAll(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'max_all');
+        $results = $database->find('max_all', [Query::max('price', 'max_price')]);
+        $this->assertEquals(1200, $results[0]->getAttribute('max_price'));
+        $database->deleteCollection('max_all');
+    }
+
+    public function testMaxWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'max_filt');
+        $results = $database->find('max_filt', [
+            Query::equal('category', ['books']),
+            Query::max('price', 'expensive'),
+        ]);
+        $this->assertEquals(60, $results[0]->getAttribute('expensive'));
+        $database->deleteCollection('max_filt');
+    }
+
+    public function testMinMaxTogether(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'minmax');
+        $results = $database->find('minmax', [
+            Query::min('price', 'cheapest'),
+            Query::max('price', 'priciest'),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertEquals(10, $results[0]->getAttribute('cheapest'));
+        $this->assertEquals(1200, $results[0]->getAttribute('priciest'));
+        $database->deleteCollection('minmax');
+    }
+
+    public function testMultipleAggregationsTogether(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'multi_agg');
+        $results = $database->find('multi_agg', [
+            Query::count('*', 'total_count'),
+            Query::sum('price', 'total_price'),
+            Query::avg('price', 'avg_price'),
+            Query::min('price', 'min_price'),
+            Query::max('price', 'max_price'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertEquals(9, $results[0]->getAttribute('total_count'));
+        $this->assertEquals(2785, $results[0]->getAttribute('total_price'));
+        $this->assertEqualsWithDelta(309.44, $this->numericAttribute($results[0], 'avg_price'), 1.0);
+        $this->assertEquals(10, $results[0]->getAttribute('min_price'));
+        $this->assertEquals(1200, $results[0]->getAttribute('max_price'));
+        $database->deleteCollection('multi_agg');
+    }
+
+    public function testMultipleAggregationsWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'multi_agg_f');
+        $results = $database->find('multi_agg_f', [
+            Query::equal('category', ['clothing']),
+            Query::count('*', 'cnt'),
+            Query::sum('price', 'total'),
+            Query::avg('stock', 'avg_stock'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertEquals(3, $results[0]->getAttribute('cnt'));
+        $this->assertEquals(200, $results[0]->getAttribute('total'));
+        $this->assertEqualsWithDelta(143.33, $this->numericAttribute($results[0], 'avg_stock'), 1.0);
+        $database->deleteCollection('multi_agg_f');
+    }
+
+    public function testGroupBySingleColumn(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'grp_single');
+        $results = $database->find('grp_single', [
+            Query::count('*', 'cnt'),
+            Query::groupBy(['category']),
+        ]);
+
+        $this->assertCount(3, $results);
+        $mapped = [];
+        foreach ($results as $doc) {
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
+        }
+        $this->assertEquals(3, $mapped['electronics']->getAttribute('cnt'));
+        $this->assertEquals(3, $mapped['clothing']->getAttribute('cnt'));
+        $this->assertEquals(3, $mapped['books']->getAttribute('cnt'));
+        $database->deleteCollection('grp_single');
+    }
+
+    public function testGroupByWithSum(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'grp_sum');
+        $results = $database->find('grp_sum', [
+            Query::sum('price', 'total_price'),
+            Query::groupBy(['category']),
+        ]);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
+        }
+        $this->assertEquals(2500, $mapped['electronics']->getAttribute('total_price'));
+        $this->assertEquals(200, $mapped['clothing']->getAttribute('total_price'));
+        $this->assertEquals(85, $mapped['books']->getAttribute('total_price'));
+        $database->deleteCollection('grp_sum');
+    }
+
+    public function testGroupByWithAvg(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'grp_avg');
+        $results = $database->find('grp_avg', [
+            Query::avg('price', 'avg_price'),
+            Query::groupBy(['category']),
+        ]);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $value = $doc->getAttribute('avg_price');
+            $this->assertIsNumeric($value);
+            $mapped[$category] = (float) $value;
+        }
+        $this->assertEqualsWithDelta(833.33, $mapped['electronics'], 1.0);
+        $this->assertEqualsWithDelta(66.67, $mapped['clothing'], 1.0);
+        $this->assertEqualsWithDelta(28.33, $mapped['books'], 1.0);
+        $database->deleteCollection('grp_avg');
+    }
+
+    public function testGroupByWithMinMax(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'grp_minmax');
+        $results = $database->find('grp_minmax', [
+            Query::min('price', 'cheapest'),
+            Query::max('price', 'priciest'),
+            Query::groupBy(['category']),
+        ]);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
+        }
+        $this->assertEquals(500, $mapped['electronics']->getAttribute('cheapest'));
+        $this->assertEquals(1200, $mapped['electronics']->getAttribute('priciest'));
+        $this->assertEquals(30, $mapped['clothing']->getAttribute('cheapest'));
+        $this->assertEquals(120, $mapped['clothing']->getAttribute('priciest'));
+        $this->assertEquals(10, $mapped['books']->getAttribute('cheapest'));
+        $this->assertEquals(60, $mapped['books']->getAttribute('priciest'));
+        $database->deleteCollection('grp_minmax');
+    }
+
+    public function testGroupByWithMultipleAggregations(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'grp_multi');
+        $results = $database->find('grp_multi', [
+            Query::count('*', 'cnt'),
+            Query::sum('price', 'total'),
+            Query::avg('rating', 'avg_rating'),
+            Query::min('stock', 'min_stock'),
+            Query::max('stock', 'max_stock'),
+            Query::groupBy(['category']),
+        ]);
+
+        $this->assertCount(3, $results);
+        $mapped = [];
+        foreach ($results as $doc) {
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
+        }
+
+        $this->assertEquals(3, $mapped['electronics']->getAttribute('cnt'));
+        $this->assertEquals(2500, $mapped['electronics']->getAttribute('total'));
+        $this->assertEquals(50, $mapped['electronics']->getAttribute('min_stock'));
+        $this->assertEquals(100, $mapped['electronics']->getAttribute('max_stock'));
+
+        $this->assertEquals(3, $mapped['books']->getAttribute('cnt'));
+        $this->assertEquals(85, $mapped['books']->getAttribute('total'));
+        $this->assertEquals(40, $mapped['books']->getAttribute('min_stock'));
+        $this->assertEquals(500, $mapped['books']->getAttribute('max_stock'));
+
+        $database->deleteCollection('grp_multi');
+    }
+
+    public function testGroupByWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'grp_filt');
+        $results = $database->find('grp_filt', [
+            Query::greaterThan('price', 50),
+            Query::count('*', 'cnt'),
+            Query::groupBy(['category']),
+        ]);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $category = $doc->getAttribute('category');
+            $this->assertIsString($category);
+            $mapped[$category] = $doc;
+        }
+        $this->assertEquals(3, $mapped['electronics']->getAttribute('cnt'));
+        $this->assertEquals(1, $mapped['clothing']->getAttribute('cnt'));
+        $this->assertEquals(1, $mapped['books']->getAttribute('cnt'));
+        $database->deleteCollection('grp_filt');
+    }
+
+    public function testGroupByOrdersStatus(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createOrders($database, 'grp_status');
+        $results = $database->find('grp_status', [
+            Query::count('*', 'cnt'),
+            Query::sum('total', 'revenue'),
+            Query::groupBy(['status']),
+        ]);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $status = $doc->getAttribute('status');
+            $this->assertIsString($status);
+            $mapped[$status] = $doc;
+        }
+        $this->assertEquals(7, $mapped['completed']->getAttribute('cnt'));
+        $this->assertEquals(2, $mapped['pending']->getAttribute('cnt'));
+        $this->assertEquals(1, $mapped['cancelled']->getAttribute('cnt'));
+        $database->deleteCollection('grp_status');
+    }
+
+    public function testGroupByCustomerOrders(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createOrders($database, 'grp_cust');
+        $results = $database->find('grp_cust', [
+            Query::count('*', 'order_count'),
+            Query::sum('total', 'total_spent'),
+            Query::avg('total', 'avg_order'),
+            Query::groupBy(['customer_uid']),
+        ]);
+
+        $this->assertCount(4, $results);
+        $mapped = [];
+        foreach ($results as $doc) {
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
+        }
+        $this->assertEquals(3, $mapped['alice']->getAttribute('order_count'));
+        $this->assertEquals(2890, $mapped['alice']->getAttribute('total_spent'));
+        $this->assertEquals(2, $mapped['bob']->getAttribute('order_count'));
+        $this->assertEquals(1275, $mapped['bob']->getAttribute('total_spent'));
+        $database->deleteCollection('grp_cust');
+    }
+
+    public function testHavingGreaterThan(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'having_gt');
+        $results = $database->find('having_gt', [
+            Query::sum('price', 'total_price'),
+            Query::groupBy(['category']),
+            Query::having([Query::greaterThan('total_price', 100)]),
+        ]);
+
+        $this->assertCount(2, $results);
+        $categories = array_map(fn ($d) => $d->getAttribute('category'), $results);
+        $this->assertContains('electronics', $categories);
+        $this->assertContains('clothing', $categories);
+        $this->assertNotContains('books', $categories);
+        $database->deleteCollection('having_gt');
+    }
+
+    public function testHavingLessThan(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'having_lt');
+        $results = $database->find('having_lt', [
+            Query::count('*', 'cnt'),
+            Query::sum('price', 'total'),
+            Query::groupBy(['category']),
+            Query::having([Query::lessThan('total', 500)]),
+        ]);
+
+        $this->assertCount(2, $results);
+        $categories = array_map(fn ($d) => $d->getAttribute('category'), $results);
+        $this->assertContains('clothing', $categories);
+        $this->assertContains('books', $categories);
+        $database->deleteCollection('having_lt');
+    }
+
+    public function testHavingWithCount(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createReviews($database, 'having_cnt');
+        $results = $database->find('having_cnt', [
+            Query::count('*', 'review_count'),
+            Query::groupBy(['product_uid']),
+            Query::having([Query::greaterThanEqual('review_count', 3)]),
+        ]);
+
+        $productIds = array_map(fn ($d) => $d->getAttribute('product_uid'), $results);
+        $this->assertContains('laptop', $productIds);
+        $this->assertContains('novel', $productIds);
+        $this->assertNotContains('jacket', $productIds);
+        $database->deleteCollection('having_cnt');
+    }
+
+    public function testInnerJoinBasic(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createOrders($database, 'ij_orders');
+        $this->createCustomers($database, 'ij_customers');
+
+        $results = $database->find('ij_orders', [
+            Query::join('ij_customers', 'customer_uid', '$id'),
+            Query::count('*', 'total'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertEquals(10, $results[0]->getAttribute('total'));
+
+        $this->cleanupAggCollections($database, ['ij_orders', 'ij_customers']);
+    }
+
+    public function testInnerJoinWithGroupBy(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createOrders($database, 'ij_grp_o');
+        $this->createCustomers($database, 'ij_grp_c');
+
+        $results = $database->find('ij_grp_o', [
+            Query::join('ij_grp_c', 'customer_uid', '$id'),
+            Query::sum('total', 'total_spent'),
+            Query::count('*', 'order_count'),
+            Query::groupBy(['customer_uid']),
+        ]);
+
+        $this->assertCount(4, $results);
+        $mapped = [];
+        foreach ($results as $doc) {
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
+        }
+        $this->assertEquals(2890, $mapped['alice']->getAttribute('total_spent'));
+        $this->assertEquals(3, $mapped['alice']->getAttribute('order_count'));
+        $this->assertEquals(1275, $mapped['bob']->getAttribute('total_spent'));
+        $this->assertEquals(2, $mapped['bob']->getAttribute('order_count'));
+
+        $this->cleanupAggCollections($database, ['ij_grp_o', 'ij_grp_c']);
+    }
+
+    public function testInnerJoinWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createOrders($database, 'ij_filt_o');
+        $this->createCustomers($database, 'ij_filt_c');
+
+        $results = $database->find('ij_filt_o', [
+            Query::join('ij_filt_c', 'customer_uid', '$id'),
+            Query::equal('status', ['completed']),
+            Query::sum('total', 'revenue'),
+            Query::groupBy(['customer_uid']),
+        ]);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
+        }
+        $this->assertEquals(2800, $mapped['alice']->getAttribute('revenue'));
+        $this->assertEquals(1275, $mapped['bob']->getAttribute('revenue'));
+        $this->assertEquals(240, $mapped['charlie']->getAttribute('revenue'));
+        $this->assertEquals(300, $mapped['diana']->getAttribute('revenue'));
+
+        $this->cleanupAggCollections($database, ['ij_filt_o', 'ij_filt_c']);
+    }
+
+    public function testInnerJoinWithHaving(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createOrders($database, 'ij_hav_o');
+        $this->createCustomers($database, 'ij_hav_c');
+
+        $results = $database->find('ij_hav_o', [
+            Query::join('ij_hav_c', 'customer_uid', '$id'),
+            Query::sum('total', 'total_spent'),
+            Query::groupBy(['customer_uid']),
+            Query::having([Query::greaterThan('total_spent', 1000)]),
+        ]);
+
+        $this->assertCount(3, $results);
+        $customerIds = array_map(fn ($d) => $d->getAttribute('customer_uid'), $results);
+        $this->assertContains('alice', $customerIds);
+        $this->assertContains('bob', $customerIds);
+        $this->assertContains('diana', $customerIds);
+
+        $this->cleanupAggCollections($database, ['ij_hav_o', 'ij_hav_c']);
+    }
+
+    public function testInnerJoinProductReviewStats(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'ij_prs_p');
+        $this->createReviews($database, 'ij_prs_r');
+
+        $results = $database->find('ij_prs_p', [
+            Query::join('ij_prs_r', '$id', 'product_uid'),
+            Query::count('*', 'review_count'),
+            Query::avg('score', 'avg_score'),
+            Query::groupBy(['name']),
+        ]);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
+        }
+
+        $this->assertEquals(3, $mapped['Laptop']->getAttribute('review_count'));
+        $this->assertEqualsWithDelta(4.0, $this->numericAttribute($mapped['Laptop'], 'avg_score'), 0.1);
+        $this->assertEquals(3, $mapped['Novel']->getAttribute('review_count'));
+        $this->assertEqualsWithDelta(4.67, $this->numericAttribute($mapped['Novel'], 'avg_score'), 0.1);
+
+        $this->cleanupAggCollections($database, ['ij_prs_p', 'ij_prs_r']);
+    }
+
+    public function testLeftJoinBasic(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'lj_basic_p');
+        $this->createReviews($database, 'lj_basic_r');
+
+        $results = $database->find('lj_basic_p', [
+            Query::leftJoin('lj_basic_r', '$id', 'product_uid'),
+            Query::count('*', 'review_count'),
+            Query::groupBy(['name']),
+        ]);
+
+        $this->assertCount(9, $results);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
+        }
+
+        $this->assertEquals(3, $mapped['Laptop']->getAttribute('review_count'));
+        $this->assertEquals(2, $mapped['Phone']->getAttribute('review_count'));
+        $this->assertEquals(1, $mapped['Tablet']->getAttribute('review_count'));
+        $this->assertEquals(1, $mapped['Comic']->getAttribute('review_count'));
+
+        $this->cleanupAggCollections($database, ['lj_basic_p', 'lj_basic_r']);
+    }
+
+    public function testLeftJoinWithFilter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createProducts($database, 'lj_filt_p');
+        $this->createOrders($database, 'lj_filt_o');
+
+        $results = $database->find('lj_filt_p', [
+            Query::leftJoin('lj_filt_o', '$id', 'product_uid'),
+            Query::equal('category', ['electronics']),
+            Query::count('*', 'order_count'),
+            Query::sum('quantity', 'total_qty'),
+            Query::groupBy(['name']),
+        ]);
+
+        $this->assertCount(3, $results);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
+        }
+        $this->assertEquals(2, $mapped['Laptop']->getAttribute('order_count'));
+        $this->assertEquals(2, $mapped['Phone']->getAttribute('order_count'));
+
+        $this->cleanupAggCollections($database, ['lj_filt_p', 'lj_filt_o']);
+    }
+
+    public function testLeftJoinCustomerOrderSummary(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $this->createCustomers($database, 'lj_cos_c');
+        $this->createOrders($database, 'lj_cos_o');
+
+        $results = $database->find('lj_cos_c', [
+            Query::leftJoin('lj_cos_o', '$id', 'customer_uid'),
+            Query::count('*', 'order_count'),
+            Query::groupBy(['name']),
+        ]);
+
+        $this->assertCount(5, $results);
+
+        $mapped = [];
+        foreach ($results as $doc) {
+            $name = $doc->getAttribute('name');
+            $this->assertIsString($name);
+            $mapped[$name] = $doc;
+        }
+
+        $this->assertEquals(3, $mapped['Alice']->getAttribute('order_count'));
+        $this->assertEquals(2, $mapped['Bob']->getAttribute('order_count'));
+        $this->assertEquals(2, $mapped['Charlie']->getAttribute('order_count'));
+        $this->assertEquals(3, $mapped['Diana']->getAttribute('order_count'));
+        $this->assertEquals(1, $mapped['Eve']->getAttribute('order_count'));
+
+        $this->cleanupAggCollections($database, ['lj_cos_c', 'lj_cos_o']);
+    }
+
+    public function testJoinAggregationWithPermissionsGrouped(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $cols = ['jp_apg_o', 'jp_apg_c'];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection(new Collection(id: 'jp_apg_c', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::read(Role::user('viewer'))]));
+        $database->createAttribute('jp_apg_c', Attribute::string(key: 'name', size: 100, required: true));
+        $database->createCollection(new Collection(id: 'jp_apg_o', permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute('jp_apg_o', Attribute::string(key: 'customer_uid', required: true));
+        $database->createAttribute('jp_apg_o', Attribute::integer(key: 'amount', required: true));
+
+        foreach (['u1', 'u2'] as $uid) {
+            $database->createDocument('jp_apg_c', new Document([
+                '$id' => $uid, 'name' => 'User ' . $uid,
+                '$permissions' => [Permission::read(Role::any()), Permission::read(Role::user('viewer'))],
+            ]));
+        }
+
+        $database->createDocument('jp_apg_o', new Document([
+            'customer_uid' => 'u1', 'amount' => 100,
+            '$permissions' => [Permission::read(Role::user('viewer'))],
+        ]));
+        $database->createDocument('jp_apg_o', new Document([
+            'customer_uid' => 'u1', 'amount' => 200,
+            '$permissions' => [Permission::read(Role::user('viewer'))],
+        ]));
+        $database->createDocument('jp_apg_o', new Document([
+            'customer_uid' => 'u2', 'amount' => 500,
+            '$permissions' => [Permission::read(Role::user('admin'))],
+        ]));
+        $database->createDocument('jp_apg_o', new Document([
+            'customer_uid' => 'u2', 'amount' => 50,
+            '$permissions' => [Permission::read(Role::user('viewer'))],
+        ]));
+
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::user('viewer')->toString());
+
+        $results = $database->find('jp_apg_o', [
+            Query::join('jp_apg_c', 'customer_uid', '$id'),
+            Query::sum('amount', 'total'),
+            Query::count('*', 'cnt'),
+            Query::groupBy(['customer_uid']),
+        ]);
+
+        $this->assertCount(2, $results);
+        $mapped = [];
+        foreach ($results as $doc) {
+            $customer_uid = $doc->getAttribute('customer_uid');
+            $this->assertIsString($customer_uid);
+            $mapped[$customer_uid] = $doc;
+        }
+        $this->assertEquals(300, $mapped['u1']->getAttribute('total'));
+        $this->assertEquals(2, $mapped['u1']->getAttribute('cnt'));
+        $this->assertEquals(50, $mapped['u2']->getAttribute('total'));
+        $this->assertEquals(1, $mapped['u2']->getAttribute('cnt'));
+
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole('any');
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    public function testLeftJoinPermissionFiltered(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $cols = ['jp_ljpf_p', 'jp_ljpf_r'];
+        $this->cleanupAggCollections($database, $cols);
+
+        $database->createCollection(new Collection(id: 'jp_ljpf_p', permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute('jp_ljpf_p', Attribute::string(key: 'name', size: 100, required: true));
+        $database->createCollection(new Collection(id: 'jp_ljpf_r', permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::read(Role::user('tester'))]));
+        $database->createAttribute('jp_ljpf_r', Attribute::string(key: 'product_uid', required: true));
+        $database->createAttribute('jp_ljpf_r', Attribute::integer(key: 'score', required: true));
+
+        $database->createDocument('jp_ljpf_p', new Document([
+            '$id' => 'visible', 'name' => 'Visible Product',
+            '$permissions' => [Permission::read(Role::user('tester'))],
+        ]));
+        $database->createDocument('jp_ljpf_p', new Document([
+            '$id' => 'hidden', 'name' => 'Hidden Product',
+            '$permissions' => [Permission::read(Role::user('admin'))],
+        ]));
+
+        foreach (['visible', 'visible', 'hidden'] as $pid) {
+            $database->createDocument('jp_ljpf_r', new Document([
+                'product_uid' => $pid, 'score' => 5,
+                '$permissions' => [Permission::read(Role::any()), Permission::read(Role::user('tester'))],
+            ]));
+        }
+
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole(Role::user('tester')->toString());
+
+        $results = $database->find('jp_ljpf_p', [
+            Query::leftJoin('jp_ljpf_r', '$id', 'product_uid'),
+            Query::count('*', 'review_count'),
+            Query::groupBy(['name']),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertEquals('Visible Product', $results[0]->getAttribute('name'));
+        $this->assertEquals(2, $results[0]->getAttribute('review_count'));
+
+        $database->getAuthorization()->cleanRoles();
+        $database->getAuthorization()->addRole('any');
+
+        $this->cleanupAggCollections($database, $cols);
+    }
+
+    /**
+     * @return array<string, array{string, string, string, string, array<Query>, int|float}>
+     */
+    public static function singleAggregationProvider(): array
+    {
+        return [
+            'count all products' => ['cnt', 'count', '*', 'total', [], 9],
+            'count electronics' => ['cnt', 'count', '*', 'total', [Query::equal('category', ['electronics'])], 3],
+            'count clothing' => ['cnt', 'count', '*', 'total', [Query::equal('category', ['clothing'])], 3],
+            'count books' => ['cnt', 'count', '*', 'total', [Query::equal('category', ['books'])], 3],
+            'count price > 100' => ['cnt', 'count', '*', 'total', [Query::greaterThan('price', 100)], 4],
+            'count price <= 50' => ['cnt', 'count', '*', 'total', [Query::lessThanEqual('price', 50)], 4],
+            'sum all prices' => ['sum', 'sum', 'price', 'total', [], 2785],
+            'sum electronics' => ['sum', 'sum', 'price', 'total', [Query::equal('category', ['electronics'])], 2500],
+            'sum clothing' => ['sum', 'sum', 'price', 'total', [Query::equal('category', ['clothing'])], 200],
+            'sum books' => ['sum', 'sum', 'price', 'total', [Query::equal('category', ['books'])], 85],
+            'sum stock' => ['sum', 'sum', 'stock', 'total', [], 1495],
+            'sum stock electronics' => ['sum', 'sum', 'stock', 'total', [Query::equal('category', ['electronics'])], 225],
+            'min all price' => ['min', 'min', 'price', 'val', [], 10],
+            'min electronics price' => ['min', 'min', 'price', 'val', [Query::equal('category', ['electronics'])], 500],
+            'min clothing price' => ['min', 'min', 'price', 'val', [Query::equal('category', ['clothing'])], 30],
+            'min books price' => ['min', 'min', 'price', 'val', [Query::equal('category', ['books'])], 10],
+            'min stock' => ['min', 'min', 'stock', 'val', [], 40],
+            'max all price' => ['max', 'max', 'price', 'val', [], 1200],
+            'max electronics price' => ['max', 'max', 'price', 'val', [Query::equal('category', ['electronics'])], 1200],
+            'max clothing price' => ['max', 'max', 'price', 'val', [Query::equal('category', ['clothing'])], 120],
+            'max books price' => ['max', 'max', 'price', 'val', [Query::equal('category', ['books'])], 60],
+            'max stock' => ['max', 'max', 'stock', 'val', [], 500],
+            'count distinct categories' => ['cntd', 'countDistinct', 'category', 'val', [], 3],
+            'count distinct price > 50' => ['cntd', 'countDistinct', 'category', 'val', [Query::greaterThan('price', 50)], 3],
+        ];
+    }
+
+    /**
+     * @param  array<Query>  $filters
+     */
+    #[DataProvider('singleAggregationProvider')]
+    public function testSingleAggregation(string $collSuffix, string $method, string $attribute, string $alias, array $filters, int|float $expected): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'dp_agg_' . $collSuffix . $this->getAggSuffix();
+        $this->createProducts($database, $col);
+
+        $aggQuery = match ($method) {
+            'count' => Query::count($attribute, $alias),
+            'sum' => Query::sum($attribute, $alias),
+            'avg' => Query::avg($attribute, $alias),
+            'min' => Query::min($attribute, $alias),
+            'max' => Query::max($attribute, $alias),
+            'countDistinct' => Query::countDistinct($attribute, $alias),
+            default => throw new \InvalidArgumentException('Unknown aggregation method: '.$method),
+        };
+
+        $queries = array_merge($filters, [$aggQuery]);
+        $results = $database->find($col, $queries);
+        $this->assertCount(1, $results);
+
+        if ($method === 'avg') {
+            $this->assertEqualsWithDelta($expected, $this->numericAttribute($results[0], $alias), 1.0);
+        } else {
+            $this->assertEquals($expected, $results[0]->getAttribute($alias));
+        }
+    }
+
+    /**
+     * @return array<string, array{string, array<Query>, int}>
+     */
+    public static function groupByCountProvider(): array
+    {
+        return [
+            'group by category no filter' => ['category', [], 3],
+            'group by category price > 50' => ['category', [Query::greaterThan('price', 50)], 3],
+            'group by category price > 200' => ['category', [Query::greaterThan('price', 200)], 1],
+        ];
+    }
+
+    /**
+     * @param  array<Query>  $filters
+     */
+    #[DataProvider('groupByCountProvider')]
+    public function testGroupByCount(string $groupCol, array $filters, int $expectedGroups): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'dp_grpby' . $this->getAggSuffix();
+        $this->createProducts($database, $col);
+
+        $queries = array_merge($filters, [
+            Query::count('*', 'cnt'),
+            Query::groupBy([$groupCol]),
+        ]);
+        $results = $database->find($col, $queries);
+        $this->assertCount($expectedGroups, $results);
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function orderStatusAggProvider(): array
+    {
+        return [
+            'completed orders revenue' => ['completed', 4615],
+            'pending orders revenue' => ['pending', 890],
+            'cancelled orders revenue' => ['cancelled', 500],
+        ];
+    }
+
+    #[DataProvider('orderStatusAggProvider')]
+    public function testOrderStatusAggregation(string $status, int $expectedRevenue): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'dp_osa_' . $status;
+        $this->createOrders($database, $col);
+
+        $results = $database->find($col, [
+            Query::equal('status', [$status]),
+            Query::sum('total', 'revenue'),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertEquals($expectedRevenue, $results[0]->getAttribute('revenue'));
+        $database->deleteCollection($col);
+    }
+
+    /**
+     * @return array<string, array{string, string, int|float}>
+     */
+    public static function categoryAggProvider(): array
+    {
+        return [
+            'electronics count' => ['electronics', 'count', 3],
+            'electronics sum' => ['electronics', 'sum', 2500],
+            'electronics min' => ['electronics', 'min', 500],
+            'electronics max' => ['electronics', 'max', 1200],
+            'clothing count' => ['clothing', 'count', 3],
+            'clothing sum' => ['clothing', 'sum', 200],
+            'clothing min' => ['clothing', 'min', 30],
+            'clothing max' => ['clothing', 'max', 120],
+            'books count' => ['books', 'count', 3],
+            'books sum' => ['books', 'sum', 85],
+            'books min' => ['books', 'min', 10],
+            'books max' => ['books', 'max', 60],
+        ];
+    }
+
+    #[DataProvider('categoryAggProvider')]
+    public function testCategoryAggregation(string $category, string $method, int|float $expected): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'dp_cat_' . $category . '_' . $method;
+        $this->createProducts($database, $col);
+
+        $aggQuery = match ($method) {
+            'count' => Query::count('*', 'val'),
+            'sum' => Query::sum('price', 'val'),
+            'min' => Query::min('price', 'val'),
+            'max' => Query::max('price', 'val'),
+            default => throw new \InvalidArgumentException('Unknown aggregation method: '.$method),
+        };
+
+        $results = $database->find($col, [
+            Query::equal('category', [$category]),
+            $aggQuery,
+        ]);
+        $this->assertEquals($expected, $results[0]->getAttribute('val'));
+        $database->deleteCollection($col);
+    }
+
+    /**
+     * @return array<string, array{string, int}>
+     */
+    public static function reviewCountProvider(): array
+    {
+        return [
+            'laptop reviews' => ['laptop', 3],
+            'phone reviews' => ['phone', 2],
+            'shirt reviews' => ['shirt', 2],
+            'novel reviews' => ['novel', 3],
+            'jacket reviews' => ['jacket', 1],
+            'textbook reviews' => ['textbook', 1],
+        ];
+    }
+
+    #[DataProvider('reviewCountProvider')]
+    public function testReviewCounts(string $productId, int $expectedCount): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'dp_rc_' . $productId;
+        $this->createReviews($database, $col);
+
+        $results = $database->find($col, [
+            Query::equal('product_uid', [$productId]),
+            Query::count('*', 'cnt'),
+        ]);
+        $this->assertEquals($expectedCount, $results[0]->getAttribute('cnt'));
+        $database->deleteCollection($col);
+    }
+
+    /**
+     * @return array<string, array{int, int}>
+     */
+    public static function priceRangeCountProvider(): array
+    {
+        return [
+            'price 0-20' => [0, 20, 2],
+            'price 0-50' => [0, 50, 4],
+            'price 0-100' => [0, 100, 5],
+            'price 50-200' => [50, 200, 3],
+            'price 100-500' => [100, 500, 2],
+            'price 500-1500' => [500, 1500, 3],
+            'price 0-10000' => [0, 10000, 9],
+        ];
+    }
+
+    #[DataProvider('priceRangeCountProvider')]
+    public function testPriceRangeCount(int $min, int $max, int $expected): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $col = 'dp_prc_' . $min . '_' . $max;
+        $this->createProducts($database, $col);
+
+        $results = $database->find($col, [
+            Query::between('price', $min, $max),
+            Query::count('*', 'cnt'),
+        ]);
+        $this->assertEquals($expected, $results[0]->getAttribute('cnt'));
+        $database->deleteCollection($col);
+    }
+
+    /**
+     * stddev() and variance() are the POPULATION statistic on every adapter.
+     *
+     * Bare SQL `STDDEV` / `VARIANCE` are population on MySQL and MariaDB and
+     * sample on PostgreSQL, so the same query answered different numbers per
+     * engine. The adapters now emit `STDDEV_POP` / `VAR_POP` explicitly, so
+     * these must equal the stddevPop / varPop cases below over the same rows.
+     */
+    public function testStddevAndVarianceArePopulationOnEveryAdapter(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'stat_contract');
+
+        $stddev = $database->find('stat_contract', [Query::stddev('price', 'result')]);
+        $this->assertCount(1, $stddev);
+        $this->assertEqualsWithDelta(406.87456737949, $this->numericAttribute($stddev[0], 'result'), 0.5);
+        $this->assertNotEqualsWithDelta(431.55564852957, $this->numericAttribute($stddev[0], 'result'), 0.5);
+
+        $variance = $database->find('stat_contract', [Query::variance('price', 'result')]);
+        $this->assertCount(1, $variance);
+        $this->assertEqualsWithDelta(165546.91358025, $this->numericAttribute($variance[0], 'result'), 1.0);
+        $this->assertNotEqualsWithDelta(186240.27777778, $this->numericAttribute($variance[0], 'result'), 1.0);
+
+        $database->deleteCollection('stat_contract');
+    }
+
+    public function testStddevPopOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'stddev_pop');
+        $results = $database->find('stddev_pop', [Query::stddevPop('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(406.87456737949, $this->numericAttribute($results[0], 'result'), 0.5);
+        $database->deleteCollection('stddev_pop');
+    }
+
+    public function testStddevSampOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'stddev_samp');
+        $results = $database->find('stddev_samp', [Query::stddevSamp('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(431.55564852957, $this->numericAttribute($results[0], 'result'), 0.5);
+        $database->deleteCollection('stddev_samp');
+    }
+
+    public function testVarPopOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'var_pop');
+        $results = $database->find('var_pop', [Query::varPop('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(165546.91358025, $this->numericAttribute($results[0], 'result'), 1.0);
+        $database->deleteCollection('var_pop');
+    }
+
+    public function testVarSampOfPrice(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'var_samp');
+        $results = $database->find('var_samp', [Query::varSamp('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertEqualsWithDelta(186240.27777778, $this->numericAttribute($results[0], 'result'), 1.0);
+        $database->deleteCollection('var_samp');
+    }
+
+    public function testBitAndOfIntegerColumn(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'bit_and');
+        $results = $database->find('bit_and', [Query::bitAnd('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertSame(0, $this->intAttribute($results[0], 'result'));
+        $database->deleteCollection('bit_and');
+    }
+
+    public function testBitOrOfIntegerColumn(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'bit_or');
+        $results = $database->find('bit_or', [Query::bitOr('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertSame(2047, $this->intAttribute($results[0], 'result'));
+        $database->deleteCollection('bit_or');
+    }
+
+    public function testBitXorOfIntegerColumn(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $this->createProducts($database, 'bit_xor');
+        $results = $database->find('bit_xor', [Query::bitXor('price', 'result')]);
+        $this->assertCount(1, $results);
+        $this->assertSame(1545, $this->intAttribute($results[0], 'result'));
+        $database->deleteCollection('bit_xor');
+    }
+
+    private function assertRejectedAsQueryShape(callable $call, string $message): void
+    {
+        $error = null;
+        try {
+            $call();
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(QueryException::class, $error, $error === null ? 'the query shape was accepted' : $error::class.': '.$error->getMessage());
+        $this->assertSame($message, $error->getMessage());
+    }
+
+    public function testJoinCountIsCappedAtEight(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'join_cap';
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'label', size: 20, required: true));
+        $database->createDocument($collection, new Document([
+            'label' => 'only',
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+
+        $joins = fn (int $count): array => \array_map(fn (int $index): Query => Query::crossJoin($collection, 'joined'.$index), \range(1, $count));
+
+        $this->assertCount(1, $database->find($collection, $joins(8)));
+        $this->assertSame(1, $database->count($collection, $joins(8)));
+
+        $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $joins(9)), 'Too many joins: at most 8 are allowed');
+        $this->assertRejectedAsQueryShape(fn () => $database->find($collection, [...$joins(62), Query::limit(1)]), 'Too many joins: at most 8 are allowed');
+        $this->assertRejectedAsQueryShape(fn () => $database->count($collection, $joins(9)), 'Too many joins: at most 8 are allowed');
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testHavingConditionsFollowTheFilterRules(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'having_filter_rules';
+        $this->createProducts($database, $collection);
+
+        $rejected = [
+            'Searching by attribute "name" requires a fulltext index.' => [Query::count('*', 'rows'), Query::groupBy(['name']), Query::having([Query::search('name', 'Laptop')])],
+            'Invalid query: Having can only compare an aggregate alias or a groupBy attribute: no_such_attribute' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::equal('no_such_attribute', ['x'])])],
+            'Invalid query: Having can only compare an aggregate alias or a groupBy attribute: name' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::equal('name', ['Laptop'])])],
+            'Invalid query: Aggregate alias "total" can only be compared at the top level of having' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::or([Query::greaterThan('total', 1000), Query::lessThan('total', 100)])])],
+            'Invalid query: Query value is invalid for aggregate alias "total"' => [Query::sum('price', 'total'), Query::groupBy(['category']), Query::having([Query::greaterThan('total', 'abc')])],
+            'Invalid query: Query value is invalid for attribute "name"' => [Query::max('name', 'last'), Query::groupBy(['category']), Query::having([Query::greaterThan('last', 5)])],
+        ];
+        foreach ($rejected as $message => $queries) {
+            $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $queries), $message);
+        }
+
+        $results = $database->find($collection, [
+            Query::sum('price', 'total'),
+            Query::groupBy(['category']),
+            Query::having([
+                Query::greaterThan('total', 100),
+                Query::equal('category', ['electronics', 'books']),
+            ]),
+        ]);
+        $this->assertCount(1, $results);
+        $this->assertSame('electronics', $results[0]->getAttribute('category'));
+        $this->assertSame(2500, $this->intAttribute($results[0], 'total'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testNumericAggregatesRejectAttributesThatAreNotNumbers(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'numeric_aggregate_operands';
+        $this->createProducts($database, $collection);
+
+        $rejected = [
+            'sum' => Query::sum('category', 'result'),
+            'avg' => Query::avg('name', 'result'),
+            'stddev' => Query::stddev('category', 'result'),
+            'variance' => Query::variance('category', 'result'),
+            'bitAnd' => Query::bitAnd('name', 'result'),
+            'bitOr' => Query::bitOr('category', 'result'),
+        ];
+        foreach ($rejected as $method => $query) {
+            $this->assertRejectedAsQueryShape(
+                fn () => $database->find($collection, [$query]),
+                'Invalid query: Aggregate '.$method.' requires a numeric attribute that is not an array: '.$query->getAttribute(),
+            );
+        }
+
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, [Query::bitXor('rating', 'result')]),
+            'Invalid query: Aggregate bitXor requires an integer attribute that is not an array: rating',
+        );
+
+        $results = $database->find($collection, [Query::min('category', 'first'), Query::max('name', 'last'), Query::countDistinct('category', 'categories')]);
+        $this->assertSame('books', $results[0]->getAttribute('first'));
+        $this->assertSame('Textbook', $results[0]->getAttribute('last'));
+        $this->assertSame(3, $this->intAttribute($results[0], 'categories'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testEmptySetAggregatesAreZeroForCountsAndNullOtherwise(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'empty_set_aggregates';
+        $this->createProducts($database, $collection);
+
+        $others = [
+            'total' => Query::sum('price', 'total'),
+            'mean' => Query::avg('price', 'mean'),
+            'least' => Query::min('price', 'least'),
+            'most' => Query::max('price', 'most'),
+        ];
+        if (! $database->getAdapter() instanceof SQLite) {
+            $others += [
+                'spread' => Query::stddev('price', 'spread'),
+                'spread_population' => Query::stddevPop('price', 'spread_population'),
+                'spread_sample' => Query::stddevSamp('price', 'spread_sample'),
+                'variance' => Query::variance('price', 'variance'),
+                'variance_population' => Query::varPop('price', 'variance_population'),
+                'variance_sample' => Query::varSamp('price', 'variance_sample'),
+                'all_bits' => Query::bitAnd('price', 'all_bits'),
+                'any_bits' => Query::bitOr('price', 'any_bits'),
+                'odd_bits' => Query::bitXor('price', 'odd_bits'),
+            ];
+        }
+
+        $results = $database->find($collection, [
+            Query::equal('category', ['nonexistent']),
+            Query::count('*', 'rows'),
+            Query::countDistinct('category', 'categories'),
+            ...\array_values($others),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertSame(0, $this->intAttribute($results[0], 'rows'));
+        $this->assertSame(0, $this->intAttribute($results[0], 'categories'));
+        foreach (\array_keys($others) as $alias) {
+            $this->assertTrue($results[0]->offsetExists($alias), $alias.' must be returned');
+            $this->assertNull($results[0]->getAttribute($alias), $alias.' over no rows must be null, got '.\var_export($results[0]->getAttribute($alias), true));
+        }
+
+        $expected = ['rows', 'categories', ...\array_keys($others)];
+        $returned = \array_keys($results[0]->getArrayCopy());
+        \sort($expected);
+        \sort($returned);
+        $this->assertSame($expected, $returned, 'only the requested aliases may be returned');
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testBitwiseAggregatesOfOnlyNullValuesAreNull(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations) || $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'null_bitwise_inputs';
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'kind', size: 20, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'flags', required: false));
+
+        foreach ([['empty', null], ['empty', null], ['set', 6], ['set', 3]] as [$kind, $flags]) {
+            $database->createDocument($collection, new Document([
+                'kind' => $kind,
+                'flags' => $flags,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $bitwise = [Query::bitAnd('flags', 'all_bits'), Query::bitOr('flags', 'any_bits'), Query::bitXor('flags', 'odd_bits')];
+
+        $ungrouped = $database->find($collection, [Query::equal('kind', ['empty']), ...$bitwise]);
+        $this->assertCount(1, $ungrouped);
+        foreach (['all_bits', 'any_bits', 'odd_bits'] as $alias) {
+            $this->assertNull($ungrouped[0]->getAttribute($alias), $alias.' of only null values must be null, got '.\var_export($ungrouped[0]->getAttribute($alias), true));
+        }
+
+        $grouped = $database->find($collection, [...$bitwise, Query::groupBy(['kind']), Query::orderAsc('kind')]);
+        $this->assertCount(2, $grouped);
+        $this->assertSame('empty', $grouped[0]->getAttribute('kind'));
+        foreach (['all_bits', 'any_bits', 'odd_bits'] as $alias) {
+            $this->assertNull($grouped[0]->getAttribute($alias), $alias.' of a group of null values must be null');
+        }
+        $this->assertSame('set', $grouped[1]->getAttribute('kind'));
+        $this->assertSame(2, $this->intAttribute($grouped[1], 'all_bits'));
+        $this->assertSame(7, $this->intAttribute($grouped[1], 'any_bits'));
+        $this->assertSame(5, $this->intAttribute($grouped[1], 'odd_bits'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testUnknownColumnsAreAttributeNotFound(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || $adapter->hasFeature(SQLite::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'unknown_column';
+        $this->createScores($database, $collection);
+
+        $this->assertAttributeNotFound(fn () => $database->skipValidation(
+            fn () => $database->find($collection, [Query::equal('no_such_attribute', ['x'])]),
+        ));
+
+        $this->deleteColumn($collection, 'score');
+        $this->assertAttributeNotFound(fn () => $database->find($collection, [Query::greaterThan('score', 1)]));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testSearchWithoutAFulltextIndexIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'search_unindexed';
+        $this->createScores($database, $collection);
+
+        $search = [Query::search('name', 'alpha')];
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, $search),
+            'Searching by attribute "name" requires a fulltext index.',
+        );
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->skipValidation(fn () => $database->find($collection, $search)),
+            'Searching requires a fulltext index on the searched attributes',
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testMoreTablesThanTheEngineCanJoinIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'join_tables';
+        $this->createScores($database, $collection);
+
+        $joins = \array_map(fn (int $index): Query => Query::crossJoin($collection, 'joined'.$index), \range(1, 61));
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, $joins),
+            'Too many joins: at most 8 are allowed',
+        );
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->skipValidation(fn () => $database->find($collection, [...$joins, Query::limit(1)])),
+            'Too many tables in a join',
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testAggregateAliasesAreLimitedToSixtyThreeCharacters(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'alias_length';
+        $this->createProducts($database, $collection);
+
+        $longest = \str_repeat('a', 63);
+        $tooLong = \str_repeat('a', 64);
+
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, [Query::sum('price', $tooLong)]),
+            'Invalid query: Aggregate alias is too long: at most 63 characters are allowed',
+        );
+        $this->assertRejectedAsQueryShape(
+            fn () => $database->find($collection, [Query::count('*', $tooLong), Query::groupBy(['category'])]),
+            'Invalid query: Aggregate alias is too long: at most 63 characters are allowed',
+        );
+
+        $total = $database->find($collection, [Query::sum('price', $longest)]);
+        $this->assertCount(1, $total);
+        $this->assertSame([$longest], \array_keys($total[0]->getArrayCopy()));
+        $this->assertSame(2785, $this->intAttribute($total[0], $longest));
+
+        if ($database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+            $grouped = $database->find($collection, [Query::bitOr('price', $longest), Query::groupBy(['category']), Query::orderAsc('category')]);
+            $this->assertSame(
+                [['books', 63], ['clothing', 126], ['electronics', 2036]],
+                \array_map(fn (Document $row): array => [$row->getAttribute('category'), $this->intAttribute($row, $longest)], $grouped),
+            );
+
+            $none = $database->find($collection, [Query::equal('category', ['nonexistent']), Query::bitAnd('price', $longest)]);
+            $this->assertCount(1, $none);
+            $this->assertSame([$longest], \array_keys($none[0]->getArrayCopy()));
+            $this->assertNull($none[0]->getAttribute($longest));
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testDistinctOrderedByAnUnselectedAttributeIsRejectedWhereTheEngineRefusesIt(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'distinct_order';
+        $this->createScores($database, $collection);
+
+        $queries = [Query::distinct(), Query::select(['name']), Query::orderAsc('score')];
+
+        if ($adapter->hasFeature(Postgres::class) || $adapter->hasFeature(MySQL::class)) {
+            $this->assertRejectedAsQueryShape(
+                fn () => $database->find($collection, $queries),
+                'A distinct() query can only be ordered by a selected attribute on this database',
+            );
+        } else {
+            $this->assertSame(['beta', 'gamma', 'alpha'], $this->namesOf($database->find($collection, $queries)));
+        }
+
+        $this->assertSame(
+            ['beta', 'gamma', 'alpha'],
+            $this->namesOf($database->find($collection, [Query::distinct(), Query::select(['name', 'score']), Query::orderAsc('score')])),
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    private function createScores(Database $database, string $collection): void
+    {
+        if ($database->exists($database->getDatabase(), $collection)) {
+            $database->deleteCollection($collection);
+        }
+
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 20, required: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'score', required: true));
+
+        foreach ([['alpha', 3], ['alpha', 3], ['beta', 1], ['gamma', 2]] as [$name, $score]) {
+            $database->createDocument($collection, new Document([
+                'name' => $name,
+                'score' => $score,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+    }
+
+    private function assertAttributeNotFound(callable $call): void
+    {
+        $error = null;
+        try {
+            $call();
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(NotFoundException::class, $error, $error === null ? 'the unknown column was accepted' : $error::class.': '.$error->getMessage());
+        $this->assertSame('Attribute not found', $error->getMessage());
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<mixed>
+     */
+    private function namesOf(array $rows): array
+    {
+        return \array_values(\array_map(fn (Document $row): mixed => $row->getAttribute('name'), $rows));
+    }
+
+    public function testMainAttributeAggregatedUnderItsOwnNameOverAJoinIsReadFromTheMainTable(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $main = 'own_name_main';
+        $joined = 'own_name_joined';
+        $this->cleanupAggCollections($database, [$main, $joined]);
+        foreach ([$main, $joined] as $collection) {
+            $database->createCollection(new Collection(
+                id: $collection,
+                attributes: [Attribute::string(key: 'link', size: 16, required: true), Attribute::integer(key: 'score', required: true)],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            ));
+        }
+        foreach ([[$main, '1', 10], [$main, '2', 20], [$joined, '1', 1], [$joined, '3', 3]] as [$collection, $link, $score]) {
+            $database->createDocument($collection, new Document([
+                'link' => $link,
+                'score' => $score,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        foreach ([
+            'inner join' => [Query::join($joined, 'link', 'link', '=', 'other'), 10, 1],
+            'left join' => [Query::leftJoin($joined, 'link', 'link', '=', 'other'), 30, 2],
+            'right join' => [Query::rightJoin($joined, 'link', 'link', '=', 'other'), 10, 2],
+            'full outer join' => [Query::fullOuterJoin($joined, 'link', 'link', '=', 'other'), 30, 3],
+        ] as $type => [$join, $total, $rows]) {
+            $own = $database->find($main, [$join, Query::sum('score', 'score')]);
+            $this->assertCount(1, $own, $type);
+            $this->assertSame($total, $this->intAttribute($own[0], 'score'), $type);
+
+            $other = $database->find($main, [$join, Query::sum('score', 'total'), Query::count('*', 'score')]);
+            $this->assertCount(1, $other, $type);
+            $this->assertSame($total, $this->intAttribute($other[0], 'total'), $type);
+            $this->assertSame($rows, $this->intAttribute($other[0], 'score'), $type);
+        }
+
+        $this->cleanupAggCollections($database, [$main, $joined]);
+    }
+
+    public function testAggregateAliasNamingAnotherResultColumnIsAnInvalidQuery(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'alias_result_columns';
+        $this->createProducts($database, $collection);
+
+        foreach ([
+            'Invalid query: Aggregate alias "category" is the name the groupBy attribute "category" is returned under' => [Query::count('*', 'category'), Query::groupBy(['category'])],
+            'Invalid query: Aggregate alias "total" is given to more than one aggregate' => [Query::count('*', 'total'), Query::sum('price', 'total')],
+        ] as $message => $queries) {
+            $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $queries), $message);
+        }
+
+        $results = $database->find($collection, [Query::count('*', 'products'), Query::sum('price', 'total'), Query::groupBy(['category']), Query::orderAsc('category')]);
+        $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $row): mixed => $row->getAttribute('category'), $results));
+        $this->assertSame([3, 3, 3], \array_map(fn (Document $row): int => $this->intAttribute($row, 'products'), $results));
+        $this->assertSame([85, 200, 2500], \array_map(fn (Document $row): int => $this->intAttribute($row, 'total'), $results));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testBitwiseAggregateUnderALongAliasLeavesAnotherAggregateItsValue(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'long_bitwise_alias';
+        $this->createProducts($database, $collection);
+        $alias = \str_repeat('b', 60);
+        $prefix = \substr($alias, 0, 55);
+
+        $results = $database->find($collection, [
+            Query::equal('category', ['nonexistent']),
+            Query::bitAnd('price', $alias),
+            Query::count('*', $prefix),
+        ]);
+
+        $this->assertCount(1, $results);
+        $this->assertNull($results[0]->getAttribute($alias), 'a bitwise aggregate over no rows is null');
+        $this->assertSame(0, $this->intAttribute($results[0], $prefix), 'an aggregate named like the start of the bitwise alias keeps its value');
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testSelectNextToAnAggregateMustNameAGroupedAttribute(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_select_ungrouped';
+        $this->createProducts($database, $collection);
+
+        foreach ([
+            ['name', [Query::count('*', 'total'), Query::select(['name'])]],
+            ['$id', [Query::sum('price', 'total'), Query::select(['$id'])]],
+            ['$collection', [Query::count('*', 'total'), Query::select(['$collection'])]],
+            ['name', [Query::count('*', 'total'), Query::groupBy(['category']), Query::select(['category', 'name'])]],
+            ['name', [Query::groupBy(['category']), Query::select(['name'])]],
+        ] as [$attribute, $queries]) {
+            $this->assertRejectedAsQueryShape(fn () => $database->find($collection, $queries), $this->ungroupedSelectMessage($attribute));
+        }
+
+        if ($database->getAdapter()->supports(Capability::Joins)) {
+            $orders = 'agg_select_ungrouped_orders';
+            $this->createOrders($database, $orders);
+            $product = Query::join($collection, 'product_uid', '$id', '=', 'product');
+
+            foreach ([
+                ['product.name', [$product, Query::count('*', 'total'), Query::groupBy(['status']), Query::select(['product.name'])]],
+                ['status', [$product, Query::count('*', 'total'), Query::groupBy(['product.category']), Query::select(['status'])]],
+                ['product.*', [$product, Query::count('*', 'total'), Query::select(['product.*'])]],
+            ] as [$attribute, $queries]) {
+                $this->assertRejectedAsQueryShape(fn () => $database->find($orders, $queries), $this->ungroupedSelectMessage($attribute));
+            }
+
+            $database->deleteCollection($orders);
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testWildcardSelectNextToAnAggregateReturnsOnlyTheAggregates(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_select_wildcard';
+        $this->createProducts($database, $collection);
+
+        $totals = $database->find($collection, [Query::count('*', 'total'), Query::sum('price', 'revenue'), Query::select(['*'])]);
+        $this->assertCount(1, $totals);
+        $this->assertSame(['revenue', 'total'], $this->sortedAttributeNames($totals[0]));
+        $this->assertSame(9, $this->intAttribute($totals[0], 'total'));
+        $this->assertSame(2785, $this->intAttribute($totals[0], 'revenue'));
+
+        $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::select(['*']), Query::orderAsc('category')]);
+        $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $groups));
+        foreach ($groups as $group) {
+            $this->assertSame(['category', 'total'], $this->sortedAttributeNames($group));
+            $this->assertSame(3, $this->intAttribute($group, 'total'));
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testRelationshipWildcardsNextToAnAggregateAddNothingToTheRows(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $customers = 'agg_select_rel_customers';
+        $accounts = 'agg_select_rel_accounts';
+        $regions = 'agg_select_rel_regions';
+        $this->cleanupAggCollections($database, [$customers, $accounts, $regions]);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $regions, attributes: [Attribute::string(key: 'code', size: 16, required: true)], permissions: $permissions));
+        $database->createCollection(new Collection(id: $accounts, attributes: [Attribute::string(key: 'plan', size: 16, required: true)], permissions: $permissions));
+        $database->createCollection(new Collection(id: $customers, attributes: [Attribute::string(key: 'status', size: 16, required: true)], permissions: $permissions));
+        $database->createRelationship(Relationship::oneToOne(collection: $customers, relatedCollection: $accounts, key: 'account', twoWayKey: 'customer'));
+        $database->createRelationship(Relationship::manyToOne(collection: $accounts, relatedCollection: $regions, key: 'region', twoWayKey: 'accounts'));
+
+        $read = [Permission::read(Role::any())];
+        $database->createDocument($regions, new Document(['$id' => 'eu', 'code' => 'eu', '$permissions' => $read]));
+        $database->createDocument($accounts, new Document(['$id' => 'pro', 'plan' => 'pro', 'region' => 'eu', '$permissions' => $read]));
+        $database->createDocument($customers, new Document(['$id' => 'c1', 'status' => 'active', 'account' => 'pro', '$permissions' => $read]));
+        $database->createDocument($customers, new Document(['$id' => 'c2', 'status' => 'active', '$permissions' => $read]));
+        $database->createDocument($customers, new Document(['$id' => 'c3', 'status' => 'closed', '$permissions' => $read]));
+
+        foreach ([['*', 'account.*'], ['*', 'account.*', 'account.region.*']] as $selects) {
+            $totals = $database->find($customers, [Query::count('*', 'total'), Query::select($selects)]);
+            $this->assertCount(1, $totals);
+            $this->assertSame(['total'], $this->sortedAttributeNames($totals[0]));
+            $this->assertSame(3, $this->intAttribute($totals[0], 'total'));
+
+            $groups = $database->find($customers, [Query::count('*', 'total'), Query::groupBy(['status']), Query::select($selects), Query::orderAsc('status')]);
+            $this->assertSame(['active', 'closed'], \array_map(fn (Document $group): mixed => $group->getAttribute('status'), $groups));
+            $this->assertSame([2, 1], \array_map(fn (Document $group): int => $this->intAttribute($group, 'total'), $groups));
+            $this->assertSame(['status', 'total'], $this->sortedAttributeNames($groups[0]));
+
+            if ($adapter->supports(Capability::Joins)) {
+                $joined = $database->find($customers, [Query::fullOuterJoin($accounts, 'account', '$id', '=', 'owned'), Query::count('*', 'total'), Query::select($selects)]);
+                $this->assertCount(1, $joined);
+                $this->assertSame(['total'], $this->sortedAttributeNames($joined[0]));
+                $this->assertSame(3, $this->intAttribute($joined[0], 'total'));
+            }
+        }
+
+        $this->cleanupAggCollections($database, [$customers, $accounts, $regions]);
+    }
+
+    public function testGroupedSelectReturnsEachGroupOnceWithItsAggregate(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_select_grouped';
+        $this->createProducts($database, $collection);
+
+        foreach ([['category'], ['*', 'category']] as $selects) {
+            $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::select($selects), Query::orderAsc('category')]);
+            $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $groups));
+            foreach ($groups as $group) {
+                $this->assertSame(['category', 'total'], $this->sortedAttributeNames($group));
+                $this->assertSame(3, $this->intAttribute($group, 'total'));
+            }
+        }
+
+        $categories = $database->find($collection, [Query::groupBy(['category']), Query::select(['category']), Query::orderAsc('category')]);
+        $this->assertSame(
+            [['category' => 'books'], ['category' => 'clothing'], ['category' => 'electronics']],
+            \array_map(fn (Document $group): array => $group->getArrayCopy(), $categories),
+        );
+
+        if ($database->getAdapter()->supports(Capability::Joins)) {
+            $orders = 'agg_select_grouped_orders';
+            $this->createOrders($database, $orders);
+
+            foreach ([
+                'inner join' => [Query::join($collection, 'product_uid', '$id', '=', 'product'), [2, 3, 5]],
+                'full outer join' => [Query::fullOuterJoin($collection, 'product_uid', '$id', '=', 'product'), [3, 3, 5]],
+            ] as $type => [$product, $totals]) {
+                $groups = $database->find($orders, [$product, Query::count('*', 'total'), Query::groupBy(['product.category']), Query::select(['product.category']), Query::orderAsc('product.category')]);
+                $this->assertSame(['books', 'clothing', 'electronics'], \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $groups), $type);
+                $this->assertSame($totals, \array_map(fn (Document $group): int => $this->intAttribute($group, 'total'), $groups), $type);
+                $this->assertSame(['category', 'total'], $this->sortedAttributeNames($groups[0]), $type);
+            }
+
+            $database->deleteCollection($orders);
+        }
+
+        $database->deleteCollection($collection);
+    }
+
+    private function ungroupedSelectMessage(string $attribute): string
+    {
+        return 'Invalid query: Cannot select "'.$attribute.'": an aggregation query can only select the attributes it groups by';
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function sortedAttributeNames(Document $row): array
+    {
+        $names = \array_map(strval(...), \array_keys($row->getArrayCopy()));
+        \sort($names);
+
+        return $names;
+    }
+
+    public function testAggregateNextToASearchWithoutAnOrderCountsTheMatches(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_search_relevance';
+        $this->createProducts($database, $collection);
+        $database->createDocument($collection, new Document([
+            '$id' => 'sleeve',
+            'name' => 'Laptop Sleeve',
+            'category' => 'clothing',
+            'price' => 25,
+            'stock' => 60,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+
+        $totals = $database->find($collection, [Query::count('*', 'total'), Query::search('name', 'Laptop')]);
+        $this->assertSame([['total']], \array_map($this->sortedAttributeNames(...), $totals));
+        $this->assertSame(2, $this->intAttribute($totals[0], 'total'));
+
+        $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::search('name', 'Laptop')]);
+        $this->assertSame([['category', 'total'], ['category', 'total']], \array_map($this->sortedAttributeNames(...), $groups));
+        $this->assertSame(['clothing' => 1, 'electronics' => 1], $this->totalsByCategory($groups));
+
+        $categories = $database->find($collection, [Query::groupBy(['category']), Query::search('name', 'Laptop')]);
+        $this->assertSame([['category'], ['category']], \array_map($this->sortedAttributeNames(...), $categories));
+        $names = \array_map(fn (Document $group): mixed => $group->getAttribute('category'), $categories);
+        \sort($names);
+        $this->assertSame(['clothing', 'electronics'], $names);
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testAggregateNextToAVectorQueryWithoutAnOrderCountsTheMatches(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'agg_vector_distance';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 100, required: true),
+                Attribute::string(key: 'category', size: 50, required: true),
+                Attribute::vector(key: 'embedding', size: 3, required: true),
+            ],
+            indexes: [Index::fullText(key: 'name_search', attributes: ['name'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([
+            ['Laptop', 'electronics', [1.0, 0.0, 0.0]],
+            ['Laptop Sleeve', 'clothing', [0.0, 1.0, 0.0]],
+            ['Phone', 'electronics', [0.0, 0.0, 1.0]],
+        ] as [$name, $category, $embedding]) {
+            $database->createDocument($collection, new Document([
+                'name' => $name,
+                'category' => $category,
+                'embedding' => $embedding,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $totals = $database->find($collection, [Query::count('*', 'total'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $this->assertSame([['total']], \array_map($this->sortedAttributeNames(...), $totals));
+        $this->assertSame(3, $this->intAttribute($totals[0], 'total'));
+
+        $groups = $database->find($collection, [Query::count('*', 'total'), Query::groupBy(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $this->assertSame([['category', 'total'], ['category', 'total']], \array_map($this->sortedAttributeNames(...), $groups));
+        $this->assertSame(['clothing' => 1, 'electronics' => 2], $this->totalsByCategory($groups));
+
+        $matches = $database->find($collection, [Query::count('*', 'total'), Query::search('name', 'Laptop'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $this->assertSame([['total']], \array_map($this->sortedAttributeNames(...), $matches));
+        $this->assertSame(2, $this->intAttribute($matches[0], 'total'));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  array<Document>  $groups
+     * @return array<string, int>
+     */
+    private function totalsByCategory(array $groups): array
+    {
+        $totals = [];
+        foreach ($groups as $group) {
+            $category = $group->getAttribute('category');
+            $this->assertIsString($category);
+            $totals[$category] = $this->intAttribute($group, 'total');
+        }
+        \ksort($totals);
+
+        return $totals;
+    }
+
+    public function testDistinctNextToASearchReturnsEachSelectionOnce(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'distinct_search_relevance';
+        $this->createProducts($database, $collection);
+        $database->createDocument($collection, new Document([
+            '$id' => 'dock',
+            'name' => 'Laptop Laptop Dock',
+            'category' => 'electronics',
+            'price' => 90,
+            'stock' => 5,
+            '$permissions' => [Permission::read(Role::any())],
+        ]));
+        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+
+        $categories = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop')]);
+        $this->assertSame(['electronics'], $this->categoriesOf($categories));
+        $this->assertArrayNotHasKey('_relevance', $categories[0]->getArrayCopy());
+
+        $ordered = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop'), Query::orderAsc('category')]);
+        $this->assertSame(['electronics'], $this->categoriesOf($ordered));
+        $this->assertArrayNotHasKey('_relevance', $ordered[0]->getArrayCopy());
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testDistinctNextToAVectorQueryReturnsEachSelectionOnce(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter->supports(Capability::Aggregations) || ! $adapter->supports(Capability::Fulltext) || ! $adapter->supports(Capability::Vectors)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'distinct_vector_distance';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 100, required: true),
+                Attribute::string(key: 'category', size: 50, required: true),
+                Attribute::vector(key: 'embedding', size: 3, required: true),
+            ],
+            indexes: [Index::fullText(key: 'name_search', attributes: ['name'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach ([
+            ['laptop', 'Laptop', 'electronics', [1.0, 0.0, 0.0]],
+            ['dock', 'Laptop Laptop Dock', 'electronics', [0.0, 1.0, 0.0]],
+            ['sleeve', 'Laptop Sleeve', 'clothing', [0.0, 0.0, 1.0]],
+            ['novel', 'Novel', 'books', [1.0, 1.0, 0.0]],
+        ] as [$id, $name, $category, $embedding]) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'name' => $name,
+                'category' => $category,
+                'embedding' => $embedding,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+
+        $unordered = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0])]);
+        $categories = $this->categoriesOf($unordered);
+        \sort($categories);
+        $this->assertSame(['books', 'clothing', 'electronics'], $categories);
+        foreach ($unordered as $row) {
+            $this->assertArrayNotHasKey(Document::DISTANCE, $row->getArrayCopy());
+        }
+
+        $this->assertSame(
+            ['books', 'clothing', 'electronics'],
+            $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category')])),
+        );
+        $this->assertSame(
+            ['electronics', 'clothing', 'books'],
+            $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderDesc('category')])),
+        );
+
+        $matches = $database->find($collection, [Query::distinct(), Query::select(['category']), Query::search('name', 'Laptop'), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category')]);
+        $this->assertSame(['clothing', 'electronics'], $this->categoriesOf($matches));
+        foreach ($matches as $row) {
+            $this->assertArrayNotHasKey('_relevance', $row->getArrayCopy());
+            $this->assertArrayNotHasKey(Document::DISTANCE, $row->getArrayCopy());
+        }
+
+        $sleeve = $database->getDocument($collection, 'sleeve');
+        $this->assertSame(
+            ['electronics'],
+            $this->categoriesOf($database->find($collection, [Query::distinct(), Query::select(['category']), Query::vectorCosine('embedding', [1.0, 0.0, 0.0]), Query::orderAsc('category'), Query::cursorAfter($sleeve)])),
+        );
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  array<Document>  $rows
+     * @return list<mixed>
+     */
+    private function categoriesOf(array $rows): array
+    {
+        return \array_values(\array_map(fn (Document $row): mixed => $row->getAttribute('category'), $rows));
+    }
+
+    public function testSearchPagedWithACursorListsEachMatchOnce(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'search_cursor_pages';
+        $this->createProducts($database, $collection);
+        foreach (['dock' => 'Laptop Laptop Dock', 'sleeve' => 'Laptop Sleeve', 'bag' => 'Laptop Bag'] as $id => $name) {
+            $database->createDocument($collection, new Document([
+                '$id' => $id,
+                'name' => $name,
+                'category' => 'electronics',
+                'price' => 90,
+                'stock' => 5,
+                '$permissions' => [Permission::read(Role::any())],
+            ]));
+        }
+        $database->createIndex($collection, Index::fullText(key: 'name_search', attributes: ['name']));
+
+        $matches = ['laptop', 'dock', 'sleeve', 'bag'];
+        $search = Query::search('name', 'Laptop');
+        $after = $this->pageOneByOne($database, $collection, $search, null, Query::cursorAfter(...), \count($matches));
+        $before = $this->pageOneByOne($database, $collection, $search, $database->getDocument($collection, 'bag'), Query::cursorBefore(...), \count($matches));
+
+        $this->assertSame(
+            ['after' => $matches, 'before' => ['sleeve', 'dock', 'laptop']],
+            [
+                'after' => \array_map(fn (Document $document): string => $document->getId(), $after),
+                'before' => \array_map(fn (Document $document): string => $document->getId(), $before),
+            ],
+        );
+        foreach ([...$after, ...$before] as $document) {
+            $this->assertArrayNotHasKey('_relevance', $document->getArrayCopy());
+        }
+
+        $unpaged = $database->find($collection, [$search]);
+        $this->assertSame($matches, \array_map(fn (Document $document): string => $document->getId(), $unpaged));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  callable(Document): Query  $cursorQuery
+     * @return list<Document>
+     */
+    private function pageOneByOne(Database $database, string $collection, Query $search, ?Document $cursor, callable $cursorQuery, int $matches): array
+    {
+        $documents = [];
+        while (\count($documents) <= $matches) {
+            $queries = [$search, Query::limit(1)];
+            if ($cursor !== null) {
+                $queries[] = $cursorQuery($cursor);
+            }
+
+            $cursor = $database->find($collection, $queries)[0] ?? null;
+            if ($cursor === null) {
+                break;
+            }
+
+            $documents[] = $cursor;
+        }
+
+        return $documents;
+    }
+}

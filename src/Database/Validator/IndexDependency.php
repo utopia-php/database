@@ -2,9 +2,14 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\Attribute as AttributeVO;
 use Utopia\Database\Document;
+use Utopia\Database\Index as IndexVO;
 use Utopia\Validator;
 
+/**
+ * Validates that an attribute can be safely deleted or renamed by checking for index dependencies.
+ */
 class IndexDependency extends Validator
 {
     protected string $message = "Attribute can't be deleted or renamed because it is used in an index";
@@ -12,18 +17,20 @@ class IndexDependency extends Validator
     protected bool $castIndexSupport;
 
     /**
-     * @var array<Document>
+     * @var array<IndexVO>
      */
     protected array $indexes;
 
     /**
-     * @param array<Document> $indexes
-     * @param bool $castIndexSupport
+     * @param  array<IndexVO|Document>  $indexes
      */
     public function __construct(array $indexes, bool $castIndexSupport)
     {
         $this->castIndexSupport = $castIndexSupport;
-        $this->indexes = $indexes;
+        $this->indexes = [];
+        foreach ($indexes as $index) {
+            $this->indexes[] = $index instanceof IndexVO ? $index : IndexVO::fromDocument($index);
+        }
     }
 
     /**
@@ -37,7 +44,7 @@ class IndexDependency extends Validator
     /**
      * Is valid.
      *
-     * @param  Document  $value
+     * @param  AttributeVO|Document  $value
      */
     public function isValid($value): bool
     {
@@ -45,15 +52,16 @@ class IndexDependency extends Validator
             return true;
         }
 
-        if (! $value->getAttribute('array', false)) {
+        $attr = $value instanceof AttributeVO ? $value : AttributeVO::fromDocument($value);
+
+        if (! $attr->array) {
             return true;
         }
 
-        $key = \strtolower($value->getAttribute('key', $value->getAttribute('$id')));
+        $key = \strtolower($attr->key);
 
         foreach ($this->indexes as $index) {
-            $attributes = $index->getAttribute('attributes', []);
-            foreach ($attributes as $attribute) {
+            foreach ($index->attributes as $attribute) {
                 if ($key === \strtolower($attribute)) {
                     return false;
                 }

@@ -5,18 +5,16 @@ namespace Utopia\Database\Validator;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Validator;
 
+/**
+ * Validates authorization by checking if any of the current roles match the required permissions.
+ */
 class Authorization extends Validator
 {
-    /**
-     * @var bool
-     */
     protected bool $status = true;
 
     /**
      * Default value in case we need
      *  to reset Authorization status
-     *
-     * @var bool
      */
     protected bool $statusDefault = true;
 
@@ -24,47 +22,45 @@ class Authorization extends Validator
      * @var array<string, bool>
      */
     private array $roles = [
-        'any' => true
+        'any' => true,
     ];
 
-    /**
-     * @var string
-     */
     protected string $message = 'Authorization Error';
 
     /**
      * Get Description.
      *
      * Returns validator description
-     *
-     * @return string
      */
     public function getDescription(): string
     {
         return $this->message;
     }
 
-    /*
-     * Validation
+    /**
+     * Validate that the given input has the required permissions for the current roles.
      *
-     * Returns true if valid or false if not.
-    */
+     * @param mixed $input Authorization\Input instance containing action and permissions
+     * @return bool
+     */
     public function isValid(mixed $input): bool
     {
-        if (!($input instanceof Input)) {
+        if (! ($input instanceof Input)) {
             $this->message = 'Invalid input provided';
+
             return false;
         }
 
         $permissions = $input->getPermissions();
         $action = $input->getAction();
 
-        if (!$this->status) {
+        if (! $this->status) {
             return true;
         }
 
         if (empty($permissions)) {
             $this->message = 'No permissions provided for action \''.$action.'\'';
+
             return false;
         }
 
@@ -77,11 +73,14 @@ class Authorization extends Validator
         }
 
         $this->message = 'Missing "'.$action.'" permission for role "'.$permission.'". Only "'.\json_encode($this->getRoles()).'" scopes are allowed and "'.\json_encode($permissions).'" was given.';
+
         return false;
     }
 
     /**
-     * @param string $role
+     * Add a role to the authorized roles list.
+     *
+     * @param string $role Role identifier to add
      * @return void
      */
     public function addRole(string $role): void
@@ -90,8 +89,9 @@ class Authorization extends Validator
     }
 
     /**
-     * @param string $role
+     * Remove a role from the authorized roles list.
      *
+     * @param string $role Role identifier to remove
      * @return void
      */
     public function removeRole(string $role): void
@@ -108,6 +108,8 @@ class Authorization extends Validator
     }
 
     /**
+     * Remove all roles from the authorized roles list.
+     *
      * @return void
      */
     public function cleanRoles(): void
@@ -116,21 +118,20 @@ class Authorization extends Validator
     }
 
     /**
-     * @param string $role
+     * Check whether a specific role exists in the authorized roles list.
      *
+     * @param string $role Role identifier to check
      * @return bool
      */
     public function hasRole(string $role): bool
     {
-        return (\array_key_exists($role, $this->roles));
+        return \array_key_exists($role, $this->roles);
     }
 
     /**
      * Change default status.
      * This will be used for the
      *  value set on the $this->reset() method
-     * @param bool $status
-     * @return void
      */
     public function setDefaultStatus(bool $status): void
     {
@@ -140,9 +141,6 @@ class Authorization extends Validator
 
     /**
      * Change status
-     *
-     * @param bool $status
-     * @return void
      */
     public function setStatus(bool $status): void
     {
@@ -151,8 +149,6 @@ class Authorization extends Validator
 
     /**
      * Get status
-     *
-     * @return bool
      */
     public function getStatus(): bool
     {
@@ -165,7 +161,8 @@ class Authorization extends Validator
      * Skips authorization for the code to be executed inside the callback
      *
      * @template T
-     * @param callable(): T $callback
+     *
+     * @param  callable(): T  $callback
      * @return T
      */
     public function skip(callable $callback): mixed
@@ -182,8 +179,6 @@ class Authorization extends Validator
 
     /**
      * Enable Authorization checks
-     *
-     * @return void
      */
     public function enable(): void
     {
@@ -192,8 +187,6 @@ class Authorization extends Validator
 
     /**
      * Disable Authorization checks
-     *
-     * @return void
      */
     public function disable(): void
     {
@@ -202,8 +195,6 @@ class Authorization extends Validator
 
     /**
      * Disable Authorization checks
-     *
-     * @return void
      */
     public function reset(): void
     {
@@ -214,8 +205,6 @@ class Authorization extends Validator
      * Is array
      *
      * Function will return true if object is array.
-     *
-     * @return bool
      */
     public function isArray(): bool
     {
@@ -226,8 +215,6 @@ class Authorization extends Validator
      * Get Type
      *
      * Returns validator type.
-     *
-     * @return string
      */
     public function getType(): string
     {

@@ -1,0 +1,87 @@
+<?php
+
+namespace Tests\Unit;
+
+use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\Memory as CacheMemory;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
+
+class SelectFilterSkipTest extends TestCase
+{
+    public function testFilterNotAppliedWhenAttributeNotSelected(): void
+    {
+        $database = new Database(new DatabaseMemory(), new Cache(new CacheMemory()));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('select_filter_'.\uniqid());
+
+        $database->create();
+
+        $calls = new \stdClass();
+        $calls->count = 0;
+        $database->addFilter(
+            'subQueryProbeUnit',
+            fn (mixed $value) => null,
+            function (mixed $value) use ($calls) {
+                $calls->count++;
+
+                return ['fanned', 'out'];
+            }
+        );
+
+        $database->createCollection(new Collection(id: 'filterSelect'));
+        $database->createAttribute('filterSelect', Attribute::string(key: 'plain', size: 128));
+        $database->createAttribute('filterSelect', Attribute::string(key: 'kids', size: 128, filters: ['subQueryProbeUnit']));
+
+        $database->createDocument('filterSelect', new Document([
+            '$id' => 'doc1',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            'plain' => 'x',
+        ]));
+
+        $calls->count = 0;
+        $document = $database->getDocument('filterSelect', 'doc1');
+        $this->assertSame(1, $calls->count);
+        $this->assertSame(['fanned', 'out'], $document->getAttribute('kids'));
+
+        $calls->count = 0;
+        $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['$id', 'plain'])]);
+        $this->assertSame(0, $calls->count);
+        $this->assertNull($document->getAttribute('kids'));
+        $this->assertSame('x', $document->getAttribute('plain'));
+
+        $calls->count = 0;
+        $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['$id', 'kids'])]);
+        $this->assertSame(1, $calls->count);
+        $this->assertSame(['fanned', 'out'], $document->getAttribute('kids'));
+
+        $calls->count = 0;
+        $document = $database->getDocument('filterSelect', 'doc1', [Query::select(['*'])]);
+        $this->assertSame(1, $calls->count);
+        $this->assertSame(['fanned', 'out'], $document->getAttribute('kids'));
+
+        $calls->count = 0;
+        $documents = $database->find('filterSelect', [Query::select(['$id', 'plain'])]);
+        $this->assertCount(1, $documents);
+        $this->assertSame(0, $calls->count);
+        $this->assertNull($documents[0]->getAttribute('kids'));
+
+        $calls->count = 0;
+        $documents = $database->find('filterSelect');
+        $this->assertCount(1, $documents);
+        $this->assertSame(1, $calls->count);
+        $this->assertSame(['fanned', 'out'], $documents[0]->getAttribute('kids'));
+    }
+}

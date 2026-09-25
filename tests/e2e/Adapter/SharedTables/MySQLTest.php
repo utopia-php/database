@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\SharedTables;
 
 use Redis;
 use Tests\E2E\Adapter\Base;
+use Tests\E2E\Adapter\Scopes\MySQLJoinPlanTests;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MySQL;
@@ -12,27 +13,26 @@ use Utopia\Database\PDO;
 
 class MySQLTest extends Base
 {
+    use MySQLJoinPlanTests;
+
     public static ?Database $database = null;
+
     protected static ?PDO $pdo = null;
+
     protected static string $namespace;
 
     // Remove once all methods are implemented
     /**
      * Return name of adapter
-     *
-     * @return string
      */
     public static function getAdapterName(): string
     {
-        return "mysql";
+        return 'mysql';
     }
 
-    /**
-     * @return Database
-     */
     public function getDatabase(): Database
     {
-        if (!is_null(self::$database)) {
+        if (! is_null(self::$database)) {
             return self::$database;
         }
 
@@ -45,19 +45,19 @@ class MySQLTest extends Base
 
         $redis = new Redis();
         $redis->connect('redis', 6379);
-        $redis->flushAll();
+        $redis->select(8);
 
-        $cache = new Cache(new RedisAdapter($redis));
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
 
         $database = new Database(new MySQL($pdo), $cache);
+        assert(self::$authorization !== null);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setSharedTables(true)
             ->setTenant(999)
-            ->setNamespace(static::$namespace = '')
-            ->enableLocks(true)
-        ;
+            ->setNamespace(static::$namespace = 'st_'.static::getTestToken())
+            ->enableLocks(true);
 
         if ($database->exists()) {
             $database->delete();
@@ -66,14 +66,16 @@ class MySQLTest extends Base
         $database->create();
 
         self::$pdo = $pdo;
+
         return self::$database = $database;
     }
 
     protected function deleteColumn(string $collection, string $column): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;
@@ -81,9 +83,10 @@ class MySQLTest extends Base
 
     protected function deleteIndex(string $collection, string $index): bool
     {
-        $sqlTable = "`" . $this->getDatabase()->getDatabase() . "`.`" . $this->getDatabase()->getNamespace() . "_" . $collection . "`";
+        $sqlTable = '`'.$this->getDatabase()->getDatabase().'`.`'.$this->getDatabase()->getNamespace().'_'.$collection.'`';
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
+        assert(self::$pdo !== null);
         self::$pdo->exec($sql);
 
         return true;

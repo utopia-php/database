@@ -115,8 +115,6 @@ RUN EXT_DIR=$(php-config --extension-dir) \
 RUN echo extension=redis.so >> /usr/local/etc/php/conf.d/redis.ini
 RUN echo extension=swoole.so >> /usr/local/etc/php/conf.d/swoole.ini
 RUN echo extension=pcov.so >> /usr/local/etc/php/conf.d/pcov.ini
-RUN echo extension=xdebug.so >> /usr/local/etc/php/conf.d/xdebug.ini
-
 RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 RUN echo "opcache.enable_cli=1" >> $PHP_INI_DIR/php.ini
@@ -131,6 +129,6 @@ COPY ./dev /usr/src/code/dev
 RUN if [ "$DEBUG" = "true" ]; then cp /usr/src/code/dev/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini; fi
 RUN if [ "$DEBUG" = "true" ]; then mkdir -p /tmp/xdebug; fi
 RUN if [ "$DEBUG" = "false" ]; then rm -rf /usr/src/code/dev; fi
-RUN if [ "$DEBUG" = "false" ]; then rm -f $(php-config --extension-dir)/xdebug.so; fi
+RUN if [ "$DEBUG" = "false" ]; then rm -f /usr/local/etc/php/conf.d/xdebug.ini; fi
 
 CMD [ "tail", "-f", "/dev/null" ]

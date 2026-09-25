@@ -3,18 +3,31 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
+use ReflectionMethod;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
+/**
+ * Paratest's `--functional` mode invokes `setUpBeforeClass`/`tearDownAfterClass`
+ * between every test method, not just at suite boundaries, while inherited
+ * fixture statics (`$moviesFixtureInit`, `$documentsFixtureInit`, etc.) stay
+ * set across methods within the same worker process. Scrubbing the namespace
+ * or recreating the `Database` between tests would leave the cached fixture
+ * metadata pointing at collections that no longer exist. The CI Redis
+ * container is ephemeral, so leaking keys to process exit is safe.
+ */
 class RedisTest extends Base
 {
     public static ?Database $database = null;
     public static ?Redis $redisClient = null;
     public static string $redisNamespace = '';
-    /** @var array<int, string> Adapter-keyspace SCAN patterns the run owns, scrubbed in tearDownAfterClass. */
-    protected static array $keyPatterns = [];
 
     public static function getAdapterName(): string
     {
@@ -42,7 +55,7 @@ class RedisTest extends Base
             self::$authorization = new \Utopia\Database\Validator\Authorization();
         }
 
-        $host = \getenv('REDIS_HOST') ?: 'redis-mirror';
+        $host = \getenv('REDIS_HOST') ?: 'redis';
         $port = (int) (\getenv('REDIS_PORT') ?: 6379);
 
         $client = new Redis();
@@ -61,17 +74,10 @@ class RedisTest extends Base
         $database = new Database($adapter, $cache);
         $database
             ->setAuthorization(self::$authorization)
-            ->setDatabase('utopiaTests')
+            ->setDatabase($this->testDatabase)
             ->setNamespace(self::$redisNamespace);
 
         $this->configureDatabase($database);
-
-        // Track every adapter-keyspace pattern this run owns so
-        // tearDownAfterClass can scrub without a global FLUSH. The
-        // configureDatabase() call above may have mutated the namespace
-        // (shared-tables uses ''), so capture the post-configure namespace
-        // too.
-        self::$keyPatterns = self::buildKeyPatterns(self::$redisNamespace, $database->getNamespace(), $database->getDatabase());
 
         if ($database->exists()) {
             $database->delete();
@@ -80,27 +86,6 @@ class RedisTest extends Base
         $database->create();
 
         return self::$database = $database;
-    }
-
-    /**
-     * Build SCAN MATCH patterns covering the adapter keyspace for every
-     * namespace this test class actually wrote to. The two-namespace form
-     * (initial + post-configure) covers the shared-tables case where
-     * setNamespace('') is applied before create().
-     *
-     * @return array<int, string>
-     */
-    protected static function buildKeyPatterns(string $initialNamespace, string $effectiveNamespace, string $database): array
-    {
-        $patterns = [];
-        $namespaces = \array_unique([$initialNamespace, $effectiveNamespace]);
-        foreach ($namespaces as $namespace) {
-            // Adapter writes: `KEY_PREFIX:{namespace}:{database}:*`. Empty
-            // namespace produces a literal double-colon, which is a valid
-            // SCAN pattern.
-            $patterns[] = RedisAdapter::KEY_PREFIX . ':' . $namespace . ':' . $database . ':*';
-        }
-        return \array_values(\array_unique($patterns));
     }
 
     protected function deleteColumn(string $collection, string $column): bool
@@ -137,36 +122,52 @@ class RedisTest extends Base
         );
     }
 
-    public static function tearDownAfterClass(): void
+    public function testReadsDropAStoredNonStringPermission(): void
     {
-        try {
-            if (self::$keyPatterns !== [] && self::$redisClient instanceof Redis) {
-                self::scrubKeys(self::$redisClient, self::$keyPatterns);
-            }
-        } finally {
-            self::$database = null;
-            self::$redisClient = null;
-            self::$redisNamespace = '';
-            self::$keyPatterns = [];
-            parent::tearDownAfterClass();
-        }
-    }
+        $database = $this->getDatabase();
+        $collection = 'lenientReads';
+        $permissions = [Permission::read(Role::any())];
 
-    /**
-     * @param array<int, string> $patterns
-     */
-    private static function scrubKeys(Redis $client, array $patterns): void
-    {
-        foreach ($patterns as $pattern) {
-            $iterator = null;
-            while (($keys = $client->scan($iterator, $pattern, 500)) !== false) {
-                if (\is_array($keys) && \count($keys) > 0) {
-                    $client->del($keys);
-                }
-                if ($iterator === 0) {
-                    break;
-                }
-            }
-        }
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: true,
+        ));
+        $database->createDocument($collection, new Document([
+            '$id' => 'note',
+            '$permissions' => $permissions,
+            'title' => 'stored',
+        ]));
+
+        $adapter = $database->getAdapter();
+        $client = self::$redisClient;
+        $this->assertInstanceOf(RedisAdapter::class, $adapter);
+        $this->assertNotNull($client);
+        $key = (new ReflectionMethod(RedisAdapter::class, 'docKey'))->invoke($adapter, $collection, 'note');
+        $this->assertIsString($key);
+        $payload = $client->get($key);
+        $this->assertIsString($payload);
+        $stored = \json_decode($payload, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertIsArray($stored);
+        $stored[Document::PERMISSIONS] = [Permission::read(Role::any()), 42, null];
+        $client->set($key, \json_encode($stored, JSON_THROW_ON_ERROR));
+
+        $this->assertSame($permissions, $database->getDocument($collection, 'note')->getPermissions());
+        $this->assertSame(
+            [$permissions],
+            \array_map(fn (Document $document): array => $document->getPermissions(), $database->find($collection)),
+        );
+
+        $this->assertSame(1, $database->updateDocuments($collection, new Document(['title' => 'bulk'])));
+        $this->assertSame('bulk', $database->getDocument($collection, 'note')->getAttribute('title'));
+
+        $updated = $database->updateDocument($collection, 'note', new Document(['title' => 'single']));
+        $this->assertSame('single', $updated->getAttribute('title'));
+        $this->assertSame($permissions, $updated->getPermissions());
     }
 }

@@ -3,10 +3,19 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PDOException;
+use Redis;
+use RedisException;
+use ReflectionProperty;
 use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
-use Utopia\Console;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Attribute;
+use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
@@ -20,7 +29,9 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Mirror;
+use Utopia\Database\PDO;
 use Utopia\Database\Query;
 
 trait GeneralTests
@@ -40,35 +51,30 @@ trait GeneralTests
      */
     public function testQueryTimeout(): void
     {
-        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
+        if (! ($this->getDatabase()->getAdapter()->hasFeature(Feature\Timeouts::class))) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('global-timeouts');
+        $database->createCollection(new Collection(id: 'global-timeouts'));
 
         $this->assertEquals(
             true,
-            $database->createAttribute(
-                collection: 'global-timeouts',
-                id: 'longtext',
-                type: Database::VAR_STRING,
-                size: 100000000,
-                required: true
-            )
+            $database->createAttribute('global-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true))
         );
 
         for ($i = 0; $i < 20; $i++) {
             $database->createDocument('global-timeouts', new Document([
-                'longtext' => file_get_contents(__DIR__ . '/../../../resources/longtext.txt'),
+                'longtext' => file_get_contents(__DIR__.'/../../../resources/longtext.txt'),
                 '$permissions' => [
                     Permission::read(Role::any()),
                     Permission::update(Role::any()),
-                    Permission::delete(Role::any())
-                ]
+                    Permission::delete(Role::any()),
+                ],
             ]));
         }
 
@@ -86,404 +92,61 @@ trait GeneralTests
         }
     }
 
-    public function testCountTimeout(): void
-    {
-        if (!$this->getDatabase()->getAdapter()->getSupportForTimeouts()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $database->createCollection('count-timeouts');
-
-        $this->assertEquals(
-            true,
-            $database->createAttribute(
-                collection: 'count-timeouts',
-                id: 'longtext',
-                type: Database::VAR_STRING,
-                size: 100000000,
-                required: true
-            )
-        );
-
-        $longtext = file_get_contents(__DIR__ . '/../../../resources/longtext.txt');
-        for ($i = 0; $i < 20; $i++) {
-            $database->createDocument('count-timeouts', new Document([
-                'longtext' => $longtext,
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::update(Role::any()),
-                    Permission::delete(Role::any())
-                ]
-            ]));
-        }
-
-        try {
-            $database->setTimeout(1);
-
-            $thrown = null;
-            try {
-                // A substring scan forces the engine to walk every huge value; a
-                // cheap filter (e.g. notEqual) lets COUNT finish inside the timeout.
-                $database->count('count-timeouts', [
-                    Query::contains('longtext', ['needle-that-does-not-exist']),
-                ]);
-            } catch (\Exception $e) {
-                $thrown = $e;
-            }
-
-            $this->assertInstanceOf(TimeoutException::class, $thrown, 'count() must throw a timeout exception');
-        } finally {
-            $database->clearTimeout();
-            $database->deleteCollection('count-timeouts');
-        }
-    }
-
-    public function testPreserveDatesUpdate(): void
-    {
-        $this->getDatabase()->getAuthorization()->disable();
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $database->setPreserveDates(true);
-
-        $database->createCollection('preserve_update_dates');
-
-        $database->createAttribute('preserve_update_dates', 'attr1', Database::VAR_STRING, 10, false);
-
-        $doc1 = $database->createDocument('preserve_update_dates', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [],
-            'attr1' => 'value1',
-        ]));
-
-        $doc2 = $database->createDocument('preserve_update_dates', new Document([
-            '$id' => 'doc2',
-            '$permissions' => [],
-            'attr1' => 'value2',
-        ]));
-
-        $doc3 = $database->createDocument('preserve_update_dates', new Document([
-            '$id' => 'doc3',
-            '$permissions' => [],
-            'attr1' => 'value3',
-        ]));
-        // updating with empty dates
-        try {
-            $doc1->setAttribute('$updatedAt', '');
-            $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
-            $this->fail('Failed to throw structure exception');
-
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
-        }
-
-        try {
-            $this->getDatabase()->updateDocuments(
-                'preserve_update_dates',
-                new Document([
-                    '$updatedAt' => ''
-                ]),
-                [
-                    Query::equal('$id', [
-                        $doc2->getId(),
-                        $doc3->getId()
-                    ])
-                ]
-            );
-            $this->fail('Failed to throw structure exception');
-
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
-        }
-
-        // non empty dates
-        $newDate = '2000-01-01T10:00:00.000+00:00';
-
-        $doc1->setAttribute('$updatedAt', $newDate);
-        $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
-        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
-        $doc1 = $database->getDocument('preserve_update_dates', 'doc1');
-        $this->assertEquals($newDate, $doc1->getAttribute('$updatedAt'));
-
-        $this->getDatabase()->updateDocuments(
-            'preserve_update_dates',
-            new Document([
-                '$updatedAt' => $newDate
-            ]),
-            [
-                Query::equal('$id', [
-                    $doc2->getId(),
-                    $doc3->getId()
-                ])
-            ]
-        );
-
-        $doc2 = $database->getDocument('preserve_update_dates', 'doc2');
-        $doc3 = $database->getDocument('preserve_update_dates', 'doc3');
-        $this->assertEquals($newDate, $doc2->getAttribute('$updatedAt'));
-        $this->assertEquals($newDate, $doc3->getAttribute('$updatedAt'));
-
-        $database->deleteCollection('preserve_update_dates');
-
-        $database->setPreserveDates(false);
-
-        $this->getDatabase()->getAuthorization()->reset();
-    }
-
-    public function testPreserveDatesCreate(): void
-    {
-        $this->getDatabase()->getAuthorization()->disable();
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForAttributes()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        $database->setPreserveDates(true);
-
-        $database->createCollection('preserve_create_dates');
-
-        $database->createAttribute('preserve_create_dates', 'attr1', Database::VAR_STRING, 10, false);
-
-        // empty string for $createdAt should throw Structure exception
-        try {
-            $date = '';
-            $database->createDocument('preserve_create_dates', new Document([
-                '$id' => 'doc1',
-                '$permissions' => [],
-                'attr1' => 'value1',
-                '$createdAt' => $date
-            ]));
-            $this->fail('Failed to throw structure exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
-        }
-
-        try {
-            $database->createDocuments('preserve_create_dates', [
-                new Document([
-                    '$id' => 'doc2',
-                    '$permissions' => [],
-                    'attr1' => 'value2',
-                    '$createdAt' => $date
-                ]),
-                new Document([
-                    '$id' => 'doc3',
-                    '$permissions' => [],
-                    'attr1' => 'value3',
-                    '$createdAt' => $date
-                ]),
-            ], batchSize: 2);
-            $this->fail('Failed to throw structure exception');
-        } catch (Exception $e) {
-            $this->assertInstanceOf(StructureException::class, $e);
-            $this->assertEquals('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
-        }
-
-        // non empty date
-        $date = '2000-01-01T10:00:00.000+00:00';
-
-        $database->createDocument('preserve_create_dates', new Document([
-            '$id' => 'doc1',
-            '$permissions' => [],
-            'attr1' => 'value1',
-            '$createdAt' => $date
-        ]));
-
-        $database->createDocuments('preserve_create_dates', [
-            new Document([
-                '$id' => 'doc2',
-                '$permissions' => [],
-                'attr1' => 'value2',
-                '$createdAt' => $date
-            ]),
-            new Document([
-                '$id' => 'doc3',
-                '$permissions' => [],
-                'attr1' => 'value3',
-                '$createdAt' => $date,
-            ]),
-            new Document([
-                '$id' => 'doc4',
-                '$permissions' => [],
-                'attr1' => 'value3',
-                '$createdAt' => null,
-            ]),
-            new Document([
-                '$id' => 'doc5',
-                '$permissions' => [],
-                'attr1' => 'value3',
-            ]),
-        ], batchSize: 2);
-
-        $doc1 = $database->getDocument('preserve_create_dates', 'doc1');
-        $doc2 = $database->getDocument('preserve_create_dates', 'doc2');
-        $doc3 = $database->getDocument('preserve_create_dates', 'doc3');
-        $doc4 = $database->getDocument('preserve_create_dates', 'doc4');
-        $doc5 = $database->getDocument('preserve_create_dates', 'doc5');
-        $this->assertEquals($date, $doc1->getAttribute('$createdAt'));
-        $this->assertEquals($date, $doc2->getAttribute('$createdAt'));
-        $this->assertEquals($date, $doc3->getAttribute('$createdAt'));
-        $this->assertNotEmpty($date, $doc4->getAttribute('$createdAt'));
-        $this->assertNotEquals($date, $doc4->getAttribute('$createdAt'));
-        $this->assertNotEmpty($date, $doc5->getAttribute('$createdAt'));
-        $this->assertNotEquals($date, $doc5->getAttribute('$createdAt'));
-
-        $database->deleteCollection('preserve_create_dates');
-
-        $database->setPreserveDates(false);
-
-        $this->getDatabase()->getAuthorization()->reset();
-    }
-
-    public function testGetAttributeLimit(): void
-    {
-        $this->assertIsInt($this->getDatabase()->getLimitForAttributes());
-    }
-    public function testGetIndexLimit(): void
-    {
-        $this->assertEquals(58, $this->getDatabase()->getLimitForIndexes());
-    }
-
-    public function testGetId(): void
-    {
-        $this->assertEquals(20, strlen(ID::unique()));
-        $this->assertEquals(13, strlen(ID::unique(0)));
-        $this->assertEquals(13, strlen(ID::unique(-1)));
-        $this->assertEquals(23, strlen(ID::unique(10)));
-
-        // ensure two sequential calls to getId do not give the same result
-        $this->assertNotEquals(ID::unique(10), ID::unique(10));
-    }
-
     public function testSharedTablesUpdateTenant(): void
     {
         $database = $this->getDatabase();
         $sharedTables = $database->getSharedTables();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        if ($database->exists('sharedTables')) {
-            $database->setDatabase('sharedTables')->delete();
+        $sharedTablesDb = 'sharedTables_'.static::getTestToken();
+
+        if ($database->exists($sharedTablesDb)) {
+            $database->setDatabase($sharedTablesDb)->delete();
         }
 
         $database
-            ->setDatabase('sharedTables')
+            ->setDatabase($sharedTablesDb)
             ->setNamespace('')
             ->setSharedTables(true)
             ->setTenant(null)
             ->create();
 
-        // Create collection
-        $database->createCollection(__FUNCTION__, documentSecurity: false);
-
-        $database
-            ->setTenant(1)
-            ->updateDocument(Database::METADATA, __FUNCTION__, new Document([
-                '$id' => __FUNCTION__,
-                'name' => 'Scooby Doo',
-            ]));
-
-        // Ensure tenant was not swapped
-        $doc = $database
-            ->setTenant(null)
-            ->getDocument(Database::METADATA, __FUNCTION__);
-
-        $this->assertEquals('Scooby Doo', $doc['name']);
-
-        // Reset state
-        $database
-            ->setSharedTables($sharedTables)
-            ->setNamespace($namespace)
-            ->setDatabase($schema);
-    }
-
-
-    public function testFindOrderByAfterException(): void
-    {
-        /**
-         * ORDER BY - After Exception
-         * Must be last assertion in test
-         */
-        $document = new Document([
-            '$collection' => 'other collection'
-        ]);
-
-        $this->expectException(Exception::class);
-
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        $database->find('movies', [
-            Query::limit(2),
-            Query::offset(0),
-            Query::cursorAfter($document)
-        ]);
-    }
-
-
-    public function testNestedQueryValidation(): void
-    {
-        $this->getDatabase()->createCollection(__FUNCTION__, [
-            new Document([
-                '$id' => ID::custom('name'),
-                'type' => Database::VAR_STRING,
-                'size' => 255,
-                'required' => true,
-            ])
-        ], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-            Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
-
-        $this->getDatabase()->createDocuments(__FUNCTION__, [
-            new Document([
-                '$id' => ID::unique(),
-                'name' => 'test1',
-            ]),
-            new Document([
-                '$id' => ID::unique(),
-                'name' => 'doc2',
-            ]),
-        ]);
-
         try {
-            $this->getDatabase()->find(__FUNCTION__, [
-                Query::or([
-                    Query::equal('name', ['test1']),
-                    Query::search('name', 'doc'),
-                ])
-            ]);
-            $this->fail('Failed to throw exception');
-        } catch (Throwable $e) {
-            $this->assertInstanceOf(QueryException::class, $e);
-            $this->assertEquals('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
+            $database->createCollection(new Collection(id: __FUNCTION__, documentSecurity: false));
+
+            $database
+                ->setTenant(1)
+                ->updateDocument(Database::METADATA, __FUNCTION__, new Document([
+                    '$id' => __FUNCTION__,
+                    'name' => 'Scooby Doo',
+                ]));
+
+            $database->setTenant(null);
+            $database->purgeCachedDocument(Database::METADATA, __FUNCTION__);
+            $doc = $database->getDocument(Database::METADATA, __FUNCTION__);
+
+            $this->assertFalse($doc->isEmpty());
+            $this->assertEquals(__FUNCTION__, $doc->getId());
+        } finally {
+            $database->setTenant(null)->setSharedTables(false);
+            if ($database->exists($sharedTablesDb)) {
+                $database->delete($sharedTablesDb);
+            }
+            $database
+                ->setSharedTables($sharedTables)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
         }
     }
-
 
     public function testSharedTablesTenantPerDocument(): void
     {
@@ -494,373 +157,506 @@ trait GeneralTests
         $tenantPerDocument = $database->getTenantPerDocument();
         $namespace = $database->getNamespace();
         $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
 
-        if (!$database->getAdapter()->getSupportForSchemas()) {
-            $this->expectNotToPerformAssertions();
-            return;
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
+            $this->markTestSkipped('Tenant per document needs a schema to hold the shared table');
         }
 
-        if ($database->exists('sharedTablesTenantPerDocument')) {
-            $database->delete('sharedTablesTenantPerDocument');
+        $tenantPerDocDb = 'sharedTablesTenantPerDocument_'.static::getTestToken();
+
+        if ($database->exists($tenantPerDocDb)) {
+            $database->delete($tenantPerDocDb);
         }
 
         $database
-            ->setDatabase('sharedTablesTenantPerDocument')
+            ->setDatabase($tenantPerDocDb)
             ->setNamespace('')
             ->setSharedTables(true)
             ->setTenant(null)
             ->create();
 
-        // Create collection
-        $database->createCollection(__FUNCTION__, permissions: [
-            Permission::create(Role::any()),
-            Permission::read(Role::any()),
-            Permission::update(Role::any()),
-        ], documentSecurity: false);
+        try {
+            // Create collection
+            $database->createCollection(new Collection(id: __FUNCTION__, permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ], documentSecurity: false));
 
-        $database->createAttribute(__FUNCTION__, 'name', Database::VAR_STRING, 100, false);
-        $database->createIndex(__FUNCTION__, 'nameIndex', Database::INDEX_KEY, ['name']);
+            $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
+            $database->createIndex(__FUNCTION__, Index::key(key: 'nameIndex', attributes: ['name']));
 
-        $doc1Id = ID::unique();
+            $doc1Id = ID::unique();
 
-        // Create doc for tenant 1
-        $database
-            ->setTenant(null)
-            ->setTenantPerDocument(true)
-            ->createDocument(__FUNCTION__, new Document([
-                '$id' => $doc1Id,
-                '$tenant' => 1,
-                'name' => 'Spiderman',
-            ]));
-
-        // Set to tenant 1 and read
-        $doc = $database
-            ->setTenantPerDocument(false)
-            ->setTenant(1)
-            ->getDocument(__FUNCTION__, $doc1Id);
-
-        $this->assertEquals('Spiderman', $doc['name']);
-
-        $doc2Id = ID::unique();
-
-        // Create doc for tenant 2
-        $database
-            ->setTenant(null)
-            ->setTenantPerDocument(true)
-            ->createDocument(__FUNCTION__, new Document([
-                '$id' => $doc2Id,
-                '$tenant' => 2,
-                'name' => 'Batman',
-            ]));
-
-        // Set to tenant 2 and read
-        $doc = $database
-            ->setTenantPerDocument(false)
-            ->setTenant(2)
-            ->getDocument(__FUNCTION__, $doc2Id);
-
-        $this->assertEquals('Batman', $doc['name']);
-        $this->assertEquals(2, $doc->getTenant());
-
-        // Ensure no read cross-tenant
-        $docs = $database
-            ->setTenantPerDocument(false)
-            ->setTenant(1)
-            ->find(__FUNCTION__);
-
-        $this->assertEquals(1, \count($docs));
-        $this->assertEquals($doc1Id, $docs[0]->getId());
-
-        if ($database->getAdapter()->getSupportForUpserts()) {
-            // Test upsert with tenant per doc
-            $doc3Id = ID::unique();
+            // Create doc for tenant 1
             $database
                 ->setTenant(null)
                 ->setTenantPerDocument(true)
-                ->upsertDocuments(__FUNCTION__, [new Document([
-                    '$id' => $doc3Id,
-                    '$tenant' => 3,
-                    'name' => 'Superman3',
-                ])]);
+                ->createDocument(__FUNCTION__, new Document([
+                    '$id' => $doc1Id,
+                    '$tenant' => 1,
+                    'name' => 'Spiderman',
+                ]));
 
-            // Set to tenant 3 and read
+            // Set to tenant 1 and read
             $doc = $database
                 ->setTenantPerDocument(false)
-                ->setTenant(3)
-                ->getDocument(__FUNCTION__, $doc3Id);
+                ->setTenant(1)
+                ->getDocument(__FUNCTION__, $doc1Id);
 
-            $this->assertEquals('Superman3', $doc['name']);
-            $this->assertEquals(3, $doc->getTenant());
-            $this->assertEquals($doc3Id, $doc->getId());
+            $this->assertEquals('Spiderman', $doc['name']);
+            $doc1CreatedAt = $doc->getCreatedAt();
 
-            // Test no read from other tenants
+            $doc2Id = ID::unique();
+
+            // Create doc for tenant 2
+            $database
+                ->setTenant(null)
+                ->setTenantPerDocument(true)
+                ->createDocument(__FUNCTION__, new Document([
+                    '$id' => $doc2Id,
+                    '$tenant' => 2,
+                    'name' => 'Batman',
+                ]));
+
+            // Set to tenant 2 and read
+            $doc = $database
+                ->setTenantPerDocument(false)
+                ->setTenant(2)
+                ->getDocument(__FUNCTION__, $doc2Id);
+
+            $this->assertEquals('Batman', $doc['name']);
+            $this->assertEquals(2, $doc->getTenant());
+
+            // Ensure no read cross-tenant
             $docs = $database
                 ->setTenantPerDocument(false)
                 ->setTenant(1)
                 ->find(__FUNCTION__);
 
             $this->assertEquals(1, \count($docs));
+            $this->assertEquals($doc1Id, $docs[0]->getId());
 
-            // Ensure no cross-tenant read from upsert
-            $doc = $database
-                ->setTenant(1)
-                ->setTenantPerDocument(false)
-                ->getDocument(__FUNCTION__, $doc3Id);
+            // Selecting no tenant has to scope a read to no tenant rather than to every
+            // tenant: this collection's own metadata row is tenantless, so nothing above
+            // the document read is left to keep one tenant out of another's rows.
+            $database->setTenant(null)->setTenantPerDocument(true);
 
-            $this->assertEquals(true, $doc->isEmpty());
+            $this->assertCount(0, $database->find(__FUNCTION__));
+            $this->assertSame(0, $database->count(__FUNCTION__));
+            $this->assertTrue($database->getDocument(__FUNCTION__, $doc1Id)->isEmpty());
 
-            // Upsert new documents with different tenants. The sequence lookup binds one
-            // placeholder per distinct tenant, so a cross-tenant batch has to keep each
-            // tenant's value at the position its placeholder was named for -- collected here
-            // because $onNext is the only way these documents reach the caller.
-            $doc4Id = ID::unique();
-            $doc5Id = ID::unique();
-            $sequences = [];
-            $database
-                ->setTenant(null)
-                ->setTenantPerDocument(true)
-                ->upsertDocuments(
-                    __FUNCTION__,
-                    [new Document([
+            if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
+                // An upsert has to recognise a row that createDocument() wrote, not shadow it
+                // with a second one: a duplicate moves $createdAt and is checked against
+                // create permission rather than update permission.
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(__FUNCTION__, [new Document([
+                        '$id' => $doc1Id,
+                        '$tenant' => 1,
+                        'name' => 'Spiderman revised',
+                    ])]);
+
+                $documents = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(1)
+                    ->find(__FUNCTION__);
+
+                $this->assertCount(1, $documents);
+                $this->assertSame('Spiderman revised', $documents[0]->getAttribute('name'));
+                $this->assertSame($doc1CreatedAt, $documents[0]->getCreatedAt());
+
+                // Test upsert with tenant per doc
+                $doc3Id = ID::unique();
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(__FUNCTION__, [new Document([
+                        '$id' => $doc3Id,
+                        '$tenant' => 3,
+                        'name' => 'Superman3',
+                    ])]);
+
+                // Set to tenant 3 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(3)
+                    ->getDocument(__FUNCTION__, $doc3Id);
+
+                $this->assertEquals('Superman3', $doc['name']);
+                $this->assertEquals(3, $doc->getTenant());
+                $this->assertEquals($doc3Id, $doc->getId());
+
+                // Test no read from other tenants
+                $docs = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(1)
+                    ->find(__FUNCTION__);
+
+                $this->assertEquals(1, \count($docs));
+
+                // Ensure no cross-tenant read from upsert
+                $doc = $database
+                    ->setTenant(1)
+                    ->setTenantPerDocument(false)
+                    ->getDocument(__FUNCTION__, $doc3Id);
+
+                $this->assertEquals(true, $doc->isEmpty());
+
+                // Upsert new documents with different tenants. The sequence lookup binds one
+                // placeholder per distinct tenant, so a cross-tenant batch has to keep each
+                // tenant's value at the position its placeholder was named for -- collected here
+                // because $onNext is the only way these documents reach the caller.
+                $doc4Id = ID::unique();
+                $doc5Id = ID::unique();
+                $sequences = [];
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(
+                        __FUNCTION__,
+                        [new Document([
+                            '$id' => $doc4Id,
+                            '$tenant' => 4,
+                            'name' => 'Superman4',
+                        ]), new Document([
+                            '$id' => $doc5Id,
+                            '$tenant' => 5,
+                            'name' => 'Superman5',
+                        ])],
+                        onNext: function (Document $document) use (&$sequences) {
+                            $sequences[$document->getId()] = $document->getSequence();
+                        }
+                    );
+
+                $this->assertCount(2, $sequences);
+                $this->assertNotEmpty($sequences[$doc4Id]);
+                $this->assertNotEmpty($sequences[$doc5Id]);
+
+                // Set to tenant 4 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(4)
+                    ->getDocument(__FUNCTION__, $doc4Id);
+
+                $this->assertEquals('Superman4', $doc['name']);
+                $this->assertEquals(4, $doc->getTenant());
+                $this->assertEquals($doc->getSequence(), $sequences[$doc4Id]);
+
+                // Set to tenant 5 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(5)
+                    ->getDocument(__FUNCTION__, $doc5Id);
+
+                $this->assertEquals('Superman5', $doc['name']);
+                $this->assertEquals(5, $doc->getTenant());
+                $this->assertEquals($doc->getSequence(), $sequences[$doc5Id]);
+
+                // Update names via upsert
+                $database
+                    ->setTenant(null)
+                    ->setTenantPerDocument(true)
+                    ->upsertDocuments(__FUNCTION__, [new Document([
                         '$id' => $doc4Id,
                         '$tenant' => 4,
-                        'name' => 'Superman4',
+                        'name' => 'Superman4 updated',
                     ]), new Document([
                         '$id' => $doc5Id,
                         '$tenant' => 5,
-                        'name' => 'Superman5',
-                    ])],
-                    onNext: function (Document $document) use (&$sequences) {
-                        $sequences[$document->getId()] = $document->getSequence();
-                    }
-                );
+                        'name' => 'Superman5 updated',
+                    ])]);
 
-            $this->assertCount(2, $sequences);
-            $this->assertNotEmpty($sequences[$doc4Id]);
-            $this->assertNotEmpty($sequences[$doc5Id]);
+                // Set to tenant 4 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(4)
+                    ->getDocument(__FUNCTION__, $doc4Id);
 
-            // Set to tenant 4 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(4)
-                ->getDocument(__FUNCTION__, $doc4Id);
+                $this->assertEquals('Superman4 updated', $doc['name']);
+                $this->assertEquals(4, $doc->getTenant());
 
-            $this->assertEquals('Superman4', $doc['name']);
-            $this->assertEquals(4, $doc->getTenant());
-            $this->assertEquals($doc->getSequence(), $sequences[$doc4Id]);
+                // Set to tenant 5 and read
+                $doc = $database
+                    ->setTenantPerDocument(false)
+                    ->setTenant(5)
+                    ->getDocument(__FUNCTION__, $doc5Id);
 
-            // Set to tenant 5 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(5)
-                ->getDocument(__FUNCTION__, $doc5Id);
-
-            $this->assertEquals('Superman5', $doc['name']);
-            $this->assertEquals(5, $doc->getTenant());
-            $this->assertEquals($doc->getSequence(), $sequences[$doc5Id]);
-
-            // Update names via upsert
+                $this->assertEquals('Superman5 updated', $doc['name']);
+                $this->assertEquals(5, $doc->getTenant());
+            }
+        } finally {
             $database
-                ->setTenant(null)
-                ->setTenantPerDocument(true)
-                ->upsertDocuments(__FUNCTION__, [new Document([
-                    '$id' => $doc4Id,
-                    '$tenant' => 4,
-                    'name' => 'Superman4 updated',
-                ]), new Document([
-                    '$id' => $doc5Id,
-                    '$tenant' => 5,
-                    'name' => 'Superman5 updated',
-                ])]);
-
-            // Set to tenant 4 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(4)
-                ->getDocument(__FUNCTION__, $doc4Id);
-
-            $this->assertEquals('Superman4 updated', $doc['name']);
-            $this->assertEquals(4, $doc->getTenant());
-
-            // Set to tenant 5 and read
-            $doc = $database
-                ->setTenantPerDocument(false)
-                ->setTenant(5)
-                ->getDocument(__FUNCTION__, $doc5Id);
-
-            $this->assertEquals('Superman5 updated', $doc['name']);
-            $this->assertEquals(5, $doc->getTenant());
+                ->setSharedTables($sharedTables)
+                ->setTenantPerDocument($tenantPerDocument)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
         }
-
-        // Reset instance
-        $database
-            ->setSharedTables($sharedTables)
-            ->setTenantPerDocument($tenantPerDocument)
-            ->setNamespace($namespace)
-            ->setDatabase($schema);
     }
 
+    public function testSharedTablesTenantPerDocumentUpsertRefreshesTheQueryCache(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
 
-    public function testCacheFallback(): void
+        if (
+            ! $database->getSharedTables()
+            || ! $adapter->hasFeature(Feature\Upserts::class)
+            || ! $adapter->supports(Capability::Schemas)
+            || ! $adapter->supports(Capability::Caching)
+        ) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $tenantPerDocument = $database->getTenantPerDocument();
+        $tenant = $database->getTenant();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $queryCache = $database->getQueryCache();
+        $cacheSchema = 'queryCacheTenants_'.static::getTestToken();
+
+        if ($database->exists($cacheSchema)) {
+            $database->delete($cacheSchema);
+        }
+
+        try {
+            $database
+                ->setDatabase($cacheSchema)
+                ->setNamespace('')
+                ->setTenant(null)
+                ->create();
+            $database->createCollection(new Collection(
+                id: 'notes',
+                attributes: [Attribute::string(key: 'title', size: 64)],
+                permissions: [
+                    Permission::create(Role::any()),
+                    Permission::update(Role::any()),
+                ],
+                documentSecurity: true,
+            ));
+            $database
+                ->setTenantPerDocument(true)
+                ->setQueryCache(new QueryCache($database->getCache(), ID::unique()));
+
+            foreach ([5, 6] as $documentTenant) {
+                $database->createDocument('notes', $this->queryCacheTenantNote($documentTenant, ['alice', 'bob'], 'draft'));
+            }
+            foreach (['alice', 'bob'] as $reader) {
+                $this->assertSame(['note' => 'draft'], $this->queryCacheTenantTitles($database, $reader, 5));
+            }
+
+            $database->upsertDocuments('notes', [$this->queryCacheTenantNote(5, ['alice'], 'final')]);
+
+            $this->assertSame(
+                [],
+                $this->queryCacheTenantTitles($database, 'bob', 5),
+                'An upsert with no tenant selected revoked bob on tenant 5\'s note, so the query cache must not keep serving it to him',
+            );
+            $this->assertSame(['note' => 'final'], $this->queryCacheTenantTitles($database, 'alice', 5));
+            $this->assertSame(['note' => 'draft'], $this->queryCacheTenantTitles($database, 'bob', 6));
+        } finally {
+            $database
+                ->setQueryCache($queryCache)
+                ->setTenantPerDocument($tenantPerDocument)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
+        }
+    }
+
+    /**
+     * @param  list<string>  $readers
+     */
+    private function queryCacheTenantNote(int $tenant, array $readers, string $title): Document
+    {
+        return new Document([
+            '$id' => 'note',
+            '$tenant' => $tenant,
+            'title' => $title,
+            '$permissions' => \array_map(
+                static fn (string $reader): string => Permission::read(Role::user($reader)),
+                $readers,
+            ),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed> Titles by document id
+     */
+    private function queryCacheTenantTitles(Database $database, string $reader, int $tenant): array
+    {
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::user($reader)->toString());
+
+        try {
+            $titles = [];
+            foreach ($database->withTenant($tenant, fn (): array => $database->find('notes', [Query::orderAsc('$id')])) as $document) {
+                $titles[$document->getId()] = $document->getAttribute('title');
+            }
+
+            return $titles;
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+    }
+
+    public function testSharedTablesReadsScopeToTheSelectedTenant(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
+        if (! $database->getSharedTables()) {
+            $this->markTestSkipped('Reads are only tenant scoped when tables are shared');
+        }
+
+        $tenant = $database->getTenant();
+        $tenantPerDocument = $database->getTenantPerDocument();
+        $collection = 'sharedTablesTenantScopedReads';
+
+        try {
+            // A collection whose own metadata row is tenantless, the way a shared pool
+            // holds one definition for every tenant on it. The collection lookup then has
+            // no tenant to refuse on, so the document read is the only thing keeping one
+            // tenant out of another's rows.
+            $database->setTenant(null)->setTenantPerDocument(true);
+
+            $database->createCollection(new Collection(
+                id: $collection,
+                attributes: [Attribute::string(key: 'name', size: 128, required: true)],
+                permissions: [
+                    Permission::create(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+                documentSecurity: false,
+            ));
+
+            $database->createDocument($collection, new Document([
+                Document::ID => 'one',
+                Document::TENANT => 1,
+                'name' => 'tenant one',
+            ]));
+            $database->createDocument($collection, new Document([
+                Document::ID => 'two',
+                Document::TENANT => 2,
+                'name' => 'tenant two',
+            ]));
+
+            $database->setTenantPerDocument(false)->setTenant(1);
+
+            $this->assertSame(
+                ['one'],
+                \array_map(fn (Document $document) => $document->getId(), $database->find($collection))
+            );
+            $this->assertSame(1, $database->count($collection));
+            $this->assertTrue($database->getDocument($collection, 'two')->isEmpty());
+
+            $database->setTenant(null)->setTenantPerDocument(true);
+
+            $this->assertCount(0, $database->find($collection));
+            $this->assertSame(0, $database->count($collection));
+            $this->assertTrue($database->getDocument($collection, 'one')->isEmpty());
+        } finally {
+            $database->setTenant($tenant)->setTenantPerDocument($tenantPerDocument);
+        }
+    }
+
+    public function testCacheFallbackOnFailure(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $this->getDatabase()->getAuthorization()->cleanRoles();
-        $this->getDatabase()->getAuthorization()->addRole(Role::any()->toString());
+        $collection = 'cacheFallback_'.uniqid();
 
-        // Write mock data
-        $database->createCollection('testRedisFallback', attributes: [
-            new Document([
-                '$id' => ID::custom('string'),
-                'type' => Database::VAR_STRING,
-                'size' => 767,
-                'required' => true,
-            ])
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'string', size: 767, required: true),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
             Permission::update(Role::any()),
-            Permission::delete(Role::any())
-        ]);
+            Permission::delete(Role::any()),
+        ]));
 
-        $database->createDocument('testRedisFallback', new Document([
+        $database->createDocument($collection, new Document([
             '$id' => 'doc1',
             'string' => 'text📝',
         ]));
 
-        $database->createIndex('testRedisFallback', 'index1', Database::INDEX_KEY, ['string']);
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
+        $database->createIndex($collection, Index::key(key: 'index1', attributes: ['string']));
+        $this->assertCount(1, $database->find($collection, [Query::equal('string', ['text📝'])]));
 
-        // Bring down Redis
-        $stdout = '';
-        $stderr = '';
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
-
-        // Check we can read data still
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-        $this->assertFalse(($database->getDocument('testRedisFallback', 'doc1'))->isEmpty());
-
-        // Check we cannot modify data
-        try {
-            $database->updateDocument('testRedisFallback', 'doc1', new Document([
-                'string' => 'text📝 updated',
-            ]));
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
+        // Stopping the shared Redis container would also fail every test paratest runs alongside this one,
+        // so the outage is a client whose every command fails the way a lost server does.
+        $unreachable = $this->createStub(Redis::class);
+        foreach (['hGet', 'hSet', 'hKeys', 'eval', 'evalSha', 'flushDB', 'dbSize', 'ping'] as $command) {
+            $unreachable->method($command)->willThrowException(new RedisException('Redis server redis:6379 went away'));
         }
+
+        $original = $database->getCache();
+        $destination = $database instanceof Mirror ? $database->getDestination() : null;
+        $destinationCache = $destination?->getCache();
+
+        $database->setCache(new Cache((new RedisAdapter($unreachable))->setMaxRetries(0)));
 
         try {
-            $database->deleteDocument('testRedisFallback', 'doc1');
-            $this->fail('Failed to throw exception');
-        } catch (\Throwable $e) {
-            $this->assertEquals('Redis server redis:6379 went away', $e->getMessage());
-        }
+            $this->assertCount(1, $database->find($collection, [Query::equal('string', ['text📝'])]));
+            $this->assertSame('text📝', $database->getDocument($collection, 'doc1')->getAttribute('string'));
 
-        // Bring backup Redis
-        Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-        sleep(5);
+            try {
+                $database->updateDocument($collection, 'doc1', new Document([
+                    'string' => 'text📝 updated',
+                ]));
+                $this->fail('Updating a document must fail while its cache entry cannot be invalidated');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(RedisException::class, $e);
+                $this->assertSame('Redis server redis:6379 went away', $e->getMessage());
+            }
 
-        $this->assertCount(1, $database->find('testRedisFallback', [Query::equal('string', ['text📝'])]));
-    }
+            try {
+                $database->deleteDocument($collection, 'doc1');
+                $this->fail('Deleting a document must fail while its cache entry cannot be invalidated');
+            } catch (Throwable $e) {
+                $this->assertInstanceOf(RedisException::class, $e);
+                $this->assertSame('Redis server redis:6379 went away', $e->getMessage());
+            }
 
-    public function testCacheReconnect(): void
-    {
-        /** @var Database $database */
-        $database = $this->getDatabase();
-
-        if (!$database->getAdapter()->getSupportForCacheSkipOnFailure()) {
-            $this->expectNotToPerformAssertions();
-            return;
-        }
-
-        // Wait for Redis to be fully healthy after previous test
-        $this->waitForRedis();
-
-        // Create new cache with reconnection enabled
-        $redis = new \Redis();
-        $redis->connect('redis', 6379);
-        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
-
-        // For Mirror, we need to set cache on both source and destination
-        if ($database instanceof Mirror) {
-            $database->getSource()->setCache($cache);
-
-            $mirrorRedis = new \Redis();
-            $mirrorRedis->connect('redis-mirror', 6379);
-            $mirrorCache = new Cache((new RedisAdapter($mirrorRedis))->setMaxRetries(3));
-            $database->getDestination()->setCache($mirrorCache);
-        }
-
-        $database->setCache($cache);
-
-        $database->getAuthorization()->cleanRoles();
-        $database->getAuthorization()->addRole(Role::any()->toString());
-
-        try {
-            $database->createCollection('testCacheReconnect', attributes: [
-                new Document([
-                    '$id' => ID::custom('title'),
-                    'type' => Database::VAR_STRING,
-                    'size' => 255,
-                    'required' => true,
-                ])
-            ], permissions: [
-                Permission::read(Role::any()),
-                Permission::create(Role::any()),
-                Permission::update(Role::any()),
-                Permission::delete(Role::any())
-            ]);
-
-            $database->createDocument('testCacheReconnect', new Document([
-                '$id' => 'reconnect_doc',
-                'title' => 'Test Document',
-            ]));
-
-            // Cache the document
-            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
-            $this->assertEquals('Test Document', $doc->getAttribute('title'));
-
-            // Bring down Redis
-            $stdout = '';
-            $stderr = '';
-            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker stop', "", $stdout, $stderr);
-            sleep(1);
-
-            // Bring back Redis
-            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-            $this->waitForRedis();
-
-            // Cache should reconnect - read should work
-            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
-            $this->assertEquals('Test Document', $doc->getAttribute('title'));
-
-            // Update should work after reconnect
-            $database->updateDocument('testCacheReconnect', 'reconnect_doc', new Document([
-                '$id' => 'reconnect_doc',
-                'title' => 'Updated Title',
-            ]));
-
-            $doc = $database->getDocument('testCacheReconnect', 'reconnect_doc');
-            $this->assertEquals('Updated Title', $doc->getAttribute('title'));
+            $this->assertSame('text📝', $database->getDocument($collection, 'doc1')->getAttribute('string'));
         } finally {
-            // Ensure Redis is running
-            $stdout = '';
-            $stderr = '';
-            Console::execute('docker ps -a --filter "name=utopia-redis" --format "{{.Names}}" | xargs -r docker start', "", $stdout, $stderr);
-            $this->waitForRedis();
-
-            // Cleanup collection if it exists
-            if ($database->exists() && !$database->getCollection('testCacheReconnect')->isEmpty()) {
-                $database->deleteCollection('testCacheReconnect');
+            $database->setCache($original);
+            if ($destination !== null && $destinationCache !== null) {
+                $destination->setCache($destinationCache);
             }
         }
+
+        $this->assertCount(1, $database->find($collection, [Query::equal('string', ['text📝'])]));
+
+        $updated = $database->updateDocument($collection, 'doc1', new Document([
+            'string' => 'text📝 updated',
+        ]));
+        $this->assertSame('text📝 updated', $updated->getAttribute('string'));
+        $this->assertSame('text📝 updated', $database->getDocument($collection, 'doc1')->getAttribute('string'));
+
+        $this->assertTrue($database->deleteDocument($collection, 'doc1'));
+        $this->assertTrue($database->getDocument($collection, 'doc1')->isEmpty());
+
+        $database->deleteCollection($collection);
     }
 
     /**
@@ -873,8 +669,8 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('transactionAtomicity');
-        $database->createAttribute('transactionAtomicity', 'title', Database::VAR_STRING, 128, true);
+        $database->createCollection(new Collection(id: 'transactionAtomicity'));
+        $database->createAttribute('transactionAtomicity', Attribute::string(key: 'title', size: 128, required: true));
 
         // Verify a successful transaction commits
         $doc = $database->withTransaction(function () use ($database) {
@@ -915,6 +711,142 @@ trait GeneralTests
         $database->deleteCollection('transactionAtomicity');
     }
 
+    public function testDocumentCacheEpochStaysBlockedUntilOuterTransactionCommit(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+
+        $collection = 'txDocumentCacheCommit';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'user',
+                'name' => 'original',
+            ]));
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+            [$collectionKey] = $database->getCacheKeys($collection, 'user');
+            $epochKey = $collectionKey.'#epoch';
+
+            $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+                $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+                $epoch = $database->getCache()->load($epochKey, Database::TTL);
+                $this->assertIsString($epoch);
+                $this->assertStringStartsWith('blocked:', $epoch);
+            });
+
+            $epoch = $database->getCache()->load($epochKey, Database::TTL);
+            $this->assertIsString($epoch);
+            $this->assertStringNotContainsString('blocked:', $epoch);
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testDocumentCacheEpochIsReleasedAfterOuterTransactionRollback(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+
+        $collection = 'txDocumentCacheRollback';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'user',
+                'name' => 'original',
+            ]));
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+            [$collectionKey] = $database->getCacheKeys($collection, 'user');
+            $epochKey = $collectionKey.'#epoch';
+
+            try {
+                $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+                    $database->updateDocument($collection, 'user', new Document(['name' => 'rolled-back']));
+                    $epoch = $database->getCache()->load($epochKey, Database::TTL);
+                    $this->assertIsString($epoch);
+                    $this->assertStringStartsWith('blocked:', $epoch);
+
+                    throw new ConflictException('rollback');
+                });
+            } catch (ConflictException) {
+            }
+
+            $epoch = $database->getCache()->load($epochKey, Database::TTL);
+            $this->assertIsString($epoch);
+            $this->assertStringNotContainsString('blocked:', $epoch);
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testNestedTransactionKeepsDocumentCacheEpochBlockedUntilOuterCommit(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+        if (! $database->getAdapter()->supports(Capability::NestedTransactions)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'txNestedDocumentCache';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'user',
+                'name' => 'original',
+            ]));
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+            [$collectionKey] = $database->getCacheKeys($collection, 'user');
+            $epochKey = $collectionKey.'#epoch';
+
+            $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+                $database->withTransaction(function () use ($database, $collection): void {
+                    $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+                });
+
+                $epoch = $database->getCache()->load($epochKey, Database::TTL);
+                $this->assertIsString($epoch);
+                $this->assertStringStartsWith('blocked:', $epoch);
+            });
+
+            $epoch = $database->getCache()->load($epochKey, Database::TTL);
+            $this->assertIsString($epoch);
+            $this->assertStringNotContainsString('blocked:', $epoch);
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     /**
      * Test that withTransaction correctly resets inTransaction state
      * when a known exception (DuplicateException) is thrown after successful rollback.
@@ -924,8 +856,8 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        $database->createCollection('txKnownException');
-        $database->createAttribute('txKnownException', 'title', Database::VAR_STRING, 128, true);
+        $database->createCollection(new Collection(id: 'txKnownException'));
+        $database->createAttribute('txKnownException', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txKnownException', new Document([
             '$id' => 'existing_doc',
@@ -976,8 +908,9 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForTransactionRetries()) {
+        if (! $database->getAdapter()->supports(Capability::TransactionRetries)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
@@ -1014,13 +947,14 @@ trait GeneralTests
         /** @var Database $database */
         $database = $this->getDatabase();
 
-        if (!$database->getAdapter()->getSupportForNestedTransactions()) {
+        if (! $database->getAdapter()->supports(Capability::NestedTransactions)) {
             $this->expectNotToPerformAssertions();
+
             return;
         }
 
-        $database->createCollection('txNested');
-        $database->createAttribute('txNested', 'title', Database::VAR_STRING, 128, true);
+        $database->createCollection(new Collection(id: 'txNested'));
+        $database->createAttribute('txNested', Attribute::string(key: 'title', size: 128, required: true));
 
         $database->createDocument('txNested', new Document([
             '$id' => 'nested_existing',
@@ -1031,7 +965,7 @@ trait GeneralTests
         ]));
 
         // Outer transaction should succeed even if inner transaction throws
-        $result = $database->withTransaction(function () use ($database) {
+        $database->withTransaction(function () use ($database) {
             $database->createDocument('txNested', new Document([
                 '$id' => 'outer_doc',
                 '$permissions' => [
@@ -1058,8 +992,6 @@ trait GeneralTests
             return true;
         });
 
-        $this->assertTrue($result);
-
         // inTransaction must be false after everything completes
         $this->assertFalse(
             $database->getAdapter()->inTransaction(),
@@ -1081,17 +1013,477 @@ trait GeneralTests
     /**
      * Wait for Redis to be ready with a readiness probe
      */
-    private function waitForRedis(int $maxRetries = 10, int $delayMs = 500): void
+
+    public function testCacheReconnect(): void
     {
-        for ($i = 0; $i < $maxRetries; $i++) {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::CacheSkipOnFailure)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $cache = new Cache((new RedisAdapter($redis))->setMaxRetries(3));
+
+        $original = $database->getCache();
+        $database->setCache($cache);
+
+        $collection = 'cacheReconnect_'.uniqid();
+
+        try {
+            $database->createCollection(new Collection(id: $collection, attributes: [
+                Attribute::string(key: 'title', size: 255, required: true),
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+            ]));
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Test Document',
+            ]));
+
+            $this->assertSame('Test Document', $database->getDocument($collection, 'reconnect_doc')->getAttribute('title'));
+
+            $this->dropRedisConnection($redis);
+
+            $this->assertTrue((bool) $cache->save('reconnect_probe', 'alive'), 'The cache must reconnect after the server dropped the connection');
+            $this->assertSame('alive', $cache->load('reconnect_probe', 60));
+
+            $this->assertSame('Test Document', $database->getDocument($collection, 'reconnect_doc')->getAttribute('title'));
+
+            $database->updateDocument($collection, 'reconnect_doc', new Document([
+                '$id' => 'reconnect_doc',
+                'title' => 'Updated Title',
+            ]));
+
+            $this->assertSame('Updated Title', $database->getDocument($collection, 'reconnect_doc')->getAttribute('title'));
+        } finally {
+            $database->setCache($original);
+            $database->deleteCollection($collection);
+        }
+    }
+
+    private function dropRedisConnection(Redis $redis): void
+    {
+        $id = $redis->rawCommand('CLIENT', 'ID');
+        $this->assertIsInt($id);
+
+        $killer = new Redis();
+        $killer->connect('redis', 6379);
+        $killer->rawCommand('CLIENT', 'KILL', 'ID', (string) $id);
+        $killer->close();
+    }
+
+    public function testCountTimeout(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\Timeouts::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(id: 'count-timeouts'));
+
+        $this->assertTrue($database->createAttribute('count-timeouts', Attribute::string(key: 'longtext', size: 100000000, required: true)));
+
+        $longtext = file_get_contents(__DIR__.'/../../../resources/longtext.txt');
+        $this->assertIsString($longtext);
+
+        for ($i = 0; $i < 20; $i++) {
+            $database->createDocument('count-timeouts', new Document([
+                'longtext' => $longtext,
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::any()),
+                    Permission::delete(Role::any()),
+                ],
+            ]));
+        }
+
+        try {
+            $database->setTimeout(1);
+
+            $thrown = null;
             try {
-                $redis = new \Redis();
-                $redis->connect('redis', 6379);
-                $redis->ping();
-                return;
-            } catch (\RedisException $e) {
-                usleep($delayMs * 1000);
+                $database->count('count-timeouts', [
+                    Query::containsString('longtext', ['needle-that-does-not-exist']),
+                ]);
+            } catch (Exception $e) {
+                $thrown = $e;
             }
+
+            $this->assertInstanceOf(TimeoutException::class, $thrown, 'count() must throw a timeout exception');
+        } finally {
+            $database->clearTimeout();
+            $database->deleteCollection('count-timeouts');
+        }
+    }
+
+    public function testTimeoutSurvivesReconnect(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof MariaDB || ! $adapter->getDriver() instanceof PDO) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $driver = $adapter->getDriver();
+        $settings = [];
+        foreach (['dsn', 'username', 'password'] as $name) {
+            $value = (new ReflectionProperty(PDO::class, $name))->getValue($driver);
+            $this->assertIsString($value);
+            $settings[] = $value;
+        }
+        [$dsn, $username, $password] = $settings;
+        $killer = new \PDO($dsn, $username, $password, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+
+        $interruptedByTimeout = function () use ($driver): bool {
+            $statement = $driver->prepare('SELECT SLEEP(3)');
+            try {
+                $statement->execute();
+            } catch (PDOException $error) {
+                if (\in_array($error->errorInfo[1] ?? null, [1969, 3024], true)) {
+                    return true;
+                }
+
+                throw $error;
+            }
+
+            return \in_array($statement->fetchColumn(), [1, '1'], true);
+        };
+
+        $database->setTimeout(1000);
+
+        try {
+            $connection = $adapter->getConnectionId();
+            $this->assertMatchesRegularExpression('/^\d+$/', $connection);
+            $killer->exec("KILL {$connection}");
+
+            $interrupted = ['statement that reconnects' => $interruptedByTimeout()];
+            $this->assertNotSame($connection, $adapter->getConnectionId(), 'KILL must have forced a reconnect');
+
+            $database->setTimeout(1000);
+            $interrupted['same timeout set again'] = $interruptedByTimeout();
+
+            $database->reconnect();
+            $interrupted['explicit reconnect'] = $interruptedByTimeout();
+
+            $this->assertSame([
+                'statement that reconnects' => true,
+                'same timeout set again' => true,
+                'explicit reconnect' => true,
+            ], $interrupted, 'The 1s timeout must cut SELECT SLEEP(3) short after every reconnect');
+        } finally {
+            $database->clearTimeout();
+        }
+    }
+
+    public function testFindOrderByAfterException(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'cursorCollection_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection));
+
+        try {
+            $database->find($collection, [
+                Query::limit(2),
+                Query::offset(0),
+                Query::cursorAfter(new Document([
+                    '$id' => 'cursor',
+                    '$sequence' => '1',
+                    '$collection' => 'other collection',
+                ])),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(DatabaseException::class, $e);
+            $this->assertSame('cursor Document must be from the same Collection.', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testGetAttributeLimit(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if ($adapter->getLimitForAttributes() === 0) {
+            $this->assertSame(0, $database->getLimitForAttributes(), 'An adapter without a column limit reports no limit');
+
+            return;
+        }
+
+        $this->assertSame($adapter->getLimitForAttributes() - $adapter->getCountOfDefaultAttributes(), $database->getLimitForAttributes(), 'The limit must leave room for the internal columns');
+    }
+
+    public function testGetIndexLimit(): void
+    {
+        $this->assertSame(58, $this->getDatabase()->getLimitForIndexes());
+    }
+
+    public function testGetId(): void
+    {
+        $this->assertSame(20, strlen(ID::unique()));
+        $this->assertSame(13, strlen(ID::unique(0)));
+        $this->assertSame(13, strlen(ID::unique(-1)));
+        $this->assertSame(23, strlen(ID::unique(10)));
+
+        $this->assertNotSame(ID::unique(10), ID::unique(10));
+    }
+
+    public function testNestedQueryValidation(): void
+    {
+        $database = $this->getDatabase();
+
+        $database->createCollection(new Collection(id: __FUNCTION__, attributes: [
+            Attribute::string(key: 'name', size: 255, required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+
+        $database->createDocuments(__FUNCTION__, [
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'test1',
+            ]),
+            new Document([
+                '$id' => ID::unique(),
+                'name' => 'doc2',
+            ]),
+        ]);
+
+        try {
+            $database->find(__FUNCTION__, [
+                Query::or([
+                    Query::equal('name', ['test1']),
+                    Query::search('name', 'doc'),
+                ]),
+            ]);
+            $this->fail('Failed to throw exception');
+        } catch (Throwable $e) {
+            $this->assertInstanceOf(QueryException::class, $e);
+            $this->assertSame('Searching by attribute "name" requires a fulltext index.', $e->getMessage());
+        } finally {
+            $database->deleteCollection(__FUNCTION__);
+        }
+    }
+
+    public function testPreserveDatesCreate(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->getAuthorization()->disable();
+        $database->setPreserveDates(true);
+
+        try {
+            $database->createCollection(new Collection(id: 'preserve_create_dates', attributes: [
+                Attribute::string(key: 'attr1', size: 10),
+            ]));
+
+            $date = '';
+
+            try {
+                $database->createDocument('preserve_create_dates', new Document([
+                    '$id' => 'doc1',
+                    '$permissions' => [],
+                    'attr1' => 'value1',
+                    '$createdAt' => $date,
+                ]));
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+            }
+
+            try {
+                $database->createDocuments('preserve_create_dates', [
+                    new Document([
+                        '$id' => 'doc2',
+                        '$permissions' => [],
+                        'attr1' => 'value2',
+                        '$createdAt' => $date,
+                    ]),
+                    new Document([
+                        '$id' => 'doc3',
+                        '$permissions' => [],
+                        'attr1' => 'value3',
+                        '$createdAt' => $date,
+                    ]),
+                ], batchSize: 2);
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$createdAt"', $e->getMessage());
+            }
+
+            $date = '2000-01-01T10:00:00.000+00:00';
+
+            $database->createDocument('preserve_create_dates', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'attr1' => 'value1',
+                '$createdAt' => $date,
+            ]));
+
+            $database->createDocuments('preserve_create_dates', [
+                new Document([
+                    '$id' => 'doc2',
+                    '$permissions' => [],
+                    'attr1' => 'value2',
+                    '$createdAt' => $date,
+                ]),
+                new Document([
+                    '$id' => 'doc3',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                    '$createdAt' => $date,
+                ]),
+                new Document([
+                    '$id' => 'doc4',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                    '$createdAt' => null,
+                ]),
+                new Document([
+                    '$id' => 'doc5',
+                    '$permissions' => [],
+                    'attr1' => 'value3',
+                ]),
+            ], batchSize: 2);
+
+            $doc1 = $database->getDocument('preserve_create_dates', 'doc1');
+            $doc2 = $database->getDocument('preserve_create_dates', 'doc2');
+            $doc3 = $database->getDocument('preserve_create_dates', 'doc3');
+            $doc4 = $database->getDocument('preserve_create_dates', 'doc4');
+            $doc5 = $database->getDocument('preserve_create_dates', 'doc5');
+            $this->assertSame($date, $doc1->getCreatedAt());
+            $this->assertSame($date, $doc2->getCreatedAt());
+            $this->assertSame($date, $doc3->getCreatedAt());
+            $this->assertNotEmpty($doc4->getCreatedAt());
+            $this->assertNotSame($date, $doc4->getCreatedAt(), 'A null date is replaced by the current time');
+            $this->assertNotEmpty($doc5->getCreatedAt());
+            $this->assertNotSame($date, $doc5->getCreatedAt(), 'A missing date is replaced by the current time');
+        } finally {
+            $database->deleteCollection('preserve_create_dates');
+            $database->setPreserveDates(false);
+            $database->getAuthorization()->reset();
+        }
+    }
+
+    public function testPreserveDatesUpdate(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->getAuthorization()->disable();
+        $database->setPreserveDates(true);
+
+        try {
+            $database->createCollection(new Collection(id: 'preserve_update_dates', attributes: [
+                Attribute::string(key: 'attr1', size: 10),
+            ]));
+
+            $doc1 = $database->createDocument('preserve_update_dates', new Document([
+                '$id' => 'doc1',
+                '$permissions' => [],
+                'attr1' => 'value1',
+            ]));
+
+            $doc2 = $database->createDocument('preserve_update_dates', new Document([
+                '$id' => 'doc2',
+                '$permissions' => [],
+                'attr1' => 'value2',
+            ]));
+
+            $doc3 = $database->createDocument('preserve_update_dates', new Document([
+                '$id' => 'doc3',
+                '$permissions' => [],
+                'attr1' => 'value3',
+            ]));
+
+            try {
+                $doc1->setAttribute('$updatedAt', '');
+                $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+            }
+
+            try {
+                $database->updateDocuments(
+                    'preserve_update_dates',
+                    new Document([
+                        '$updatedAt' => '',
+                    ]),
+                    [
+                        Query::equal('$id', [
+                            $doc2->getId(),
+                            $doc3->getId(),
+                        ]),
+                    ]
+                );
+                $this->fail('Failed to throw structure exception');
+            } catch (Exception $e) {
+                $this->assertInstanceOf(StructureException::class, $e);
+                $this->assertSame('Invalid document structure: Missing required attribute "$updatedAt"', $e->getMessage());
+            }
+
+            $newDate = '2000-01-01T10:00:00.000+00:00';
+
+            $doc1->setAttribute('$updatedAt', $newDate);
+            $doc1 = $database->updateDocument('preserve_update_dates', 'doc1', $doc1);
+            $this->assertSame($newDate, $doc1->getUpdatedAt());
+            $doc1 = $database->getDocument('preserve_update_dates', 'doc1');
+            $this->assertSame($newDate, $doc1->getUpdatedAt());
+
+            $database->updateDocuments(
+                'preserve_update_dates',
+                new Document([
+                    '$updatedAt' => $newDate,
+                ]),
+                [
+                    Query::equal('$id', [
+                        $doc2->getId(),
+                        $doc3->getId(),
+                    ]),
+                ]
+            );
+
+            $doc2 = $database->getDocument('preserve_update_dates', 'doc2');
+            $doc3 = $database->getDocument('preserve_update_dates', 'doc3');
+            $this->assertSame($newDate, $doc2->getUpdatedAt());
+            $this->assertSame($newDate, $doc3->getUpdatedAt());
+        } finally {
+            $database->deleteCollection('preserve_update_dates');
+            $database->setPreserveDates(false);
+            $database->getAuthorization()->reset();
         }
     }
 }

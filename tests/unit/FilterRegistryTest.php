@@ -5,10 +5,13 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Query\Schema\ColumnType;
 
 class FilterRegistryTest extends TestCase
 {
@@ -21,9 +24,9 @@ class FilterRegistryTest extends TestCase
     private Database $database;
 
     /**
-     * @var array<string, array{encode: callable, decode: callable, signature: string}>
+     * @var array<mixed>
      */
-    private array $registry;
+    private array $registry = [];
 
     protected function setUp(): void
     {
@@ -36,11 +39,12 @@ class FilterRegistryTest extends TestCase
         // Snapshot once the constructor has registered the built-ins, so the
         // restore in tearDown puts back a populated registry rather than an
         // empty one.
-        $this->registry = (new \ReflectionProperty(Database::class, 'filters'))->getValue();
+        $registry = (new \ReflectionProperty(Database::class, 'filters'))->getValue();
+        $this->registry = \is_array($registry) ? $registry : [];
 
         $this->database->create();
-        $this->database->createCollection('projects');
-        $this->database->createAttribute('projects', 'name', Database::VAR_STRING, 255, false);
+        $this->database->createCollection(new Collection(id: 'projects'));
+        $this->database->createAttribute('projects', Attribute::string(key: 'name', size: 255));
         $this->database->createDocument('projects', new Document([
             '$id' => 'project',
             '$permissions' => [Permission::read(Role::any())],
@@ -79,7 +83,7 @@ class FilterRegistryTest extends TestCase
         $this->adapter->updateDocument($collection, 'project', $document, true);
     }
 
-    private function read(?Database $database = null): string
+    private function read(?Database $database = null): mixed
     {
         return ($database ?? $this->database)
             ->getDocument('projects', 'project')
@@ -147,7 +151,7 @@ class FilterRegistryTest extends TestCase
                 'attributes' => [
                     new Document([
                         '$id' => 'occurredAt',
-                        'type' => Database::VAR_DATETIME,
+                        'type' => ColumnType::Datetime->value,
                         'array' => false,
                         'filters' => ['datetime'],
                     ]),

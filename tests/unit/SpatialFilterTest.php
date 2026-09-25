@@ -5,9 +5,11 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
-use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature\Spatial;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Query\Schema\ColumnType;
 
 class SpatialFilterTest extends TestCase
 {
@@ -16,8 +18,10 @@ class SpatialFilterTest extends TestCase
      */
     private function createDatabase(array $point): Database
     {
-        $adapter = $this->createMock(Adapter::class);
-        $adapter->method('getSupportForHostname')->willReturn(false);
+        $adapter = $this->createStub(MariaDB::class);
+        $adapter->method('hasFeature')->willReturnCallback(
+            static fn (string $feature): bool => $feature === Spatial::class,
+        );
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getNamespace')->willReturn('test');
         $adapter->method('getSharedTables')->willReturn(false);
@@ -34,9 +38,9 @@ class SpatialFilterTest extends TestCase
             'attributes' => [
                 new Document([
                     '$id' => 'location',
-                    'type' => Database::VAR_POINT,
+                    'type' => ColumnType::Point->value,
                     'array' => false,
-                    'filters' => [Database::VAR_POINT],
+                    'filters' => [ColumnType::Point->value],
                 ]),
             ],
         ]);

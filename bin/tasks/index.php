@@ -13,7 +13,9 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
+use Utopia\Database\Index;
 use Utopia\Database\PDO;
+use Utopia\Query\Schema\Order;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Text;
 
@@ -61,8 +63,9 @@ $cli
             ],
         ];
 
-        if (!isset($dbAdapters[$adapter])) {
+        if (! isset($dbAdapters[$adapter])) {
             Console::error("Adapter '{$adapter}' not supported");
+
             return;
         }
 
@@ -82,31 +85,31 @@ $cli
 
         Console::info("Creating key index 'createdGenre' on 'articles' for created > '2010-01-01 05:00:00' and genre = 'travel'");
         $start = microtime(true);
-        $database->createIndex('articles', 'createdGenre', Database::INDEX_KEY, ['created', 'genre'], [], [Database::ORDER_DESC, Database::ORDER_DESC]);
+        $database->createIndex('articles', Index::key(key: 'createdGenre', attributes: ['created', 'genre'], orders: [Order::Desc, Order::Desc]));
         $time = microtime(true) - $start;
         Console::success("Index 'createdGenre' created in {$time} seconds");
 
         Console::info("Creating key index 'genre' on 'articles' for genres: fashion, finance, sports");
         $start = microtime(true);
-        $database->createIndex('articles', 'genre', Database::INDEX_KEY, ['genre'], [], [Database::ORDER_ASC]);
+        $database->createIndex('articles', Index::key(key: 'genre', attributes: ['genre'], orders: [Order::Asc]));
         $time = microtime(true) - $start;
         Console::success("Index 'genre' created in {$time} seconds");
 
         Console::info("Creating key index 'views' on 'articles' for views > 100000");
         $start = microtime(true);
-        $database->createIndex('articles', 'views', Database::INDEX_KEY, ['views'], [], [Database::ORDER_DESC]);
+        $database->createIndex('articles', Index::key(key: 'views', attributes: ['views'], orders: [Order::Desc]));
         $time = microtime(true) - $start;
         Console::success("Index 'views' created in {$time} seconds");
 
         Console::info("Creating fulltext index 'fulltextsearch' on 'articles' for search term 'Alice'");
         $start = microtime(true);
-        $database->createIndex('articles', 'fulltextsearch', Database::INDEX_FULLTEXT, ['text']);
+        $database->createIndex('articles', Index::fullText(key: 'fulltextsearch', attributes: ['text']));
         $time = microtime(true) - $start;
         Console::success("Index 'fulltextsearch' created in {$time} seconds");
 
         Console::info("Creating key index 'tags' on 'articles' for tags containing 'tag1'");
         $start = microtime(true);
-        $database->createIndex('articles', 'tags', Database::INDEX_KEY, ['tags']);
+        $database->createIndex('articles', Index::key(key: 'tags', attributes: ['tags']));
         $time = microtime(true) - $start;
         Console::success("Index 'tags' created in {$time} seconds");
     });

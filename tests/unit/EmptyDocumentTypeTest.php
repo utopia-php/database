@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\Memory as CacheMemory;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 
@@ -28,7 +29,7 @@ class EmptyDocumentTypeTest extends TestCase
             ->setDatabase('utopiaTests')
             ->setNamespace('empty_type_' . \uniqid());
         $database->create();
-        $database->createCollection('users');
+        $database->createCollection(new Collection(id: 'users'));
         $database->setDocumentType('users', TypedUser::class);
 
         $empty = $database->getDocument('users', '');

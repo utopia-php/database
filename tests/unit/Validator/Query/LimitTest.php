@@ -8,7 +8,7 @@ use Utopia\Database\Validator\Query\Limit;
 
 class LimitTest extends TestCase
 {
-    public function testValueSuccess(): void
+    public function test_value_success(): void
     {
         $validator = new Limit(100);
 
@@ -16,7 +16,7 @@ class LimitTest extends TestCase
         $this->assertTrue($validator->isValid(Query::limit(100)));
     }
 
-    public function testValueFailure(): void
+    public function test_value_failure(): void
     {
         $validator = new Limit(100);
 

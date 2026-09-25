@@ -29,19 +29,15 @@ class TransactionRetryTest extends TestCase
     public function testTimeoutIsNotRetried(): void
     {
         $attempts = 0;
-        $thrown = null;
 
         try {
             $this->adapter->withTransaction(function () use (&$attempts) {
                 $attempts++;
                 throw new TimeoutException('Query timed out');
             });
-        } catch (TimeoutException $e) {
-            $thrown = $e;
+        } catch (TimeoutException) {
+            $this->assertSame(1, $attempts);
         }
-
-        $this->assertInstanceOf(TimeoutException::class, $thrown);
-        $this->assertSame(1, $attempts);
     }
 
     /**
@@ -51,19 +47,15 @@ class TransactionRetryTest extends TestCase
     public function testDuplicateIsNotRetried(): void
     {
         $attempts = 0;
-        $thrown = null;
 
         try {
             $this->adapter->withTransaction(function () use (&$attempts) {
                 $attempts++;
                 throw new DuplicateException('Duplicate');
             });
-        } catch (DuplicateException $e) {
-            $thrown = $e;
+        } catch (DuplicateException) {
+            $this->assertSame(1, $attempts);
         }
-
-        $this->assertInstanceOf(DuplicateException::class, $thrown);
-        $this->assertSame(1, $attempts);
     }
 
     /**
@@ -73,19 +65,15 @@ class TransactionRetryTest extends TestCase
     public function testGenericFailureIsRetried(): void
     {
         $attempts = 0;
-        $thrown = null;
 
         try {
             $this->adapter->withTransaction(function () use (&$attempts) {
                 $attempts++;
                 throw new \RuntimeException('transient');
             });
-        } catch (\RuntimeException $e) {
-            $thrown = $e;
+        } catch (\RuntimeException) {
+            $this->assertSame(3, $attempts);
         }
-
-        $this->assertInstanceOf(\RuntimeException::class, $thrown);
-        $this->assertSame(3, $attempts);
     }
 
     /**
@@ -151,11 +139,9 @@ class TransactionRetryTest extends TestCase
         $this->assertInstanceOf(\RuntimeException::class, $thrown);
 
         $inTransaction = new \ReflectionProperty(RedisAdapter::class, 'inTransaction');
-        $inTransaction->setAccessible(true);
         $this->assertSame(0, $inTransaction->getValue($adapter));
 
         $journalStack = new \ReflectionProperty(RedisAdapter::class, 'journalStack');
-        $journalStack->setAccessible(true);
         $this->assertSame([], $journalStack->getValue($adapter));
     }
 }

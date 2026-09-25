@@ -7,7 +7,7 @@ use Utopia\Database\Validator\Vector;
 
 class VectorTest extends TestCase
 {
-    public function testVector(): void
+    public function test_vector(): void
     {
         // Test valid vectors
         $validator = new Vector(3);
@@ -28,7 +28,7 @@ class VectorTest extends TestCase
         $this->assertFalse($validator->isValid([1.0, true, 3.0])); // Boolean value
     }
 
-    public function testVectorWithDifferentDimensions(): void
+    public function test_vector_with_different_dimensions(): void
     {
         $validator1 = new Vector(1);
         $this->assertTrue($validator1->isValid([5.0]));
@@ -46,7 +46,7 @@ class VectorTest extends TestCase
         $this->assertFalse($validator128->isValid($vector127));
     }
 
-    public function testVectorDescription(): void
+    public function test_vector_description(): void
     {
         $validator = new Vector(3);
         $this->assertEquals('Value must be an array of 3 numeric values', $validator->getDescription());
@@ -55,7 +55,7 @@ class VectorTest extends TestCase
         $this->assertEquals('Value must be an array of 256 numeric values', $validator256->getDescription());
     }
 
-    public function testVectorType(): void
+    public function test_vector_type(): void
     {
         $validator = new Vector(3);
         $this->assertEquals('array', $validator->getType());

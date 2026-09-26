@@ -65,6 +65,11 @@ class Vector extends Validator
             if (!\is_int($component) && !\is_float($component)) {
                 return false;
             }
+
+            // INF and NAN are floats but are not storable vector components
+            if (!\is_finite($component)) {
+                return false;
+            }
         }
 
         return true;

@@ -547,7 +547,7 @@ class Database
                     return $value;
                 }
 
-                return json_encode($value);
+                return json_encode($value, JSON_THROW_ON_ERROR);
             },
             /**
              * @param mixed $value
@@ -716,9 +716,15 @@ class Database
                     if (!\is_int($item) && !\is_float($item)) {
                         return $value;
                     }
+                    // INF and NAN have no JSON representation. Hand them back
+                    // unencoded so the Vector validator reports the offending
+                    // component rather than this filter reporting a JSON error.
+                    if (!\is_finite($item)) {
+                        return $value;
+                    }
                 }
 
-                return \json_encode(\array_map(\floatval(...), $value));
+                return \json_encode(\array_map(\floatval(...), $value), JSON_THROW_ON_ERROR);
             },
             /**
              * @param string|null $value
@@ -747,7 +753,7 @@ class Database
                     return $value;
                 }
 
-                return \json_encode($value);
+                return \json_encode($value, JSON_THROW_ON_ERROR);
             },
             /**
              * @param mixed $value
@@ -9475,7 +9481,7 @@ class Database
                 foreach ($value as $index => $node) {
                     if ($node !== null) {
                         foreach ($filters as $filter) {
-                            $node = $this->encodeAttribute($filter, $node, $document);
+                            $node = $this->encodeAttribute($filter, $node, $document, $key);
                         }
                         $value[$index] = $node;
                     }
@@ -9704,11 +9710,12 @@ class Database
      * @param string $name
      * @param mixed $value
      * @param Document $document
+     * @param string $attribute
      *
      * @return mixed
      * @throws DatabaseException
      */
-    protected function encodeAttribute(string $name, mixed $value, Document $document): mixed
+    protected function encodeAttribute(string $name, mixed $value, Document $document, string $attribute = ''): mixed
     {
         if (!array_key_exists($name, self::$filters) && !array_key_exists($name, $this->instanceFilters)) {
             throw new NotFoundException("Filter: {$name} not found");
@@ -9721,7 +9728,11 @@ class Database
                 $value = self::$filters[$name]['encode']($value, $document, $this);
             }
         } catch (\Throwable $th) {
-            throw new DatabaseException($th->getMessage(), $th->getCode(), $th);
+            $message = $attribute === ''
+                ? $th->getMessage()
+                : "Failed to encode attribute \"{$attribute}\": {$th->getMessage()}";
+
+            throw new DatabaseException($message, $th->getCode(), $th);
         }
 
         return $value;

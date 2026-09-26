@@ -26,6 +26,15 @@ class VectorTest extends TestCase
         $this->assertFalse($validator->isValid([])); // Empty array
         $this->assertFalse($validator->isValid(['x' => 1.0, 'y' => 2.0, 'z' => 3.0])); // Associative array
         $this->assertFalse($validator->isValid([1.0, true, 3.0])); // Boolean value
+
+        // INF and NAN are floats, but no vector column can hold them and they
+        // have no JSON representation either
+        $this->assertFalse($validator->isValid([INF, 0.0, 0.0]));
+        $this->assertFalse($validator->isValid([-INF, 0.0, 0.0]));
+        $this->assertFalse($validator->isValid([NAN, 0.0, 0.0]));
+
+        // Large finite values remain valid
+        $this->assertTrue($validator->isValid([1e38, -1e38, 1e37]));
     }
 
     public function testVectorWithDifferentDimensions(): void

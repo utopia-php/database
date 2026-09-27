@@ -189,24 +189,41 @@ class MariaDB extends SQL
         $collection .= ")";
         $collection = $this->trigger(Database::EVENT_COLLECTION_CREATE, $collection);
 
+        // _column scopes a permission to a single column. An empty string means
+        // every column, which is how every permission written before column-level
+        // permissions reads. It is NOT NULL on purpose: MySQL and MariaDB treat
+        // NULLs as distinct in a UNIQUE index, so a nullable _column would let
+        // duplicate permission rows slip past the unique index.
+        //
+        // Sized to MAX_UID_DEFAULT_LENGTH rather than the 255 the other string members
+        // use. The unique index holds four of those, and in utf8mb4 a fifth
+        // VARCHAR(255) member
+        // takes the key past InnoDB's 3072-byte limit -- MySQL refuses the CREATE with
+        // "Specified key was too long", though MariaDB allows it, so testing on one
+        // says nothing about the other. The Permissions validator already caps a
+        // scoped column at this same constant, so nothing storable is lost.
         $permissions = "
             CREATE TABLE {$this->getSQLTable($id . '_perms')} (
                 _id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
                 _type VARCHAR(12) NOT NULL,
                 _permission VARCHAR(255) NOT NULL,
+                _column VARCHAR(" . Database::MAX_PERMISSION_COLUMN_LENGTH . ") NOT NULL DEFAULT '',
                 _document VARCHAR(255) NOT NULL,
+                _documentInternalId BIGINT UNSIGNED NOT NULL DEFAULT 0,
                 PRIMARY KEY (_id),
         ";
 
         if ($this->sharedTables) {
             $permissions .= "
                 _tenant INT(11) UNSIGNED DEFAULT NULL,
-                UNIQUE INDEX _index1 (_document, _tenant, _type, _permission),
+                UNIQUE INDEX " . static::PERMISSIONS_INDEX . " (_document, _tenant, _type, _permission, _column),
+                INDEX " . static::PERMISSIONS_INDEX_DOCUMENT . " (_documentInternalId, _tenant, _type, _permission, _column),
                 INDEX _permission (_tenant, _permission, _type)
             ";
         } else {
             $permissions .= "
-                UNIQUE INDEX _index1 (_document, _type, _permission),
+                UNIQUE INDEX " . static::PERMISSIONS_INDEX . " (_document, _type, _permission, _column),
+                INDEX " . static::PERMISSIONS_INDEX_DOCUMENT . " (_documentInternalId, _type, _permission, _column),
                 INDEX _permission (_permission, _type)
             ";
         }
@@ -894,13 +911,22 @@ class MariaDB extends SQL
                 $attributeIndex++;
             }
 
+            // _column is always named. Every permissions table carries it -- new ones
+            // from CREATE TABLE, older ones from the column-permissions migration -- so
+            // there is nothing to make it conditional on. Writing it unconditionally also
+            // keeps _perms in step with the _permissions JSON on the row: a grant stored
+            // as read("role", "salary") lands as _column = 'salary' whatever the flag
+            // says, so the query gate and masking can never disagree about it.
             $permissions = [];
+            $permissionBinds = [];
             foreach (Database::PERMISSIONS as $type) {
-                foreach ($document->getPermissionsByType($type) as $permission) {
+                foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                     $tenantBind = $this->sharedTables ? ", :_tenant" : '';
-                    $permission = \str_replace('"', '', $permission);
-                    $permission = "('{$type}', '{$permission}', :_uid {$tenantBind})";
-                    $permissions[] = $permission;
+                    $role = \str_replace('"', '', $permission['role']);
+
+                    $columnBind = ":_column_{$type}_{$i}";
+                    $permissionBinds[$columnBind] = $permission['column'];
+                    $permissions[] = "('{$type}', '{$role}', {$columnBind}, :_uid {$tenantBind})";
                 }
             }
 
@@ -909,7 +935,7 @@ class MariaDB extends SQL
                 $permissions = \implode(', ', $permissions);
 
                 $sqlPermissions = "
-                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _document {$tenantColumn})
+                    INSERT INTO {$this->getSQLTable($name . '_perms')} (_type, _permission, _column, _document {$tenantColumn})
                     VALUES {$permissions};
                 ";
 
@@ -917,6 +943,9 @@ class MariaDB extends SQL
                 $stmtPermissions->bindValue(':_uid', $document->getId());
                 if ($this->sharedTables) {
                     $stmtPermissions->bindValue(':_tenant', $document->getTenant());
+                }
+                foreach ($permissionBinds as $key => $value) {
+                    $stmtPermissions->bindValue($key, $value);
                 }
             }
 
@@ -932,10 +961,14 @@ class MariaDB extends SQL
                 try {
                     $stmtPermissions->execute();
                 } catch (PDOException $e) {
+                    // Compare the violated key exactly rather than searching the
+                    // message for a substring: the index names are contained in
+                    // plenty of other index names, and misreading one would run the
+                    // cleanup below against permissions that were never orphaned.
                     $isOrphanedPermission = $e->getCode() === '23000'
                         && isset($e->errorInfo[1])
                         && $e->errorInfo[1] === 1062
-                        && \str_contains($e->getMessage(), '_index1');
+                        && $this->isPermissionsIndex($this->getViolatedKey($e->getMessage()));
 
                     if (!$isOrphanedPermission) {
                         throw $e;
@@ -1007,10 +1040,13 @@ class MariaDB extends SQL
                 $values = [];
                 $binds = [];
                 foreach (Database::PERMISSIONS as $type) {
-                    foreach ($document->getPermissionsByType($type) as $i => $permission) {
+                    foreach ($document->getPermissionsByTypeWithColumns($type) as $i => $permission) {
                         $tenantPlaceholder = $this->sharedTables ? ', :_tenant' : '';
-                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i} {$tenantPlaceholder})";
-                        $binds[":_add_{$type}_{$i}"] = $permission;
+
+                        $values[] = "( :_uid, '{$type}', :_add_{$type}_{$i}, :_addcol_{$type}_{$i} {$tenantPlaceholder})";
+                        $binds[":_addcol_{$type}_{$i}"] = $permission['column'];
+
+                        $binds[":_add_{$type}_{$i}"] = $permission['role'];
                     }
                 }
 
@@ -1018,7 +1054,7 @@ class MariaDB extends SQL
                     $tenantColumn = $this->sharedTables ? ', _tenant' : '';
 
                     $sql = "
-				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission {$tenantColumn})
+				    INSERT INTO {$this->getSQLTable($name . '_perms')} (_document, _type, _permission, _column {$tenantColumn})
 				    VALUES " . \implode(', ', $values);
 
                     $sql = $this->trigger(Database::EVENT_PERMISSIONS_CREATE, $sql);
@@ -1771,6 +1807,26 @@ class MariaDB extends SQL
         return true;
     }
 
+    public function getSupportForColumnPermissions(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Is this the unique index on a permissions table, under either name?
+     *
+     * A duplicate-key error has to be recognised on tables the column-permissions
+     * migration has reached and on ones it has not, so both spellings count.
+     *
+     * @param string|null $key
+     * @return bool
+     */
+    protected function isPermissionsIndex(?string $key): bool
+    {
+        return $key === static::PERMISSIONS_INDEX || $key === static::PERMISSIONS_INDEX_LEGACY;
+    }
+
+
     public function getSupportForSchemaAttributes(): bool
     {
         return true;
@@ -1896,7 +1952,7 @@ class MariaDB extends SQL
         // Duplicate row
         if ($e->getCode() === '23000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1062) {
             $key = $this->getViolatedKey($e->getMessage());
-            if ($key === '_index1') {
+            if ($this->isPermissionsIndex($key)) {
                 return new DuplicateException('Duplicate permissions for document', $e->getCode(), $e);
             }
             if ($key !== null && $key !== '_uid' && $key !== 'PRIMARY') {

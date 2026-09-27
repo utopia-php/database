@@ -19,6 +19,15 @@ services:
       - ./docker-compose.yml:/usr/src/code/docker-compose.yml
     environment:
       PHP_IDE_CONFIG: serverName=tests
+      # Xdebug stays installed but idle. dev/xdebug.ini sets mode=develop,debug,profile
+      # with start_with_request=yes, so it engages on every request -- and it is a trap in
+      # two directions. It costs enough time to push the timeout-sensitive tests past
+      # their thresholds, and it inflates memory per allocation, so tests that assert a
+      # memory ceiling measure xdebug rather than the code. Either way the run fails
+      # locally and passes in CI, where the image is built without xdebug.so at all, and
+      # the failure looks like a real regression. Override per command to step-debug:
+      # docker compose exec -e XDEBUG_MODE=debug tests ...
+      XDEBUG_MODE: off
     depends_on:
       postgres:
         condition: service_healthy

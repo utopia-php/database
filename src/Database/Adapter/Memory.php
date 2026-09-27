@@ -2093,8 +2093,7 @@ class Memory extends Adapter
     }
 
     /**
-     * Column-level permissions are not supported by this adapter, so a rename
-     * can never have column-scoped permissions to repoint.
+     * Repoint every grant scoped to $old at $new.
      *
      * @param Document $collection
      * @param string $old
@@ -2131,6 +2130,9 @@ class Memory extends Adapter
     {
         $key = $this->key($collection->getId());
         $updated = 0;
+
+        /** @var array<string, array<string>> $touched */
+        $touched = [];
 
         foreach ($this->data[$key]['documents'] ?? [] as $documentKey => $row) {
             $permissions = $row['_permissions'] ?? [];
@@ -2169,8 +2171,22 @@ class Memory extends Adapter
                 continue;
             }
 
+            $touched[$documentKey] = $permissions;
             $this->data[$key]['documents'][$documentKey]['_permissions'] = \array_values(\array_unique($rewritten));
             $updated++;
+        }
+
+        // One inverse for the whole sweep, like renameAttribute() above. Without it a
+        // rollback would undo the rename or delete but keep the rewritten grants, and
+        // rowGrantsColumns() would then deny access on a column that still exists.
+        if (!empty($touched)) {
+            $this->journal(function () use ($key, $touched): void {
+                foreach ($touched as $documentKey => $permissions) {
+                    if (isset($this->data[$key]['documents'][$documentKey])) {
+                        $this->data[$key]['documents'][$documentKey]['_permissions'] = $permissions;
+                    }
+                }
+            });
         }
 
         return $updated;

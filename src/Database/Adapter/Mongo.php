@@ -4354,11 +4354,14 @@ class Mongo extends Adapter
                 $filters['_tenant'] = $this->getTenantFilters($collection->getId());
             }
 
-            $found = $this->client->find($name, $filters, [
+            // Both the read and the write below join the open transaction. Without the
+            // session they run outside it, so a rollback would restore the column while
+            // leaving its grants rewritten or dropped.
+            $found = $this->client->find($name, $filters, $this->getTransactionOptions([
                 'limit' => Database::DELETE_BATCH_SIZE,
                 'sort' => ['_uid' => 1],
                 'projection' => ['_uid' => 1, '_permissions' => 1],
-            ])->cursor->firstBatch ?? [];
+            ]))->cursor->firstBatch ?? [];
 
             if (empty($found)) {
                 break;
@@ -4411,7 +4414,7 @@ class Mongo extends Adapter
 
                 $this->client->update($name, $where, [
                     '$set' => ['_permissions' => \array_values(\array_unique($rewritten))],
-                ]);
+                ], $this->getTransactionOptions());
 
                 $updated++;
             }

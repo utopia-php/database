@@ -1624,4 +1624,68 @@ trait PermissionTests
 
         $authorization->cleanRoles();
     }
+
+    /**
+     * Dropping a column purges the grants scoped to it, so a rollback has to put both
+     * back or neither. Restoring the column alone is the dangerous half: the grants
+     * stay purged and access to a column that still exists is silently revoked.
+     *
+     * Whether the column itself survives a rollback is the engine's business -- MySQL
+     * and MariaDB commit implicitly on DDL, so nothing about the drop is reversible
+     * there -- which is why this asserts the two agree rather than that either returns.
+     * Memory has to journal the rewrite to hold this, and Mongo has to run it inside
+     * the session; both got it wrong in different ways.
+     */
+    public function testRollbackRestoresGrantsPurgedByAColumnDelete(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('rollbackGrants', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('rollbackGrants', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('rollbackGrants', new Document([
+                '$id' => ID::custom('r1'),
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'salary' => 100,
+            ]));
+        });
+
+        $before = $authorization->skip(
+            fn () => $database->getDocument('rollbackGrants', 'r1')->getPermissions()
+        );
+
+        try {
+            $authorization->skip(fn () => $database->withTransaction(function () use ($database) {
+                $database->deleteAttribute('rollbackGrants', 'salary');
+
+                throw new DatabaseException('rollback');
+            }));
+            $this->fail('the transaction should have propagated the failure');
+        } catch (DatabaseException) {
+            // expected -- the rollback is what is under test
+        }
+
+        $attributes = $authorization->skip(
+            fn () => $database->getCollection('rollbackGrants')->getAttribute('attributes', [])
+        );
+        $after = $authorization->skip(
+            fn () => $database->getDocument('rollbackGrants', 'r1')->getPermissions()
+        );
+
+        $this->assertSame(
+            \count($attributes) === 1,
+            $before === $after,
+            'a rollback must restore the column and the grants scoped to it together'
+        );
+    }
 }

@@ -1784,4 +1784,67 @@ trait PermissionTests
             $this->assertSame([Permission::read(Role::user('hr'), 'salary')], $stored);
         }
     }
+
+    /**
+     * A related document with no permissions of its own inherits the parent's. A
+     * column-scoped grant cannot come along: it names a column of the parent's
+     * collection, which the related collection does not have and may not even allow
+     * scoping on. Only the unscoped grants carry over.
+     */
+    public function testRelatedDocumentInheritsOnlyUnscopedPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()
+            || !$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('relParent', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('relParent', 'title', Database::VAR_STRING, 64, false);
+            $database->createAttribute('relParent', 'secret', Database::VAR_STRING, 64, false);
+
+            // Column security deliberately off here: a related collection need not have
+            // it, and inheriting a column-scoped grant would be rejected outright.
+            $database->createCollection('relChild', documentSecurity: true, columnSecurity: false, permissions: []);
+            $database->createAttribute('relChild', 'label', Database::VAR_STRING, 64, false);
+
+            $database->createRelationship(
+                collection: 'relParent',
+                relatedCollection: 'relChild',
+                type: Database::RELATION_ONE_TO_MANY,
+                id: 'kids'
+            );
+
+            $database->createDocument('relParent', new Document([
+                '$id' => ID::custom('rp1'),
+                '$permissions' => [
+                    Permission::read(Role::any()),
+                    Permission::update(Role::user('ed')),
+                    Permission::read(Role::user('hr'), 'secret'),
+                ],
+                'title' => 'T',
+                'secret' => 'S',
+                'kids' => [new Document(['$id' => ID::custom('rc1'), 'label' => 'one'])],
+            ]));
+        });
+
+        $child = $authorization->skip(
+            fn () => $database->getDocument('relChild', 'rc1')->getPermissions()
+        );
+
+        \sort($child);
+
+        $this->assertSame(
+            [Permission::read(Role::any()), Permission::update(Role::user('ed'))],
+            $child,
+            'the child inherits the unscoped grants and none of the column-scoped ones'
+        );
+    }
 }

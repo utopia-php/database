@@ -5466,6 +5466,26 @@ class Database
     }
 
     /**
+     * The grants a related document may inherit from its parent.
+     *
+     * A column-scoped grant names a column of the parent's collection. The related
+     * collection does not have that column -- and may not permit column scoping at
+     * all -- so inheriting one either names a column that does not exist there or
+     * trips the column-security guard. Only the unscoped grants carry over; a related
+     * document that needs column scoping is given it explicitly.
+     *
+     * @param Document $document
+     * @return array<string>
+     */
+    private function inheritablePermissions(Document $document): array
+    {
+        return \array_values(\array_filter(
+            $document->getPermissions(),
+            fn (string $permission) => Permission::parse($permission)->isForAllColumns()
+        ));
+    }
+
+    /**
      * Resolve column keys to the identities storage holds them under.
      *
      * The gate compares against _column, which carries identities, while everything
@@ -7275,7 +7295,7 @@ class Database
         if ($related->isEmpty()) {
             // If the related document doesn't exist, create it, inheriting permissions if none are set
             if (!isset($relation['$permissions'])) {
-                $relation->setAttribute('$permissions', $document->getPermissions());
+                $relation->setAttribute('$permissions', $this->inheritablePermissions($document));
             }
 
             $related = $this->createDocument($relatedCollection->getId(), $relation);
@@ -8100,7 +8120,7 @@ class Database
                                     $this->relationshipWriteStack[] = $relatedCollection->getId();
                                     if ($related->isEmpty()) {
                                         if (!isset($value['$permissions'])) {
-                                            $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                            $value->setAttribute('$permissions', $this->inheritablePermissions($document));
                                         }
                                         $related = $this->createDocument(
                                             $relatedCollection->getId(),
@@ -8189,7 +8209,7 @@ class Database
 
                                     if ($related->isEmpty()) {
                                         if (!isset($relation['$permissions'])) {
-                                            $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                            $relation->setAttribute('$permissions', $this->inheritablePermissions($document));
                                         }
                                         $this->createDocument(
                                             $relatedCollection->getId(),
@@ -8229,7 +8249,7 @@ class Database
 
                             if ($related->isEmpty()) {
                                 if (!isset($value['$permissions'])) {
-                                    $value->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                    $value->setAttribute('$permissions', $this->inheritablePermissions($document));
                                 }
                                 $this->createDocument(
                                     $relatedCollection->getId(),
@@ -8302,7 +8322,7 @@ class Database
 
                                 if ($related->isEmpty()) {
                                     if (!isset($value['$permissions'])) {
-                                        $relation->setAttribute('$permissions', $document->getAttribute('$permissions'));
+                                        $relation->setAttribute('$permissions', $this->inheritablePermissions($document));
                                     }
                                     $related = $this->createDocument(
                                         $relatedCollection->getId(),

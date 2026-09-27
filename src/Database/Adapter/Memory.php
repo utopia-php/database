@@ -2093,7 +2093,9 @@ class Memory extends Adapter
     }
 
     /**
-     * Repoint every grant scoped to $old at $new.
+     * Unreachable: _perms._column holds the attribute's immutable identity, which a
+     * rename does not change, so Database::renameAttribute() moves no permission rows.
+     * Kept only to satisfy the Adapter contract until that method is removed from it.
      *
      * @param Document $collection
      * @param string $old
@@ -2102,7 +2104,7 @@ class Memory extends Adapter
      */
     public function renameColumnPermissions(Document $collection, string $old, string $new): int
     {
-        return $this->repointColumnPermissions($collection, $old, $new);
+        return 0;
     }
 
     public function deleteColumnPermissions(Document $collection, string $column): int

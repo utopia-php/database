@@ -2095,9 +2095,19 @@ abstract class SQL extends Adapter
      * @return int documents whose permissions changed
      * @throws DatabaseException
      */
+    /**
+     * Unreachable: _perms._column holds the attribute's immutable identity, which a
+     * rename does not change, so Database::renameAttribute() moves no permission rows.
+     * Kept only to satisfy the Adapter contract until that method is removed from it.
+     *
+     * @param Document $collection
+     * @param string $old
+     * @param string $new
+     * @return int documents whose permissions changed
+     */
     public function renameColumnPermissions(Document $collection, string $old, string $new): int
     {
-        return $this->repointColumnPermissions($collection, $old, $new);
+        return 0;
     }
 
     /**
@@ -2153,9 +2163,13 @@ abstract class SQL extends Adapter
         // read cannot seek and scans whatever it returns; taking more per pass is the
         // only way to scan fewer times.
         //
-        // The loop needs no offset because the work removes its own rows from the
-        // predicate -- once a batch is repointed or deleted it no longer matches
-        // _column = :_old, so the next pass returns the following batch.
+        // The loop advances on _id rather than trusting the work to remove its own rows
+        // from the predicate. A delete does remove them, but a repoint only rewrites
+        // _column -- and under a case-insensitive collation, which is the default for
+        // utf8mb4, a rename that changes only case leaves every rewritten row still
+        // matching _column = :_old. The predicate would return the same batch forever.
+        $cursor = 0;
+
         while (true) {
             // The primary key comes back alongside the document id so the mutation
             // below can address these rows directly. Matching on _column again would
@@ -2164,10 +2178,13 @@ abstract class SQL extends Adapter
                 SELECT _id, _document
                 FROM {$table}
                 WHERE _column = :_column
+                  AND _id > :_cursor
                 {$tenantQuery}
+                ORDER BY _id
                 LIMIT " . self::SELECT_BATCH_SIZE . "
             ");
             $stmt->bindValue(':_column', $old);
+            $stmt->bindValue(':_cursor', $cursor);
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);
             }
@@ -2230,6 +2247,9 @@ abstract class SQL extends Adapter
                 }
                 $this->execute($mutate);
             }
+
+            // Ordered by _id, so the last row of the batch is the high-water mark.
+            $cursor = (int) $rows[\count($rows) - 1]['_id'];
         }
 
         return $updated;

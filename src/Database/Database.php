@@ -3427,9 +3427,13 @@ class Database
             if (!\is_null($newKey) && $newKey !== $id) {
                 $this->repointCollectionColumnPermissions($collectionDoc, $id, $newKey);
 
-                foreach ($this->adapter->renameColumnPermissions($collectionDoc, $id, $newKey) as $documentId) {
-                    $this->purgeCachedDocument($collection, $documentId);
-                }
+                // No per-document purge: purgeCachedCollection() below lists and purges
+                // every document key under the collection, so purging the affected ones
+                // here is the same work done twice -- and it would fire an extra
+                // EVENT_DOCUMENT_PURGE per document, which testEvents() asserts the exact
+                // sequence of. The rollback path keeps its purge: the collection purge
+                // runs after updateMetadata(), so a failed write never reaches it.
+                $this->adapter->renameColumnPermissions($collectionDoc, $id, $newKey);
             }
         }
 
@@ -3462,9 +3466,13 @@ class Database
 
                 // Only when the rename half actually ran; see the repoint above.
                 if (!\is_null($newKey) && $newKey !== $id) {
-                    foreach ($this->adapter->renameColumnPermissions($collectionDoc, $newKey, $id) as $documentId) {
-                        $this->purgeCachedDocument($collection, $documentId);
-                    }
+                    $this->adapter->renameColumnPermissions($collectionDoc, $newKey, $id);
+
+                    // The collection purge at the end of this method sits after
+                    // updateMetadata(), so a failed write never reaches it. Purge here
+                    // instead -- by collection, not per document, so nothing has to
+                    // carry a list of ids back for the sake of invalidating them.
+                    $this->purgeCachedCollection($collection);
                 }
             },
             shouldRollback: $updated,
@@ -3605,9 +3613,13 @@ class Database
         // than deleting them, so they still have to be cleaned up here.
         $this->repointCollectionColumnPermissions($collection, $id, null);
 
-        foreach ($this->adapter->deleteColumnPermissions($collection, $id) as $documentId) {
-            $this->purgeCachedDocument($collection->getId(), $documentId);
-        }
+        // No per-document purge: purgeCachedCollection() below lists and purges
+        // every document key under the collection, so purging the affected ones
+        // here is the same work done twice -- and it would fire an extra
+        // EVENT_DOCUMENT_PURGE per document, which testEvents() asserts the exact
+        // sequence of. The rollback path keeps its purge: the collection purge
+        // runs after updateMetadata(), so a failed write never reaches it.
+        $this->adapter->deleteColumnPermissions($collection, $id);
 
         $this->updateMetadata(
             collection: $collection,
@@ -3751,9 +3763,13 @@ class Database
         // enforcement, not storage, so grants outlive it and still need moving.
         $this->repointCollectionColumnPermissions($collection, $old, $new);
 
-        foreach ($this->adapter->renameColumnPermissions($collection, $old, $new) as $documentId) {
-            $this->purgeCachedDocument($collection->getId(), $documentId);
-        }
+        // No per-document purge: purgeCachedCollection() below lists and purges
+        // every document key under the collection, so purging the affected ones
+        // here is the same work done twice -- and it would fire an extra
+        // EVENT_DOCUMENT_PURGE per document, which testEvents() asserts the exact
+        // sequence of. The rollback path keeps its purge: the collection purge
+        // runs after updateMetadata(), so a failed write never reaches it.
+        $this->adapter->renameColumnPermissions($collection, $old, $new);
 
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
@@ -3769,9 +3785,11 @@ class Database
             rollbackOperation: function () use ($collection, $old, $new) {
                 $this->adapter->renameAttribute($collection->getId(), $new, $old);
 
-                foreach ($this->adapter->renameColumnPermissions($collection, $new, $old) as $documentId) {
-                    $this->purgeCachedDocument($collection->getId(), $documentId);
-                }
+                $this->adapter->renameColumnPermissions($collection, $new, $old);
+
+                // See updateAttribute(): the collection purge below is unreachable
+                // once updateMetadata() has thrown, so the rollback does its own.
+                $this->purgeCachedCollection($collection->getId());
             },
             shouldRollback: $renamed,
             operationDescription: "attribute rename '{$old}' to '{$new}'"

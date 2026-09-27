@@ -4294,12 +4294,12 @@ class Mongo extends Adapter
         return true;
     }
 
-    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    public function renameColumnPermissions(Document $collection, string $old, string $new): int
     {
         return $this->repointColumnPermissions($collection, $old, $new);
     }
 
-    public function deleteColumnPermissions(Document $collection, string $column): array
+    public function deleteColumnPermissions(Document $collection, string $column): int
     {
         return $this->repointColumnPermissions($collection, $column, null);
     }
@@ -4319,13 +4319,13 @@ class Mongo extends Adapter
      * @param Document $collection
      * @param string $old
      * @param string|null $new new column key, or null to drop the permissions
-     * @return array<string> ids of documents whose permissions changed
+     * @return int documents whose permissions changed
      * @throws Exception
      */
-    private function repointColumnPermissions(Document $collection, string $old, ?string $new): array
+    private function repointColumnPermissions(Document $collection, string $old, ?string $new): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
-        $updated = [];
+        $updated = 0;
         $cursor = null;
 
         // Paged by _uid rather than by matching the column, because the column lives
@@ -4403,7 +4403,7 @@ class Mongo extends Adapter
                     '$set' => ['_permissions' => \array_values(\array_unique($rewritten))],
                 ]);
 
-                $updated[] = $row['_uid'];
+                $updated++;
             }
         }
 

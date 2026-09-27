@@ -527,12 +527,12 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    public function renameColumnPermissions(Document $collection, string $old, string $new): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    public function deleteColumnPermissions(Document $collection, string $column): array
+    public function deleteColumnPermissions(Document $collection, string $column): int
     {
         return $this->delegate(__FUNCTION__, \func_get_args());
     }

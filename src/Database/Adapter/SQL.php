@@ -60,6 +60,26 @@ abstract class SQL extends Adapter
      */
     protected const PERMISSIONS_INDEX_DOCUMENT = '_document_internal';
 
+    /**
+     * Rows a batched read takes per pass.
+     *
+     * Paired with BIND_CHUNK_SIZE below, and deliberately larger. The two are bounded
+     * by different things: a read whose predicate cannot seek costs a scan whatever it
+     * returns, so the only way to pay it less often is to take more each time. Reading
+     * wide and chunking the writes afterwards cuts the number of scans without
+     * changing how much is bound at once.
+     */
+    protected const SELECT_BATCH_SIZE = 12_000;
+
+    /**
+     * Values a single statement binds.
+     *
+     * Bounded by how many placeholders a prepared statement can carry, not by how much
+     * was read. Kept well inside the 5000 that Database caps query values at, so rows
+     * from one SELECT_BATCH_SIZE read are chunked to this before being bound.
+     */
+    protected const BIND_CHUNK_SIZE = 3_000;
+
     protected mixed $pdo;
 
     /**
@@ -2072,10 +2092,10 @@ abstract class SQL extends Adapter
      * @param Document $collection
      * @param string $old
      * @param string $new
-     * @return array<string> ids of documents whose $permissions changed
+     * @return int documents whose permissions changed
      * @throws DatabaseException
      */
-    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    public function renameColumnPermissions(Document $collection, string $old, string $new): int
     {
         return $this->repointColumnPermissions($collection, $old, $new);
     }
@@ -2089,10 +2109,10 @@ abstract class SQL extends Adapter
      *
      * @param Document $collection
      * @param string $column
-     * @return array<string> ids of documents whose $permissions changed
+     * @return int documents whose permissions changed
      * @throws DatabaseException
      */
-    public function deleteColumnPermissions(Document $collection, string $column): array
+    public function deleteColumnPermissions(Document $collection, string $column): int
     {
         return $this->repointColumnPermissions($collection, $column, null);
     }
@@ -2112,21 +2132,26 @@ abstract class SQL extends Adapter
      * @param Document $collection
      * @param string $old
      * @param string|null $new new column key, or null to drop the permissions
-     * @return array<string> ids of documents whose $permissions changed
+     * @return int documents whose permissions changed
      * @throws DatabaseException
      */
-    private function repointColumnPermissions(Document $collection, string $old, ?string $new): array
+    private function repointColumnPermissions(Document $collection, string $old, ?string $new): int
     {
         $name = $this->filter($collection->getId());
         $tenantQuery = $this->getTenantQuery($collection->getId());
         $table = $this->getSQLTable($name . '_perms');
-        $updated = [];
+        $updated = 0;
 
         // Worked in batches rather than all at once. A column used by a per-document
         // permission is used by one row per document, so the affected set grows with
         // the collection: loading every id would hold the whole set in memory, and
         // binding them into a single IN list would blow past the server's parameter
         // limit long before that.
+        //
+        // Reading and writing use different sizes on purpose -- see SELECT_BATCH_SIZE
+        // and BIND_CHUNK_SIZE. _column is the last member of the unique index, so this
+        // read cannot seek and scans whatever it returns; taking more per pass is the
+        // only way to scan fewer times.
         //
         // The loop needs no offset because the work removes its own rows from the
         // predicate -- once a batch is repointed or deleted it no longer matches
@@ -2140,7 +2165,7 @@ abstract class SQL extends Adapter
                 FROM {$table}
                 WHERE _column = :_column
                 {$tenantQuery}
-                LIMIT " . Database::DELETE_BATCH_SIZE . "
+                LIMIT " . self::SELECT_BATCH_SIZE . "
             ");
             $stmt->bindValue(':_column', $old);
             if ($this->sharedTables) {
@@ -2155,54 +2180,56 @@ abstract class SQL extends Adapter
                 break;
             }
 
-            $sequences = \array_column($rows, '_id');
-            $documents = \array_values(\array_unique(\array_column($rows, '_document')));
+            foreach (\array_chunk($rows, self::BIND_CHUNK_SIZE) as $chunk) {
+                $sequences = \array_column($chunk, '_id');
+                $documents = \array_values(\array_unique(\array_column($chunk, '_document')));
 
-            $placeholders = \implode(', ', \array_map(
-                fn ($index) => ":_uid_{$index}",
-                \array_keys($documents)
-            ));
+                $placeholders = \implode(', ', \array_map(
+                    fn ($index) => ":_uid_{$index}",
+                    \array_keys($documents)
+                ));
 
-            // The stored $permissions on the row and the _perms rows hold the same
-            // fact, so they move together, scoped to this batch.
-            $updated = [...$updated, ...$this->repointPermissionsJson($name, $documents, $placeholders, $tenantQuery, $old, $new)];
+                // The stored $permissions on the row and the _perms rows hold the same
+                // fact, so they move together, scoped to this batch.
+                $updated += $this->repointPermissionsJson($name, $documents, $placeholders, $tenantQuery, $old, $new);
 
-            if (!\is_null($new)) {
-                // A document can already hold the same role and action scoped to the
-                // destination column. Repointing the old scope onto it would then be a
-                // second identical row, which _index1 refuses -- and by this point the
-                // physical column has been renamed, so the failure would leave the
-                // schema renamed with permissions still describing the old state.
-                // The old scope is redundant once the destination exists, so drop it
-                // instead of repointing it.
-                $this->dropCollidingColumnPermissions($table, $documents, $placeholders, $tenantQuery, $old, $new);
-            }
+                if (!\is_null($new)) {
+                    // A document can already hold the same role and action scoped to the
+                    // destination column. Repointing the old scope onto it would then be a
+                    // second identical row, which _index1 refuses -- and by this point the
+                    // physical column has been renamed, so the failure would leave the
+                    // schema renamed with permissions still describing the old state.
+                    // The old scope is redundant once the destination exists, so drop it
+                    // instead of repointing it.
+                    $this->dropCollidingColumnPermissions($table, $documents, $placeholders, $tenantQuery, $old, $new);
+                }
 
-            // Addressed by primary key. Rows the collision pass above already removed
-            // simply match nothing.
-            $sequencePlaceholders = \implode(', ', \array_map(
-                fn ($index) => ":_id_{$index}",
-                \array_keys($sequences)
-            ));
+                // Addressed by primary key. Rows the collision pass above already removed
+                // simply match nothing.
+                $sequencePlaceholders = \implode(', ', \array_map(
+                    fn ($index) => ":_id_{$index}",
+                    \array_keys($sequences)
+                ));
 
-            if (\is_null($new)) {
-                $mutate = $this->getPDO()->prepare("
+                if (\is_null($new)) {
+                    $mutate = $this->getPDO()->prepare("
                     DELETE FROM {$table}
                     WHERE _id IN ({$sequencePlaceholders})
                 ");
-            } else {
-                $mutate = $this->getPDO()->prepare("
+                } else {
+                    $mutate = $this->getPDO()->prepare("
                     UPDATE {$table}
                     SET _column = :_new
                     WHERE _id IN ({$sequencePlaceholders})
                 ");
-                $mutate->bindValue(':_new', $new);
-            }
+                    $mutate->bindValue(':_new', $new);
+                }
 
-            foreach ($sequences as $index => $sequence) {
-                $mutate->bindValue(":_id_{$index}", $sequence);
+                foreach ($sequences as $index => $sequence) {
+                    $mutate->bindValue(":_id_{$index}", $sequence);
+                }
+                $this->execute($mutate);
             }
-            $this->execute($mutate);
         }
 
         return $updated;
@@ -2296,7 +2323,7 @@ abstract class SQL extends Adapter
      * @param string $tenantQuery
      * @param string $old
      * @param string|null $new
-     * @return array<string> ids whose $permissions changed
+     * @return int documents whose $permissions changed
      * @throws DatabaseException
      */
     private function repointPermissionsJson(
@@ -2306,7 +2333,7 @@ abstract class SQL extends Adapter
         string $tenantQuery,
         string $old,
         ?string $new
-    ): array {
+    ): int {
         $select = $this->getPDO()->prepare("
             SELECT _uid, _permissions
             FROM {$this->getSQLTable($name)}
@@ -2331,7 +2358,7 @@ abstract class SQL extends Adapter
             {$tenantQuery}
         ");
 
-        $updated = [];
+        $updated = 0;
 
         foreach ($rows as $row) {
             $permissions = \json_decode($row['_permissions'] ?? '[]', true);
@@ -2377,7 +2404,7 @@ abstract class SQL extends Adapter
             }
             $this->execute($update);
 
-            $updated[] = $row['_uid'];
+            $updated++;
         }
 
         return $updated;

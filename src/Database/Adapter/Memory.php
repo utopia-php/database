@@ -2099,14 +2099,14 @@ class Memory extends Adapter
      * @param Document $collection
      * @param string $old
      * @param string $new
-     * @return array<string>
+     * @return int documents whose permissions changed
      */
-    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    public function renameColumnPermissions(Document $collection, string $old, string $new): int
     {
         return $this->repointColumnPermissions($collection, $old, $new);
     }
 
-    public function deleteColumnPermissions(Document $collection, string $column): array
+    public function deleteColumnPermissions(Document $collection, string $column): int
     {
         return $this->repointColumnPermissions($collection, $column, null);
     }
@@ -2124,13 +2124,13 @@ class Memory extends Adapter
      * @param Document $collection
      * @param string $old
      * @param string|null $new new column key, or null to drop the permissions
-     * @return array<string> ids of documents whose permissions changed
+     * @return int documents whose permissions changed
      * @throws DatabaseException
      */
-    private function repointColumnPermissions(Document $collection, string $old, ?string $new): array
+    private function repointColumnPermissions(Document $collection, string $old, ?string $new): int
     {
         $key = $this->key($collection->getId());
-        $updated = [];
+        $updated = 0;
 
         foreach ($this->data[$key]['documents'] ?? [] as $documentKey => $row) {
             $permissions = $row['_permissions'] ?? [];
@@ -2170,7 +2170,7 @@ class Memory extends Adapter
             }
 
             $this->data[$key]['documents'][$documentKey]['_permissions'] = \array_values(\array_unique($rewritten));
-            $updated[] = $row['_uid'] ?? $documentKey;
+            $updated++;
         }
 
         return $updated;

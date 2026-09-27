@@ -783,16 +783,16 @@ class Redis extends Adapter
      * @param Document $collection
      * @param string $old
      * @param string $new
-     * @return array<string>
+     * @return int documents whose permissions changed
      */
-    public function renameColumnPermissions(Document $collection, string $old, string $new): array
+    public function renameColumnPermissions(Document $collection, string $old, string $new): int
     {
-        return [];
+        return 0;
     }
 
-    public function deleteColumnPermissions(Document $collection, string $column): array
+    public function deleteColumnPermissions(Document $collection, string $column): int
     {
-        return [];
+        return 0;
     }
 
     public function getSupportForSchemaAttributes(): bool

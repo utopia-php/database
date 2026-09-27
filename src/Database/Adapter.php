@@ -1027,18 +1027,18 @@ abstract class Adapter
      * @param Document $collection
      * @param string $old
      * @param string $new
-     * @return array<string> ids of documents whose $permissions changed
+     * @return int documents whose $permissions changed
      */
-    abstract public function renameColumnPermissions(Document $collection, string $old, string $new): array;
+    abstract public function renameColumnPermissions(Document $collection, string $old, string $new): int;
 
     /**
      * Drop every permission scoped to a column that no longer exists.
      *
      * @param Document $collection
      * @param string $column
-     * @return array<string> ids of documents whose $permissions changed
+     * @return int documents whose $permissions changed
      */
-    abstract public function deleteColumnPermissions(Document $collection, string $column): array;
+    abstract public function deleteColumnPermissions(Document $collection, string $column): int;
 
     /**
      * Are schema indexes supported?

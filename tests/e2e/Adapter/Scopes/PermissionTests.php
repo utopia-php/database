@@ -1688,4 +1688,47 @@ trait PermissionTests
             'a rollback must restore the column and the grants scoped to it together'
         );
     }
+    /**
+     * An adapter without column support must not be able to hold the flag at all.
+     * Masking reads the flag alone, while find(), count() and sum() take the column
+     * gate from getSupportForColumnPermissions() -- so storing it on such an adapter
+     * yields a collection that hides a value from a read while a predicate still
+     * reveals it and a sum still adds it up. updateCollection() has always refused
+     * this; createCollection() has to refuse it too, or the refusal is one call away
+     * from being bypassed.
+     */
+    public function testColumnSecurityIsRefusedWhenTheAdapterCannotEnforceIt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $authorization = $database->getAuthorization();
+        $supported = $database->getAdapter()->getSupportForColumnPermissions();
+
+        $create = fn () => $authorization->skip(fn () => $database->createCollection(
+            'columnSupport' . ($supported ? 'Yes' : 'No'),
+            documentSecurity: true,
+            columnSecurity: true,
+            permissions: []
+        ));
+
+        if (!$supported) {
+            try {
+                $create();
+                $this->fail('createCollection stored columnSecurity on an adapter that cannot enforce it');
+            } catch (DatabaseException $e) {
+                $this->assertStringContainsString('not supported by this adapter', $e->getMessage());
+            }
+
+            return;
+        }
+
+        $create();
+
+        $collection = $authorization->skip(
+            fn () => $database->getCollection('columnSupportYes')
+        );
+
+        $this->assertTrue($collection->getAttribute('columnSecurity'));
+    }
 }

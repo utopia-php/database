@@ -1884,6 +1884,17 @@ class Database
      */
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, bool $columnSecurity = false): Document
     {
+        // Same precondition updateCollection() enforces, and for a sharper reason here:
+        // an adapter without column support still masks -- masking reads the flag alone
+        // -- while find(), count() and sum() skip the column gate, which they take from
+        // getSupportForColumnPermissions(). Storing the flag anyway would leave a
+        // collection where values are hidden from a read but a predicate still reveals
+        // them and a sum still adds them up, which is worse than not offering the
+        // feature at all.
+        if ($columnSecurity && !$this->adapter->getSupportForColumnPermissions()) {
+            throw new DatabaseException('Column security is not supported by this adapter');
+        }
+
         foreach ($attributes as &$attribute) {
             // Documents the caller built, stored wholesale below, so identity is
             // stamped here rather than relying on what arrived.

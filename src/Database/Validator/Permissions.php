@@ -28,7 +28,11 @@ class Permissions extends Roles
      *
      * @param int $length maximum amount of permissions. 0 means unlimited.
      * @param array<string> $allowed allowed permissions. Defaults to all available.
-     * @param array<string> $columns known column keys a permission may be scoped to. Empty means any valid key.
+     * @param array<string> $columns the collection's column keys. A permission may only name
+     *        one of these, so the default of none rejects every column-scoped permission.
+     *        There is no way to waive the check: a caller that cannot name the columns is a
+     *        caller with no collection in scope, and it has no business judging a grant
+     *        against one.
      */
     public function __construct(int $length = 0, array $allowed = [...Database::PERMISSIONS, Database::PERMISSION_WRITE], array $columns = [])
     {
@@ -123,7 +127,7 @@ class Permissions extends Roles
                     return false;
                 }
 
-                if (!empty($this->columns) && !\in_array($column, $this->columns, true)) {
+                if (!\in_array($column, $this->columns, true)) {
                     $this->message = 'Column "' . $column . '" does not exist.';
                     return false;
                 }

@@ -50,11 +50,12 @@ class ColumnPermissionSqlTest extends TestCase
         $this->database->create();
 
         $this->authorization->skip(function () {
-            $this->database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: [
-                Permission::read(Role::any(), 'name'),
-            ]);
+            // Columns first: a column-scoped grant is stored against the attribute's
+            // $internalId, so the attribute has to exist before anything can name it.
+            $this->database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: []);
             $this->database->createAttribute('employees', 'name', Database::VAR_STRING, 128, false);
             $this->database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 8, false);
+            $this->database->updateCollection('employees', [Permission::read(Role::any(), 'name')], true, true);
 
             // hr may read salary on e1 only
             $this->database->createDocument('employees', new Document([

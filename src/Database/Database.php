@@ -134,6 +134,27 @@ class Database
      */
     public const MAX_PERMISSION_COLUMN_LENGTH = 244;
 
+    /**
+     * Key of an attribute's immutable identity.
+     *
+     * A column-scoped permission is stored against this, never against the attribute's
+     * key, so renaming a column moves no permissions at all and a column created later
+     * under a freed name inherits nothing. Assigned once at creation and never
+     * rewritten; the key changes around it.
+     *
+     * Callers never see it. Permission strings carry column keys in and out --
+     * encode() resolves key to identity on the way to storage, decode() resolves it
+     * back -- so what a client writes is what it reads, and what travels between
+     * installs is a name rather than an id only one install can interpret.
+     *
+     * Named with the "$" that marks every other system field on a document ($id,
+     * $permissions, $createdAt). The rest of an attribute's keys -- key, type, size,
+     * required -- are the caller's to set, and an identity in that namespace would
+     * read as one of them and could be supplied by anyone building an attribute
+     * document by hand.
+     */
+    public const ATTRIBUTE_INTERNAL_ID = '$internalId';
+
     // Maximum byte capacity for TEXT
     public const MAX_TEXT_BYTES = 65535;
     public const MAX_MEDIUMTEXT_BYTES = 16777215;
@@ -1864,6 +1885,10 @@ class Database
     public function createCollection(string $id, array $attributes = [], array $indexes = [], ?array $permissions = null, bool $documentSecurity = true, bool $columnSecurity = false): Document
     {
         foreach ($attributes as &$attribute) {
+            // Documents the caller built, stored wholesale below, so identity is
+            // stamped here rather than relying on what arrived.
+            $attribute = $this->stampAttributeIdentity($attribute);
+
             if (in_array($attribute['type'], self::ATTRIBUTE_FILTER_TYPES)) {
                 $existingFilters = $attribute['filters'] ?? [];
                 if (!is_array($existingFilters)) {
@@ -1880,20 +1905,6 @@ class Database
             Permission::create(Role::any()),
         ];
 
-        if ($this->validate) {
-            $columns = [];
-            foreach ($attributes as $attribute) {
-                $key = $attribute['key'] ?? $attribute['$id'] ?? null;
-                if (\is_string($key) && $key !== '') {
-                    $columns[] = $key;
-                }
-            }
-
-            $validator = new Permissions(columns: $columns);
-            if (!$validator->isValid($permissions)) {
-                throw new DatabaseException($validator->getDescription());
-            }
-        }
 
         $collection = $this->silent(fn () => $this->getCollection($id));
 
@@ -1955,7 +1966,17 @@ class Database
             'columnSecurity' => $columnSecurity
         ]);
 
+        // The flag guard runs first on purpose: with column security off, no permission
+        // here may name a column at all, and saying so is more use than reporting that
+        // the column is missing -- which invites creating it and trying again.
         $this->assertColumnSecurityEnabled($collection, $permissions);
+
+        if ($this->validate) {
+            $validator = new Permissions(columns: $this->getColumnKeys($collection));
+            if (!$validator->isValid($permissions)) {
+                throw new DatabaseException($validator->getDescription());
+            }
+        }
 
         if ($this->validate) {
             $validator = new IndexValidator(
@@ -2129,6 +2150,19 @@ class Database
         // enabling again restores the exact restriction.
         if ($columnSecurity && !$this->adapter->getSupportForColumnPermissions()) {
             throw new DatabaseException('Column security is not supported by this adapter');
+        }
+
+        if ($columnSecurity) {
+            // Attributes created before identities existed have none, and a
+            // column-scoped grant cannot be stored against a column that has no
+            // identity. Turning the feature on is the moment they first matter, and it
+            // is already a write to this document -- so they are assigned here rather
+            // than by a migration that would have to walk every collection whether or
+            // not it ever uses column permissions.
+            $collection->setAttribute('attributes', \array_map(
+                fn (Document $attribute) => $this->stampAttributeIdentity($attribute),
+                $collection->getAttribute('attributes', [])
+            ));
         }
 
         $collection
@@ -2475,7 +2509,7 @@ class Database
             }
         }
 
-        $collection->setAttribute('attributes', $attribute, Document::SET_TYPE_APPEND);
+        $collection->setAttribute('attributes', $this->stampAttributeIdentity($attribute), Document::SET_TYPE_APPEND);
 
         $this->updateMetadata(
             collection: $collection,
@@ -2679,7 +2713,7 @@ class Database
         }
 
         foreach ($attributeDocuments as $attributeDocument) {
-            $collection->setAttribute('attributes', $attributeDocument, Document::SET_TYPE_APPEND);
+            $collection->setAttribute('attributes', $this->stampAttributeIdentity($attributeDocument), Document::SET_TYPE_APPEND);
         }
 
         $this->updateMetadata(
@@ -3412,28 +3446,12 @@ class Database
                 throw new DatabaseException('Failed to update attribute');
             }
 
-            // A column-scoped permission names its column, in _perms._column and
-            // again inside the $permissions JSON, so a rename has to repoint both.
-            // There is no stable column id to hang permissions off: this method
-            // rewrites the attribute's '$id' and 'key' together, so the key is the
-            // only handle there is.
-            //
-            // Deliberately not gated on columnSecurity. Disabling the flag leaves
-            // scoped grants in storage, dormant, so gating here would let a rename
-            // slip past them -- and re-enabling would then point them at a key that
-            // no longer exists, or at whatever column later took that name. The
-            // adapter's first query finds nothing when no grant is scoped to this
-            // column, which is the common case and costs one lookup.
+            // Per-document grants need nothing: they are stored against the
+            // attribute's $internalId, which this method never rewrites. The
+            // collection's own grants are the exception -- they stay as keys, on one
+            // row, so they move here. Free, because that row is being written anyway.
             if (!\is_null($newKey) && $newKey !== $id) {
                 $this->repointCollectionColumnPermissions($collectionDoc, $id, $newKey);
-
-                // No per-document purge: purgeCachedCollection() below lists and purges
-                // every document key under the collection, so purging the affected ones
-                // here is the same work done twice -- and it would fire an extra
-                // EVENT_DOCUMENT_PURGE per document, which testEvents() asserts the exact
-                // sequence of. The rollback path keeps its purge: the collection purge
-                // runs after updateMetadata(), so a failed write never reaches it.
-                $this->adapter->renameColumnPermissions($collectionDoc, $id, $newKey);
             }
         }
 
@@ -3441,40 +3459,16 @@ class Database
 
         $this->updateMetadata(
             collection: $collectionDoc,
-            rollbackOperation: function () use (
+            rollbackOperation: fn () => $this->adapter->updateAttribute(
                 $collection,
-                $collectionDoc,
-                $id,
-                $newKey,
+                $newKey ?? $id,
                 $originalType,
-                $originalSize,
+                (int)$originalSize,
                 $originalSigned,
                 $originalArray,
                 $originalKey,
                 $originalRequired
-            ) {
-                $this->adapter->updateAttribute(
-                    $collection,
-                    $newKey ?? $id,
-                    $originalType,
-                    (int)$originalSize,
-                    $originalSigned,
-                    $originalArray,
-                    $originalKey,
-                    $originalRequired
-                );
-
-                // Only when the rename half actually ran; see the repoint above.
-                if (!\is_null($newKey) && $newKey !== $id) {
-                    $this->adapter->renameColumnPermissions($collectionDoc, $newKey, $id);
-
-                    // The collection purge at the end of this method sits after
-                    // updateMetadata(), so a failed write never reaches it. Purge here
-                    // instead -- by collection, not per document, so nothing has to
-                    // carry a list of ids back for the sake of invalidating them.
-                    $this->purgeCachedCollection($collection);
-                }
-            },
+            ),
             shouldRollback: $updated,
             operationDescription: "attribute update '{$id}'",
             silentRollback: true
@@ -3607,19 +3601,26 @@ class Database
             // Ignore
         }
 
-        // Permissions name their column by key, so grants left behind would be
-        // inherited by any column later created under the same name. Runs whatever
-        // columnSecurity says: disabling it keeps scoped grants in storage rather
-        // than deleting them, so they still have to be cleaned up here.
+        // Hygiene rather than safety: the column is gone, so grants naming it confer
+        // nothing and a column created later under the same key gets a fresh
+        // $internalId that no stored grant can match. Clearing them keeps dead rows
+        // out of _perms rather than waiting for a read-modify-write to shed them.
+        //
+        // Two identifiers, deliberately. The collection's own grants are in memory and
+        // decoded, so they still speak in keys; the adapter works on storage, which
+        // holds identities.
         $this->repointCollectionColumnPermissions($collection, $id, null);
+
+        $internalId = $attribute instanceof Document
+            ? $attribute->getAttribute(self::ATTRIBUTE_INTERNAL_ID)
+            : null;
 
         // No per-document purge: purgeCachedCollection() below lists and purges
         // every document key under the collection, so purging the affected ones
-        // here is the same work done twice -- and it would fire an extra
-        // EVENT_DOCUMENT_PURGE per document, which testEvents() asserts the exact
-        // sequence of. The rollback path keeps its purge: the collection purge
-        // runs after updateMetadata(), so a failed write never reaches it.
-        $this->adapter->deleteColumnPermissions($collection, $id);
+        // here is the same work done twice.
+        if (\is_string($internalId) && $internalId !== '') {
+            $this->adapter->deleteColumnPermissions($collection, $internalId);
+        }
 
         $this->updateMetadata(
             collection: $collection,
@@ -3754,43 +3755,17 @@ class Database
             }
         }
 
-        // A column-scoped permission names its column, in _perms._column and again
-        // inside the $permissions JSON, so a rename has to repoint both -- the same
-        // migration updateAttribute() runs for its own rename. Left alone, the grants
-        // stay attached to the old key: the caller loses the renamed column, and a
-        // column later created under the old name inherits authority it never earned.
-        // Not gated on columnSecurity, for the same reason: the flag controls
-        // enforcement, not storage, so grants outlive it and still need moving.
+        // Per-document grants are untouched by a rename -- they are stored against
+        // the attribute's $internalId. Only the collection's own grants, which stay as
+        // keys, have to move, and they move in memory on the row about to be written.
         $this->repointCollectionColumnPermissions($collection, $old, $new);
-
-        // No per-document purge: purgeCachedCollection() below lists and purges
-        // every document key under the collection, so purging the affected ones
-        // here is the same work done twice -- and it would fire an extra
-        // EVENT_DOCUMENT_PURGE per document, which testEvents() asserts the exact
-        // sequence of. The rollback path keeps its purge: the collection purge
-        // runs after updateMetadata(), so a failed write never reaches it.
-        $this->adapter->renameColumnPermissions($collection, $old, $new);
 
         $collection->setAttribute('attributes', $attributes);
         $collection->setAttribute('indexes', $indexes);
 
-        // The grants above are already committed, so the rollback has to walk them
-        // back alongside the column. Reversing only the schema would leave the schema
-        // on the old key and the grants on the new one -- access lost now, and
-        // inherited later by whatever is created under the new name. The collection's
-        // own grants need no undoing: they live on $collection, which this call is what
-        // persists, so a failure here means they were never written.
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: function () use ($collection, $old, $new) {
-                $this->adapter->renameAttribute($collection->getId(), $new, $old);
-
-                $this->adapter->renameColumnPermissions($collection, $new, $old);
-
-                // See updateAttribute(): the collection purge below is unreachable
-                // once updateMetadata() has thrown, so the rollback does its own.
-                $this->purgeCachedCollection($collection->getId());
-            },
+            rollbackOperation: fn () => $this->adapter->renameAttribute($collection->getId(), $new, $old),
             shouldRollback: $renamed,
             operationDescription: "attribute rename '{$old}' to '{$new}'"
         );
@@ -4090,8 +4065,8 @@ class Database
             // prior partial failure. Skip creation and proceed to metadata update.
         }
 
-        $collection->setAttribute('attributes', $relationship, Document::SET_TYPE_APPEND);
-        $relatedCollection->setAttribute('attributes', $twoWayRelationship, Document::SET_TYPE_APPEND);
+        $collection->setAttribute('attributes', $this->stampAttributeIdentity($relationship), Document::SET_TYPE_APPEND);
+        $relatedCollection->setAttribute('attributes', $this->stampAttributeIdentity($twoWayRelationship), Document::SET_TYPE_APPEND);
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection, $created) {
             $indexesCreated = [];
@@ -5365,6 +5340,156 @@ class Database
      * @param Document $collection
      * @return array<string>
      */
+    /**
+     * Give an attribute its immutable identity, if it does not already have one.
+     *
+     * Every path that persists an attribute runs this: createAttribute() builds the
+     * document itself, while createAttributes(), createCollection() and
+     * createRelationship() take documents the caller built and cannot rely on them
+     * carrying an identity. An existing one is kept rather than replaced so that a
+     * migration can assign identities itself, and so that re-running one is harmless.
+     *
+     * @param Document $attribute
+     * @return Document
+     */
+    /**
+     * Rewrite a document's column-scoped permissions between key and identity.
+     *
+     * Storage holds the identity so that renaming a column moves nothing; callers
+     * only ever see the key. Permissions naming neither -- a grant whose column has
+     * since been deleted -- are dropped rather than passed through: the identity
+     * means nothing to a caller, and such a grant already confers nothing, so letting
+     * a read-modify-write shed it is how the leftovers of a dropped column disappear.
+     *
+     * @param Document $collection
+     * @param Document $document
+     * @param bool $toIdentity true going to storage, false coming back
+     * @return void
+     */
+    private function translatePermissionColumns(Document $collection, Document $document, bool $toIdentity): void
+    {
+        if (!$document->offsetExists('$permissions')) {
+            return;
+        }
+
+        // A collection's own grants are left as keys. They live on one row, are held
+        // in memory as keys between reads and writes, and are rewritten whenever the
+        // collection document is persisted -- so a rename would re-encode a grant
+        // naming a key that no longer exists. repointCollectionColumnPermissions()
+        // moves them instead, which costs nothing because that row is being written
+        // anyway. Per-document grants, the ones there can be millions of, carry the
+        // identity and so survive a rename untouched.
+        if ($collection->getId() === self::METADATA) {
+            return;
+        }
+
+        $map = [];
+
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            $key = $attribute['key'] ?? $attribute['$id'] ?? null;
+            $internalId = $attribute[self::ATTRIBUTE_INTERNAL_ID] ?? null;
+
+            if (!\is_string($key) || !\is_string($internalId) || $key === '' || $internalId === '') {
+                continue;
+            }
+
+            $map[$toIdentity ? $key : $internalId] = $toIdentity ? $internalId : $key;
+        }
+
+        $translated = [];
+
+        foreach ($document->getPermissions() as $permission) {
+            $parsed = Permission::parse($permission);
+
+            if ($parsed->isForAllColumns()) {
+                $translated[] = $permission;
+                continue;
+            }
+
+            $column = $map[$parsed->getColumn()] ?? null;
+
+            if ($column === null) {
+                // Going out, this is a grant whose column has been dropped: it confers
+                // nothing, its identity means nothing to a caller, and letting a
+                // read-modify-write shed it is how those leftovers disappear.
+                if (!$toIdentity) {
+                    continue;
+                }
+
+                // Coming in, it is a grant naming a column that does not exist. Storage
+                // is keyed by identity, so there is nothing to store it against, and
+                // silently dropping it would lose a permission the caller believes it
+                // set.
+                throw new DatabaseException(
+                    'Permission "' . $permission . '" is scoped to column "'
+                    . $parsed->getColumn() . '", which does not exist on this collection.'
+                );
+            }
+
+            $translated[] = (new Permission(
+                $parsed->getPermission(),
+                $parsed->getRole(),
+                $parsed->getIdentifier(),
+                $parsed->getDimension(),
+                $column
+            ))->toString();
+        }
+
+        $document->setAttribute('$permissions', \array_values(\array_unique($translated)));
+    }
+
+    /**
+     * Resolve column keys to the identities storage holds them under.
+     *
+     * The gate compares against _column, which carries identities, while everything
+     * above it -- queries, the collection's own grants, error messages -- speaks in
+     * keys. This is the one place the two meet, so the keys survive as far as the
+     * adapter call and no further.
+     *
+     * @param Document $collection
+     * @param array<string> $keys
+     * @return array<string>
+     */
+    private function columnIdentities(Document $collection, array $keys): array
+    {
+        if (empty($keys)) {
+            return [];
+        }
+
+        $map = [];
+
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            $key = $attribute['key'] ?? $attribute['$id'] ?? null;
+            $internalId = $attribute[self::ATTRIBUTE_INTERNAL_ID] ?? null;
+
+            if (\is_string($key) && \is_string($internalId) && $key !== '' && $internalId !== '') {
+                $map[$key] = $internalId;
+            }
+        }
+
+        $identities = [];
+
+        foreach ($keys as $key) {
+            // A queried column with no identity cannot be matched by any stored grant,
+            // so it is passed through unchanged and the gate finds nothing -- which is
+            // the closed answer this should give.
+            $identities[] = $map[$key] ?? $key;
+        }
+
+        return \array_values(\array_unique($identities));
+    }
+
+    private function stampAttributeIdentity(Document $attribute): Document
+    {
+        $internalId = $attribute->getAttribute(self::ATTRIBUTE_INTERNAL_ID);
+
+        if (!\is_string($internalId) || $internalId === '') {
+            $attribute->setAttribute(self::ATTRIBUTE_INTERNAL_ID, ID::unique());
+        }
+
+        return $attribute;
+    }
+
     private function getColumnKeys(Document $collection): array
     {
         $keys = [];
@@ -6683,14 +6808,23 @@ class Database
             }
         }
 
-        $document = $this->encode($collection, $document);
-
-        if ($this->validate) {
+        // Before encode(), which swaps column keys for their identities. The caller
+        // wrote keys and any complaint has to name what the caller wrote.
+        //
+        // A metadata document is a collection, and its permissions name that collection's
+        // columns -- not the columns of _metadata, which is what $collection is here. They
+        // are judged against the right list by createCollection() and updateCollection(),
+        // which hold it; checking them again here would only ever compare them to the
+        // wrong schema. translatePermissionColumns() sits out the same write for the same
+        // reason.
+        if ($this->validate && $collection->getId() !== self::METADATA) {
             $validator = new Permissions(columns: $this->getColumnKeys($collection));
             if (!$validator->isValid($document->getPermissions())) {
                 throw new DatabaseException($validator->getDescription());
             }
         }
+
+        $document = $this->encode($collection, $document);
 
         if ($this->validate) {
             $structure = new Structure(
@@ -8586,8 +8720,17 @@ class Database
             $old = $this->adapter->castingBefore($collection, $old);
             $document = $this->adapter->castingBefore($collection, $document);
 
+            // The adapter diffs the two halves of this Change to work out which
+            // permission rows to add and remove. "new" has been through encode(), so
+            // its column-scoped grants carry identities; "old" came back from find()
+            // and still carries keys. Comparing those two would find no overlap and
+            // re-insert every row on top of itself, so the old side is put into the
+            // same terms as the new one.
+            $stored = clone $old;
+            $this->translatePermissionColumns($collection, $stored, true);
+
             $documents[$key] = new Change(
-                old: $old,
+                old: $stored,
                 new: $document
             );
         }
@@ -9798,7 +9941,7 @@ class Database
                 $cursor,
                 $cursorDirection,
                 $forPermission,
-                $columnPermissions
+                $this->columnIdentities($collection, $columnPermissions)
             );
 
             $results = $skipAuth ? $this->authorization->skip($getResults) : $getResults();
@@ -10269,7 +10412,7 @@ class Database
 
         $queries = $queriesOrNull;
 
-        $getCount = fn () => $this->adapter->count($collection, $queries, $max, $columnPermissions);
+        $getCount = fn () => $this->adapter->count($collection, $queries, $max, $this->columnIdentities($collection, $columnPermissions));
         $count = $skipAuth ? $this->authorization->skip($getCount) : $getCount();
 
         $this->trigger(self::EVENT_DOCUMENT_COUNT, $count);
@@ -10383,7 +10526,7 @@ class Database
 
         $queries = $queriesOrNull;
 
-        $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max, $columnPermissions);
+        $getSum = fn () => $this->adapter->sum($collection, $attribute, $queries, $max, $this->columnIdentities($collection, $columnPermissions));
         $sum = $skipAuth ? $this->authorization->skip($getSum) : $getSum();
 
         $this->trigger(self::EVENT_DOCUMENT_SUM, $sum);
@@ -10477,6 +10620,13 @@ class Database
      */
     public function encode(Document $collection, Document $document, bool $applyDefaults = true): Document
     {
+        // The mirror of decode(): a caller writes column keys, storage keeps
+        // identities, so a rename later moves the column and leaves every permission
+        // where it is. Runs before the filters below, which are what turn a _metadata
+        // row's attribute list into JSON -- once that has happened there is nothing
+        // left to resolve a key against.
+        $this->translatePermissionColumns($collection, $document, true);
+
         $attributes = $collection->getAttribute('attributes', []);
         $internalDateAttributes = ['$createdAt', '$updatedAt'];
         foreach ($this->getInternalAttributes() as $attribute) {
@@ -10666,6 +10816,12 @@ class Database
                 }
             }
         }
+
+        // Storage holds each column-scoped permission against the attribute's
+        // identity; callers see the key. Every path that hands a document back runs
+        // through here, so this is the only place the swap has to happen.
+        $this->translatePermissionColumns($collection, $document, false);
+
         return $document;
     }
 

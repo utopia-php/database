@@ -138,13 +138,13 @@ class ColumnPermissionEnforcementTest extends TestCase
     public function testCollectionLevelColumnGrantIsStillMaskedInFind(): void
     {
         $this->authorization->skip(function () {
-            $this->database->createCollection('public_employees', documentSecurity: true, columnSecurity: true, permissions: [
-                Permission::read(Role::any(), 'name'),
-            ]);
+            $this->database->createCollection('public_employees', documentSecurity: true, columnSecurity: true, permissions: []);
 
             foreach (['name', 'email', 'salary'] as $column) {
                 $this->database->createAttribute('public_employees', $column, Database::VAR_STRING, 128, false);
             }
+
+            $this->database->updateCollection('public_employees', [Permission::read(Role::any(), 'name')], true, true);
 
             $this->database->createDocument('public_employees', new Document([
                 '$id' => 'pub1',
@@ -177,11 +177,10 @@ class ColumnPermissionEnforcementTest extends TestCase
     public function testCollectionLevelColumnGrantFollowsARename(): void
     {
         $this->authorization->skip(function () {
-            $this->database->createCollection('scoped', documentSecurity: true, columnSecurity: true, permissions: [
-                Permission::read(Role::any(), 'name'),
-            ]);
+            $this->database->createCollection('scoped', documentSecurity: true, columnSecurity: true, permissions: []);
 
             $this->database->createAttribute('scoped', 'name', Database::VAR_STRING, 128, false);
+            $this->database->updateCollection('scoped', [Permission::read(Role::any(), 'name')], true, true);
 
             $this->assertSame(
                 ['read("any", "name")'],

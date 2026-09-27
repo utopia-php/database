@@ -146,13 +146,43 @@ class ColumnPermissionTest extends TestCase
 
     public function testValidatorAcceptsColumnScopedReadCreateUpdate(): void
     {
-        $validator = new Permissions();
+        $validator = new Permissions(columns: ['salary', 'name']);
 
         $this->assertTrue($validator->isValid([
             'read("user:1", "salary")',
             'create("users", "name")',
             'update("team:abc/owner", "name")',
         ]), $validator->getDescription());
+    }
+
+    /**
+     * The default is no columns, so a column-scoped permission is refused until the
+     * caller names the columns that exist. There is no waiver: a caller who forgets is
+     * told, rather than quietly having a grant on a column nobody checked accepted on
+     * its behalf.
+     */
+    public function testValidatorRejectsColumnScopedGrantByDefault(): void
+    {
+        $validator = new Permissions();
+
+        $this->assertFalse($validator->isValid(['read("user:1", "salary")']));
+        $this->assertStringContainsString('does not exist', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid(['read("user:1")']), $validator->getDescription());
+    }
+
+    /**
+     * An empty list is a collection with no columns, not a caller who did not say. Every
+     * column-scoped grant names a column that does not exist.
+     */
+    public function testValidatorWithNoColumnsRejectsEveryColumnScopedGrant(): void
+    {
+        $validator = new Permissions(columns: []);
+
+        $this->assertFalse($validator->isValid(['read("user:1", "salary")']));
+        $this->assertStringContainsString('does not exist', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid(['read("user:1")']), $validator->getDescription());
     }
 
     public function testValidatorRejectsColumnScopedDelete(): void
@@ -186,5 +216,215 @@ class ColumnPermissionTest extends TestCase
 
         $this->assertFalse($validator->isValid(['read("user:1", "_internal")']));
         $this->assertStringContainsString('not a valid column key', $validator->getDescription());
+    }
+
+    // ------------------------------------------------- grants on a missing column
+
+    /**
+     * @return array{Database, Authorization}
+     */
+    private function database(): array
+    {
+        $authorization = new Authorization();
+
+        $database = new Database(new Memory(), new Cache(new NoCache()));
+        $database
+            ->setAuthorization($authorization)
+            ->setDatabase('columnPermissions')
+            ->setNamespace('cpm_' . \uniqid());
+
+        $database->create();
+
+        return [$database, $authorization];
+    }
+
+    /**
+     * A collection created with no columns has nothing a permission could name, so a
+     * grant on one is refused rather than held until that column appears and quietly
+     * starts applying.
+     */
+    public function testCreateCollectionRejectsGrantOnMissingColumn(): void
+    {
+        [$database, $authorization] = $this->database();
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('does not exist');
+
+        $authorization->skip(fn () => $database->createCollection(
+            'employees',
+            documentSecurity: true,
+            columnSecurity: true,
+            permissions: [Permission::read(Role::any(), 'salary')]
+        ));
+    }
+
+    /**
+     * The same grant is accepted when the column it names is created in the same call,
+     * which is what makes the refusal above about the missing column rather than about
+     * collection-level grants carrying columns at all.
+     */
+    public function testCreateCollectionAcceptsGrantOnColumnCreatedWithIt(): void
+    {
+        [$database, $authorization] = $this->database();
+
+        $authorization->skip(fn () => $database->createCollection(
+            'employees',
+            attributes: [new Document([
+                '$id' => 'salary',
+                'key' => 'salary',
+                'type' => Database::VAR_INTEGER,
+                'size' => 8,
+                'required' => false,
+                'default' => null,
+                'signed' => true,
+                'array' => false,
+                'filters' => [],
+            ])],
+            documentSecurity: true,
+            columnSecurity: true,
+            permissions: [Permission::read(Role::any(), 'salary')]
+        ));
+
+        $collection = $authorization->skip(fn () => $database->getCollection('employees'));
+
+        $this->assertSame([Permission::read(Role::any(), 'salary')], $collection->getPermissions());
+    }
+
+    /**
+     * updateCollection judges the grant against the columns the collection has now, so
+     * one naming a column that was never created is refused here too.
+     */
+    public function testUpdateCollectionRejectsGrantOnMissingColumn(): void
+    {
+        [$database, $authorization] = $this->collectionWithoutSalary();
+
+        try {
+            $authorization->skip(fn () => $database->updateCollection(
+                'employees',
+                [Permission::read(Role::any(), 'salary')],
+                true,
+                true
+            ));
+            $this->fail('updateCollection accepted a grant naming a column that does not exist');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('does not exist', $e->getMessage());
+        }
+
+        $collection = $authorization->skip(fn () => $database->getCollection('employees'));
+
+        $this->assertSame([], $collection->getPermissions(), 'a refused update must change nothing');
+    }
+
+    /**
+     * A collection with one column, 'name', and one document holding grants on it.
+     * 'salary' is deliberately never created: it is the column these tests name.
+     *
+     * @return array{Database, Authorization}
+     */
+    private function collectionWithoutSalary(): array
+    {
+        [$database, $authorization] = $this->database();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('employees', 'name', Database::VAR_STRING, 128, false);
+
+            $database->createDocument('employees', new Document([
+                '$id' => 'e1',
+                '$permissions' => [
+                    Permission::read(Role::any(), 'name'),
+                    Permission::update(Role::any(), 'name'),
+                ],
+                'name' => 'Bob',
+            ]));
+        });
+
+        return [$database, $authorization];
+    }
+
+    /**
+     * A grant naming a column that does not exist confers nothing today and binds
+     * late if that column is ever created -- a restriction nobody reviewed at the
+     * moment it became real. The write is refused instead.
+     */
+    public function testCreateDocumentRejectsGrantOnMissingColumn(): void
+    {
+        [$database, $authorization] = $this->collectionWithoutSalary();
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('does not exist');
+
+        $authorization->skip(fn () => $database->createDocument('employees', new Document([
+            '$id' => 'e2',
+            '$permissions' => [Permission::read(Role::any(), 'salary')],
+            'name' => 'Ann',
+        ])));
+    }
+
+    /**
+     * Same refusal with validation skipped. Storage is keyed by the column's identity,
+     * so a grant naming no column has nothing to be stored against -- which makes this
+     * a property of the write path rather than of the validator in front of it.
+     */
+    public function testCreateDocumentRejectsGrantOnMissingColumnWithoutValidation(): void
+    {
+        [$database, $authorization] = $this->collectionWithoutSalary();
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('does not exist');
+
+        $authorization->skip(fn () => $database->skipValidation(
+            fn () => $database->createDocument('employees', new Document([
+                '$id' => 'e2',
+                '$permissions' => [Permission::read(Role::any(), 'salary')],
+                'name' => 'Ann',
+            ]))
+        ));
+    }
+
+    /**
+     * The update path has to refuse what the create path refuses. Accepting here would
+     * leave the same orphan grant in storage by a different door.
+     */
+    public function testUpdateDocumentRejectsGrantOnMissingColumn(): void
+    {
+        [$database, $authorization] = $this->collectionWithoutSalary();
+
+        $update = fn () => $authorization->skip(fn () => $database->updateDocument('employees', 'e1', new Document([
+            '$id' => 'e1',
+            '$permissions' => [Permission::read(Role::any(), 'salary')],
+            'name' => 'Bob',
+        ])));
+
+        try {
+            $update();
+            $this->fail('updateDocument accepted a grant naming a column that does not exist');
+        } catch (DatabaseException $e) {
+            $this->assertStringContainsString('does not exist', $e->getMessage());
+        }
+
+        $stored = $authorization->skip(fn () => $database->getDocument('employees', 'e1'));
+
+        $this->assertSame(
+            [Permission::read(Role::any(), 'name'), Permission::update(Role::any(), 'name')],
+            $stored->getPermissions(),
+            'a refused update must leave the stored permissions untouched'
+        );
+    }
+
+    public function testUpdateDocumentRejectsGrantOnMissingColumnWithoutValidation(): void
+    {
+        [$database, $authorization] = $this->collectionWithoutSalary();
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('does not exist');
+
+        $authorization->skip(fn () => $database->skipValidation(
+            fn () => $database->updateDocument('employees', 'e1', new Document([
+                '$id' => 'e1',
+                '$permissions' => [Permission::read(Role::any(), 'salary')],
+                'name' => 'Bob',
+            ]))
+        ));
     }
 }

@@ -2477,13 +2477,16 @@ class Mongo extends Adapter
      */
     private function permissionStrings(string $type, Document $collection): array
     {
+        // Identities, not keys. A column-scoped grant is stored against the
+        // attribute's $internalId so that renaming the column moves nothing, and this
+        // has to enumerate what the stored strings actually contain.
         $columns = [];
 
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
-            $key = $attribute['key'] ?? $attribute['$id'] ?? null;
+            $internalId = $attribute[Database::ATTRIBUTE_INTERNAL_ID] ?? null;
 
-            if (\is_string($key) && $key !== '') {
-                $columns[$key] = true;
+            if (\is_string($internalId) && $internalId !== '') {
+                $columns[$internalId] = true;
             }
         }
 

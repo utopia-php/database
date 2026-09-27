@@ -43,13 +43,15 @@ class ColumnPermissionQueryTest extends TestCase
         }
 
         $this->authorization->skip(function () {
-            $this->database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: [
-                Permission::read(Role::any(), 'name'),
-                Permission::create(Role::any(), 'name'),
-            ]);
+            $this->database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: []);
 
             $this->database->createAttribute('employees', 'name', Database::VAR_STRING, 128, false);
             $this->database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $this->database->updateCollection('employees', [
+                Permission::read(Role::any(), 'name'),
+                Permission::create(Role::any(), 'name'),
+            ], true, true);
 
             $this->database->createDocument('employees', new Document([
                 '$id' => 'e1',
@@ -226,11 +228,10 @@ class ColumnPermissionQueryTest extends TestCase
     public function testWithoutDocumentSecurityAnUnreadableColumnThrows(): void
     {
         $this->authorization->skip(function () {
-            $this->database->createCollection('strict', documentSecurity: false, columnSecurity: true, permissions: [
-                Permission::read(Role::any(), 'name'),
-            ]);
+            $this->database->createCollection('strict', documentSecurity: false, columnSecurity: true, permissions: []);
             $this->database->createAttribute('strict', 'name', Database::VAR_STRING, 128, false);
             $this->database->createAttribute('strict', 'salary', Database::VAR_INTEGER, 8, false);
+            $this->database->updateCollection('strict', [Permission::read(Role::any(), 'name')], false, true);
         });
 
         $this->authorization->cleanRoles();

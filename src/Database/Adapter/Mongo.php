@@ -2538,7 +2538,14 @@ class Mongo extends Adapter
      */
     private function applyColumnPermissions(array $filters, array $columnPermissions, string $type): array
     {
-        if (empty($columnPermissions) || !$this->authorization->getStatus()) {
+        // Not gated on authorization->getStatus(). That flag is also false when the
+        // caller holds a collection-level grant, because Database wraps the call in
+        // authorization->skip() -- and a column-scoped collection grant is exactly the
+        // case that needs column filtering. Skipping row authorization means the caller
+        // may see every row, never that it may see every column. Database decides
+        // whether to pass any columns at all; an empty list filters nothing. The SQL
+        // adapters keep their column conditions outside the same guard.
+        if (empty($columnPermissions)) {
             return $filters;
         }
 

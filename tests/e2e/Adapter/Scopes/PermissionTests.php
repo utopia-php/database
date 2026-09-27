@@ -1573,4 +1573,55 @@ trait PermissionTests
         ));
     }
 
+    /**
+     * A collection-level grant makes every row readable, so Database skips row
+     * authorization for the whole query. That says nothing about columns: a grant
+     * scoped to one column must still hide the others from a predicate, a count and a
+     * sum. Mongo gated its column filter on the same authorization flag and so dropped
+     * it in exactly this case, while the SQL adapters keep theirs outside that guard --
+     * a divergence no Memory or SQLite test can see.
+     */
+    public function testCollectionGrantDoesNotExposeOtherColumnsToQueries(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('collectionGate', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('collectionGate', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('collectionGate', 'salary', Database::VAR_INTEGER, 8, false);
+
+            // Readable to anyone, but only the name. Nothing grants salary.
+            $database->updateCollection('collectionGate', [Permission::read(Role::any(), 'name')], true, true);
+
+            $database->createDocument('collectionGate', new Document([
+                '$id' => ID::custom('g1'), '$permissions' => [], 'name' => 'Bob', 'salary' => 100,
+            ]));
+            $database->createDocument('collectionGate', new Document([
+                '$id' => ID::custom('g2'), '$permissions' => [], 'name' => 'Ann', 'salary' => 900,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('any');
+
+        // The rows are readable, so they come back -- masked down to name.
+        $this->assertCount(2, $database->find('collectionGate'));
+
+        // Reaching salary is what must find nothing. A predicate that matched would
+        // report whether a salary exceeds a threshold; a sum would report the values.
+        $this->assertCount(0, $database->find('collectionGate', [Query::greaterThan('salary', 50)]));
+        $this->assertEquals(0, $database->count('collectionGate', [Query::greaterThan('salary', 50)]));
+        $this->assertEquals(0, $database->sum('collectionGate', 'salary'));
+
+        $authorization->cleanRoles();
+    }
 }

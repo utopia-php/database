@@ -1731,4 +1731,57 @@ trait PermissionTests
 
         $this->assertTrue($collection->getAttribute('columnSecurity'));
     }
+
+    /**
+     * updateDocuments() encodes $updates once up front and again per merged document,
+     * so a column-scoped grant passes through the key-to-identity translation twice.
+     * The second pass must recognise what the first produced; treating it as an unknown
+     * column key rejected every bulk update that carried one.
+     */
+    public function testBulkUpdateAcceptsColumnScopedPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('bulkColumnGrants', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('bulkColumnGrants', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('bulkColumnGrants', 'salary', Database::VAR_INTEGER, 8, false);
+
+            foreach ([['b1', 'Bob', 100], ['b2', 'Ann', 900]] as [$id, $name, $salary]) {
+                $database->createDocument('bulkColumnGrants', new Document([
+                    '$id' => ID::custom($id),
+                    '$permissions' => [Permission::read(Role::any(), 'name')],
+                    'name' => $name,
+                    'salary' => $salary,
+                ]));
+            }
+        });
+
+        $modified = $authorization->skip(fn () => $database->updateDocuments(
+            'bulkColumnGrants',
+            new Document([
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+            ])
+        ));
+
+        $this->assertSame(2, $modified);
+
+        // Read back in the caller's vocabulary: the identity is storage's business.
+        foreach (['b1', 'b2'] as $id) {
+            $stored = $authorization->skip(
+                fn () => $database->getDocument('bulkColumnGrants', $id)->getPermissions()
+            );
+
+            $this->assertSame([Permission::read(Role::user('hr'), 'salary')], $stored);
+        }
+    }
 }

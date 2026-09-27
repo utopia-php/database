@@ -5396,6 +5396,14 @@ class Database
 
         $map = [];
 
+        // Outbound, a value that is already an identity is left alone. updateDocuments()
+        // encodes $updates once up front and again per merged document, so this runs
+        // twice over the same permission; without this the second pass would look up an
+        // identity in a map keyed by column key, find nothing, and reject a grant the
+        // first pass had just produced. Keys are resolved first, so a column whose key
+        // happens to look like an identity still resolves as the key it is.
+        $identities = [];
+
         foreach ($collection->getAttribute('attributes', []) as $attribute) {
             $key = $attribute['key'] ?? $attribute['$id'] ?? null;
             $internalId = $attribute[self::ATTRIBUTE_INTERNAL_ID] ?? null;
@@ -5405,6 +5413,10 @@ class Database
             }
 
             $map[$toIdentity ? $key : $internalId] = $toIdentity ? $internalId : $key;
+
+            if ($toIdentity) {
+                $identities[$internalId] = true;
+            }
         }
 
         $translated = [];
@@ -5418,6 +5430,10 @@ class Database
             }
 
             $column = $map[$parsed->getColumn()] ?? null;
+
+            if ($column === null && isset($identities[$parsed->getColumn()])) {
+                $column = $parsed->getColumn();
+            }
 
             if ($column === null) {
                 // Going out, this is a grant whose column has been dropped: it confers
@@ -5895,8 +5911,17 @@ class Database
         // otherwise "may update name" is enough to add read+update on every other
         // column, which makes column-level permissions unenforceable.
         if ($document->offsetExists('$permissions')) {
-            $before = $old->getPermissions();
-            $after = $document->getPermissions();
+            // Either side may arrive in either vocabulary -- the bulk path merges a
+            // decoded document with encoded updates -- so both are normalised to
+            // identities before comparing. The translation is idempotent, which is what
+            // makes normalising a side that is already normalised free.
+            $storedOld = clone $old;
+            $storedNew = clone $document;
+            $this->translatePermissionColumns($collection, $storedOld, true);
+            $this->translatePermissionColumns($collection, $storedNew, true);
+
+            $before = $storedOld->getPermissions();
+            $after = $storedNew->getPermissions();
 
             \sort($before);
             \sort($after);
@@ -7821,7 +7846,14 @@ class Database
                             throw new QueryException('Permission document missing in select');
                         }
 
-                        $originalPermissions = $document->getPermissions();
+                        // $updates was encoded up front so its grants carry identities,
+                        // while $document came back from find() decoded, so its carry
+                        // keys. Comparing the two as they stand never matches, and the
+                        // rewrite this flag exists to avoid would always run.
+                        $stored = clone $document;
+                        $this->translatePermissionColumns($collection, $stored, true);
+
+                        $originalPermissions = $stored->getPermissions();
 
                         \sort($originalPermissions);
 

@@ -62,10 +62,9 @@ class MongoPermissionStringsTest extends TestCase
 
     /**
      * @param list<string> $roles
-     * @param list<string> $columns
      * @return list<string>
      */
-    private function permissionStrings(array $roles, string $type, array $columns = []): array
+    private function permissionStrings(array $roles, string $type): array
     {
         $authorization = new Authorization();
         $authorization->enable();
@@ -79,10 +78,9 @@ class MongoPermissionStringsTest extends TestCase
 
         $method = new ReflectionMethod(Mongo::class, 'permissionStrings');
 
-        $collection = new Document([
-            '$id' => 'test',
-            'attributes' => \array_map(fn (string $column) => ['key' => $column], $columns),
-        ]);
+        // These cases are about how a role becomes a match string, which does not
+        // involve columns; an attribute-less collection keeps that the only variable.
+        $collection = new Document(['$id' => 'test', 'attributes' => []]);
 
         /** @var list<string> $values */
         $values = $method->invoke($adapter, $type, $collection);

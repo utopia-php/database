@@ -4367,8 +4367,20 @@ class Mongo extends Adapter
             // Both the read and the write below join the open transaction. Without the
             // session they run outside it, so a rollback would restore the column while
             // leaving its grants rewritten or dropped.
+            // batchSize matches the limit so the whole batch arrives in firstBatch and
+            // the server closes the cursor itself. Left to its default, MongoDB returns
+            // 101 documents and keeps the cursor open for a getMore that never comes --
+            // this loop only ever reads firstBatch -- so a sweep over a column with many
+            // grants would abandon one server cursor per pass. It also turns roughly ten
+            // round trips per batch into one.
+            //
+            // find() and count() solve the same problem the other way, draining the
+            // cursor with getMore() and killing the remainder in a finally. They have to:
+            // they honour a caller's limit and cannot size a batch to fit it. This sweep
+            // owns its own limit, so not opening a cursor is simpler than closing one.
             $found = $this->client->find($name, $filters, $this->getTransactionOptions([
                 'limit' => Database::DELETE_BATCH_SIZE,
+                'batchSize' => Database::DELETE_BATCH_SIZE,
                 'sort' => ['_uid' => 1],
                 'projection' => ['_uid' => 1, '_permissions' => 1],
             ]))->cursor->firstBatch ?? [];

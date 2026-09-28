@@ -2669,25 +2669,23 @@ trait Documents
             return;
         }
 
-        $active = \bin2hex(\random_bytes(16));
-        if ($this->cache->save($epochKey, $active) === false) {
-            throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
-        }
+        if ($started !== $finished) {
+            $this->cache->purge($finishedKey);
 
-        if ($started === $finished) {
-            return;
-        }
-
-        $this->cache->purge($finishedKey);
-        if ($this->cache->getGeneration($finishedKey) === $finished) {
-            $nextStarted = $this->cache->getGeneration($startedKey);
-            $nextFinished = $this->cache->getGeneration($finishedKey);
-            $nextEpoch = $this->cache->load($epochKey, self::TTL);
-            if ($nextStarted === $nextFinished || $nextEpoch !== $active) {
-                return;
+            // A cache flush restarts generations, so an unchanged #finished
+            // only proves this purge was lost while the epoch read with it is
+            // still in place; publish the new epoch after this check, not before.
+            if (
+                $this->cache->getGeneration($finishedKey) === $finished
+                && \is_string($epoch)
+                && $this->cache->load($epochKey, self::TTL) === $epoch
+            ) {
+                throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
             }
+        }
 
-            throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
+        if ($this->cache->save($epochKey, \bin2hex(\random_bytes(16))) === false) {
+            throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
         }
     }
 

@@ -3652,7 +3652,16 @@ class Database
             : null;
 
         if (\is_string($internalId) && $internalId !== '') {
-            $this->adapter->deleteColumnPermissions($collection, $internalId);
+            try {
+                $this->adapter->deleteColumnPermissions($collection, $internalId);
+            } catch (\Throwable $e) {
+                // Swallowed on purpose. By this point the deletion is durable -- the
+                // metadata no longer lists the attribute -- so failing here would report
+                // an error for work that succeeded and, worse, skip the cache purge
+                // below, leaving readers a cached collection that still has the column.
+                // What is left behind is dead rows, which confer nothing and shed on the
+                // next read-modify-write.
+            }
         }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));

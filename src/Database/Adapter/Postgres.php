@@ -2140,6 +2140,15 @@ class Postgres extends SQL
      *
      * @return bool
      */
+    /**
+     * _permissions is JSONB here, which has no equality operator against text, so the
+     * bound value is cast before the comparison.
+     */
+    protected function getJsonBind(string $placeholder): string
+    {
+        return $placeholder . '::jsonb';
+    }
+
     public function getSupportForColumnPermissions(): bool
     {
         return true;

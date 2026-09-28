@@ -61,6 +61,13 @@ abstract class SQL extends Adapter
     protected const PERMISSIONS_INDEX_DOCUMENT = '_document_internal';
 
     /**
+     * How many times a conditional permissions rewrite re-reads and retries before
+     * giving up on a row. Contention here means someone edited the same document's
+     * permissions mid-sweep, which is rare and does not repeat indefinitely.
+     */
+    protected const REWRITE_MAX_ATTEMPTS = 3;
+
+    /**
      * Rows a batched read takes per pass.
      *
      * Paired with BIND_CHUNK_SIZE below, and deliberately larger. The two are bounded
@@ -2371,63 +2378,151 @@ abstract class SQL extends Adapter
         $rows = $select->fetchAll();
         $select->closeCursor();
 
+        // Conditional on the value that was read. Writing the whole field back
+        // unconditionally would undo any grant added or revoked between the select
+        // above and this update -- a lost revocation being the one that matters. The
+        // row-lock alternative is not available: SQLite disables FOR UPDATE precisely
+        // because it deadlocks against the DDL deleteAttribute() performs around this.
+        $stored = $this->getJsonBind(':_stored');
+
         $update = $this->getPDO()->prepare("
             UPDATE {$this->getSQLTable($name)}
             SET _permissions = :_permissions
             WHERE _uid = :_uid
+              AND _permissions = {$stored}
             {$tenantQuery}
         ");
 
         $updated = 0;
 
         foreach ($rows as $row) {
-            $permissions = \json_decode($row['_permissions'] ?? '[]', true);
+            $current = $row['_permissions'] ?? '[]';
 
-            if (!\is_array($permissions)) {
-                continue;
-            }
+            for ($attempt = 0; $attempt < self::REWRITE_MAX_ATTEMPTS; $attempt++) {
+                $rewritten = $this->withoutColumnPermissions($current, $old, $new);
 
-            $rewritten = [];
-            $changed = false;
-
-            foreach ($permissions as $permission) {
-                $parsed = Permission::parse($permission);
-
-                if ($parsed->getColumn() !== $old) {
-                    $rewritten[] = $permission;
-                    continue;
+                if ($rewritten === null) {
+                    // Nothing on this row names the column any more.
+                    break;
                 }
 
-                $changed = true;
+                $update->bindValue(':_permissions', $rewritten);
+                $update->bindValue(':_uid', $row['_uid']);
+                $update->bindValue(':_stored', $current);
+                if ($this->sharedTables) {
+                    $update->bindValue(':_tenant', $this->tenant);
+                }
+                $this->execute($update);
 
-                if (\is_null($new)) {
-                    continue;
+                if ($update->rowCount() > 0) {
+                    $updated++;
+                    break;
                 }
 
-                $rewritten[] = (new Permission(
-                    $parsed->getPermission(),
-                    $parsed->getRole(),
-                    $parsed->getIdentifier(),
-                    $parsed->getDimension(),
-                    $new
-                ))->toString();
-            }
+                // Someone else wrote the row first. Re-read and rebuild on what is
+                // there now, so their change survives and ours still applies.
+                $current = $this->currentPermissions($name, $row['_uid'], $tenantQuery);
 
-            if (!$changed) {
-                continue;
+                if ($current === null) {
+                    // Row is gone; nothing left to rewrite.
+                    break;
+                }
             }
-
-            $update->bindValue(':_permissions', \json_encode(\array_values(\array_unique($rewritten))));
-            $update->bindValue(':_uid', $row['_uid']);
-            if ($this->sharedTables) {
-                $update->bindValue(':_tenant', $this->tenant);
-            }
-            $this->execute($update);
-
-            $updated++;
         }
 
         return $updated;
+    }
+
+    /**
+     * Rebuild a stored permissions JSON without the grants scoped to one column.
+     *
+     * @param string $stored the JSON as it is on the row
+     * @param string $old the column whose grants are going
+     * @param string|null $new new column key, or null to drop the grants
+     * @return string|null the new JSON, or null when nothing names $old
+     */
+    private function withoutColumnPermissions(string $stored, string $old, ?string $new): ?string
+    {
+        $permissions = \json_decode($stored, true);
+
+        if (!\is_array($permissions)) {
+            return null;
+        }
+
+        $rewritten = [];
+        $changed = false;
+
+        foreach ($permissions as $permission) {
+            $parsed = Permission::parse($permission);
+
+            if ($parsed->getColumn() !== $old) {
+                $rewritten[] = $permission;
+                continue;
+            }
+
+            $changed = true;
+
+            if (\is_null($new)) {
+                continue;
+            }
+
+            $rewritten[] = (new Permission(
+                $parsed->getPermission(),
+                $parsed->getRole(),
+                $parsed->getIdentifier(),
+                $parsed->getDimension(),
+                $new
+            ))->toString();
+        }
+
+        if (!$changed) {
+            return null;
+        }
+
+        // Throwing rather than returning false: a row whose permissions will not encode
+        // is a broken row, and silently skipping it would leave its grants in place
+        // while the sweep reported success.
+        return \json_encode(\array_values(\array_unique($rewritten)), JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * Re-read one row's permissions after a conditional update found it changed.
+     *
+     * @return string|null the stored JSON, or null when the row no longer exists
+     */
+    private function currentPermissions(string $name, string $uid, string $tenantQuery): ?string
+    {
+        $select = $this->getPDO()->prepare("
+            SELECT _permissions
+            FROM {$this->getSQLTable($name)}
+            WHERE _uid = :_uid
+            {$tenantQuery}
+        ");
+        $select->bindValue(':_uid', $uid);
+        if ($this->sharedTables) {
+            $select->bindValue(':_tenant', $this->tenant);
+        }
+        $this->execute($select);
+
+        $row = $select->fetch();
+        $select->closeCursor();
+
+        if ($row === false) {
+            return null;
+        }
+
+        return $row['_permissions'] ?? '[]';
+    }
+
+    /**
+     * Bind a JSON value for comparison against the _permissions column.
+     *
+     * Most adapters store it as text and compare it as given. Postgres stores JSONB,
+     * which has no equality against text, so it overrides this to cast.
+     */
+    protected function getJsonBind(string $placeholder): string
+    {
+        return $placeholder;
     }
 
     /**

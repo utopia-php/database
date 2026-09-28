@@ -4321,28 +4321,26 @@ class Mongo extends Adapter
 
     public function deleteColumnPermissions(Document $collection, string $column): int
     {
-        return $this->repointColumnPermissions($collection, $column, null);
+        return $this->repointColumnPermissions($collection, $column);
     }
 
     /**
-     * Move or drop the permissions scoped to one column.
+     * Drop the permissions scoped to one column.
      *
      * This adapter keeps permissions inline on each document and authorizes column
-     * access from those same strings, so a rename that left them alone would quietly
-     * revoke access under the old name, and a delete would leave grants for a column
-     * key to inherit if it were recreated.
+     * access from those same strings, so a dropped column leaves grants a recreated
+     * one could inherit if they were not cleared.
      *
-     * Documents are handled in batches. Only those still naming the old column are
-     * fetched, and rewriting them takes them out of that set, so the next pass
-     * returns the following batch without needing an offset.
+     * Deletion only. Renaming is not reachable -- _column carries the attribute's
+     * immutable identity, which a rename does not change -- and the removal below is
+     * expressed as a $pull, which can take elements out but cannot rewrite them.
      *
      * @param Document $collection
-     * @param string $old
-     * @param string|null $new new column key, or null to drop the permissions
+     * @param string $column
      * @return int documents whose permissions changed
      * @throws Exception
      */
-    private function repointColumnPermissions(Document $collection, string $old, ?string $new): int
+    private function repointColumnPermissions(Document $collection, string $column): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
         $updated = 0;
@@ -4399,33 +4397,23 @@ class Mongo extends Adapter
                     continue;
                 }
 
-                $rewritten = [];
-                $changed = false;
+                // Collected as the exact strings to drop rather than as a rewritten
+                // array. $set would write the whole field back, so a grant added or
+                // revoked between the read above and this write would be silently
+                // undone -- a lost revocation being the one that matters. $pull removes
+                // only these elements and leaves everything else as it stands, which is
+                // a single atomic server-side operation and needs no re-read or retry.
+                $remove = [];
 
                 foreach ($permissions as $permission) {
-                    $parsed = Permission::parse((string)$permission);
+                    $permission = (string)$permission;
 
-                    if ($parsed->getColumn() !== $old) {
-                        $rewritten[] = (string)$permission;
-                        continue;
+                    if (Permission::parse($permission)->getColumn() === $column) {
+                        $remove[] = $permission;
                     }
-
-                    $changed = true;
-
-                    if (\is_null($new)) {
-                        continue;
-                    }
-
-                    $rewritten[] = (new Permission(
-                        $parsed->getPermission(),
-                        $parsed->getRole(),
-                        $parsed->getIdentifier(),
-                        $parsed->getDimension(),
-                        $new
-                    ))->toString();
                 }
 
-                if (!$changed) {
+                if (empty($remove)) {
                     continue;
                 }
 
@@ -4435,7 +4423,7 @@ class Mongo extends Adapter
                 }
 
                 $this->client->update($name, $where, [
-                    '$set' => ['_permissions' => \array_values(\array_unique($rewritten))],
+                    '$pull' => ['_permissions' => ['$in' => \array_values(\array_unique($remove))]],
                 ], $this->getTransactionOptions());
 
                 $updated++;

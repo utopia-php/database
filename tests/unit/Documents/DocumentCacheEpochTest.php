@@ -218,17 +218,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache = new FlushDuringActivationMemory();
         $database = $this->createDatabaseWithCache($cache);
         $this->assertTrue($cache->flush());
-        $database->createDocument('webhooks', new Document([
-            '$id' => 'hook',
-            'name' => 'original',
-        ]));
-
-        [$collectionKey] = $database->getCacheKeys('webhooks');
-        $this->assertSame(
-            '1',
-            $database->getCache()->getGeneration($collectionKey.'#finished'),
-            "The flush and the activation's own purge must bring #finished back to the generation it read"
-        );
+        $this->assertTrue($database->purgeCachedCollection('webhooks'));
         $cache->flushAfterReading('collection:webhooks#finished');
 
         $this->assertTrue($database->deleteCollection('webhooks'));

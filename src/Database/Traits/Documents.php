@@ -11,6 +11,7 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
+use Utopia\Database\Cache\Owners;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -2588,14 +2589,13 @@ trait Documents
     private function blockDocumentCacheEpoch(string $collectionKey, string $token): bool
     {
         $epochKey = $collectionKey.'#epoch';
-        $ownersKey = $collectionKey.'#owners';
-        if ($this->cache->save($ownersKey, $token, $token) === false) {
+        if (! (new Owners($this->cache))->register($collectionKey, $token)) {
             $epoch = $this->cache->load($epochKey, self::TTL);
             if ($epoch === false || $epoch === null) {
                 return false;
             }
 
-            throw new RuntimeException("Failed to register document cache owner '{$token}' in '{$ownersKey}'");
+            throw new RuntimeException("Failed to register document cache owner '{$token}' for '{$collectionKey}'");
         }
 
         $startedKey = $collectionKey.'#started';
@@ -2633,16 +2633,16 @@ trait Documents
 
     private function activateDocumentCacheEpoch(string $collectionKey, string $token): void
     {
-        $ownersKey = $collectionKey.'#owners';
-        $owner = $this->cache->load($ownersKey, self::TTL, $token);
+        $registration = (new Owners($this->cache))->find($collectionKey, $token);
+        $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
         if ($owner !== false && $owner !== null && $owner !== $token) {
-            throw new RuntimeException("Invalid document cache owner '{$token}' in '{$ownersKey}'");
+            throw new RuntimeException("Invalid document cache owner '{$token}' for '{$collectionKey}'");
         }
         $owned = $owner === $token;
-        if ($owned && ! $this->cache->purge($ownersKey, $token)) {
-            $owner = $this->cache->load($ownersKey, self::TTL, $token);
+        if ($owned && ! $this->cache->purge($registration->key, $registration->field)) {
+            $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
             if ($owner !== false && $owner !== null) {
-                throw new RuntimeException("Failed to release document cache owner '{$token}' in '{$ownersKey}'");
+                throw new RuntimeException("Failed to release document cache owner '{$token}' for '{$collectionKey}'");
             }
             $owned = false;
         }

@@ -847,7 +847,7 @@ trait GeneralTests
         }
     }
 
-    public function testCacheInvalidationLeavesOneOwnerKeyPerCollection(): void
+    public function testCacheInvalidationDoesNotAddRedisKeysPerWrite(): void
     {
         $database = $this->getDatabase();
         if (! $database->getAdapter()->supports(Capability::Caching)) {
@@ -874,25 +874,19 @@ trait GeneralTests
 
         try {
             $database->createDocument($collection, new Document(['$id' => 'doc0', 'name' => 'doc 0']));
-            $owners = $this->scanOwnerKeys($redis, $collection);
+            $keys = $this->scanKeys($redis, $collection);
 
             for ($index = 1; $index <= 10; $index++) {
                 $database->createDocument($collection, new Document(['$id' => 'doc'.$index, 'name' => 'doc '.$index]));
-                $this->assertCount($index + 1, $database->find($collection, [Query::limit(100)]));
             }
             $database->withTransaction(function () use ($database, $collection): void {
                 $database->updateDocument($collection, 'doc1', new Document(['name' => 'updated']));
                 $database->updateDocument($collection, 'doc2', new Document(['name' => 'updated']));
             });
 
-            $this->assertSame($owners, $this->scanOwnerKeys($redis, $collection), 'A purged key stays behind in Redis, so a write must not register its owner under a key of its own');
-            $this->assertNotEmpty($owners);
-            foreach ($owners as $key) {
-                $this->assertStringEndsWith('#owners', $key);
-                $fields = $redis->hKeys($key);
-                $this->assertIsArray($fields);
-                $this->assertSame([], \array_values(\array_diff($fields, ['__utopia_gen__', '__utopia_tomb__'])), "Every write must release its registration in '{$key}'");
-            }
+            $this->assertNotEmpty($keys);
+            $this->assertSame($keys, $this->scanKeys($redis, $collection), 'Redis keeps a purged key with no expiry, so a write must not leave a key of its own');
+            $this->assertCount(11, $database->find($collection, [Query::limit(100)]));
         } finally {
             $database->setQueryCache($queryCache)->setCache($original);
             if ($destination !== null && $destinationCache !== null) {
@@ -1126,12 +1120,12 @@ trait GeneralTests
     /**
      * @return array<string>
      */
-    private function scanOwnerKeys(Redis $redis, string $collection): array
+    private function scanKeys(Redis $redis, string $collection): array
     {
         $keys = [];
         $iterator = null;
         do {
-            $batch = $redis->scan($iterator, '*'.\strtolower($collection).'*#owner*', 1000);
+            $batch = $redis->scan($iterator, '*'.\strtolower($collection).'*', 1000);
             if (\is_array($batch)) {
                 \array_push($keys, ...$batch);
             }

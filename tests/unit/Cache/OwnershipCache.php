@@ -8,7 +8,7 @@ use Utopia\Cache\Feature\Leasable;
 
 final class OwnershipCache implements CacheAdapter, Leasable
 {
-    /** @var array<string, array<string, array{time: int, data: array<int|string, mixed>|string}>> */
+    /** @var array<string, array{time: int, data: array<int|string, mixed>|string}> */
     private array $store = [];
 
     /** @var array<string, int> */
@@ -22,7 +22,7 @@ final class OwnershipCache implements CacheAdapter, Leasable
 
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
-        $saved = $this->store[$key][$this->field($key, $hash)] ?? null;
+        $saved = $this->store[$key] ?? null;
 
         return $saved !== null && $saved['time'] + $ttl > \time() ? $saved['data'] : false;
     }
@@ -44,7 +44,7 @@ final class OwnershipCache implements CacheAdapter, Leasable
             $activation();
         }
 
-        $this->store[$key][$this->field($key, $hash)] = ['time' => \time(), 'data' => $data];
+        $this->store[$key] = ['time' => \time(), 'data' => $data];
 
         return $data;
     }
@@ -65,12 +65,11 @@ final class OwnershipCache implements CacheAdapter, Leasable
 
     public function touch(string $key, string $hash = ''): bool
     {
-        $field = $this->field($key, $hash);
-        if (! isset($this->store[$key][$field])) {
+        if (! isset($this->store[$key])) {
             return false;
         }
 
-        $this->store[$key][$field]['time'] = \time();
+        $this->store[$key]['time'] = \time();
 
         return true;
     }
@@ -93,11 +92,7 @@ final class OwnershipCache implements CacheAdapter, Leasable
         }
 
         $this->generations[$key] = ($this->generations[$key] ?? 0) + 1;
-        if ($hash === '') {
-            unset($this->store[$key]);
-        } else {
-            unset($this->store[$key][$hash]);
-        }
+        unset($this->store[$key]);
 
         return true;
     }
@@ -125,9 +120,9 @@ final class OwnershipCache implements CacheAdapter, Leasable
         return 'ownership';
     }
 
-    public function has(string $key, string $hash = ''): bool
+    public function has(string $key): bool
     {
-        return isset($this->store[$key][$this->field($key, $hash)]);
+        return isset($this->store[$key]);
     }
 
     public function pauseNextActivation(Closure $activation): void
@@ -143,10 +138,5 @@ final class OwnershipCache implements CacheAdapter, Leasable
     public function failDuringActivation(): void
     {
         $this->failDuringActivation = true;
-    }
-
-    private function field(string $key, string $hash): string
-    {
-        return $hash === '' ? $key : $hash;
     }
 }

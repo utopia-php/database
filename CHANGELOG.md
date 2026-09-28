@@ -288,8 +288,9 @@ not change anything for an upgrade from 7.x.
   - A written document's own attribute named `options` no longer names a collection to invalidate.
   - Writes no longer leave a key behind in Redis each. The document cache and the `find()` query cache registered
     every invalidation under a key of its own, and a Redis purge keeps a purged key, holding its generation, with no
-    expiry. A collection's invalidations now register as fields of one `#owners` key. Keys matching `*#owner:*`
-    left by earlier builds are no longer read and can be deleted.
+    expiry. On the Redis adapters a collection's invalidations now register as fields of one `#owners` key;
+    adapters that store no fields keep a key per invalidation, which their purge deletes. On Redis, keys matching
+    `*#owner:*` left by earlier builds are no longer read and can be deleted.
 - **Permissions and tenancy:**
   - Under shared tables, `upsertDocuments()` and `upsertDocument()` store their permission rows under the tenant, on
     an adapter with no earlier write and through `Adapter\Pool` alike.

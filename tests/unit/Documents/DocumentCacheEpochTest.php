@@ -249,7 +249,7 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
 
-    public function testWritesLeaveOneOwnerKeyPerCollection(): void
+    public function testWritesDoNotAddKeysToACacheThatKeepsPurgedKeys(): void
     {
         $cache = new RedisLeasableCache();
         $database = $this->createDatabaseWithCache($cache);
@@ -258,7 +258,7 @@ final class DocumentCacheEpochTest extends TestCase
             '$id' => 'hook0',
             'name' => 'hook 0',
         ]));
-        $owners = $this->getOwnerKeys($cache);
+        $keys = $cache->keys();
 
         for ($index = 1; $index <= 20; $index++) {
             $database->createDocument('webhooks', new Document([
@@ -271,16 +271,39 @@ final class DocumentCacheEpochTest extends TestCase
             $database->updateDocument('webhooks', 'hook2', new Document(['name' => 'updated']));
         });
 
-        $this->assertSame($owners, $this->getOwnerKeys($cache), 'A purged key stays behind in Redis, so a write must not register its owner under a key of its own');
-        [$collectionKey] = $database->getCacheKeys('webhooks');
-        $this->assertContains(\strtolower($collectionKey.'#owners'), $owners);
-        foreach ($owners as $key) {
-            $this->assertSame([], $cache->list($key), "Every write must release its registration in '{$key}'");
-        }
+        $this->assertSame($keys, $cache->keys(), 'A purged key stays behind in Redis, so a write must not leave a key of its own');
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook1')->getAttribute('name'));
     }
 
-    public function testActivationRejectsAForeignOwnerRegistration(): void
+    public function testOverlappingWritesSucceedOnACacheWithoutFields(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $writer = $this->createDatabaseWithCache($cache);
+        $other = $this->createDatabaseWithCache($cache, $writer->getNamespace());
+        foreach ([$writer, $other] as $database) {
+            $database->createDocument('webhooks', new Document([
+                '$id' => 'hook',
+                'name' => 'original',
+            ]));
+        }
+
+        $writer->withTransaction(function () use ($writer, $other, $cache): void {
+            $writer->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $cache->failBlocks();
+            try {
+                $other->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+                $this->fail('The other writer\'s block did not fail');
+            } catch (\RuntimeException $error) {
+                $this->assertStringContainsString('block document cache epoch', $error->getMessage());
+            } finally {
+                $cache->failBlocks(false);
+            }
+        });
+
+        $this->assertSame('updated', $writer->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testActivationRejectsACorruptedOwnerRegistration(): void
     {
         $cache = new RedisLeasableCache();
         $database = $this->createDatabaseWithCache($cache);
@@ -288,21 +311,16 @@ final class DocumentCacheEpochTest extends TestCase
             '$id' => 'hook',
             'name' => 'original',
         ]));
-        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
-        $ownersKey = \strtolower($collectionKey.'#owners');
+        $cache->corruptFieldWrites();
 
         try {
-            $database->withTransaction(function () use ($database, $cache, $ownersKey): void {
-                $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
-                foreach ($cache->list($ownersKey) as $token) {
-                    $cache->save($ownersKey, 'intruder', $token);
-                }
-            });
-            $this->fail('A foreign document cache owner registration was accepted');
+            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->fail('A corrupted document cache owner registration was accepted');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('Invalid document cache owner', $error->getMessage());
         }
 
+        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
         $this->assertDocumentCacheEpochBlocked($database, $collectionKey);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
@@ -315,7 +333,7 @@ final class DocumentCacheEpochTest extends TestCase
             '$id' => 'hook',
             'name' => 'original',
         ]));
-        $cache->failFieldPurges('#owners');
+        $cache->failFieldPurges();
 
         try {
             $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
@@ -327,17 +345,6 @@ final class DocumentCacheEpochTest extends TestCase
         [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
         $this->assertDocumentCacheEpochBlocked($database, $collectionKey);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
-    }
-
-    /**
-     * @return array<string>
-     */
-    private function getOwnerKeys(RedisLeasableCache $cache): array
-    {
-        return \array_values(\array_filter(
-            $cache->keys(),
-            static fn (string $key): bool => \str_contains($key, '#owner'),
-        ));
     }
 
     private function assertDocumentCacheEpochBlocked(Database $database, string $collectionKey): void
@@ -358,12 +365,12 @@ final class DocumentCacheEpochTest extends TestCase
         return [$database, $adapter];
     }
 
-    private function createDatabaseWithCache(CacheAdapter $cache): Database
+    private function createDatabaseWithCache(CacheAdapter $cache, ?string $namespace = null): Database
     {
         $database = new Database(new DatabaseMemory(), new Cache($cache));
         $database
             ->setDatabase('utopiaTests')
-            ->setNamespace('epoch_'.\uniqid());
+            ->setNamespace($namespace ?? 'epoch_'.\uniqid());
         $database->create();
         $database->createCollection(new Collection(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
@@ -480,9 +487,9 @@ final class FailDocumentEpochMemory extends MemoryCache
 
     private ?string $activationFailure = null;
 
-    public function failBlocks(): void
+    public function failBlocks(bool $failing = true): void
     {
-        $this->failingBlocks = true;
+        $this->failingBlocks = $failing;
     }
 
     public function failActivations(?string $key = null): void

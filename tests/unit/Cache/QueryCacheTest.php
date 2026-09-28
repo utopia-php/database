@@ -448,18 +448,18 @@ class QueryCacheTest extends TestCase
                 $second->blockCollection($key, $secondToken);
 
                 $this->assertNull($reader->getEntry($scope, 'users', []));
-                $this->assertTrue($adapter->has($key.'#owners', $secondToken));
+                $this->assertTrue($adapter->has($key.'#owner:'.$secondToken));
             });
 
             $first->activateCollection($key, $firstToken);
 
-            $this->assertFalse($adapter->has($key.'#owners', $firstToken));
-            $this->assertTrue($adapter->has($key.'#owners', $secondToken));
+            $this->assertFalse($adapter->has($key.'#owner:'.$firstToken));
+            $this->assertTrue($adapter->has($key.'#owner:'.$secondToken));
             $this->assertNull($reader->getEntry($scope, 'users', []));
 
             $second->activateCollection($key, $secondToken);
 
-            $this->assertFalse($adapter->has($key.'#owners', $secondToken));
+            $this->assertFalse($adapter->has($key.'#owner:'.$secondToken));
             $fresh = $reader->getEntry($scope, 'users', []);
             $this->assertNotNull($fresh);
             $this->assertNull($reader->get($fresh));
@@ -564,37 +564,50 @@ class QueryCacheTest extends TestCase
         $this->assertNull($queryCache->getEntry(new Scope(), 'users', []));
     }
 
-    public function testInvalidationsLeaveOneOwnerKeyPerCollection(): void
+    public function testInvalidationsDoNotAddKeysToACacheThatKeepsPurgedKeys(): void
     {
         $adapter = new RedisLeasableCache();
         $queryCache = new QueryCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
-        $key = $queryCache->getCollectionKey($scope, 'users');
+        $queryCache->invalidateCollection($scope, 'users');
+        $keys = $adapter->keys();
 
         for ($invalidation = 0; $invalidation < 20; $invalidation++) {
             $queryCache->invalidateCollection($scope, 'users');
         }
 
-        $this->assertSame(
-            [$key.'#owners'],
-            \array_values(\array_filter($adapter->keys(), static fn (string $stored): bool => \str_contains($stored, '#owner'))),
-            'A purged key stays behind in Redis, so invalidations must share one owner key instead of leaving one each',
-        );
-        $this->assertSame([], $adapter->list($key.'#owners'), 'Every invalidation must release its registration');
+        $this->assertSame($keys, $adapter->keys(), 'A purged key stays behind in Redis, so an invalidation must not leave a key of its own');
         $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
     }
 
-    public function testActivationRejectsAForeignOwnerRegistration(): void
+    public function testOverlappingInvalidationsSucceedOnACacheWithoutFields(): void
     {
-        $cache = new Cache(new RedisLeasableCache());
-        $queryCache = new QueryCache($cache);
+        $queryCache = new QueryCache(new Cache(new Memory()));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
+
+        $queryCache->blockCollection($key, 'first');
+        $queryCache->blockCollection($key, 'second');
+        $queryCache->activateCollection($key, 'first');
+        $this->assertNull($queryCache->getEntry(new Scope(), 'users', []), 'The second writer is still in flight');
+        $queryCache->activateCollection($key, 'second');
+
+        $this->assertNull(
+            $queryCache->getEntry(new Scope(), 'users', []),
+            'A cache without generations cannot prove a new epoch fresh, so it stays blocked',
+        );
+    }
+
+    public function testActivationRejectsACorruptedOwnerRegistration(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $key = $queryCache->getCollectionKey(new Scope(), 'users');
+        $adapter->corruptFieldWrites();
         $queryCache->blockCollection($key, 'owner');
-        $cache->save($key.'#owners', 'intruder', 'owner');
 
         try {
             $queryCache->activateCollection($key, 'owner');
-            $this->fail('A foreign owner registration was accepted');
+            $this->fail('A corrupted owner registration was accepted');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('Invalid query cache owner', $error->getMessage());
         }
@@ -608,7 +621,7 @@ class QueryCacheTest extends TestCase
         $queryCache = new QueryCache(new Cache($adapter));
         $key = $queryCache->getCollectionKey(new Scope(), 'users');
         $queryCache->blockCollection($key, 'owner');
-        $adapter->failFieldPurges('#owners');
+        $adapter->failFieldPurges();
 
         try {
             $queryCache->activateCollection($key, 'owner');

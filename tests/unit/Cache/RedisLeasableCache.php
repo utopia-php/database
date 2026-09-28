@@ -19,7 +19,9 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     /** @var array<string, int> */
     private array $generations = [];
 
-    private ?string $failingFieldPurges = null;
+    private bool $failingFieldPurges = false;
+
+    private bool $corruptingFieldWrites = false;
 
     public function load(string $key, int $ttl, string $hash = ''): mixed
     {
@@ -32,6 +34,10 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     {
         if ($key === '' || empty($data)) {
             return false;
+        }
+
+        if ($hash !== '' && $this->corruptingFieldWrites) {
+            $data = 'corrupted';
         }
 
         $this->fields[$key][$this->field($key, $hash)] = ['time' => \time(), 'data' => $data];
@@ -73,7 +79,7 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
 
     public function purge(string $key, string $hash = ''): bool
     {
-        if ($hash !== '' && $this->failingFieldPurges !== null && \str_ends_with($key, $this->failingFieldPurges)) {
+        if ($hash !== '' && $this->failingFieldPurges) {
             return false;
         }
 
@@ -132,11 +138,19 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
     }
 
     /**
-     * Fail every field purge of a key ending with $suffix, leaving the field in place.
+     * Fail every purge of a single field, leaving the field in place.
      */
-    public function failFieldPurges(string $suffix): void
+    public function failFieldPurges(): void
     {
-        $this->failingFieldPurges = $suffix;
+        $this->failingFieldPurges = true;
+    }
+
+    /**
+     * Store a different value than the one given on every write to a single field.
+     */
+    public function corruptFieldWrites(): void
+    {
+        $this->corruptingFieldWrites = true;
     }
 
     private function field(string $key, string $hash): string

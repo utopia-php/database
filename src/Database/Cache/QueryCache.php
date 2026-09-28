@@ -169,7 +169,7 @@ class QueryCache
      */
     public function blockCollection(string $key, string $token): void
     {
-        if ($this->cache->save($this->getOwnersKey($key), $token, $token) === false) {
+        if (! (new Owners($this->cache))->register($key, $token)) {
             throw new RuntimeException("Failed to register query cache owner for '{$key}'");
         }
 
@@ -186,14 +186,14 @@ class QueryCache
      */
     public function activateCollection(string $key, string $token): void
     {
-        $ownersKey = $this->getOwnersKey($key);
-        $owner = $this->cache->load($ownersKey, self::PERMANENT, $token);
+        $registration = (new Owners($this->cache))->find($key, $token);
+        $owner = $this->cache->load($registration->key, self::PERMANENT, $registration->field);
         if ($owner !== false && $owner !== null && $owner !== $token) {
             throw new RuntimeException("Invalid query cache owner for '{$key}'");
         }
         $owned = $owner === $token;
-        if ($owned && ! $this->cache->purge($ownersKey, $token)) {
-            $owner = $this->cache->load($ownersKey, self::PERMANENT, $token);
+        if ($owned && ! $this->cache->purge($registration->key, $registration->field)) {
+            $owner = $this->cache->load($registration->key, self::PERMANENT, $registration->field);
             if ($owner !== false && $owner !== null) {
                 throw new RuntimeException("Failed to release query cache owner for '{$key}'");
             }
@@ -322,11 +322,6 @@ class QueryCache
     private function getFinishedKey(string $key): string
     {
         return $key.'#finished';
-    }
-
-    private function getOwnersKey(string $key): string
-    {
-        return $key.'#owners';
     }
 
     private function getStartedKey(string $key): string

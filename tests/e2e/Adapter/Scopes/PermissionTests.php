@@ -2396,7 +2396,8 @@ trait PermissionTests
                 collection: 'maskParent',
                 relatedCollection: 'maskChild',
                 type: Database::RELATION_ONE_TO_MANY,
-                id: 'kids'
+                id: 'kids',
+                twoWayKey: 'parent'
             );
 
             $database->createDocument('maskParent', new Document([
@@ -2409,7 +2410,15 @@ trait PermissionTests
                 'secret' => 'S',
                 'kids' => [new Document([
                     '$id' => ID::custom('c1'),
-                    '$permissions' => [Permission::read(Role::user('hr'), 'label')],
+                    // The grant on 'parent' is what lets the child be found at all:
+                    // populating the relationship queries this collection by that
+                    // column, and the gate wants a grant on every column a query reads.
+                    // Without it the child is absent, which is a different outcome from
+                    // being present and masked -- and only the second one is under test.
+                    '$permissions' => [
+                        Permission::read(Role::user('hr'), 'label'),
+                        Permission::read(Role::user('hr'), 'parent'),
+                    ],
                     'label' => 'visible',
                     'hidden' => 'not',
                 ])],
@@ -2424,12 +2433,21 @@ trait PermissionTests
         $this->assertSame('T', $parent->getAttribute('title'));
         $this->assertNull($parent->getAttribute('secret'), 'the parent hides what the parent hides');
 
-        $child = $authorization->skip(fn () => $database->getDocument('maskChild', 'c1'));
-        $this->assertSame('not', $child->getAttribute('hidden'), 'stored intact');
+        // The child as it travels inside the parent. The parent is masked only after
+        // its relationships are populated, so an unmasked child would leave here.
+        $kids = $parent->getAttribute('kids', []);
+        $this->assertCount(1, $kids, 'the child is readable, so it comes along');
+        $this->assertSame('visible', $kids[0]->getAttribute('label'));
+        $this->assertNull($kids[0]->getAttribute('hidden'), 'the child hides what the child hides, in here too');
 
+        // A direct read of the same child agrees.
         $seen = $database->getDocument('maskChild', 'c1');
         $this->assertSame('visible', $seen->getAttribute('label'));
-        $this->assertNull($seen->getAttribute('hidden'), 'and the child hides what the child hides');
+        $this->assertNull($seen->getAttribute('hidden'));
+
+        // Withheld, not lost.
+        $child = $authorization->skip(fn () => $database->getDocument('maskChild', 'c1'));
+        $this->assertSame('not', $child->getAttribute('hidden'), 'stored intact');
 
         $authorization->cleanRoles();
     }

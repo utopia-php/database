@@ -1949,7 +1949,7 @@ trait PermissionTests
 
         $authorization = $database->getAuthorization();
 
-        $identity = $authorization->skip(function () use ($database) {
+        $authorization->skip(function () use ($database) {
             $database->createCollection('renameKeepsGrants', documentSecurity: true, columnSecurity: true, permissions: []);
             $database->createAttribute('renameKeepsGrants', 'name', Database::VAR_STRING, 64, false);
             $database->createAttribute('renameKeepsGrants', 'salary', Database::VAR_INTEGER, 8, false);
@@ -1960,31 +1960,27 @@ trait PermissionTests
                 'name' => 'Bob',
                 'salary' => 100,
             ]));
-
-            foreach ($database->getCollection('renameKeepsGrants')->getAttribute('attributes', []) as $attribute) {
-                if ($attribute['key'] === 'salary') {
-                    return $attribute[Database::ATTRIBUTE_INTERNAL_ID];
-                }
-            }
-
-            return null;
         });
 
-        $this->assertIsString($identity);
+        $identities = fn (): array => $authorization->skip(function () use ($database): array {
+            $map = [];
+
+            foreach ($database->getCollection('renameKeepsGrants')->getAttribute('attributes', []) as $attribute) {
+                $map[$attribute['key']] = $attribute[Database::ATTRIBUTE_INTERNAL_ID] ?? '';
+            }
+
+            return $map;
+        });
+
+        $before = $identities();
+        $this->assertArrayHasKey('salary', $before);
+        $this->assertNotSame('', $before['salary']);
 
         $authorization->skip(fn () => $database->updateAttribute('renameKeepsGrants', 'salary', newKey: 'pay'));
 
-        $renamed = $authorization->skip(function () use ($database) {
-            foreach ($database->getCollection('renameKeepsGrants')->getAttribute('attributes', []) as $attribute) {
-                if ($attribute['key'] === 'pay') {
-                    return $attribute[Database::ATTRIBUTE_INTERNAL_ID];
-                }
-            }
-
-            return null;
-        });
-
-        $this->assertSame($identity, $renamed, 'the rename moved the key, not the identity');
+        $after = $identities();
+        $this->assertArrayNotHasKey('salary', $after);
+        $this->assertSame($before['salary'], $after['pay'] ?? null, 'the rename moved the key, not the identity');
 
         $authorization->cleanRoles();
         $authorization->addRole('user:hr');
@@ -2107,6 +2103,352 @@ trait PermissionTests
             fn () => $database->getDocument('upsertGrants', 'u1')->getPermissions()
         );
         $this->assertSame([Permission::read(Role::user('hr'), 'salary')], $stored, 'and readable as the key it was written with');
+
+        $authorization->cleanRoles();
+    }
+
+    /**
+     * A query reading two columns needs a grant on both.
+     *
+     * The gate emits one condition per column and ANDs them, so holding one of the two
+     * is not enough. Getting this wrong in the other direction is the dangerous way: an
+     * OR would let a grant on a harmless column carry a predicate on a sensitive one,
+     * and the predicate is what leaks the value.
+     */
+    public function testAQueryOnTwoColumnsNeedsAGrantOnBoth(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('twoColumnFilters', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('twoColumnFilters', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('twoColumnFilters', 'salary', Database::VAR_INTEGER, 8, false);
+            $database->createAttribute('twoColumnFilters', 'grade', Database::VAR_INTEGER, 8, false);
+
+            // Two grants: name and salary. Nothing grants grade.
+            $database->createDocument('twoColumnFilters', new Document([
+                '$id' => ID::custom('both'),
+                '$permissions' => [
+                    Permission::read(Role::user('hr'), 'name'),
+                    Permission::read(Role::user('hr'), 'salary'),
+                ],
+                'name' => 'Bob',
+                'salary' => 100,
+                'grade' => 7,
+            ]));
+
+            // One grant: name only.
+            $database->createDocument('twoColumnFilters', new Document([
+                '$id' => ID::custom('one'),
+                '$permissions' => [Permission::read(Role::user('hr'), 'name')],
+                'name' => 'Bob',
+                'salary' => 100,
+                'grade' => 7,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        // Both columns granted on 'both', only one on 'one'.
+        $found = $database->find('twoColumnFilters', [
+            Query::equal('name', ['Bob']),
+            Query::greaterThan('salary', 50),
+        ]);
+
+        $this->assertCount(1, $found, 'only the row granting both columns matches');
+        $this->assertSame('both', $found[0]->getId());
+
+        // grade is granted on neither, so adding it to the same query matches nothing.
+        $this->assertCount(0, $database->find('twoColumnFilters', [
+            Query::equal('name', ['Bob']),
+            Query::greaterThan('grade', 1),
+        ]), 'one ungranted column is enough to exclude the row');
+
+        $this->assertSame(0, $database->count('twoColumnFilters', [
+            Query::equal('name', ['Bob']),
+            Query::greaterThan('grade', 1),
+        ]));
+
+        $authorization->cleanRoles();
+    }
+
+    /**
+     * Collection-level and document-level grants combine.
+     *
+     * They are stored differently -- the collection's on its own row as keys, the
+     * document's in _perms and the row JSON as identities -- so the union is the one
+     * place both vocabularies have to agree. With documentSecurity off, only the
+     * collection's half counts, which is what makes this a union rather than a merge.
+     */
+    public function testCollectionAndDocumentColumnGrantsCombine(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('unionGrants', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('unionGrants', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('unionGrants', 'salary', Database::VAR_INTEGER, 8, false);
+            $database->createAttribute('unionGrants', 'grade', Database::VAR_INTEGER, 8, false);
+
+            // The collection grants name; the document grants salary. Neither grants grade.
+            $database->updateCollection('unionGrants', [Permission::read(Role::user('hr'), 'name')], true, true);
+
+            $database->createDocument('unionGrants', new Document([
+                '$id' => ID::custom('u1'),
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100,
+                'grade' => 7,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $document = $database->getDocument('unionGrants', 'u1');
+
+        $this->assertSame('Bob', $document->getAttribute('name'), 'the collection half');
+        $this->assertSame(100, $document->getAttribute('salary'), 'and the document half');
+        $this->assertNull($document->getAttribute('grade'), 'and nothing neither of them named');
+
+        // The query gate sees the same union.
+        $this->assertCount(1, $database->find('unionGrants', [
+            Query::equal('name', ['Bob']),
+            Query::greaterThan('salary', 50),
+        ]), 'a query spanning both halves is allowed');
+
+        $this->assertCount(0, $database->find('unionGrants', [
+            Query::greaterThan('grade', 1),
+        ]), 'a query on the ungranted column is not');
+
+        // With documentSecurity off the document's own grant stops counting, leaving
+        // only what the collection gave.
+        $authorization->skip(fn () => $database->updateCollection(
+            'unionGrants',
+            [Permission::read(Role::user('hr'), 'name')],
+            false,
+            true
+        ));
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $document = $database->getDocument('unionGrants', 'u1');
+
+        $this->assertSame('Bob', $document->getAttribute('name'), 'the collection half survives');
+        $this->assertNull($document->getAttribute('salary'), 'the document half does not');
+
+        $authorization->cleanRoles();
+    }
+
+    /**
+     * An update grant names the columns it may change, and nothing else.
+     *
+     * Rewriting $permissions is deliberately not one of them: if "may update name" were
+     * enough to edit the grant list, a caller could grant itself every other column and
+     * column permissions would enforce nothing.
+     */
+    public function testUpdatingAColumnWithoutAGrantOnItIsRefused(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('writeScope', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('writeScope', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('writeScope', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('writeScope', new Document([
+                '$id' => ID::custom('w1'),
+                '$permissions' => [
+                    Permission::read(Role::user('hr')),
+                    Permission::update(Role::user('hr'), 'name'),
+                ],
+                'name' => 'Bob',
+                'salary' => 100,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        // The granted column changes.
+        $updated = $database->updateDocument('writeScope', 'w1', new Document(['name' => 'Ann']));
+        $this->assertSame('Ann', $updated->getAttribute('name'));
+
+        // The ungranted one does not.
+        try {
+            $database->updateDocument('writeScope', 'w1', new Document(['salary' => 900]));
+            $this->fail('updating a column with no grant on it should be refused');
+        } catch (AuthorizationException $e) {
+            $this->assertStringContainsString('salary', $e->getMessage());
+        }
+
+        // Nor may the caller widen its own grant.
+        try {
+            $database->updateDocument('writeScope', 'w1', new Document([
+                '$permissions' => [
+                    Permission::read(Role::user('hr')),
+                    Permission::update(Role::user('hr')),
+                ],
+            ]));
+            $this->fail('rewriting $permissions should be refused');
+        } catch (AuthorizationException $e) {
+            $this->assertStringContainsString('$permissions', $e->getMessage());
+        }
+
+        $stored = $authorization->skip(fn () => $database->getDocument('writeScope', 'w1'));
+        $this->assertSame(100, $stored->getAttribute('salary'), 'the refused write changed nothing');
+
+        $authorization->cleanRoles();
+    }
+
+    /**
+     * Delete takes the whole row, so it cannot be scoped to a column -- which means a
+     * caller holding only column-scoped grants holds no delete at all, however many
+     * columns they cover.
+     */
+    public function testColumnScopedGrantsDoNotPermitDelete(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('deleteScope', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('deleteScope', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('deleteScope', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('deleteScope', new Document([
+                '$id' => ID::custom('x1'),
+                '$permissions' => [
+                    Permission::read(Role::user('hr'), 'name'),
+                    Permission::read(Role::user('hr'), 'salary'),
+                    Permission::update(Role::user('hr'), 'name'),
+                ],
+                'name' => 'Bob',
+                'salary' => 100,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        try {
+            $database->deleteDocument('deleteScope', 'x1');
+            $this->fail('column-scoped grants should not permit deleting the row');
+        } catch (AuthorizationException) {
+            // expected
+        }
+
+        $this->assertFalse(
+            $authorization->skip(fn () => $database->getDocument('deleteScope', 'x1'))->isEmpty(),
+            'the row survives'
+        );
+
+        $authorization->cleanRoles();
+    }
+
+    /**
+     * A related document is masked by its own collection's rules, not the parent's.
+     * Each side keeps its own flag and its own grants, so a parent that hides a column
+     * says nothing about what the child hides.
+     */
+    public function testRelatedDocumentsAreMaskedByTheirOwnCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()
+            || !$database->getAdapter()->getSupportForRelationships()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('maskParent', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('maskParent', 'title', Database::VAR_STRING, 64, false);
+            $database->createAttribute('maskParent', 'secret', Database::VAR_STRING, 64, false);
+
+            $database->createCollection('maskChild', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('maskChild', 'label', Database::VAR_STRING, 64, false);
+            $database->createAttribute('maskChild', 'hidden', Database::VAR_STRING, 64, false);
+
+            $database->createRelationship(
+                collection: 'maskParent',
+                relatedCollection: 'maskChild',
+                type: Database::RELATION_ONE_TO_MANY,
+                id: 'kids'
+            );
+
+            $database->createDocument('maskParent', new Document([
+                '$id' => ID::custom('p1'),
+                '$permissions' => [
+                    Permission::read(Role::user('hr'), 'title'),
+                    Permission::read(Role::user('hr'), 'kids'),
+                ],
+                'title' => 'T',
+                'secret' => 'S',
+                'kids' => [new Document([
+                    '$id' => ID::custom('c1'),
+                    '$permissions' => [Permission::read(Role::user('hr'), 'label')],
+                    'label' => 'visible',
+                    'hidden' => 'not',
+                ])],
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $parent = $database->getDocument('maskParent', 'p1');
+
+        $this->assertSame('T', $parent->getAttribute('title'));
+        $this->assertNull($parent->getAttribute('secret'), 'the parent hides what the parent hides');
+
+        $child = $authorization->skip(fn () => $database->getDocument('maskChild', 'c1'));
+        $this->assertSame('not', $child->getAttribute('hidden'), 'stored intact');
+
+        $seen = $database->getDocument('maskChild', 'c1');
+        $this->assertSame('visible', $seen->getAttribute('label'));
+        $this->assertNull($seen->getAttribute('hidden'), 'and the child hides what the child hides');
 
         $authorization->cleanRoles();
     }

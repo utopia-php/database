@@ -1293,12 +1293,16 @@ trait CollectionTests
 
         $database->setMetadata('scope', 'api.users');
 
-        $hook = new class () implements Transform {
+        $hook = new class ($database->getNamespace().'_docs') implements Transform {
             public string $query = '';
+
+            public function __construct(private readonly string $table)
+            {
+            }
 
             public function transform(Event $event, string $query): string
             {
-                if ($event !== Event::DocumentRead) {
+                if ($event !== Event::DocumentRead || ! \str_contains($query, $this->table)) {
                     return $query;
                 }
 

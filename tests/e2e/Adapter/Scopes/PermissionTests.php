@@ -1875,4 +1875,239 @@ trait PermissionTests
             'the child inherits the unscoped grants and none of the column-scoped ones'
         );
     }
+
+    /**
+     * Deleting a column revokes the grants scoped to it.
+     *
+     * The rollback case is covered elsewhere; this is the ordinary one, and it is the
+     * test the cleanup most needs. Its SQL is a compare-and-set whose comparison differs
+     * per adapter -- CAST(.. AS BINARY) on MariaDB and MySQL, ::jsonb on Postgres, plain
+     * on SQLite -- and if one of those stops matching, the purge quietly does nothing
+     * and every other test still passes.
+     */
+    public function testDeletingAColumnRevokesTheGrantsScopedToIt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('revokeOnDelete', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('revokeOnDelete', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('revokeOnDelete', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('revokeOnDelete', new Document([
+                '$id' => ID::custom('d1'),
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $this->assertSame(1, $database->count('revokeOnDelete'), 'the grant makes the row visible');
+
+        $authorization->skip(fn () => $database->deleteAttribute('revokeOnDelete', 'salary'));
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        // The only grant named the column that is now gone, so nothing is left to see --
+        // not the values, and not the fact that the row exists.
+        $this->assertSame(0, $database->count('revokeOnDelete'), 'and its removal takes that away');
+        $this->assertCount(0, $database->find('revokeOnDelete'));
+        $this->assertTrue($database->getDocument('revokeOnDelete', 'd1')->isEmpty());
+
+        $authorization->cleanRoles();
+    }
+
+    /**
+     * Renaming a column keeps its grants, because _column carries the attribute's
+     * identity and a rename does not change it. A regression that put the key back
+     * there would leave every other test passing and quietly revoke access here.
+     */
+    public function testRenamingAColumnKeepsItsGrantsAndIdentity(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()
+            || !$database->getAdapter()->getSupportForSchemaAttributes()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $identity = $authorization->skip(function () use ($database) {
+            $database->createCollection('renameKeepsGrants', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('renameKeepsGrants', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('renameKeepsGrants', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('renameKeepsGrants', new Document([
+                '$id' => ID::custom('r1'),
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100,
+            ]));
+
+            foreach ($database->getCollection('renameKeepsGrants')->getAttribute('attributes', []) as $attribute) {
+                if ($attribute['key'] === 'salary') {
+                    return $attribute[Database::ATTRIBUTE_INTERNAL_ID];
+                }
+            }
+
+            return null;
+        });
+
+        $this->assertIsString($identity);
+
+        $authorization->skip(fn () => $database->updateAttribute('renameKeepsGrants', 'salary', newKey: 'pay'));
+
+        $renamed = $authorization->skip(function () use ($database) {
+            foreach ($database->getCollection('renameKeepsGrants')->getAttribute('attributes', []) as $attribute) {
+                if ($attribute['key'] === 'pay') {
+                    return $attribute[Database::ATTRIBUTE_INTERNAL_ID];
+                }
+            }
+
+            return null;
+        });
+
+        $this->assertSame($identity, $renamed, 'the rename moved the key, not the identity');
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $document = $database->getDocument('renameKeepsGrants', 'r1');
+
+        $this->assertSame(100, $document->getAttribute('pay'), 'the grant follows the column under its new name');
+        $this->assertNull($document->getAttribute('name'), 'and still withholds the rest');
+
+        $authorization->cleanRoles();
+    }
+
+    /**
+     * A bulk update that does not touch $permissions must leave them exactly as they
+     * were. The comparison deciding that runs between a decoded document and encoded
+     * updates, so it has to normalise both before it can mean anything.
+     */
+    public function testBulkUpdateLeavesUnchangedColumnPermissionsIntact(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+        $granted = [Permission::read(Role::user('hr'), 'salary'), Permission::update(Role::any())];
+
+        $authorization->skip(function () use ($database, $granted) {
+            $database->createCollection('bulkKeepsGrants', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('bulkKeepsGrants', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('bulkKeepsGrants', 'salary', Database::VAR_INTEGER, 8, false);
+
+            $database->createDocument('bulkKeepsGrants', new Document([
+                '$id' => ID::custom('k1'),
+                '$permissions' => $granted,
+                'name' => 'Bob',
+                'salary' => 100,
+            ]));
+        });
+
+        // No $permissions on the updates: only the value changes.
+        $authorization->skip(fn () => $database->updateDocuments(
+            'bulkKeepsGrants',
+            new Document(['name' => 'Ann'])
+        ));
+
+        $stored = $authorization->skip(
+            fn () => $database->getDocument('bulkKeepsGrants', 'k1')
+        );
+
+        $permissions = $stored->getPermissions();
+        \sort($permissions);
+        $expected = $granted;
+        \sort($expected);
+
+        $this->assertSame('Ann', $stored->getAttribute('name'));
+        $this->assertSame($expected, $permissions, 'an update that says nothing about permissions changes none');
+    }
+
+    /**
+     * Upsert carries a column-scoped grant through a different path than create or
+     * update: the adapter merges stored and incoming state, and the comparison deciding
+     * what changed sees both vocabularies at once.
+     */
+    public function testUpsertKeepsColumnScopedPermissionsReadable(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()
+            || !$database->getAdapter()->getSupportForUpserts()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('upsertGrants', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('upsertGrants', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('upsertGrants', 'salary', Database::VAR_INTEGER, 8, false);
+
+            // Insert half.
+            $database->upsertDocument('upsertGrants', new Document([
+                '$id' => ID::custom('u1'),
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $document = $database->getDocument('upsertGrants', 'u1');
+        $this->assertSame(100, $document->getAttribute('salary'), 'insert half stores a usable grant');
+        $this->assertNull($document->getAttribute('name'));
+
+        // Update half: same id, same grant, different value.
+        $authorization->skip(fn () => $database->upsertDocument('upsertGrants', new Document([
+            '$id' => ID::custom('u1'),
+            '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+            'name' => 'Ann',
+            'salary' => 900,
+        ])));
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $document = $database->getDocument('upsertGrants', 'u1');
+        $this->assertSame(900, $document->getAttribute('salary'), 'update half keeps it usable');
+        $this->assertNull($document->getAttribute('name'));
+
+        $stored = $authorization->skip(
+            fn () => $database->getDocument('upsertGrants', 'u1')->getPermissions()
+        );
+        $this->assertSame([Permission::read(Role::user('hr'), 'salary')], $stored, 'and readable as the key it was written with');
+
+        $authorization->cleanRoles();
+    }
 }

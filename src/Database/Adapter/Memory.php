@@ -2115,12 +2115,13 @@ class Memory extends Adapter
     /**
      * Move or drop the permissions scoped to one column.
      *
-     * Only the stored _permissions of each row are rewritten. The permission indexes
-     * this adapter keeps are built from getPermissionsByType(), which strips the
-     * column, so they hold roles alone and nothing in them refers to a column name.
-     * Column access is decided from the row's own permissions by rowGrantsColumns(),
-     * which is why leaving these unrewritten would silently revoke access after a
-     * rename, and let a recreated column inherit grants after a delete.
+     * Both the stored _permissions and this adapter's role index are rewritten. The
+     * index holds roles with the column stripped, so it cannot be left alone: dropping
+     * a row's last column-scoped grant takes the permission out of _permissions but
+     * would leave the role still indexed, and the row gate reads the index -- so the
+     * document would stay countable by a caller who can no longer read any of it. On
+     * the SQL adapters the _perms rows are the index and carry _column, so removing
+     * them settles both at once; here they are separate and both have to be told.
      *
      * @param Document $collection
      * @param string $old
@@ -2174,7 +2175,21 @@ class Memory extends Adapter
             }
 
             $touched[$documentKey] = $permissions;
-            $this->data[$key]['documents'][$documentKey]['_permissions'] = \array_values(\array_unique($rewritten));
+            $rewritten = \array_values(\array_unique($rewritten));
+            $this->data[$key]['documents'][$documentKey]['_permissions'] = $rewritten;
+
+            $uid = $row['_uid'] ?? $documentKey;
+            $tenant = $row['_tenant'] ?? null;
+
+            $this->removePermissionsForDocument($key, (string) $uid, $tenant, $this->sharedTables);
+
+            $indexed = new Document(['$permissions' => $rewritten]);
+            foreach (Database::PERMISSIONS as $type) {
+                foreach ($indexed->getPermissionsByType($type) as $permission) {
+                    $this->addPermissionEntry($key, (string) $uid, (string) $type, (string) $permission, $tenant);
+                }
+            }
+
             $updated++;
         }
 

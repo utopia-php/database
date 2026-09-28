@@ -213,6 +213,18 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
 
+    public function testCacheFlushAfterActivationReadsGenerationsDoesNotFailTheCommittedMutation(): void
+    {
+        $cache = new FlushDuringActivationMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $this->assertTrue($cache->flush());
+        $this->assertTrue($database->purgeCachedCollection('webhooks'));
+        $cache->flushAfterReading('collection:webhooks#finished');
+
+        $this->assertTrue($database->deleteCollection('webhooks'));
+        $this->assertTrue($database->getCollection('webhooks')->isEmpty());
+    }
+
     public function testActivationPurgeFailureStillPropagates(): void
     {
         $cache = new FlushDuringActivationMemory();
@@ -406,6 +418,8 @@ final class FlushDuringActivationMemory extends MemoryCache implements Leasable
 
     private bool $failDuringActivation = false;
 
+    private ?string $flushAfterReading = null;
+
     public function flushDuringActivation(): void
     {
         $this->flushDuringActivation = true;
@@ -416,9 +430,20 @@ final class FlushDuringActivationMemory extends MemoryCache implements Leasable
         $this->failDuringActivation = true;
     }
 
+    public function flushAfterReading(string $key): void
+    {
+        $this->flushAfterReading = $key;
+    }
+
     public function getGeneration(string $key): string
     {
-        return (string) ($this->generations[$key] ?? 0);
+        $generation = (string) ($this->generations[$key] ?? 0);
+        if ($this->flushAfterReading !== null && \str_ends_with($key, $this->flushAfterReading)) {
+            $this->flushAfterReading = null;
+            $this->flush();
+        }
+
+        return $generation;
     }
 
     #[\Override]

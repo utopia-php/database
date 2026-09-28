@@ -327,6 +327,9 @@ not change anything for an upgrade from 7.x.
     dropped, as the SQL adapters do, instead of throwing `Exception\Structure`.
   - The Redis adapter throws `Exception\Unique`, not a plain `Duplicate`, for unique index violations.
   - Custom types stay on the handles that share their `TypeRegistry` instead of replacing global filters.
+  - A write no longer throws `Failed to finish document cache invalidation` after it commits when the cache is
+    flushed while the write invalidates its collection's cached documents, for example by `delete()` of another
+    database that shares the cache.
 - **SQL adapters:**
   - A transparent reconnect of `Utopia\Database\PDO` keeps MariaDB and MySQL statement timeouts; the timeout also
     applies to the statement retried after the reconnect.

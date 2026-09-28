@@ -78,36 +78,62 @@ class ColumnSecurityFlagTest extends TestCase
     }
 
     /**
-     * $columnSecurity is required, like $documentSecurity beside it: the value passed
-     * is the value stored, in both directions, with no inference from what the
-     * collection already held.
+     * The value passed is the value stored, in both directions, with no inference from
+     * what the collection already held -- shown by what the flag does rather than by
+     * reading it back. Off, the column half of a grant is inert, so read("hr","salary")
+     * grants what read("hr") grants. On again, the stored grant still names the column,
+     * so the restriction returns exactly as it was.
      */
-    public function testTheFlagPassedIsTheFlagStored(): void
+    public function testTurningTheFlagOffAndOnChangesWhatAColumnGrantDoes(): void
     {
         $this->collection('secured', true);
-        $this->collection('plain', false);
 
-        $this->authorization->skip(function () {
-            $this->database->updateCollection('secured', [], true, false);
-            $this->database->updateCollection('plain', [], true, true);
-        });
+        $this->authorization->skip(fn () => $this->database->createDocument('secured', new Document([
+            '$id' => 'e1',
+            '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+            'name' => 'Bob',
+            'salary' => 100,
+        ])));
 
-        $collections = $this->authorization->skip(fn () => [
-            $this->database->getCollection('secured'),
-            $this->database->getCollection('plain'),
-        ]);
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole('user:hr');
 
-        $this->assertFalse($collections[0]->getAttribute('columnSecurity'));
-        $this->assertTrue($collections[1]->getAttribute('columnSecurity'));
+        $document = $this->database->getDocument('secured', 'e1');
+        $this->assertSame(100, $document->getAttribute('salary'), 'the grant names salary');
+        $this->assertNull($document->getAttribute('name'), 'and so withholds every other column');
+
+        $this->authorization->skip(fn () => $this->database->updateCollection('secured', [], true, false));
+
+        $document = $this->database->getDocument('secured', 'e1');
+        $this->assertSame('Bob', $document->getAttribute('name'), 'off, the column half is inert');
+        $this->assertSame(100, $document->getAttribute('salary'));
+
+        $this->authorization->skip(fn () => $this->database->updateCollection('secured', [], true, true));
+
+        $document = $this->database->getDocument('secured', 'e1');
+        $this->assertNull($document->getAttribute('name'), 'on again, the stored grant restricts as before');
+        $this->assertSame(100, $document->getAttribute('salary'));
     }
 
+    /**
+     * createCollection() is called without the argument, so the default is what is under
+     * test, and it is judged by a write the default has to refuse.
+     */
     public function testDefaultsToOff(): void
     {
-        $this->collection('plain', false);
+        $this->authorization->skip(function () {
+            $this->database->createCollection('implicit', documentSecurity: true, permissions: []);
+            $this->database->createAttribute('implicit', 'salary', Database::VAR_INTEGER, 8, false);
+        });
 
-        $collection = $this->authorization->skip(fn () => $this->database->getCollection('plain'));
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('column security is not enabled');
 
-        $this->assertFalse($collection->getAttribute('columnSecurity'));
+        $this->authorization->skip(fn () => $this->database->createDocument('implicit', new Document([
+            '$id' => 'd1',
+            '$permissions' => [Permission::read(Role::any(), 'salary')],
+            'salary' => 1,
+        ])));
     }
 
     // ---------------------------------------------------------------- writes blocked

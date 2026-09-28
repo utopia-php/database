@@ -448,18 +448,18 @@ class QueryCacheTest extends TestCase
                 $second->blockCollection($key, $secondToken);
 
                 $this->assertNull($reader->getEntry($scope, 'users', []));
-                $this->assertTrue($adapter->has($key.'#owner:'.$secondToken));
+                $this->assertTrue($adapter->has($key.'#owners', $secondToken));
             });
 
             $first->activateCollection($key, $firstToken);
 
-            $this->assertFalse($adapter->has($key.'#owner:'.$firstToken));
-            $this->assertTrue($adapter->has($key.'#owner:'.$secondToken));
+            $this->assertFalse($adapter->has($key.'#owners', $firstToken));
+            $this->assertTrue($adapter->has($key.'#owners', $secondToken));
             $this->assertNull($reader->getEntry($scope, 'users', []));
 
             $second->activateCollection($key, $secondToken);
 
-            $this->assertFalse($adapter->has($key.'#owner:'.$secondToken));
+            $this->assertFalse($adapter->has($key.'#owners', $secondToken));
             $fresh = $reader->getEntry($scope, 'users', []);
             $this->assertNotNull($fresh);
             $this->assertNull($reader->get($fresh));
@@ -559,6 +559,62 @@ class QueryCacheTest extends TestCase
             $this->fail('Query cache activation purge failure was not propagated');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('finish query cache invalidation', $error->getMessage());
+        }
+
+        $this->assertNull($queryCache->getEntry(new Scope(), 'users', []));
+    }
+
+    public function testInvalidationsLeaveOneOwnerKeyPerCollection(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+
+        for ($invalidation = 0; $invalidation < 20; $invalidation++) {
+            $queryCache->invalidateCollection($scope, 'users');
+        }
+
+        $this->assertSame(
+            [$key.'#owners'],
+            \array_values(\array_filter($adapter->keys(), static fn (string $stored): bool => \str_contains($stored, '#owner'))),
+            'A purged key stays behind in Redis, so invalidations must share one owner key instead of leaving one each',
+        );
+        $this->assertSame([], $adapter->list($key.'#owners'), 'Every invalidation must release its registration');
+        $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
+    }
+
+    public function testActivationRejectsAForeignOwnerRegistration(): void
+    {
+        $cache = new Cache(new RedisLeasableCache());
+        $queryCache = new QueryCache($cache);
+        $key = $queryCache->getCollectionKey(new Scope(), 'users');
+        $queryCache->blockCollection($key, 'owner');
+        $cache->save($key.'#owners', 'intruder', 'owner');
+
+        try {
+            $queryCache->activateCollection($key, 'owner');
+            $this->fail('A foreign owner registration was accepted');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('Invalid query cache owner', $error->getMessage());
+        }
+
+        $this->assertNull($queryCache->getEntry(new Scope(), 'users', []));
+    }
+
+    public function testActivationPropagatesAnOwnerReleaseFailure(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $key = $queryCache->getCollectionKey(new Scope(), 'users');
+        $queryCache->blockCollection($key, 'owner');
+        $adapter->failFieldPurges('#owners');
+
+        try {
+            $queryCache->activateCollection($key, 'owner');
+            $this->fail('An owner release failure was not propagated');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('Failed to release query cache owner', $error->getMessage());
         }
 
         $this->assertNull($queryCache->getEntry(new Scope(), 'users', []));

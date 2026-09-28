@@ -847,6 +847,61 @@ trait GeneralTests
         }
     }
 
+    public function testCacheInvalidationLeavesOneOwnerKeyPerCollection(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+
+        $collection = 'ownerKeys'.ID::unique();
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', size: 64, required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $cache = new Cache(new RedisAdapter($redis));
+        $original = $database->getCache();
+        $queryCache = $database->getQueryCache();
+        $destination = $database instanceof Mirror ? $database->getDestination() : null;
+        $destinationCache = $destination?->getCache();
+        $database->setCache($cache)->setQueryCache(new QueryCache($cache));
+
+        try {
+            $database->createDocument($collection, new Document(['$id' => 'doc0', 'name' => 'doc 0']));
+            $owners = $this->scanOwnerKeys($redis, $collection);
+
+            for ($index = 1; $index <= 10; $index++) {
+                $database->createDocument($collection, new Document(['$id' => 'doc'.$index, 'name' => 'doc '.$index]));
+                $this->assertCount($index + 1, $database->find($collection, [Query::limit(100)]));
+            }
+            $database->withTransaction(function () use ($database, $collection): void {
+                $database->updateDocument($collection, 'doc1', new Document(['name' => 'updated']));
+                $database->updateDocument($collection, 'doc2', new Document(['name' => 'updated']));
+            });
+
+            $this->assertSame($owners, $this->scanOwnerKeys($redis, $collection), 'A purged key stays behind in Redis, so a write must not register its owner under a key of its own');
+            $this->assertNotEmpty($owners);
+            foreach ($owners as $key) {
+                $this->assertStringEndsWith('#owners', $key);
+                $fields = $redis->hKeys($key);
+                $this->assertIsArray($fields);
+                $this->assertSame([], \array_values(\array_diff($fields, ['__utopia_gen__', '__utopia_tomb__'])), "Every write must release its registration in '{$key}'");
+            }
+        } finally {
+            $database->setQueryCache($queryCache)->setCache($original);
+            if ($destination !== null && $destinationCache !== null) {
+                $destination->setCache($destinationCache);
+            }
+            $database->deleteCollection($collection);
+        }
+    }
+
     /**
      * Test that withTransaction correctly resets inTransaction state
      * when a known exception (DuplicateException) is thrown after successful rollback.
@@ -1066,6 +1121,26 @@ trait GeneralTests
             $database->setCache($original);
             $database->deleteCollection($collection);
         }
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function scanOwnerKeys(Redis $redis, string $collection): array
+    {
+        $keys = [];
+        $iterator = null;
+        do {
+            $batch = $redis->scan($iterator, '*'.\strtolower($collection).'*#owner*', 1000);
+            if (\is_array($batch)) {
+                \array_push($keys, ...$batch);
+            }
+        } while ($iterator > 0);
+
+        $keys = \array_values(\array_unique($keys));
+        \sort($keys);
+
+        return $keys;
     }
 
     private function dropRedisConnection(Redis $redis): void

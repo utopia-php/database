@@ -2588,14 +2588,14 @@ trait Documents
     private function blockDocumentCacheEpoch(string $collectionKey, string $token): bool
     {
         $epochKey = $collectionKey.'#epoch';
-        $ownerKey = $collectionKey.'#owner:'.$token;
-        if ($this->cache->save($ownerKey, $token) === false) {
+        $ownersKey = $collectionKey.'#owners';
+        if ($this->cache->save($ownersKey, $token, $token) === false) {
             $epoch = $this->cache->load($epochKey, self::TTL);
             if ($epoch === false || $epoch === null) {
                 return false;
             }
 
-            throw new RuntimeException("Failed to register document cache owner '{$ownerKey}'");
+            throw new RuntimeException("Failed to register document cache owner '{$token}' in '{$ownersKey}'");
         }
 
         $startedKey = $collectionKey.'#started';
@@ -2633,16 +2633,16 @@ trait Documents
 
     private function activateDocumentCacheEpoch(string $collectionKey, string $token): void
     {
-        $ownerKey = $collectionKey.'#owner:'.$token;
-        $owner = $this->cache->load($ownerKey, self::TTL);
+        $ownersKey = $collectionKey.'#owners';
+        $owner = $this->cache->load($ownersKey, self::TTL, $token);
         if ($owner !== false && $owner !== null && $owner !== $token) {
-            throw new RuntimeException("Invalid document cache owner '{$ownerKey}'");
+            throw new RuntimeException("Invalid document cache owner '{$token}' in '{$ownersKey}'");
         }
         $owned = $owner === $token;
-        if ($owned && ! $this->cache->purge($ownerKey)) {
-            $owner = $this->cache->load($ownerKey, self::TTL);
+        if ($owned && ! $this->cache->purge($ownersKey, $token)) {
+            $owner = $this->cache->load($ownersKey, self::TTL, $token);
             if ($owner !== false && $owner !== null) {
-                throw new RuntimeException("Failed to release document cache owner '{$ownerKey}'");
+                throw new RuntimeException("Failed to release document cache owner '{$token}' in '{$ownersKey}'");
             }
             $owned = false;
         }

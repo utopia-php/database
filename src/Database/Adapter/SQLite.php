@@ -1531,6 +1531,17 @@ class SQLite extends MariaDB
      *
      * @return bool
      */
+    /**
+     * Back to the plain bind, undoing MariaDB's cast. SQLite already compares TEXT
+     * byte-for-byte, and it has no BINARY type: CAST('["a"]' AS BINARY) takes NUMERIC
+     * affinity and evaluates to 0, so inheriting the cast would leave a comparison that
+     * never matches and a cleanup that silently stopped running.
+     */
+    protected function getJsonBind(string $placeholder): string
+    {
+        return $placeholder;
+    }
+
     public function getSupportForColumnPermissions(): bool
     {
         return true;

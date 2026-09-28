@@ -1807,6 +1807,17 @@ class MariaDB extends SQL
         return true;
     }
 
+    /**
+     * _permissions is MEDIUMTEXT under the table's utf8mb4 collation, which is case
+     * insensitive, so a plain comparison would treat read("user:hr") and
+     * read("user:HR") as the same permissions. Casting the bound value forces a
+     * byte-for-byte comparison, which is what the compare-and-set needs.
+     */
+    protected function getJsonBind(string $placeholder): string
+    {
+        return "CAST({$placeholder} AS BINARY)";
+    }
+
     public function getSupportForColumnPermissions(): bool
     {
         return true;

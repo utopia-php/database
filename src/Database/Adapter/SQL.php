@@ -2517,8 +2517,13 @@ abstract class SQL extends Adapter
     /**
      * Bind a JSON value for comparison against the _permissions column.
      *
-     * Most adapters store it as text and compare it as given. Postgres stores JSONB,
-     * which has no equality against text, so it overrides this to cast.
+     * The comparison guards a read-modify-write, so it has to be byte-for-byte: two
+     * permission sets differing only in the case of a role are different permissions,
+     * and treating them as equal would let the rewrite undo a concurrent change.
+     *
+     * SQLite compares TEXT with BINARY collation already, so it takes the value as
+     * given. MariaDB and MySQL default to a case-insensitive collation and Postgres
+     * stores JSONB, which has no equality against text; both override this.
      */
     protected function getJsonBind(string $placeholder): string
     {

@@ -1728,11 +1728,36 @@ trait PermissionTests
 
         $create();
 
-        $collection = $authorization->skip(
-            fn () => $database->getCollection('columnSupportYes')
-        );
+        // Judged by enforcement, not by the stored flag: an adapter answering true to
+        // getSupportForColumnPermissions() is promising the gate works, and reading the
+        // setting back would not tell us whether it does.
+        $authorization->skip(function () use ($database) {
+            $database->createAttribute('columnSupportYes', 'name', Database::VAR_STRING, 64, false);
+            $database->createAttribute('columnSupportYes', 'salary', Database::VAR_INTEGER, 8, false);
 
-        $this->assertTrue($collection->getAttribute('columnSecurity'));
+            $database->createDocument('columnSupportYes', new Document([
+                '$id' => ID::custom('s1'),
+                '$permissions' => [Permission::read(Role::user('hr'), 'salary')],
+                'name' => 'Bob',
+                'salary' => 100,
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole('user:hr');
+
+        $document = $database->getDocument('columnSupportYes', 's1');
+
+        $this->assertSame(100, $document->getAttribute('salary'), 'the granted column is readable');
+        $this->assertNull($document->getAttribute('name'), 'and every other column is withheld');
+
+        // The query gate, which is separate from masking above: salary is granted, so a
+        // predicate on it matches; name is not, so a predicate on it must find nothing
+        // rather than confirm the value through the result count.
+        $this->assertCount(1, $database->find('columnSupportYes', [Query::greaterThan('salary', 50)]));
+        $this->assertCount(0, $database->find('columnSupportYes', [Query::equal('name', ['Bob'])]));
+
+        $authorization->cleanRoles();
     }
 
     /**

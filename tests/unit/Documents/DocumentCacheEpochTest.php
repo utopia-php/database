@@ -4,12 +4,15 @@ namespace Tests\Unit\Documents;
 
 use Closure;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Cache\RedisLeasableCache;
+use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -246,6 +249,111 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
 
+    public function testWritesDoNotAddKeysToACacheThatKeepsPurgedKeys(): void
+    {
+        $cache = new RedisLeasableCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->setQueryCache(new QueryCache(new Cache($cache)));
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook0',
+            'name' => 'hook 0',
+        ]));
+        $keys = $cache->keys();
+
+        for ($index = 1; $index <= 20; $index++) {
+            $database->createDocument('webhooks', new Document([
+                '$id' => 'hook'.$index,
+                'name' => 'hook '.$index,
+            ]));
+        }
+        $database->withTransaction(function () use ($database): void {
+            $database->updateDocument('webhooks', 'hook1', new Document(['name' => 'updated']));
+            $database->updateDocument('webhooks', 'hook2', new Document(['name' => 'updated']));
+        });
+
+        $this->assertSame($keys, $cache->keys(), 'A purged key stays behind in Redis, so a write must not leave a key of its own');
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook1')->getAttribute('name'));
+    }
+
+    public function testOverlappingWritesSucceedOnACacheWithoutFields(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $writer = $this->createDatabaseWithCache($cache);
+        $other = $this->createDatabaseWithCache($cache, $writer->getNamespace());
+        foreach ([$writer, $other] as $database) {
+            $database->createDocument('webhooks', new Document([
+                '$id' => 'hook',
+                'name' => 'original',
+            ]));
+        }
+
+        $writer->withTransaction(function () use ($writer, $other, $cache): void {
+            $writer->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $cache->failBlocks();
+            try {
+                $other->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+                $this->fail('The other writer\'s block did not fail');
+            } catch (\RuntimeException $error) {
+                $this->assertStringContainsString('block document cache epoch', $error->getMessage());
+            } finally {
+                $cache->failBlocks(false);
+            }
+        });
+
+        $this->assertSame('updated', $writer->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testActivationRejectsACorruptedOwnerRegistration(): void
+    {
+        $cache = new RedisLeasableCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $cache->corruptFieldWrites();
+
+        try {
+            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->fail('A corrupted document cache owner registration was accepted');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('Invalid document cache owner', $error->getMessage());
+        }
+
+        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
+        $this->assertDocumentCacheEpochBlocked($database, $collectionKey);
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    public function testActivationPropagatesAnOwnerReleaseFailure(): void
+    {
+        $cache = new RedisLeasableCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $cache->failFieldPurges();
+
+        try {
+            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->fail('A document cache owner release failure was not propagated');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('Failed to release document cache owner', $error->getMessage());
+        }
+
+        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
+        $this->assertDocumentCacheEpochBlocked($database, $collectionKey);
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    private function assertDocumentCacheEpochBlocked(Database $database, string $collectionKey): void
+    {
+        $epoch = $database->getCache()->load($collectionKey.'#epoch', Database::TTL);
+        $this->assertIsString($epoch);
+        $this->assertStringStartsWith('blocked:', $epoch);
+    }
+
     /**
      * @return array{Database, FailPurgeMemory}
      */
@@ -257,12 +365,12 @@ final class DocumentCacheEpochTest extends TestCase
         return [$database, $adapter];
     }
 
-    private function createDatabaseWithCache(MemoryCache $cache): Database
+    private function createDatabaseWithCache(CacheAdapter $cache, ?string $namespace = null): Database
     {
         $database = new Database(new DatabaseMemory(), new Cache($cache));
         $database
             ->setDatabase('utopiaTests')
-            ->setNamespace('epoch_'.\uniqid());
+            ->setNamespace($namespace ?? 'epoch_'.\uniqid());
         $database->create();
         $database->createCollection(new Collection(id: 'webhooks', attributes: [
             Attribute::string(key: 'name'),
@@ -379,9 +487,9 @@ final class FailDocumentEpochMemory extends MemoryCache
 
     private ?string $activationFailure = null;
 
-    public function failBlocks(): void
+    public function failBlocks(bool $failing = true): void
     {
-        $this->failingBlocks = true;
+        $this->failingBlocks = $failing;
     }
 
     public function failActivations(?string $key = null): void

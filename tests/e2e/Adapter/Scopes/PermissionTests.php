@@ -1664,16 +1664,19 @@ trait PermissionTests
             fn () => $database->getDocument('rollbackGrants', 'r1')->getPermissions()
         );
 
+        $rolledBack = false;
+
         try {
             $authorization->skip(fn () => $database->withTransaction(function () use ($database) {
                 $database->deleteAttribute('rollbackGrants', 'salary');
 
                 throw new DatabaseException('rollback');
             }));
-            $this->fail('the transaction should have propagated the failure');
         } catch (DatabaseException) {
-            // expected -- the rollback is what is under test
+            $rolledBack = true;
         }
+
+        $this->assertTrue($rolledBack, 'the transaction should have propagated the failure');
 
         $attributes = $authorization->skip(
             fn () => $database->getCollection('rollbackGrants')->getAttribute('attributes', [])

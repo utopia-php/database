@@ -3622,17 +3622,6 @@ class Database
         // holds identities.
         $this->repointCollectionColumnPermissions($collection, $id, null);
 
-        $internalId = $attribute instanceof Document
-            ? $attribute->getAttribute(self::ATTRIBUTE_INTERNAL_ID)
-            : null;
-
-        // No per-document purge: purgeCachedCollection() below lists and purges
-        // every document key under the collection, so purging the affected ones
-        // here is the same work done twice.
-        if (\is_string($internalId) && $internalId !== '') {
-            $this->adapter->deleteColumnPermissions($collection, $internalId);
-        }
-
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->adapter->createAttribute(
@@ -3648,6 +3637,23 @@ class Database
             operationDescription: "attribute deletion '{$id}'",
             silentRollback: true
         );
+
+        // After the metadata write, not before. updateMetadata() rethrows on failure and
+        // its rollback puts the physical column back -- but nothing puts these rows back,
+        // so purging first would leave the column restored and every grant on it gone.
+        // Afterwards, the worst case is dead rows, which is what this purge exists to
+        // tidy and which confer nothing in the meantime.
+        //
+        // No per-document purge either: purgeCachedCollection() below lists and purges
+        // every document key under the collection, so purging the affected ones here is
+        // the same work done twice.
+        $internalId = $attribute instanceof Document
+            ? $attribute->getAttribute(self::ATTRIBUTE_INTERNAL_ID)
+            : null;
+
+        if (\is_string($internalId) && $internalId !== '') {
+            $this->adapter->deleteColumnPermissions($collection, $internalId);
+        }
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
@@ -5346,24 +5352,6 @@ class Database
     }
 
     /**
-     * Column keys defined on a collection.
-     *
-     * @param Document $collection
-     * @return array<string>
-     */
-    /**
-     * Give an attribute its immutable identity, if it does not already have one.
-     *
-     * Every path that persists an attribute runs this: createAttribute() builds the
-     * document itself, while createAttributes(), createCollection() and
-     * createRelationship() take documents the caller built and cannot rely on them
-     * carrying an identity. An existing one is kept rather than replaced so that a
-     * migration can assign identities itself, and so that re-running one is harmless.
-     *
-     * @param Document $attribute
-     * @return Document
-     */
-    /**
      * Rewrite a document's column-scoped permissions between key and identity.
      *
      * Storage holds the identity so that renaming a column moves nothing; callers
@@ -5526,6 +5514,18 @@ class Database
         return \array_values(\array_unique($identities));
     }
 
+    /**
+     * Give an attribute its immutable identity, if it does not already have one.
+     *
+     * Every path that persists an attribute runs this: createAttribute() builds the
+     * document itself, while createAttributes(), createCollection() and
+     * createRelationship() take documents the caller built and cannot rely on them
+     * carrying an identity. An existing one is kept rather than replaced so that a
+     * migration can assign identities itself, and so that re-running one is harmless.
+     *
+     * @param Document $attribute
+     * @return Document
+     */
     private function stampAttributeIdentity(Document $attribute): Document
     {
         $internalId = $attribute->getAttribute(self::ATTRIBUTE_INTERNAL_ID);
@@ -5537,6 +5537,12 @@ class Database
         return $attribute;
     }
 
+    /**
+     * Column keys defined on a collection.
+     *
+     * @param Document $collection
+     * @return array<string>
+     */
     private function getColumnKeys(Document $collection): array
     {
         $keys = [];

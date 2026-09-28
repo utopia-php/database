@@ -21,8 +21,11 @@ class HashAwareMemoryCache extends Memory
      * @param  array<int|string, mixed>|string  $data
      * @return bool|string|array<int|string, mixed>
      */
-    public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
+        // $ttl is declared to match the adapter and deliberately not forwarded: this
+        // stub exists to make cache keys hash-aware, and the in-memory adapter it
+        // extends does not expire entries regardless of what it is given.
         return parent::save($this->field($key, $hash), $data);
     }
 

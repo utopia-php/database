@@ -1931,17 +1931,16 @@ trait PermissionTests
     }
 
     /**
-     * Renaming a column keeps its grants, because _column carries the attribute's
-     * identity and a rename does not change it. A regression that put the key back
-     * there would leave every other test passing and quietly revoke access here.
+     * Renaming a column keeps the grants scoped to it. What a caller is entitled to read
+     * does not depend on what the column is called.
      */
-    public function testRenamingAColumnKeepsItsGrantsAndIdentity(): void
+    public function testRenamingAColumnKeepsItsGrants(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
 
         if (!$database->getAdapter()->getSupportForColumnPermissions()
-            || !$database->getAdapter()->getSupportForSchemaAttributes()) {
+            || !$database->getAdapter()->getSupportForAttributes()) {
             $this->expectNotToPerformAssertions();
 
             return;
@@ -1962,25 +1961,7 @@ trait PermissionTests
             ]));
         });
 
-        $identities = fn (): array => $authorization->skip(function () use ($database): array {
-            $map = [];
-
-            foreach ($database->getCollection('renameKeepsGrants')->getAttribute('attributes', []) as $attribute) {
-                $map[$attribute['key']] = $attribute[Database::ATTRIBUTE_INTERNAL_ID] ?? '';
-            }
-
-            return $map;
-        });
-
-        $before = $identities();
-        $this->assertArrayHasKey('salary', $before);
-        $this->assertNotSame('', $before['salary']);
-
         $authorization->skip(fn () => $database->updateAttribute('renameKeepsGrants', 'salary', newKey: 'pay'));
-
-        $after = $identities();
-        $this->assertArrayNotHasKey('salary', $after);
-        $this->assertSame($before['salary'], $after['pay'] ?? null, 'the rename moved the key, not the identity');
 
         $authorization->cleanRoles();
         $authorization->addRole('user:hr');
@@ -2451,5 +2432,57 @@ trait PermissionTests
         $this->assertNull($seen->getAttribute('hidden'), 'and the child hides what the child hides');
 
         $authorization->cleanRoles();
+    }
+
+    /**
+     * A rename changes the key and leaves the attribute's identity alone.
+     *
+     * This pins a design decision rather than a caller-visible behaviour, and is
+     * deliberately separate from testRenamingAColumnKeepsItsGrants() for that reason.
+     * Grants surviving a rename is what callers need, and more than one design delivers
+     * it -- storing the key in _column and migrating every permission row on rename does
+     * too. This is the assertion that says which one is in force: _column holds an
+     * identity a rename cannot change, so the rename moves no permission rows at all.
+     *
+     * If that design is ever traded for another, this test is the one to delete.
+     */
+    public function testRenamingAColumnDoesNotChangeItsIdentity(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (!$database->getAdapter()->getSupportForColumnPermissions()
+            || !$database->getAdapter()->getSupportForAttributes()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authorization = $database->getAuthorization();
+
+        $identities = fn (): array => $authorization->skip(function () use ($database): array {
+            $map = [];
+
+            foreach ($database->getCollection('renameKeepsIdentity')->getAttribute('attributes', []) as $attribute) {
+                $map[$attribute['key']] = $attribute[Database::ATTRIBUTE_INTERNAL_ID] ?? '';
+            }
+
+            return $map;
+        });
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('renameKeepsIdentity', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('renameKeepsIdentity', 'salary', Database::VAR_INTEGER, 8, false);
+        });
+
+        $before = $identities();
+        $this->assertArrayHasKey('salary', $before);
+        $this->assertNotSame('', $before['salary']);
+
+        $authorization->skip(fn () => $database->updateAttribute('renameKeepsIdentity', 'salary', newKey: 'pay'));
+
+        $after = $identities();
+        $this->assertArrayNotHasKey('salary', $after, 'the key moved');
+        $this->assertSame($before['salary'], $after['pay'] ?? null, 'the identity did not');
     }
 }

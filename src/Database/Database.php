@@ -3638,32 +3638,6 @@ class Database
             silentRollback: true
         );
 
-        // After the metadata write, not before. updateMetadata() rethrows on failure and
-        // its rollback puts the physical column back -- but nothing puts these rows back,
-        // so purging first would leave the column restored and every grant on it gone.
-        // Afterwards, the worst case is dead rows, which is what this purge exists to
-        // tidy and which confer nothing in the meantime.
-        //
-        // No per-document purge either: purgeCachedCollection() below lists and purges
-        // every document key under the collection, so purging the affected ones here is
-        // the same work done twice.
-        $internalId = $attribute instanceof Document
-            ? $attribute->getAttribute(self::ATTRIBUTE_INTERNAL_ID)
-            : null;
-
-        if (\is_string($internalId) && $internalId !== '') {
-            try {
-                $this->adapter->deleteColumnPermissions($collection, $internalId);
-            } catch (\Throwable $e) {
-                // Swallowed on purpose. By this point the deletion is durable -- the
-                // metadata no longer lists the attribute -- so failing here would report
-                // an error for work that succeeded and, worse, skip the cache purge
-                // below, leaving readers a cached collection that still has the column.
-                // What is left behind is dead rows, which confer nothing and shed on the
-                // next read-modify-write.
-            }
-        }
-
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
         $this->withRetries(fn () => $this->purgeCachedDocumentInternal(self::METADATA, $collection->getId()));
 
@@ -3680,6 +3654,32 @@ class Database
             $this->trigger(self::EVENT_ATTRIBUTE_DELETE, $attribute);
         } catch (\Throwable $e) {
             // Ignore
+        }
+
+        // Last, and allowed to fail loudly.
+        //
+        // Not before updateMetadata(): its rollback puts the physical column back, but
+        // nothing puts these rows back, so purging first would leave the column restored
+        // and every grant on it gone.
+        //
+        // Not before the cache purge and the events either: those describe a deletion
+        // that has already happened, and throwing ahead of them would leave readers a
+        // cached collection still listing the column and listeners never told it went.
+        //
+        // But not swallowed. A grant scoped only to this column keeps matching the row
+        // gate, which authorizes by role and does not look at _column -- so while these
+        // rows survive, count() still reports a document whose every column the caller
+        // has lost access to. That is an existence disclosure, not untidiness, so the
+        // caller is told rather than left to assume the cleanup ran.
+        //
+        // No per-document cache purge: purgeCachedCollection() above already listed and
+        // purged every document key under the collection.
+        $internalId = $attribute instanceof Document
+            ? $attribute->getAttribute(self::ATTRIBUTE_INTERNAL_ID)
+            : null;
+
+        if (\is_string($internalId) && $internalId !== '') {
+            $this->withRetries(fn () => $this->adapter->deleteColumnPermissions($collection, $internalId));
         }
 
         return true;

@@ -5,8 +5,11 @@ namespace Tests\Unit\Validator;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
+use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\Order;
 
 class IndexTest extends TestCase
@@ -429,5 +432,57 @@ class IndexTest extends TestCase
         $validatorNoSupport = new IndexValidator($attributes, $indexesWithTTL, 768, [], false, false, false, false, false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('TTL indexes are not supported', $validatorNoSupport->getDescription());
+    }
+
+    public function testIndexWithoutATypeIsRejected(): void
+    {
+        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'by_title',
+            'attributes' => ['title'],
+        ])));
+        $this->assertStringStartsWith('Unknown index type: . Must be one of ', $validator->getDescription());
+    }
+
+    public function testTtlIndexWithoutATtlIsRejected(): void
+    {
+        $validator = new IndexValidator(
+            attributes: [Attribute::datetime(key: 'expiresAt')],
+            indexes: [],
+            maxLength: 768,
+            supportForTTLIndexes: true,
+        );
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'expiry',
+            'type' => IndexType::Ttl->value,
+            'attributes' => ['expiresAt'],
+        ])));
+        $this->assertSame('TTL must be at least 1 second', $validator->getDescription());
+    }
+
+    public function testUnknownIndexTypeIsAValidationFailure(): void
+    {
+        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'by_title',
+            'type' => 'bogus',
+            'attributes' => ['title'],
+        ])));
+        $this->assertStringStartsWith('Unknown index type: bogus. Must be one of ', $validator->getDescription());
+    }
+
+    public function testStoredIndexOfAnUnknownTypeIsReadLeniently(): void
+    {
+        $stored = new Document([
+            Document::ID => 'by_title',
+            'type' => 'bogus',
+            'attributes' => ['title'],
+        ]);
+
+        $this->assertSame(['title'], Index::fromDocument($stored)->attributes);
+        $this->assertTrue((new IndexedQueries([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
     }
 }

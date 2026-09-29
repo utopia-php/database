@@ -413,7 +413,6 @@ class Index extends Document
     {
         /** @var string $key */
         $key = $document->getAttribute('key', $document->getId());
-        /** @var string $type */
         $type = $document->getAttribute('type', IndexType::Key->value);
         /** @var array<string> $attributes */
         $attributes = $document->getAttribute('attributes', []);
@@ -426,7 +425,7 @@ class Index extends Document
 
         return self::make(
             key: $key,
-            type: IndexType::from($type),
+            type: $type instanceof IndexType ? $type : IndexType::tryFrom(\is_string($type) ? $type : '') ?? IndexType::Key,
             attributes: $attributes,
             lengths: $lengths,
             orders: self::decodeOrders($orders),

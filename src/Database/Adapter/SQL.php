@@ -1681,7 +1681,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $row = $stmt->fetch();
             $stmt->closeCursor();
 
-            return is_array($row) && is_numeric($row['sum'] ?? null) ? (int) $row['sum'] : 0;
+            return $this->countOf(\is_array($row) ? $row : []);
         }
 
         $builder = $this->newBuilder($name, $alias);
@@ -1767,13 +1767,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             /** @var array<string, mixed>|false $row */
             $row = $stmt->fetch();
             $stmt->closeCursor();
-            $sumVal = is_array($row) ? ($row['sum'] ?? 0) : 0;
 
-            if (is_numeric($sumVal)) {
-                return str_contains((string) $sumVal, '.') ? (float) $sumVal : (int) $sumVal;
-            }
-
-            return 0;
+            return $this->sumOf(\is_array($row) ? $row : []);
         }
 
         $builder = $this->newBuilder($name, $alias);

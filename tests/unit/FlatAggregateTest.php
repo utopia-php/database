@@ -3,9 +3,11 @@
 namespace Tests\Unit;
 
 use PDO;
+use PDOStatement;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -156,6 +158,42 @@ final class FlatAggregateTest extends TestCase
 
         [$sum] = $this->profile(fn (): int|float => $this->database->sum('items', 'price', [$join]));
         $this->assertSame(30, $sum);
+    }
+
+    public function testBoundedJoinedCountKeepsItsLimit(): void
+    {
+        $this->assertSame(1, $this->database->count('items', [Query::join('labels', 'category', 'category', '=', 'label')], 1));
+        $this->assertSame(3, $this->database->count('items', [Query::fullOuterJoin('labels', 'category', 'category', '=', 'label')]));
+        $this->assertSame(2, $this->database->count('items', [Query::fullOuterJoin('labels', 'category', 'category', '=', 'label')], 2));
+    }
+
+    public function testANonNumericAggregateCountsAsZero(): void
+    {
+        $statement = $this->createStub(PDOStatement::class);
+        $statement->method('execute')->willReturn(true);
+        $statement->method('closeCursor')->willReturn(true);
+        $statement->method('fetch')->willReturn(['sum' => 'not a number']);
+        $statement->method('fetchAll')->willReturn([['sum' => 'not a number']]);
+
+        $pdo = $this->createStub(PDO::class);
+        $pdo->method('prepare')->willReturn($statement);
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $collection = new Document(['$id' => 'items']);
+        $filter = [Query::equal('category', ['a'])];
+
+        $this->assertSame(0, $adapter->sum($collection, 'price'), 'unfiltered');
+        $this->assertSame(0, $adapter->sum($collection, 'price', $filter), 'filtered');
+        $this->assertSame(0, $adapter->sum($collection, 'price', $filter, 2), 'bounded');
+        $this->assertSame(0, $adapter->count($collection), 'unfiltered');
+        $this->assertSame(0, $adapter->count($collection, $filter), 'filtered');
+        $this->assertSame(0, $adapter->count($collection, $filter, 2), 'bounded');
     }
 
     public function testPermissionFilteredCountIsUnchanged(): void

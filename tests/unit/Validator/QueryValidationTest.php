@@ -22,6 +22,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join;
 use Utopia\Query\Method;
@@ -390,6 +391,31 @@ final class QueryValidationTest extends TestCase
         }
 
         $this->assertInvalidQuery('Attribute not found in schema: price', fn (): mixed => $this->database->find('owners', [$join, Query::orderAsc('price')]));
+    }
+
+    /**
+     * A document read validator accepts joins by default, as its callers expect, and refuses them
+     * with the Documents validator's opt-in flag turned off.
+     */
+    public function testDocumentQueriesRejectJoinsUnlessEnabled(): void
+    {
+        $attributes = [new Document(['$id' => 'name', 'key' => 'name', 'type' => ColumnType::String->value, 'array' => false])];
+        $joins = [
+            'inline condition' => Query::join('notes', '$id', 'customerId', '=', 'note'),
+            'on() list with a filter' => Query::join('notes', 'note', [Query::on('$id', 'customerId'), Query::equal('note.body', ['x'])]),
+        ];
+
+        $enabled = new DocumentQueries($attributes);
+        $disabled = new DocumentQueries($attributes, supportForJoins: false);
+
+        foreach ($joins as $shape => $join) {
+            $this->assertTrue($enabled->isValid([$join]), $shape.': '.$enabled->getDescription());
+
+            $this->assertFalse($disabled->isValid([$join]), $shape);
+            $this->assertSame('Invalid query method: join', $disabled->getDescription(), $shape);
+        }
+
+        $this->assertTrue($disabled->isValid([Query::select(['name'])]), $disabled->getDescription());
     }
 
     /**

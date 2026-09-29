@@ -393,14 +393,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if (! $this->getPDO()->inTransaction()) {
-            $nested = $this->inTransaction > 1;
             $this->inTransaction = 0;
 
-            if ($nested) {
-                throw new TransactionException('Failed to commit transaction: the connection no longer holds the enclosing transaction');
-            }
-
-            return false;
+            throw new TransactionException('Failed to commit transaction: the connection no longer holds the transaction');
         }
 
         if ($this->inTransaction > 1) {

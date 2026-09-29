@@ -25,6 +25,8 @@ class Index extends Validator
         ColumnType::LongText,
     ];
 
+    private const int BIG_INTEGER_SIZE = 8;
+
     protected string $message = 'Invalid index';
 
     /**
@@ -517,7 +519,10 @@ class Index extends Validator
                     ! empty($index->lengths[$attributePosition]) ? $index->lengths[$attributePosition] : $attrSize,
                 ],
                 ColumnType::Float,
-                ColumnType::Double => [2, 2],
+                ColumnType::Double,
+                ColumnType::BigInteger,
+                ColumnType::Id => [2, 2],
+                ColumnType::Integer => $attrSize >= self::BIG_INTEGER_SIZE ? [2, 2] : [1, 1],
                 default => [1, 1],
             };
             if ($indexLength < 0) {

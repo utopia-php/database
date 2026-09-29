@@ -1715,19 +1715,25 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return is_array($row) && is_numeric($row['sum'] ?? null) ? (int) $row['sum'] : 0;
         }
 
-        $innerBuilder = $this->newBuilder($name, $alias);
-        $innerBuilder->selectRaw('1');
-        $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
+        $builder = $this->newBuilder($name, $alias);
+        $this->applyFilters($builder, $otherQueries, $name, $alias);
 
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
-            $innerBuilder->addHook($this->newPermissionHook($name, $roles));
+            $builder->addHook($this->newPermissionHook($name, $roles));
         }
 
+        if ($max === null && $this->onlyNarrowsRows($otherQueries)) {
+            $builder->count('1', 'sum');
+
+            return $this->countOf($this->fetchAggregateRow($builder, Event::DocumentCount));
+        }
+
+        $builder->selectRaw('1');
         if (! \is_null($max)) {
-            $innerBuilder->limit($max);
+            $builder->limit($max);
         }
 
-        return $this->executeWrappedCount($innerBuilder);
+        return $this->executeWrappedCount($builder);
     }
 
     /**
@@ -1801,19 +1807,25 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return 0;
         }
 
-        $innerBuilder = $this->newBuilder($name, $alias);
-        $innerBuilder->select([$attribute]);
-        $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
+        $builder = $this->newBuilder($name, $alias);
+        $this->applyFilters($builder, $otherQueries, $name, $alias);
 
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
-            $innerBuilder->addHook($this->newPermissionHook($name, $roles));
+            $builder->addHook($this->newPermissionHook($name, $roles));
         }
 
+        if ($max === null && $this->onlyNarrowsRows($otherQueries)) {
+            $builder->sum($attribute, 'sum');
+
+            return $this->sumOf($this->fetchAggregateRow($builder, Event::DocumentSum));
+        }
+
+        $builder->select([$attribute]);
         if (! \is_null($max)) {
-            $innerBuilder->limit($max);
+            $builder->limit($max);
         }
 
-        return $this->executeWrappedSum($innerBuilder, $attribute);
+        return $this->executeWrappedSum($builder, $attribute);
     }
 
     /**
@@ -1951,10 +1963,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->count('1', 'sum');
 
-        $row = $this->fetchAggregateRow($outerBuilder, Event::DocumentCount);
-        $sumInt = $row['sum'] ?? 0;
-
-        return \is_numeric($sumInt) ? (int) $sumInt : 0;
+        return $this->countOf($this->fetchAggregateRow($outerBuilder, Event::DocumentCount));
     }
 
     private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute): int|float
@@ -1963,14 +1972,55 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->sum($attribute, 'sum');
 
-        $row = $this->fetchAggregateRow($outerBuilder, Event::DocumentSum);
-        $sumVal = $row['sum'] ?? 0;
+        return $this->sumOf($this->fetchAggregateRow($outerBuilder, Event::DocumentSum));
+    }
 
-        if (\is_numeric($sumVal)) {
-            return \str_contains((string) $sumVal, '.') ? (float) $sumVal : (int) $sumVal;
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function countOf(array $row): int
+    {
+        $count = $row['sum'] ?? 0;
+
+        return \is_numeric($count) ? (int) $count : 0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function sumOf(array $row): int|float
+    {
+        $sum = $row['sum'] ?? 0;
+
+        if (\is_numeric($sum)) {
+            return \str_contains((string) $sum, '.') ? (float) $sum : (int) $sum;
         }
 
         return 0;
+    }
+
+    /**
+     * Whether every query only narrows the rows an aggregate reads, so the aggregate can read the
+     * table itself: anything that shapes, orders, groups or bounds the rows needs a derived table.
+     *
+     * @param  array<Query>  $queries
+     */
+    private function onlyNarrowsRows(array $queries): bool
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (
+                ! $method->isFilter()
+                && ! $method->isSpatial()
+                && ! $method->isJson()
+                && ! \in_array($method, self::ROW_CONDITION_GROUPS, true)
+                && ! $this->isAdapterFilterQuery($query)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -1999,6 +2049,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         return [];
     }
+
+    private const array ROW_CONDITION_GROUPS = [Method::And, Method::Or, Method::ContainsAll, Method::ElemMatch];
 
     private const array BITWISE_AGGREGATES = [Method::BitAnd, Method::BitOr, Method::BitXor];
 

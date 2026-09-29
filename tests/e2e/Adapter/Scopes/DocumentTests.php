@@ -9700,4 +9700,100 @@ trait DocumentTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testFilteredCountAndSumIssueFlatStatements(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'flat_aggregates';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'category', size: 16),
+                Attribute::integer(key: 'price'),
+            ],
+            permissions: [Permission::create(Role::any())],
+            documentSecurity: true,
+        ));
+
+        try {
+            foreach ([
+                ['f1', 'a', 10, Role::any()],
+                ['f2', 'a', 20, Role::any()],
+                ['f3', 'a', 30, Role::user('flat_aggregates_other')],
+                ['f4', 'b', 40, Role::any()],
+                ['f5', 'a', 50, Role::any()],
+            ] as [$id, $category, $price, $reader]) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    '$permissions' => [Permission::read($reader)],
+                    'category' => $category,
+                    'price' => $price,
+                ]));
+            }
+
+            $filter = [Query::equal('category', ['a'])];
+            $table = $database->getNamespace().'_'.$collection;
+
+            [$count, $statements] = $this->statementsOn($database, $table, fn (): int => $database->count($collection, $filter));
+            $this->assertSame(3, $count);
+            $this->assertCount(1, $statements, \implode("\n", $statements));
+            $this->assertStringNotContainsString('table_count', $statements[0]);
+            $this->assertStringNotContainsString('FROM (SELECT', $statements[0]);
+
+            [$sum, $statements] = $this->statementsOn($database, $table, fn (): int|float => $database->sum($collection, 'price', $filter));
+            $this->assertEquals(80, $sum);
+            $this->assertCount(1, $statements, \implode("\n", $statements));
+            $this->assertStringNotContainsString('table_count', $statements[0]);
+            $this->assertStringNotContainsString('FROM (SELECT', $statements[0]);
+
+            [$bounded, $statements] = $this->statementsOn($database, $table, fn (): int => $database->count($collection, $filter, 2));
+            $this->assertSame(2, $bounded);
+            $this->assertCount(1, $statements);
+            $this->assertStringContainsString('table_count', $statements[0], 'a bound on the rows keeps the derived table');
+
+            $this->assertSame(0, $database->count($collection, [Query::equal('category', ['c'])]));
+            $this->assertEquals(0, $database->sum($collection, 'price', [Query::equal('category', ['c'])]));
+            $this->assertSame(4, $database->getAuthorization()->skip(fn (): int => $database->count($collection, $filter)));
+        } finally {
+            $database->getAuthorization()->skip(fn () => $database->deleteCollection($collection));
+        }
+    }
+
+    /**
+     * Run $read with the profiler on; return its result and the statements it ran on $table.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $read
+     * @return array{T, list<string>}
+     */
+    private function statementsOn(Database $database, string $table, callable $read): array
+    {
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
+
+        try {
+            $profiler->reset();
+            $result = $read();
+        } finally {
+            $database->disableProfiling();
+        }
+
+        $statements = [];
+        foreach ($profiler->getLogs() as $log) {
+            if (\str_contains($log->query, $table) && ! \str_contains($log->query, '_metadata')) {
+                $statements[] = $log->query;
+            }
+        }
+
+        return [$result, $statements];
+    }
 }

@@ -273,6 +273,23 @@ final class JoinResolutionTest extends TestCase
         $this->assertSame([null, 5], $scores);
     }
 
+    public function testAJoinedSelectLeavesUnselectedAttributesOut(): void
+    {
+        $join = Query::join('themes', 'theme', '$id', '=', 'th');
+        $select = Query::select(['name', 'th.name']);
+
+        $rows = $this->database->find('tickets', [$join, $select, Query::equal('$id', ['k1'])]);
+        $rows[] = $this->database->getDocument('tickets', 'k1', [$join, $select]);
+
+        foreach ($rows as $row) {
+            $this->assertSame('first', $row->getAttribute('name'));
+            $this->assertSame('banana theme', $row->getAttribute('th.name'));
+            foreach (['tags', 'amount', 'when', 'theme'] as $unselected) {
+                $this->assertFalse($row->offsetExists($unselected), $unselected.' was not selected');
+            }
+        }
+    }
+
     /**
      * @param  array<Document>  $themes
      * @return list<string>

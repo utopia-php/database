@@ -1892,12 +1892,14 @@ class Database
         }
 
         $filteredValue = [];
+        $relationshipKeys = [];
 
         if (! empty($relationships)) {
             $documentArray = (array) $document;
             foreach ($relationships as $relationship) {
                 /** @var string $key */
                 $key = $relationship[Document::ID] ?? '';
+                $relationshipKeys[$key] = true;
                 $filteredKey = $this->adapter->filter($key);
 
                 if (
@@ -1928,9 +1930,10 @@ class Database
             : null;
 
         $hasRelationshipSelections = false;
-        if ($selectionsMap !== null) {
+        if ($selectionsMap !== null && $relationshipKeys !== []) {
             foreach ($selections as $selection) {
-                if (\str_contains($selection, '.')) {
+                $dot = \strpos($selection, '.');
+                if ($dot !== false && isset($relationshipKeys[\substr($selection, 0, $dot)])) {
                     $hasRelationshipSelections = true;
                     break;
                 }

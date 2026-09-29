@@ -814,6 +814,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Create Documents in batches
      *
+     * Under skipDuplicates() only the documents the statement inserted are returned and handed
+     * to the write hooks, so a skipped document writes no permission rows for the stored one.
+     *
      * @param  array<Document>  $documents
      * @return array<Document>
      *
@@ -832,72 +835,280 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $collection = $collection->getId();
         try {
             $name = $this->filter($collection);
-
-            $attributeKeySet = [];
-            foreach (Database::INTERNAL_ATTRIBUTE_KEYS as $k) {
-                $attributeKeySet[$k] = true;
-            }
-
-            $hasSequence = null;
-            foreach ($documents as $document) {
-                foreach ($document->getAttributes() as $key => $value) {
-                    $attributeKeySet[$key] = true;
-                }
-
-                if ($hasSequence === null) {
-                    $hasSequence = ! empty($document->getSequence());
-                } elseif ($hasSequence == empty($document->getSequence())) {
-                    throw new DatabaseException('All documents must have an sequence if one is set');
-                }
-            }
-
-            $attributeKeys = \array_keys($attributeKeySet);
-
-            if ($hasSequence) {
-                $attributeKeys[] = Storage::SEQUENCE;
-            }
-
-            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
-
-            // Hoist per-row guards out of the document loop so a 1k-doc batch
-            // doesn't reallocate the spatial map and re-resolve the capability
-            // 1k times. Also pick up WKT / geometry-array values the collection
-            // metadata scan missed (stale process-local cache, typed Attribute
-            // objects, or encode() already converting defaults to WKT).
-            $spatialAttributes = $this->expandSpatialAttributes($spatialAttributes, $documents);
-            $spatialMap = \array_fill_keys($spatialAttributes, true);
-
-            foreach ($spatialAttributes as $spatialCol) {
-                $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
-            }
-
-            $intBools = $this->supports(Capability::IntegerBooleans);
-
-            foreach ($documents as $document) {
-                $row = $this->buildDocumentRow($document, $attributeKeys, $spatialMap, $intBools);
-                $row = $this->decorateRow($row, $this->documentMetadata($document));
-                $builder->set($row);
-            }
+            $hasSequence = $this->batchHasSequence($documents);
 
             if ($this->skipDuplicates) {
-                if (! $builder instanceof InsertOrIgnoreFeature) {
-                    throw new DatabaseException('Insert-or-ignore is not supported on this dialect');
-                }
-
-                $result = $builder->insertOrIgnore();
+                $documents = $this->supportsInsertReturning()
+                    ? $this->insertReturningNew($name, $documents, $spatialAttributes, $hasSequence)
+                    : $this->insertLockingStored($name, $documents, $spatialAttributes, $hasSequence);
             } else {
-                $result = $builder->insert();
+                $insert = $this->buildDocumentsInsert($name, $documents, $spatialAttributes, $hasSequence)->insert();
+                $this->execute($this->executeResult($insert, Event::DocumentsCreate));
             }
-            $stmt = $this->executeResult($result, Event::DocumentsCreate);
-            $this->execute($stmt);
 
-            $ctx = $this->buildWriteContext($name);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, $documents, $ctx));
+            if (! empty($documents)) {
+                $context = $this->buildWriteContext($name);
+                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, $documents, $context));
+            }
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
         return $documents;
+    }
+
+    /**
+     * Whether an insert can return the rows it wrote (`RETURNING`), which lets skipDuplicates()
+     * tell the inserted documents from the skipped ones in the same statement.
+     */
+    protected function supportsInsertReturning(): bool
+    {
+        return true;
+    }
+
+    /**
+     * Build an insert that skips rows colliding with a stored row.
+     *
+     * @throws DatabaseException
+     */
+    protected function insertOrIgnore(SQLBuilder $builder): Statement
+    {
+        if (! $builder instanceof InsertOrIgnoreFeature) {
+            throw new DatabaseException('Insert-or-ignore is not supported on this dialect');
+        }
+
+        return $builder->insertOrIgnore();
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     *
+     * @throws DatabaseException
+     */
+    private function batchHasSequence(array $documents): bool
+    {
+        $hasSequence = null;
+        foreach ($documents as $document) {
+            if ($hasSequence === null) {
+                $hasSequence = ! empty($document->getSequence());
+            } elseif ($hasSequence == empty($document->getSequence())) {
+                throw new DatabaseException('All documents must have an sequence if one is set');
+            }
+        }
+
+        return $hasSequence ?? false;
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @param  list<string>  $spatialAttributes
+     *
+     * @throws DatabaseException
+     */
+    private function buildDocumentsInsert(string $name, array $documents, array $spatialAttributes, bool $hasSequence): SQLBuilder
+    {
+        $attributeKeySet = [];
+        foreach (Database::INTERNAL_ATTRIBUTE_KEYS as $key) {
+            $attributeKeySet[$key] = true;
+        }
+
+        foreach ($documents as $document) {
+            foreach ($document->getAttributes() as $key => $value) {
+                $attributeKeySet[$key] = true;
+            }
+        }
+
+        $attributeKeys = \array_keys($attributeKeySet);
+
+        if ($hasSequence) {
+            $attributeKeys[] = Storage::SEQUENCE;
+        }
+
+        $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+
+        // Hoist per-row guards out of the document loop so a 1k-doc batch
+        // doesn't reallocate the spatial map and re-resolve the capability
+        // 1k times. Also pick up WKT / geometry-array values the collection
+        // metadata scan missed (stale process-local cache, typed Attribute
+        // objects, or encode() already converting defaults to WKT).
+        $spatialAttributes = $this->expandSpatialAttributes($spatialAttributes, $documents);
+        $spatialMap = \array_fill_keys($spatialAttributes, true);
+
+        foreach ($spatialAttributes as $spatialColumn) {
+            $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeomFromText('?'));
+        }
+
+        $intBools = $this->supports(Capability::IntegerBooleans);
+
+        foreach ($documents as $document) {
+            $row = $this->buildDocumentRow($document, $attributeKeys, $spatialMap, $intBools);
+            $row = $this->decorateRow($row, $this->documentMetadata($document));
+            $builder->set($row);
+        }
+
+        return $builder;
+    }
+
+    /**
+     * Insert the batch in one statement that returns the key of every row it wrote.
+     *
+     * @param  array<Document>  $documents
+     * @param  list<string>  $spatialAttributes
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    private function insertReturningNew(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
+    {
+        $insert = $this->insertOrIgnore($this->buildDocumentsInsert($name, $documents, $spatialAttributes, $hasSequence));
+        $columns = \array_map($this->quote(...), $this->documentKeyColumns());
+        $statement = $this->executeResult(
+            new Statement($insert->query.' RETURNING '.\implode(', ', $columns), $insert->bindings),
+            Event::DocumentsCreate,
+        );
+        $this->execute($statement);
+        /** @var list<list<mixed>> $rows */
+        $rows = $statement->fetchAll(PDO::FETCH_NUM);
+        $statement->closeCursor();
+
+        return $this->documentsOfRows($documents, $rows);
+    }
+
+    /**
+     * Without RETURNING, lock the stored rows of the batch's ids first (and the gaps of the
+     * missing ones, so no other writer can insert them), insert only the documents whose id is
+     * new, and read the ids back when the statement wrote fewer rows than it was given.
+     *
+     * @param  array<Document>  $documents
+     * @param  list<string>  $spatialAttributes
+     * @return array<Document>
+     *
+     * @throws DatabaseException
+     */
+    private function insertLockingStored(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
+    {
+        $insert = function () use ($name, $documents, $spatialAttributes, $hasSequence): array {
+            $taken = $this->documentKeys($this->readDocumentKeys($name, $documents, lock: true));
+            $candidates = [];
+            foreach ($documents as $document) {
+                [$tenant, $id] = $this->documentKeyOf($document);
+                if (isset($taken[$tenant][$id])) {
+                    continue;
+                }
+                $taken[$tenant][$id] = true;
+                $candidates[] = $document;
+            }
+
+            if (empty($candidates)) {
+                return [];
+            }
+
+            $statement = $this->executeResult(
+                $this->insertOrIgnore($this->buildDocumentsInsert($name, $candidates, $spatialAttributes, $hasSequence)),
+                Event::DocumentsCreate,
+            );
+            $this->execute($statement);
+            $written = $statement->rowCount();
+            $statement->closeCursor();
+
+            if ($written === \count($candidates)) {
+                return $candidates;
+            }
+
+            return $this->documentsOfRows($candidates, $this->readDocumentKeys($name, $candidates, lock: false));
+        };
+
+        return $this->inTransaction() ? $insert() : $this->withTransaction($insert);
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<list<mixed>>
+     *
+     * @throws DatabaseException
+     */
+    private function readDocumentKeys(string $name, array $documents, bool $lock): array
+    {
+        $ids = [];
+        $tenants = [];
+        foreach ($documents as $document) {
+            $ids[] = $document->getId();
+            if ($this->sharedTables && $this->tenantPerDocument && ! \in_array($document->getTenant(), $tenants, true)) {
+                $tenants[] = $document->getTenant();
+            }
+        }
+
+        $builder = $this->newBuilder($name, tenants: $tenants);
+        $builder->select($this->documentKeyColumns());
+        $builder->filter([BaseQuery::equal(Storage::UID, \array_values(\array_unique($ids)))]);
+        if ($lock) {
+            $builder->forUpdate();
+        }
+
+        $statement = $this->executeResult($builder->build(), Event::DocumentRead);
+        $this->execute($statement);
+        /** @var list<list<mixed>> $rows */
+        $rows = $statement->fetchAll(PDO::FETCH_NUM);
+        $statement->closeCursor();
+
+        return $rows;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function documentKeyColumns(): array
+    {
+        return $this->sharedTables ? [Storage::UID, Storage::TENANT] : [Storage::UID];
+    }
+
+    /**
+     * The documents whose key is among the rows, in batch order; of documents sharing a key,
+     * only the first, the one a single insert statement writes.
+     *
+     * @param  array<Document>  $documents
+     * @param  list<list<mixed>>  $rows
+     * @return array<Document>
+     */
+    private function documentsOfRows(array $documents, array $rows): array
+    {
+        $stored = $this->documentKeys($rows);
+        $matched = [];
+        foreach ($documents as $document) {
+            [$tenant, $id] = $this->documentKeyOf($document);
+            if (isset($stored[$tenant][$id])) {
+                unset($stored[$tenant][$id]);
+                $matched[] = $document;
+            }
+        }
+
+        return $matched;
+    }
+
+    /**
+     * @param  list<list<mixed>>  $rows  `[_uid]`, or `[_uid, _tenant]` under shared tables
+     * @return array<string, array<string, true>>
+     */
+    private function documentKeys(array $rows): array
+    {
+        $keys = [];
+        foreach ($rows as $row) {
+            $id = $row[0] ?? null;
+            $tenant = $this->sharedTables ? ($row[1] ?? null) : null;
+            $keys[\is_scalar($tenant) ? (string) $tenant : ''][\is_scalar($id) ? (string) $id : ''] = true;
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @return array{string, string}
+     */
+    private function documentKeyOf(Document $document): array
+    {
+        $tenant = $this->sharedTables ? $document->getTenant() : null;
+
+        return [$tenant === null ? '' : (string) $tenant, $document->getId()];
     }
 
     /**

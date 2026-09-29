@@ -771,6 +771,14 @@ class Redis extends Adapter implements
 
     public function createDocument(Document $collection, Document $document): Document
     {
+        return $this->insertDocument($collection, $document) ?? $document;
+    }
+
+    /**
+     * @return Document|null The stored document, or null when skipDuplicates() skipped it
+     */
+    private function insertDocument(Document $collection, Document $document): ?Document
+    {
         $col = $this->filter($collection->getId());
         $id = $document->getId();
         if ($id === '') {
@@ -783,7 +791,7 @@ class Redis extends Adapter implements
         $seqKey = $this->seqKey($col, $tenant);
         $permDocKey = $this->permDocKey($col, $id, $tenant);
 
-        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): Document {
+        return $this->tx(function (RedisClient $redis) use ($col, $id, $document, $docKey, $idxKey, $seqKey, $permDocKey): ?Document {
             if ((bool) $redis->exists($docKey)) {
                 if ($this->skipDuplicates) {
                     $existingPayload = $redis->get($docKey);
@@ -792,7 +800,7 @@ class Redis extends Adapter implements
                         $document->setAttribute(Document::SEQUENCE, $existing->getSequence() ?? '');
                     }
 
-                    return $document;
+                    return null;
                 }
                 throw new DuplicateException('Document already exists');
             }
@@ -801,7 +809,7 @@ class Redis extends Adapter implements
                 $this->enforceUniqueIndexes($redis, $col, $document);
             } catch (DuplicateException $e) {
                 if ($this->skipDuplicates) {
-                    return $document;
+                    return null;
                 }
                 throw $e;
             }
@@ -839,7 +847,10 @@ class Redis extends Adapter implements
     {
         $created = [];
         foreach ($documents as $document) {
-            $created[] = $this->createDocument($collection, $document);
+            $inserted = $this->insertDocument($collection, $document);
+            if ($inserted !== null) {
+                $created[] = $inserted;
+            }
         }
 
         return $created;

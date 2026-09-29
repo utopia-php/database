@@ -1224,6 +1224,14 @@ class Memory extends Adapter implements Feature\Relationships
 
     public function createDocument(Document $collection, Document $document): Document
     {
+        return $this->insertDocument($collection, $document) ?? $document;
+    }
+
+    /**
+     * @return Document|null The stored document, or null when skipDuplicates() skipped it
+     */
+    private function insertDocument(Document $collection, Document $document): ?Document
+    {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
@@ -1238,7 +1246,7 @@ class Memory extends Adapter implements Feature\Relationships
                 $existingId = $existing[Storage::SEQUENCE] ?? '';
                 $document[Document::SEQUENCE] = \is_scalar($existingId) ? (string) $existingId : '';
 
-                return $document;
+                return null;
             }
             throw new DuplicateException('Document already exists');
         }
@@ -1248,7 +1256,7 @@ class Memory extends Adapter implements Feature\Relationships
             $this->checkUniqueSignatures($key, $signatures, $docKey);
         } catch (DuplicateException $e) {
             if ($this->skipDuplicates) {
-                return $document;
+                return null;
             }
             throw $e;
         }
@@ -1305,7 +1313,10 @@ class Memory extends Adapter implements Feature\Relationships
 
         $created = [];
         foreach ($documents as $document) {
-            $created[] = $this->createDocument($collection, $document);
+            $inserted = $this->insertDocument($collection, $document);
+            if ($inserted !== null) {
+                $created[] = $inserted;
+            }
         }
 
         return $created;

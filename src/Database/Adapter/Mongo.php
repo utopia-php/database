@@ -1431,7 +1431,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $options = $this->getTransactionOptions();
         $records = [];
         $hasSequence = null;
-        $documents = \array_map(fn ($doc) => clone $doc, $documents);
+        $documents = \array_values(\array_map(fn ($doc) => clone $doc, $documents));
 
         foreach ($documents as $document) {
             $sequence = $document->getSequence();
@@ -1460,8 +1460,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 return [];
             }
 
+            $unstored = $this->unstoredDocumentIndexes($collection->getId(), $documents);
             $operations = [];
-            foreach ($records as $record) {
+            $created = [];
+            foreach ($records as $index => $record) {
+                if (! isset($unstored[$index])) {
+                    continue;
+                }
+
                 $filter = [Storage::UID => $record[Storage::UID] ?? ''];
                 if ($this->sharedTables) {
                     $filter[Storage::TENANT] = $record[Storage::TENANT] ?? $this->getTenant();
@@ -1479,6 +1485,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     'filter' => $filter,
                     'update' => ['$setOnInsert' => $setOnInsert],
                 ];
+                $created[] = $documents[$index];
+            }
+
+            if (empty($operations)) {
+                return [];
             }
 
             try {
@@ -1487,7 +1498,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 throw $this->processException($e);
             }
 
-            return $documents;
+            return $created;
         }
 
         try {
@@ -2640,6 +2651,36 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $documents;
+    }
+
+    /**
+     * The positions of the batch documents whose id is not stored under their tenant yet; of
+     * documents repeating an id, only the first.
+     *
+     * @param  array<Document>  $documents
+     * @return array<array-key, true>
+     *
+     * @throws DatabaseException
+     */
+    private function unstoredDocumentIndexes(string $collection, array $documents): array
+    {
+        $probes = $this->getSequences($collection, \array_map(
+            static fn (Document $document): Document => (clone $document)->setAttribute(Document::SEQUENCE, ''),
+            $documents,
+        ));
+
+        $seen = [];
+        $unstored = [];
+        foreach ($probes as $index => $probe) {
+            $key = $this->sequenceKey($this->sharedTables ? ($probe->getTenant() ?? $this->getTenant()) : null, $probe->getId());
+            if (! empty($probe->getSequence()) || isset($seen[$key])) {
+                continue;
+            }
+            $seen[$key] = true;
+            $unstored[$index] = true;
+        }
+
+        return $unstored;
     }
 
     /**

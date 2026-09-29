@@ -128,6 +128,12 @@ class MySQL extends MariaDB
         return new MySQLBuilder();
     }
 
+    #[\Override]
+    protected function supportsInsertReturning(): bool
+    {
+        return false;
+    }
+
     /**
      * MySQL merges each permission check into the join as a semi-join, one more table for its join
      * order search, which grows about tenfold with each table past ten. From this many joins every

@@ -56,7 +56,7 @@
         "utopia-php/pools": "2.*",
         "utopia-php/mongo": "1.*",
         "utopia-php/query": "^0.6",
-        "utopia-php/async": "^0.1"
+        "utopia-php/async": "^0.2"
     },
     "require-dev": {
         "fakerphp/faker": "1.23.*",

@@ -528,6 +528,120 @@ class QueryCacheTest extends TestCase
         $this->assertStringStartsWith('active:', $this->epochOf($adapter, $key), 'The writer must still own its tombstone and publish a fresh epoch');
     }
 
+    public function testAKilledWriterDoesNotDisableTheQueryCacheForever(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+        $before = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNotNull($before);
+
+        $queryCache->blockCollection($key, $queryCache->createToken());
+        $this->assertTrue($queryCache->set($before, [new Document(['$id' => 'stale'])], $queryCache->getGeneration($before)));
+
+        $entry = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNotNull($entry, 'A tombstone whose writer never activates must lapse once it is older than the writer timeout');
+        $this->assertNull($queryCache->get($entry), 'The lapse must not serve a result filled under the epoch the killed writer retired');
+        $this->assertTrue($queryCache->set($entry, [new Document(['$id' => 'fresh'])], $queryCache->getGeneration($entry)));
+        $this->assertSame(['fresh'], $this->ids($queryCache->get($entry) ?? []));
+    }
+
+    public function testAWriteAfterAKilledWriterReenablesTheQueryCache(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $killed = new QueryCache(new Cache($adapter));
+        $writer = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $reader = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $killed->blockCollection($killed->getCollectionKey($scope, 'users'), $killed->createToken());
+        $this->assertNull($reader->getEntry($scope, 'users', []));
+
+        $writer->invalidateCollection($scope, 'users');
+
+        $entry = $reader->getEntry($scope, 'users', []);
+        $this->assertNotNull($entry, 'The next write must reconcile a writer whose registration is older than the writer timeout');
+        $this->assertTrue($reader->set($entry, [new Document(['$id' => 'fresh'])], $reader->getGeneration($entry)));
+        $this->assertSame(['fresh'], $this->ids($reader->get($entry) ?? []));
+
+        $writer->invalidateCollection($scope, 'users');
+
+        $this->assertNotNull($reader->getEntry($scope, 'users', []), 'Later writes must not be held back by the killed writer either');
+    }
+
+    public function testAWriteDoesNotReenableTheQueryCacheWhileAnotherWriterIsLive(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $live = new QueryCache(new Cache($adapter));
+        $writer = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $key = $live->getCollectionKey($scope, 'users');
+        $token = $live->createToken();
+        $live->blockCollection($key, $token);
+
+        $writer->invalidateCollection($scope, 'users');
+
+        $this->assertNull($writer->getEntry($scope, 'users', []), 'A writer registered within the writer timeout is still in flight');
+
+        $live->activateCollection($key, $token);
+
+        $this->assertNotNull($writer->getEntry($scope, 'users', []));
+    }
+
+    public function testAWriterWhoseTokenHasNoCreationTimeCountsAsLive(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $live = new QueryCache(new Cache($adapter));
+        $writer = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $reader = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $live->blockCollection($live->getCollectionKey($scope, 'users'), 'token-without-a-time');
+
+        $writer->invalidateCollection($scope, 'users');
+
+        $this->assertNull($reader->getEntry($scope, 'users', []), 'Without a creation time a registration cannot be judged abandoned');
+    }
+
+    public function testAWriterPastTheTimeoutRetiresWhatReadersFilledWhileItRan(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+        $token = $queryCache->createToken();
+        $queryCache->blockCollection($key, $token);
+        $during = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNotNull($during);
+        $this->assertTrue($queryCache->set($during, [new Document(['$id' => 'before-commit'])], $queryCache->getGeneration($during)));
+
+        $queryCache->activateCollection($key, $token);
+
+        $after = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNotNull($after);
+        $this->assertNull($queryCache->get($after), 'A result filled while the writer ran must not be served once it activates');
+    }
+
+    public function testAWriterJudgedAbandonedStillRetiresWhatReadersFilledWhileItRan(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $slow = new QueryCache(new Cache($adapter));
+        $writer = new QueryCache(new Cache($adapter), writerTimeout: 0);
+        $scope = new Scope(namespace: 'ns');
+        $key = $slow->getCollectionKey($scope, 'users');
+        $token = $slow->createToken();
+        $slow->blockCollection($key, $token);
+        $writer->invalidateCollection($scope, 'users');
+        $during = $slow->getEntry($scope, 'users', []);
+        $this->assertNotNull($during);
+        $this->assertTrue($slow->set($during, [new Document(['$id' => 'before-commit'])], $slow->getGeneration($during)));
+
+        $slow->activateCollection($key, $token);
+
+        $after = $slow->getEntry($scope, 'users', []);
+        $this->assertNotNull($after);
+        $this->assertNull($slow->get($after), 'A writer whose registration was reconciled away must still retire what readers filled before its commit');
+    }
+
     public function testATombstoneOnACacheWithoutGenerationsLapsesWithItsRegion(): void
     {
         $queryCache = new QueryCache(new Cache(new Memory()));

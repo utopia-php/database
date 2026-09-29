@@ -14,6 +14,10 @@ class QueryCache
 
     private const string BLOCKED_PREFIX = 'blocked:';
 
+    private const string LAPSED_PREFIX = 'lapsed:';
+
+    private const string TOKEN_SEPARATOR = '.';
+
     private const string SEPARATOR = '@';
 
     private const string NEVER_STARTED = '0';
@@ -22,12 +26,18 @@ class QueryCache
 
     private const int VERSION = 2;
 
+    private const int WRITER_TIMEOUT = 3600;
+
     /** @var array<string, Region> */
     private array $regions = [];
 
+    /**
+     * @param  int  $writerTimeout  Seconds after which a write that has not activated is treated as abandoned
+     */
     public function __construct(
         private readonly Cache $cache,
         private readonly string $cacheName = 'default',
+        private readonly int $writerTimeout = self::WRITER_TIMEOUT,
     ) {
     }
 
@@ -168,9 +178,17 @@ class QueryCache
     public function invalidateCollection(Scope $scope, string $collection): void
     {
         $key = $this->getCollectionKey($scope, $collection);
-        $token = \bin2hex(\random_bytes(16));
+        $token = $this->createToken();
         $this->blockCollection($key, $token);
         $this->activateCollection($key, $token);
+    }
+
+    /**
+     * A write's token, which records when it was created so a later activation can tell an abandoned write.
+     */
+    public function createToken(): string
+    {
+        return \time().self::TOKEN_SEPARATOR.\bin2hex(\random_bytes(16));
     }
 
     /**
@@ -227,6 +245,10 @@ class QueryCache
         }
 
         if (! $owned && ! $ours) {
+            if ($this->isActive($current)) {
+                $this->publish($key, $started);
+            }
+
             return;
         }
 
@@ -243,6 +265,10 @@ class QueryCache
         if ($nextFinished === $finished && $this->isTombstoneOf($this->cache->load($epochKey, self::PERMANENT), $token)) {
             throw new RuntimeException("Failed to finish query cache invalidation for '{$key}'");
         }
+
+        if ($registration->field !== '' && $this->releaseAbandonedOwners($registration->key)) {
+            $this->publish($key, $nextStarted);
+        }
     }
 
     public function flush(): void
@@ -254,10 +280,9 @@ class QueryCache
 
     /**
      * Epochs never expire in the cache, so one cannot vanish under a transaction that
-     * outlives the region TTL. An active epoch carries the finished generation it was
+     * outlives the region TTL. An active epoch carries the started generation it was
      * published at: while the started generation still equals it, no mutation has
-     * begun since, so a reader needs one generation read. A tombstone carries its
-     * write time and lapses with the region, but only once no mutation is in flight.
+     * begun since, so a reader needs one generation read.
      */
     private function getEpoch(string $key, string $collection): ?string
     {
@@ -281,11 +306,7 @@ class QueryCache
         $stamp = \substr($value, $separator + 1);
 
         if (\str_starts_with($value, self::BLOCKED_PREFIX)) {
-            if ((int) $stamp + $this->getRegion($collection)->ttl > \time() || ! $this->isQuiescent($key)) {
-                return null;
-            }
-
-            return self::INITIAL_EPOCH;
+            return $this->getLapsedEpoch($key, $collection, $value, (int) $stamp);
         }
 
         if (! \str_starts_with($value, self::ACTIVE_PREFIX)) {
@@ -300,9 +321,64 @@ class QueryCache
         return $marker;
     }
 
-    private function isQuiescent(string $key): bool
+    /**
+     * A tombstone lapses after the region TTL once no write is counted in flight, and after the writer
+     * timeout while one is, since its writer may have died before activating. The lapsed epoch belongs
+     * to this tombstone and the finished generation, so nothing filled before the block, or before a
+     * later activation, is served under it.
+     */
+    private function getLapsedEpoch(string $key, string $collection, string $tombstone, int $stamp): ?string
     {
-        return $this->cache->getGeneration($this->getStartedKey($key)) === $this->cache->getGeneration($this->getFinishedKey($key));
+        $now = \time();
+        $ttl = $this->getRegion($collection)->ttl;
+        if ($stamp + \min($ttl, $this->writerTimeout) > $now) {
+            return null;
+        }
+
+        $started = $this->cache->getGeneration($this->getStartedKey($key));
+        $finished = $this->cache->getGeneration($this->getFinishedKey($key));
+        if ($stamp + ($started === $finished ? $ttl : $this->writerTimeout) > $now) {
+            return null;
+        }
+
+        return self::LAPSED_PREFIX.\substr($tombstone, \strlen(self::BLOCKED_PREFIX)).self::SEPARATOR.$finished;
+    }
+
+    /**
+     * Release every other writer still registered when all of them are older than the writer timeout.
+     * A token without a creation time counts as live.
+     */
+    private function releaseAbandonedOwners(string $owners): bool
+    {
+        $now = \time();
+        $abandoned = [];
+        foreach ($this->cache->list($owners) as $token) {
+            $created = $this->getTokenTime($token);
+            if ($created === null || $created + $this->writerTimeout > $now) {
+                return false;
+            }
+
+            $abandoned[] = $token;
+        }
+
+        foreach ($abandoned as $token) {
+            $this->cache->purge($owners, $token);
+        }
+
+        return true;
+    }
+
+    private function getTokenTime(string $token): ?int
+    {
+        $separator = \strpos($token, self::TOKEN_SEPARATOR);
+        $time = $separator === false ? '' : \substr($token, 0, $separator);
+
+        return \ctype_digit($time) ? (int) $time : null;
+    }
+
+    private function isActive(mixed $value): bool
+    {
+        return \is_string($value) && \str_starts_with($value, self::ACTIVE_PREFIX);
     }
 
     private function isTombstone(mixed $value): bool

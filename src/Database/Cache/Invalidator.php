@@ -145,7 +145,7 @@ class Invalidator implements Lifecycle
     {
         $tokens = [];
         foreach (\array_keys($this->extractCollections($event, $data)) as $collection) {
-            $tokens[$this->queryCache->getCollectionKey($scope, (string) $collection)] = \bin2hex(\random_bytes(16));
+            $tokens[$this->queryCache->getCollectionKey($scope, (string) $collection)] = $this->queryCache->createToken();
         }
 
         return $tokens;

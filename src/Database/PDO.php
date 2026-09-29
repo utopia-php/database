@@ -31,7 +31,21 @@ class PDO
 {
     protected PhpPDO $pdo;
 
+    /**
+     * Methods that send a statement, lowercased as PHP compares method names.
+     */
+    private const array STATEMENTS = ['begintransaction', 'commit', 'exec', 'query'];
+
+    private const string ROLLBACK = 'ROLLBACK';
+
     private ?string $hostname = null;
+
+    /**
+     * Whether a reconnect dropped the caller's open transaction and the caller has not
+     * rolled it back yet. Until then every statement is refused, so none of them runs
+     * in autocommit on the new connection.
+     */
+    private bool $lostTransaction = false;
 
     /**
      * Statements that set session state, keyed by the setting each one sets.
@@ -85,6 +99,8 @@ class PDO
      */
     public function prepareNative(string $query, array $options = []): PhpPDOStatement
     {
+        $this->guard($query);
+
         try {
             $statement = $this->pdo->prepare($query, $options);
         } catch (Throwable $e) {
@@ -109,6 +125,17 @@ class PDO
      */
     public function __call(string $method, array $args): mixed
     {
+        if ($this->lostTransaction && \strcasecmp($method, 'rollBack') === 0) {
+            $this->lostTransaction = false;
+
+            return true;
+        }
+
+        if (\in_array(\strtolower($method), self::STATEMENTS, true)) {
+            $statement = $args[0] ?? null;
+            $this->guard(\is_string($statement) ? $statement : $method);
+        }
+
         try {
             return $this->pdo->{$method}(...$args);
         } catch (Throwable $e) {
@@ -118,14 +145,13 @@ class PDO
 
                 $inTransaction = $this->pdo->inTransaction();
 
-                // Attempt to reconnect
                 $this->reconnect();
 
-                // If we weren't in a transaction, also retry the query
-                // In a transaction we can't retry as the state is attached to the previous connection
                 if (! $inTransaction) {
                     return $this->pdo->{$method}(...$args);
                 }
+
+                $this->lostTransaction = true;
             }
 
             throw $e;
@@ -168,6 +194,28 @@ class PDO
         }
 
         $this->pdo = $pdo;
+        $this->lostTransaction = false;
+    }
+
+    /**
+     * Refuse a statement while a lost transaction is not rolled back. A bare ROLLBACK is
+     * the caller ending that transaction, so it is let through and ends the refusal.
+     *
+     * @throws PDOException
+     */
+    private function guard(string $statement): void
+    {
+        if (! $this->lostTransaction) {
+            return;
+        }
+
+        if (\strcasecmp(\trim($statement), self::ROLLBACK) === 0) {
+            $this->lostTransaction = false;
+
+            return;
+        }
+
+        throw new PDOException('The transaction was lost with the connection: roll it back before running another statement');
     }
 
     private function connect(): PhpPDO
@@ -191,7 +239,7 @@ class PDO
 
     public function inTransaction(): bool
     {
-        return $this->pdo->inTransaction();
+        return $this->lostTransaction || $this->pdo->inTransaction();
     }
 
     /**

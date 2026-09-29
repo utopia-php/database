@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Closure;
 use PDOException;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -254,6 +255,143 @@ class PDOTest extends TestCase
 
         $this->assertInstanceOf(PDOException::class, $failure, 'The new connection has no temp.local to replay into');
         $this->assertSame($lost, $connection->getValue($pdo), 'A connection missing the configured session must never be used');
+    }
+
+    public function testStatementsAfterALostTransactionAreRefusedUntilItIsRolledBack(): void
+    {
+        $path = $this->createDatabaseFile();
+        [$pdo, $endSession] = $this->createLosableConnection($path);
+        $pdo->exec('CREATE TABLE items (value INTEGER)');
+        $pdo->beginTransaction();
+        $pdo->exec('INSERT INTO items VALUES (1)');
+        $endSession();
+
+        try {
+            $pdo->exec('INSERT INTO items VALUES (2)');
+        } catch (PDOException) {
+        }
+
+        $this->assertStatementRefused(fn (): mixed => $pdo->exec('INSERT INTO items VALUES (3)'));
+        $this->assertStatementRefused(fn (): mixed => $pdo->query('SELECT value FROM items'));
+        $this->assertStatementRefused(fn (): mixed => $pdo->prepare('INSERT INTO items VALUES (4)'));
+        $this->assertStatementRefused(fn (): mixed => $pdo->commit());
+        $this->assertSame([], $this->values($path), 'Nothing may run on its own after the transaction was lost');
+        $this->assertTrue($pdo->inTransaction(), 'The caller still holds a transaction until it rolls back');
+
+        $this->assertTrue($pdo->rollBack());
+        $this->assertFalse($pdo->inTransaction());
+
+        $pdo->exec('INSERT INTO items VALUES (5)');
+        $this->assertSame([5], $this->values($path));
+    }
+
+    public function testARollbackStatementEndsALostTransaction(): void
+    {
+        $path = $this->createDatabaseFile();
+        [$pdo, $endSession] = $this->createLosableConnection($path);
+        $pdo->exec('CREATE TABLE items (value INTEGER)');
+        $pdo->beginTransaction();
+        $endSession();
+
+        try {
+            $pdo->exec('INSERT INTO items VALUES (1)');
+        } catch (PDOException) {
+        }
+
+        $pdo->prepare('ROLLBACK');
+
+        $this->assertFalse($pdo->inTransaction());
+        $pdo->exec('INSERT INTO items VALUES (2)');
+        $this->assertSame([2], $this->values($path));
+    }
+
+    public function testAnExplicitReconnectEndsALostTransaction(): void
+    {
+        $path = $this->createDatabaseFile();
+        [$pdo, $endSession] = $this->createLosableConnection($path);
+        $pdo->exec('CREATE TABLE items (value INTEGER)');
+        $pdo->beginTransaction();
+        $endSession();
+
+        try {
+            $pdo->exec('INSERT INTO items VALUES (1)');
+        } catch (PDOException) {
+        }
+
+        $pdo->reconnect();
+
+        $this->assertFalse($pdo->inTransaction());
+        $pdo->exec('INSERT INTO items VALUES (2)');
+        $this->assertSame([2], $this->values($path));
+    }
+
+    private function createDatabaseFile(): string
+    {
+        $path = \tempnam(\sys_get_temp_dir(), 'pdo-test-');
+        $this->assertIsString($path);
+        \register_shutdown_function(static fn (): bool => @\unlink($path));
+
+        return $path;
+    }
+
+    /**
+     * A connection whose session the server can end: afterwards every statement on the old
+     * handle fails as a dropped MySQL connection does, and the handle still reports its
+     * transaction.
+     *
+     * @return array{PDO, Closure(): void}
+     */
+    private function createLosableConnection(string $path): array
+    {
+        $pdo = new class ("sqlite:{$path}", null, null) extends PDO {
+            public function endSession(): void
+            {
+                $this->pdo = new class () extends \PDO {
+                    public function __construct()
+                    {
+                    }
+
+                    public function inTransaction(): bool
+                    {
+                        return true;
+                    }
+
+                    public function exec(string $statement): int|false
+                    {
+                        throw new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away');
+                    }
+                };
+            }
+        };
+
+        return [$pdo, $pdo->endSession(...)];
+    }
+
+    /**
+     * @param callable(): mixed $statement
+     */
+    private function assertStatementRefused(callable $statement): void
+    {
+        try {
+            $statement();
+        } catch (PDOException $error) {
+            $this->assertStringContainsString('roll it back', $error->getMessage());
+
+            return;
+        }
+
+        $this->fail('A statement after a lost transaction must be refused');
+    }
+
+    /**
+     * @return array<int>
+     */
+    private function values(string $path): array
+    {
+        $statement = (new \PDO("sqlite:{$path}"))->query('SELECT value FROM items ORDER BY value');
+        $this->assertInstanceOf(\PDOStatement::class, $statement);
+
+        return \array_map(intval(...), $statement->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     private function pragma(PDO $pdo, string $name): int

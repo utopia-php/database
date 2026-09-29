@@ -10,6 +10,7 @@ use RuntimeException;
 use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Owners;
 use Utopia\Database\Capability;
@@ -484,6 +485,7 @@ trait Documents
         );
 
         $document = $skipAuth ? $this->authorization->skip($getDocument) : $getDocument();
+        $fillEpoch = $this->isReadFromReplica() ? null : $fillEpoch;
 
         if ($document->isEmpty()) {
             // The marker is shared by every reader, so a miss observed with authorization
@@ -493,6 +495,7 @@ trait Documents
             $missing = true;
             if ($fillEpoch !== null && empty($relationships) && ! $skipAuth && $collection->getId() !== self::METADATA) {
                 $missing = $this->authorization->skip($getDocument)->isEmpty();
+                $fillEpoch = $this->isReadFromReplica() ? null : $fillEpoch;
             }
 
             if ($fillEpoch !== null && empty($relationships) && $missing) {
@@ -572,6 +575,14 @@ trait Documents
         $written = $this->transactionWrites[$this->getEventContext()] ?? null;
 
         return $written !== null && ! isset($written[\strtolower($documentKey)]);
+    }
+
+    /**
+     * A replica may lag the primary, so what it served must not be cached for other readers.
+     */
+    private function isReadFromReplica(): bool
+    {
+        return $this->adapter instanceof ReadWritePool && $this->adapter->servedByReplica();
     }
 
     /**
@@ -3416,7 +3427,7 @@ trait Documents
                     );
                 }
 
-                if ($cacheEntry !== null && $this->queryCache !== null) {
+                if ($cacheEntry !== null && $this->queryCache !== null && ! $this->isReadFromReplica()) {
                     $this->queryCache->set($cacheEntry, $results, $cacheGeneration);
                 }
             }

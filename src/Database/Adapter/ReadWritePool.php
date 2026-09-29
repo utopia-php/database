@@ -2,6 +2,8 @@
 
 namespace Utopia\Database\Adapter;
 
+use Swoole\Coroutine;
+use Swoole\Coroutine\Context;
 use Utopia\Database\Adapter;
 use Utopia\Database\PermissionType;
 use Utopia\Pools\Pool as UtopiaPool;
@@ -72,6 +74,8 @@ class ReadWritePool extends Pool
         'getHostname',
     ];
 
+    private const string REPLICA_READ = 'utopia.database.replicaRead.';
+
     /**
      * @var UtopiaPool<covariant Adapter>
      */
@@ -84,6 +88,8 @@ class ReadWritePool extends Pool
     private ?float $lastWriteTimestamp = null;
 
     private ?string $writePoolHostname = null;
+
+    private bool $replicaRead = false;
 
     /**
      * @param  UtopiaPool<covariant Adapter>  $writePool
@@ -131,6 +137,20 @@ class ReadWritePool extends Pool
     }
 
     /**
+     * Whether the calling coroutine's latest read was served by a replica, which may lag the
+     * primary: what it returned must not be cached for other readers.
+     */
+    public function servedByReplica(): bool
+    {
+        $context = $this->getCoroutineContext();
+        if ($context === null) {
+            return $this->replicaRead;
+        }
+
+        return ($context[$this->getReplicaReadKey()] ?? false) === true;
+    }
+
+    /**
      * @param  array<mixed>  $args
      * @param  class-string|null  $feature
      */
@@ -138,6 +158,7 @@ class ReadWritePool extends Pool
     protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
     {
         if ($this->isWrite($method, $args)) {
+            $this->recordRead($method, false);
             try {
                 return parent::borrowAndInvoke($method, $args, $feature);
             } finally {
@@ -146,8 +167,12 @@ class ReadWritePool extends Pool
         }
 
         if ($this->pin() !== null || $this->isSticky() || \in_array($method, self::WRITE_POOL_METADATA_METHODS, true)) {
+            $this->recordRead($method, false);
+
             return parent::borrowAndInvoke($method, $args, $feature);
         }
+
+        $this->recordRead($method, true);
 
         return $this->readPool->use(function (Adapter $adapter) use ($method, $args, $feature) {
             try {
@@ -187,6 +212,36 @@ class ReadWritePool extends Pool
             'find' => ($args[8] ?? $args['forPermission'] ?? PermissionType::Read) !== PermissionType::Read,
             default => false,
         };
+    }
+
+    private function recordRead(string $method, bool $replica): void
+    {
+        if (! \in_array($method, self::READ_METHODS, true)) {
+            return;
+        }
+
+        $context = $this->getCoroutineContext();
+        if ($context === null) {
+            $this->replicaRead = $replica;
+
+            return;
+        }
+
+        $context[$this->getReplicaReadKey()] = $replica;
+    }
+
+    private function getCoroutineContext(): ?Context
+    {
+        if (! \extension_loaded('swoole')) {
+            return null;
+        }
+
+        return Coroutine::getContext();
+    }
+
+    private function getReplicaReadKey(): string
+    {
+        return self::REPLICA_READ.\spl_object_id($this);
     }
 
     private function stick(): void

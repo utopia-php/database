@@ -6,12 +6,18 @@ use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
+use Swoole\Coroutine;
+use Swoole\Coroutine\Channel;
+use Swoole\Runtime;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\ReadWritePool;
+use Utopia\Database\Attribute;
+use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -22,6 +28,8 @@ use Utopia\Database\Hook\Write;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
+
+use function Swoole\Coroutine\run;
 
 #[AllowMockObjectsWithoutExpectations]
 class ReadWritePoolTest extends TestCase
@@ -605,5 +613,95 @@ class ReadWritePoolTest extends TestCase
             'decodePoint', 'decodeLinestring', 'decodePolygon' => ['wkb'],
             default => [],
         };
+    }
+
+    public function testAReplicaReadFillsNoCache(): void
+    {
+        $primary = new Memory();
+        $replica = new Memory();
+        $this->createArticles($primary, 'v2');
+        $replication = $this->createArticles($replica, 'v1');
+
+        $pool = new ReadWritePool($this->createConnections($primary), $this->createConnections($replica));
+        $database = new Database($pool, new Cache(new MemoryCache()));
+        $database
+            ->setDatabase('replication')
+            ->setNamespace('replication')
+            ->setAuthorization(new Authorization());
+        $database->setQueryCache(new QueryCache(new Cache(new MemoryCache())));
+        $titles = static fn (): array => \array_map(
+            static fn (Document $article): mixed => $article->getAttribute('title'),
+            $database->find('articles'),
+        );
+
+        $this->assertSame('v1', $database->getDocument('articles', 'article')->getAttribute('title'));
+        $this->assertSame(['v1'], $titles());
+        $this->assertTrue($database->getDocument('articles', 'created')->isEmpty());
+
+        $replication->updateDocument('articles', 'article', new Document(['title' => 'v2']));
+        $replication->createDocument('articles', new Document(['$id' => 'created', 'title' => 'v2']));
+
+        $this->assertSame('v2', $database->getDocument('articles', 'article')->getAttribute('title'), 'A document a lagging replica served must not be cached for later reads');
+        $this->assertSame(['v2', 'v2'], $titles(), 'A query result a lagging replica served must not be cached for later reads');
+        $this->assertFalse($database->getDocument('articles', 'created')->isEmpty(), 'A miss a lagging replica served must not be cached for later reads');
+    }
+
+    public function testEachCoroutineReportsWhereItsOwnReadWasServed(): void
+    {
+        $this->readAdapter->method('getDocument')->willReturn(new Document());
+        $this->writeAdapter->method('getDocument')->willReturn(new Document());
+        $pool = $this->pool;
+        $observed = null;
+        $hookFlags = Runtime::getHookFlags();
+
+        try {
+            run(static function () use ($pool, &$observed): void {
+                $read = new Channel(1);
+                $locked = new Channel(1);
+
+                Coroutine::create(static function () use ($pool, $read, $locked, &$observed): void {
+                    $pool->getDocument(new Document(), 'id', [], false);
+                    $read->push(true);
+                    $locked->pop();
+                    $observed = $pool->servedByReplica();
+                });
+
+                Coroutine::create(static function () use ($pool, $read, $locked): void {
+                    $read->pop();
+                    $pool->getDocument(new Document(), 'id', [], true);
+                    $locked->push(true);
+                });
+            });
+        } finally {
+            Runtime::setHookFlags($hookFlags);
+        }
+
+        $this->assertTrue($observed, "A locking read on another coroutine must not change where this coroutine's read was served");
+    }
+
+    private function createArticles(Adapter $adapter, string $title): Database
+    {
+        $database = new Database($adapter, new Cache(new NoCache()));
+        $database
+            ->setDatabase('replication')
+            ->setNamespace('replication')
+            ->setAuthorization(new Authorization());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'articles',
+            attributes: [Attribute::string(key: 'title')],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+        $database->createDocument('articles', new Document([
+            '$id' => 'article',
+            'title' => $title,
+        ]));
+
+        return $database;
     }
 }

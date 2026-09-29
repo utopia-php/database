@@ -258,7 +258,7 @@ trait Relationships
         $relatedCollection->setAttribute('attributes', $twoWayRelationship, SetType::Append);
 
         $this->silent(function () use ($collection, $relatedCollection, $type, $twoWay, $id, $twoWayKey, $junctionCollection, $created) {
-            $indexesCreated = [];
+            $committedFailure = null;
             try {
                 $this->withRetries(function () use ($collection, $relatedCollection) {
                     $this->withTransaction(function () use ($collection, $relatedCollection) {
@@ -267,63 +267,67 @@ trait Relationships
                     });
                 });
             } catch (Throwable $e) {
-                $this->rollbackAttributeMetadata($collection, [$id]);
-                $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
+                if (! $this->failedAfterCommit($e)) {
+                    $this->rollbackAttributeMetadata($collection, [$id]);
+                    $this->rollbackAttributeMetadata($relatedCollection, [$twoWayKey]);
 
-                if ($created) {
-                    try {
-                        $this->cleanupRelationship(
-                            $collection->getId(),
-                            $relatedCollection->getId(),
-                            $type,
-                            $twoWay,
-                            $id,
-                            $twoWayKey,
-                            RelationSide::Parent
-                        );
-                    } catch (Throwable $e) {
-                        Console::error("Failed to cleanup relationship '{$id}': ".$e->getMessage());
-                    }
-
-                    if ($junctionCollection !== null) {
+                    if ($created) {
                         try {
-                            $this->cleanupCollection($junctionCollection);
-                        } catch (Throwable $e) {
-                            Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$e->getMessage());
+                            $this->cleanupRelationship(
+                                $collection->getId(),
+                                $relatedCollection->getId(),
+                                $type,
+                                $twoWay,
+                                $id,
+                                $twoWayKey,
+                                RelationSide::Parent
+                            );
+                        } catch (Throwable $cleanupError) {
+                            Console::error("Failed to cleanup relationship '{$id}': ".$cleanupError->getMessage());
+                        }
+
+                        if ($junctionCollection !== null) {
+                            try {
+                                $this->cleanupCollection($junctionCollection);
+                            } catch (Throwable $cleanupError) {
+                                Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$cleanupError->getMessage());
+                            }
                         }
                     }
+
+                    throw new DatabaseException('Failed to create relationship: '.$e->getMessage(), previous: $e);
                 }
 
-                throw new DatabaseException('Failed to create relationship: '.$e->getMessage());
+                $committedFailure = $e;
             }
 
             $indexKey = '_index_'.$id;
             $twoWayIndexKey = '_index_'.$twoWayKey;
+            $indexes = match ($type) {
+                RelationType::OneToOne => $twoWay
+                    ? [
+                        [$collection->getId(), Index::unique(key: $indexKey, attributes: [$id])],
+                        [$relatedCollection->getId(), Index::unique(key: $twoWayIndexKey, attributes: [$twoWayKey])],
+                    ]
+                    : [[$collection->getId(), Index::unique(key: $indexKey, attributes: [$id])]],
+                RelationType::OneToMany => [[$relatedCollection->getId(), Index::key(key: $twoWayIndexKey, attributes: [$twoWayKey])]],
+                RelationType::ManyToOne => [[$collection->getId(), Index::key(key: $indexKey, attributes: [$id])]],
+                RelationType::ManyToMany => [],
+            };
             $indexesCreated = [];
 
             try {
-                switch ($type) {
-                    case RelationType::OneToOne:
-                        $this->createIndex($collection->getId(), Index::unique(key: $indexKey, attributes: [$id]));
-                        $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
-                        if ($twoWay) {
-                            $this->createIndex($relatedCollection->getId(), Index::unique(key: $twoWayIndexKey, attributes: [$twoWayKey]));
-                            $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
+                foreach ($indexes as [$indexCollection, $index]) {
+                    try {
+                        $this->createIndex($indexCollection, $index);
+                    } catch (Throwable $e) {
+                        if (! $this->failedAfterCommit($e)) {
+                            throw $e;
                         }
-                        break;
-                    case RelationType::OneToMany:
-                        $this->createIndex($relatedCollection->getId(), Index::key(key: $twoWayIndexKey, attributes: [$twoWayKey]));
-                        $indexesCreated[] = ['collection' => $relatedCollection->getId(), 'index' => $twoWayIndexKey];
-                        break;
-                    case RelationType::ManyToOne:
-                        $this->createIndex($collection->getId(), Index::key(key: $indexKey, attributes: [$id]));
-                        $indexesCreated[] = ['collection' => $collection->getId(), 'index' => $indexKey];
-                        break;
-                    case RelationType::ManyToMany:
-                        // Indexes created on junction collection creation
-                        break;
-                    default:
-                        throw new RelationshipException('Invalid relationship type.');
+
+                        $committedFailure ??= $e;
+                    }
+                    $indexesCreated[] = ['collection' => $indexCollection, 'index' => $index->key];
                 }
             } catch (Throwable $e) {
                 foreach ($indexesCreated as $indexInfo) {
@@ -334,6 +338,7 @@ trait Relationships
                     }
                 }
 
+                $definitionsRemoved = true;
                 try {
                     $this->withTransaction(function () use ($collection, $relatedCollection, $id, $twoWayKey) {
                         /** @var array<Attribute> $attributes */
@@ -347,33 +352,39 @@ trait Relationships
                         $this->updateDocument(self::METADATA, $relatedCollection->getId(), $relatedCollection);
                     });
                 } catch (Throwable $cleanupError) {
+                    $definitionsRemoved = $this->failedAfterCommit($cleanupError);
                     Console::error("Failed to cleanup metadata for relationship '{$id}': ".$cleanupError->getMessage());
                 }
 
-                // Cleanup relationship
-                try {
-                    $this->cleanupRelationship(
-                        $collection->getId(),
-                        $relatedCollection->getId(),
-                        $type,
-                        $twoWay,
-                        $id,
-                        $twoWayKey,
-                        RelationSide::Parent
-                    );
-                } catch (Throwable $cleanupError) {
-                    Console::error("Failed to cleanup relationship '{$id}': ".$cleanupError->getMessage());
-                }
-
-                if ($junctionCollection !== null) {
+                if ($definitionsRemoved) {
                     try {
-                        $this->cleanupCollection($junctionCollection);
+                        $this->cleanupRelationship(
+                            $collection->getId(),
+                            $relatedCollection->getId(),
+                            $type,
+                            $twoWay,
+                            $id,
+                            $twoWayKey,
+                            RelationSide::Parent
+                        );
                     } catch (Throwable $cleanupError) {
-                        Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$cleanupError->getMessage());
+                        Console::error("Failed to cleanup relationship '{$id}': ".$cleanupError->getMessage());
+                    }
+
+                    if ($junctionCollection !== null) {
+                        try {
+                            $this->cleanupCollection($junctionCollection);
+                        } catch (Throwable $cleanupError) {
+                            Console::error("Failed to cleanup junction collection '{$junctionCollection}': ".$cleanupError->getMessage());
+                        }
                     }
                 }
 
-                throw new DatabaseException('Failed to create relationship indexes: '.$e->getMessage());
+                throw new DatabaseException('Failed to create relationship indexes: '.$e->getMessage(), previous: $e);
+            }
+
+            if ($committedFailure !== null) {
+                throw $committedFailure;
             }
         });
 

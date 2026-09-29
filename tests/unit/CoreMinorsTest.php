@@ -32,6 +32,8 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 
 final class CoreMinorsTest extends TestCase
 {
@@ -179,8 +181,16 @@ final class CoreMinorsTest extends TestCase
      */
     public function testCreateIndexKeepsItsIndexWhenTheInvalidationAfterTheCommitFails(): void
     {
-        $failure = new RuntimeException('cache unavailable');
-        $cache = $this->failingCache($failure);
+        $failing = false;
+        /** @var list<RuntimeException> $failures */
+        $failures = [];
+        $cache = $this->interceptingCache(function () use (&$failing, &$failures): void {
+            if ($failing) {
+                $failures[] = $failure = new RuntimeException('cache unavailable');
+
+                throw $failure;
+            }
+        });
         $armed = false;
         $writes = 0;
         $deletes = 0;
@@ -188,10 +198,8 @@ final class CoreMinorsTest extends TestCase
             beforeDeleteIndex: function () use (&$deletes): void {
                 $deletes++;
             },
-            afterCommit: function () use (&$armed, $cache): void {
-                if ($armed) {
-                    $cache->failing = true;
-                }
+            afterCommit: function () use (&$armed, &$failing): void {
+                $failing = $armed;
             },
         );
         $database = $this->interceptingMetadataWrites(function () use (&$armed, &$writes): void {
@@ -205,19 +213,13 @@ final class CoreMinorsTest extends TestCase
 
         $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
         $armed = false;
-        $cache->failing = false;
+        $failing = false;
 
         $this->assertSame(0, $deletes, 'An index whose definition committed must not be rolled back');
         $this->assertSame(1, $writes, 'A write that committed must not be repeated');
-        $this->assertSame($failure, $error, 'The failure after the commit must reach the caller as it was raised');
-        $this->assertSame(['by_count'], \array_map(
-            static fn (Index $index): string => $index->key,
-            \array_values($database->getCollection('logs')->indexes),
-        ));
-        $this->assertCount(1, \array_filter(
-            $database->getSchemaIndexes('logs'),
-            static fn (Document $index): bool => \str_contains($index->getId(), 'by_count'),
-        ), 'The committed index must still exist');
+        $this->assertSame($failures[0] ?? null, $error, 'The failure after the commit must reach the caller as it was raised');
+        $this->assertSame(['by_count'], $this->indexKeys($database, 'logs'));
+        $this->assertTrue($this->hasSchemaIndex($database, 'logs', 'by_count'), 'The committed index must still exist');
     }
 
     /**
@@ -245,6 +247,107 @@ final class CoreMinorsTest extends TestCase
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertSame(1, $deletes, 'An index without a stored definition must be dropped');
         $this->assertSame([], $database->getCollection('logs')->indexes);
+    }
+
+    /**
+     * The cache invalidation fails after every commit while the writes themselves succeed: the
+     * relationship keeps its columns and definitions, each of its indexes is still created, and
+     * the first failure reaches the caller as raised once they are.
+     */
+    public function testCreateRelationshipKeepsItsWorkWhenTheInvalidationAfterTheCommitFails(): void
+    {
+        $failing = false;
+        /** @var list<RuntimeException> $failures */
+        $failures = [];
+        $cache = $this->interceptingCache(function () use (&$failing, &$failures): void {
+            if ($failing) {
+                $failures[] = $failure = new RuntimeException('cache unavailable');
+
+                throw $failure;
+            }
+        });
+        $armed = false;
+        $adapter = $this->interceptingAdapter(
+            beforeTransaction: function () use (&$failing): void {
+                $failing = false;
+            },
+            afterCommit: function () use (&$armed, &$failing): void {
+                $failing = $armed;
+            },
+        );
+        $database = $this->interceptingMetadataWrites(static function (): void {
+        }, $adapter, new Cache($cache));
+        $this->configure($database);
+        $database->createCollection(new Collection(id: 'profiles'));
+        $database->createCollection(new Collection(id: 'accounts'));
+        $armed = true;
+
+        $error = $this->attempt(fn (): bool => $database->createRelationship(new Relationship(
+            collection: 'profiles',
+            relatedCollection: 'accounts',
+            type: RelationType::OneToOne,
+            twoWay: true,
+            key: 'account',
+            twoWayKey: 'profile',
+        )));
+        $armed = false;
+        $failing = false;
+
+        $this->assertTrue($this->hasSchemaAttribute($database, 'profiles', 'account'), 'A committed relationship must keep its column');
+        $this->assertTrue($this->hasSchemaAttribute($database, 'accounts', 'profile'), 'A committed relationship must keep its column');
+        $this->assertSame(['account'], $this->attributeKeys($database, 'profiles'), 'A committed relationship must keep its definition');
+        $this->assertSame(['profile'], $this->attributeKeys($database, 'accounts'), 'A committed relationship must keep its definition');
+        $this->assertSame(['_index_account'], $this->indexKeys($database, 'profiles'), 'The relationship index must still be created');
+        $this->assertSame(['_index_profile'], $this->indexKeys($database, 'accounts'), 'The two-way index must still be created');
+        $this->assertTrue($this->hasSchemaIndex($database, 'profiles', '_index_account'));
+        $this->assertTrue($this->hasSchemaIndex($database, 'accounts', '_index_profile'));
+        $this->assertSame($failures[0] ?? null, $error, 'The failure after the commit must reach the caller as it was raised');
+    }
+
+    /**
+     * The cache stays unavailable after the relationship's definitions committed, so its index
+     * cannot be recorded and the relationship is rolled back; the definitions cannot be removed
+     * either, so the columns they describe must stay with them.
+     */
+    public function testCreateRelationshipKeepsItsColumnsWhenItsDefinitionsCannotBeRemoved(): void
+    {
+        $failing = false;
+        $cache = $this->interceptingCache(function () use (&$failing): void {
+            if ($failing) {
+                throw new RuntimeException('cache unavailable');
+            }
+        });
+        $armed = false;
+        $adapter = $this->interceptingAdapter(afterCommit: function () use (&$armed, &$failing): void {
+            if ($armed) {
+                $failing = true;
+            }
+        });
+        $database = $this->interceptingMetadataWrites(static function (): void {
+        }, $adapter, new Cache($cache));
+        $this->configure($database);
+        $database->createCollection(new Collection(id: 'profiles'));
+        $database->createCollection(new Collection(id: 'accounts'));
+        $armed = true;
+
+        $error = $this->attempt(fn (): bool => $database->createRelationship(new Relationship(
+            collection: 'profiles',
+            relatedCollection: 'accounts',
+            type: RelationType::OneToOne,
+            twoWay: true,
+            key: 'account',
+            twoWayKey: 'profile',
+        )));
+        $armed = false;
+        $failing = false;
+        $fresh = $this->uncached($adapter, $database);
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertStringStartsWith('Failed to create relationship indexes: ', $error->getMessage());
+        $this->assertSame(['account'], $this->attributeKeys($fresh, 'profiles'));
+        $this->assertSame(['profile'], $this->attributeKeys($fresh, 'accounts'));
+        $this->assertTrue($this->hasSchemaAttribute($fresh, 'profiles', 'account'), 'A column whose definition stays must not be dropped');
+        $this->assertTrue($this->hasSchemaAttribute($fresh, 'accounts', 'profile'), 'A column whose definition stays must not be dropped');
     }
 
     /**
@@ -298,31 +401,45 @@ final class CoreMinorsTest extends TestCase
     }
 
     /**
-     * An adapter that runs the given hooks ahead of each index creation and deletion, and after
-     * each outermost commit.
+     * An adapter that runs the given hooks ahead of each index creation and deletion, ahead of
+     * each outermost transaction and after each outermost commit.
      *
-     * @param  Closure(): void|null  $beforeCreateIndex
-     * @param  Closure(): void|null  $beforeDeleteIndex
-     * @param  Closure(): void|null  $afterCommit
+     * @param  (Closure(): void)|null  $beforeCreateIndex
+     * @param  (Closure(): void)|null  $beforeDeleteIndex
+     * @param  (Closure(): void)|null  $beforeTransaction
+     * @param  (Closure(): void)|null  $afterCommit
      */
     private function interceptingAdapter(
         ?Closure $beforeCreateIndex = null,
         ?Closure $beforeDeleteIndex = null,
+        ?Closure $beforeTransaction = null,
         ?Closure $afterCommit = null,
     ): SQLite {
-        return new class (new PDO('sqlite::memory:'), $beforeCreateIndex, $beforeDeleteIndex, $afterCommit) extends SQLite {
+        return new class (new PDO('sqlite::memory:'), $beforeCreateIndex, $beforeDeleteIndex, $beforeTransaction, $afterCommit) extends SQLite {
             /**
-             * @param  Closure(): void|null  $beforeCreateIndex
-             * @param  Closure(): void|null  $beforeDeleteIndex
-             * @param  Closure(): void|null  $afterCommit
+             * @param  (Closure(): void)|null  $beforeCreateIndex
+             * @param  (Closure(): void)|null  $beforeDeleteIndex
+             * @param  (Closure(): void)|null  $beforeTransaction
+             * @param  (Closure(): void)|null  $afterCommit
              */
             public function __construct(
                 PDO $pdo,
                 private readonly ?Closure $beforeCreateIndex,
                 private readonly ?Closure $beforeDeleteIndex,
+                private readonly ?Closure $beforeTransaction,
                 private readonly ?Closure $afterCommit,
             ) {
                 parent::__construct($pdo);
+            }
+
+            #[\Override]
+            public function startTransaction(): bool
+            {
+                if (! $this->inTransaction()) {
+                    $this->beforeTransaction?->__invoke();
+                }
+
+                return parent::startTransaction();
             }
 
             #[\Override]
@@ -360,23 +477,68 @@ final class CoreMinorsTest extends TestCase
     }
 
     /**
-     * @return MemoryCache&object{failing: bool}
+     * @return list<string>
      */
-    private function failingCache(Throwable $failure): MemoryCache
+    private function attributeKeys(Database $database, string $collection): array
     {
-        return new class ($failure) extends MemoryCache {
-            public bool $failing = false;
+        return \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection($collection)->attributes),
+        );
+    }
 
-            public function __construct(private readonly Throwable $failure)
+    /**
+     * @return list<string>
+     */
+    private function indexKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Index $index): string => $index->key,
+            \array_values($database->getCollection($collection)->indexes),
+        );
+    }
+
+    private function hasSchemaAttribute(Database $database, string $collection, string $key): bool
+    {
+        foreach ($database->getSchemaAttributes($collection) as $attribute) {
+            if ($attribute->getId() === $key) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function hasSchemaIndex(Database $database, string $collection, string $key): bool
+    {
+        foreach ($database->getSchemaIndexes($collection) as $index) {
+            if (\str_contains($index->getId(), $key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * A cache that runs $beforeWrite ahead of each save and purge.
+     *
+     * @param  Closure(): void  $beforeWrite
+     */
+    private function interceptingCache(Closure $beforeWrite): MemoryCache
+    {
+        return new class ($beforeWrite) extends MemoryCache {
+            /**
+             * @param  Closure(): void  $beforeWrite
+             */
+            public function __construct(private readonly Closure $beforeWrite)
             {
             }
 
             #[\Override]
             public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
             {
-                if ($this->failing) {
-                    throw $this->failure;
-                }
+                ($this->beforeWrite)();
 
                 return parent::save($key, $data, $hash);
             }
@@ -384,13 +546,21 @@ final class CoreMinorsTest extends TestCase
             #[\Override]
             public function purge(string $key, string $hash = ''): bool
             {
-                if ($this->failing) {
-                    throw $this->failure;
-                }
+                ($this->beforeWrite)();
 
                 return parent::purge($key, $hash);
             }
         };
+    }
+
+    /**
+     * A second database over the same adapter and namespace that reads definitions past the cache.
+     */
+    private function uncached(Adapter $adapter, Database $database): Database
+    {
+        return (new Database($adapter, new Cache(new None())))
+            ->setDatabase($database->getDatabase())
+            ->setNamespace($database->getNamespace());
     }
 
     private function adapter(): Adapter

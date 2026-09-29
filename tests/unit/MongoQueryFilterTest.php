@@ -7,11 +7,14 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Queries\Documents;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 
 final class MongoQueryFilterTest extends TestCase
@@ -153,6 +156,50 @@ final class MongoQueryFilterTest extends TestCase
             $this->calls['update'] ?? [],
             'Renames and deletes must address the __dot__ field name that documents are stored under',
         );
+    }
+
+    public function testSumEscapesDottedAttributes(): void
+    {
+        $collection = new Document([
+            '$id' => self::COLLECTION,
+            'attributes' => [
+                new Document(['$id' => 'a.b', 'key' => 'a.b', 'type' => ColumnType::Integer->value]),
+            ],
+        ]);
+
+        $this->createAdapter()->sum($collection, 'a.b', [Query::equal('a.b', [1])]);
+
+        $this->assertSame(
+            [
+                ['$match' => ['$and' => [['a__dot__b' => ['$eq' => 1]]]]],
+                ['$group' => ['_id' => null, 'total' => ['$sum' => '$a__dot__b']]],
+            ],
+            $this->calls['aggregate'][0] ?? null,
+            'sum() must filter and sum the stored field name of a dotted attribute, as find() and count() do',
+        );
+    }
+
+    public function testRandomOrderIsRejectedAsAQueryError(): void
+    {
+        $this->expectException(QueryException::class);
+
+        $this->createAdapter()->find(
+            new Document(['$id' => self::COLLECTION]),
+            orderAttributes: [''],
+            orderTypes: [OrderDirection::Random],
+        );
+    }
+
+    public function testDocumentsValidatorRejectsRandomOrderWithoutTheCapability(): void
+    {
+        $unsupported = new Documents([], [], ColumnType::Integer->value, supportForOrderRandom: false);
+
+        $this->assertFalse($unsupported->isValid([Query::orderRandom()]));
+        $this->assertStringContainsString('Random order is not supported', $unsupported->getDescription());
+
+        $supported = new Documents([], [], ColumnType::Integer->value);
+
+        $this->assertTrue($supported->isValid([Query::orderRandom()]), $supported->getDescription());
     }
 
     /**

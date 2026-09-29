@@ -23,6 +23,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -2472,8 +2473,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
-        // queries
         $queries = array_map(fn ($query) => clone $query, $queries);
+        $this->escapeQueryAttributes($collection, $queries);
+        $field = $this->getEscapedAttributes($collection)[$attribute] ?? $attribute;
+
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
         $filters = $this->applyReadFilters($filters, $collection->getId(), PermissionType::Read);
@@ -2496,7 +2499,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $pipeline[] = [
             '$group' => [
                 Storage::SEQUENCE => null,
-                'total' => ['$sum' => '$'.$attribute],
+                'total' => ['$sum' => '$'.$field],
             ],
         ];
 
@@ -3213,6 +3216,27 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function escapeQueryAttributes(Document $collection, array $queries): void
     {
+        $dotAttributes = $this->getEscapedAttributes($collection);
+
+        if (empty($dotAttributes)) {
+            return;
+        }
+
+        foreach ($queries as $query) {
+            $attr = $query->getAttribute();
+            if (isset($dotAttributes[$attr])) {
+                $query->setAttribute($dotAttributes[$attr]);
+            }
+        }
+    }
+
+    /**
+     * The stored field name of each collection attribute whose key holds a dot or starts with `$`.
+     *
+     * @return array<string, string>
+     */
+    private function getEscapedAttributes(Document $collection): array
+    {
         $rawAttrs = $collection->getAttribute('attributes', []);
         /** @var array<array<string, mixed>> $attributes */
         $attributes = \is_array($rawAttrs) ? $rawAttrs : [];
@@ -3226,16 +3250,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
         }
 
-        if (empty($dotAttributes)) {
-            return;
-        }
-
-        foreach ($queries as $query) {
-            $attr = $query->getAttribute();
-            if (isset($dotAttributes[$attr])) {
-                $query->setAttribute($dotAttributes[$attr]);
-            }
-        }
+        return $dotAttributes;
     }
 
     /**
@@ -3652,7 +3667,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return match ($order) {
             OrderDirection::Asc => 1,
             OrderDirection::Desc => -1,
-            default => throw new DatabaseException('Unknown sort order:'.$order->value.'. Must be one of '.OrderDirection::Asc->value.', '.OrderDirection::Desc->value),
+            OrderDirection::Random => throw new QueryException('Random order is not supported by this adapter'),
         };
     }
 

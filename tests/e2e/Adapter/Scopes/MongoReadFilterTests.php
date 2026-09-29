@@ -10,6 +10,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
@@ -172,6 +173,56 @@ trait MongoReadFilterTests
         $database->deleteAttribute($collection, 'x.y');
         $database->createAttribute($collection, Attribute::string(key: 'x.y', size: 16));
         $this->assertNull($database->getDocument($collection, 'first')->getAttribute('x.y'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testOrderRandomIsRejectedAsAQueryError(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar']);
+
+        try {
+            foreach ([
+                fn (): array => $database->find($collection, [Query::orderRandom()]),
+                fn (): array => $database->skipValidation(fn (): array => $database->find($collection, [Query::orderRandom()])),
+            ] as $find) {
+                try {
+                    $find();
+                    $this->fail('orderRandom() must be rejected as a query error where the adapter cannot order by random');
+                } catch (QueryException $e) {
+                    $this->assertStringContainsString('Random order is not supported', $e->getMessage());
+                }
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testSumOnADottedAttributeMatchesTheCountedRows(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'dotted_sum_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::integer(key: 'score.value'),
+                Attribute::string(key: 'group.name', size: 16),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        foreach ([[1, 'a'], [2, 'a'], [4, 'b']] as [$score, $group]) {
+            $database->createDocument($collection, new Document(['score.value' => $score, 'group.name' => $group]));
+        }
+
+        $queries = [Query::equal('group.name', ['a'])];
+
+        $this->assertSame(2, $database->count($collection, $queries));
+        $this->assertSame(3, $database->sum($collection, 'score.value', $queries));
+        $this->assertSame(7, $database->sum($collection, 'score.value'));
 
         $database->deleteCollection($collection);
     }

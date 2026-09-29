@@ -798,4 +798,64 @@ final class RelationshipHookTest extends TestCase
 
         $this->assertSame([], $this->ids($database, 'child'));
     }
+
+    /**
+     * @return iterable<string, array{Closure(): Adapter, Relationship, string, bool, array<string, mixed>, string, bool}>
+     */
+    public static function invalidRelationshipUpdates(): iterable
+    {
+        $oneToOne = Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
+        $twoWayOneToOne = Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
+        $oneToMany = Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
+        $manyToOne = Relationship::manyToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
+        $manyToMany = Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
+
+        $cases = [
+            'one-way one-to-one child side' => [$oneToOne, 'child', false, ['parent' => 'parent1'], 'Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.', false],
+            'two-way one-to-one integer' => [$twoWayOneToOne, 'parent', false, ['partner' => 123], 'Invalid relationship value. Must be either a document, document ID or null.', false],
+            'two-way one-to-one list' => [$twoWayOneToOne, 'parent', false, ['partner' => ['child1']], 'Invalid relationship value. Must be either a document, document ID or null.', false],
+            'one-to-many list item' => [$oneToMany, 'parent', false, ['children' => [123]], 'Invalid relationship value. Must be either a document or document ID.', false],
+            'many-to-many list item' => [$manyToMany, 'parent', false, ['children' => [123]], 'Invalid relationship value. Must be either a document or document ID.', false],
+            'many-to-one document without id' => [$manyToOne, 'parent', false, ['child' => new Document(['name' => 'n'])], 'Invalid relationship value. Document must have a valid $id.', false],
+            'many-to-one empty scalar' => [$manyToOne, 'parent', true, ['child' => false], 'Invalid relationship value. Must be either a document ID or a document.', false],
+            'many-to-one scalar' => [$manyToOne, 'parent', false, ['child' => 123], 'Invalid relationship value.', false],
+            'many-to-many bulk string' => [$manyToMany, 'parent', false, ['children' => 'child1'], 'Invalid relationship value. Must be an array of documents or document IDs.', true],
+        ];
+
+        foreach (self::adapters() as $adapterName => [$adapter]) {
+            foreach ($cases as $caseName => [$relationship, $collection, $linked, $update, $message, $bulk]) {
+                yield "{$adapterName}: {$caseName}" => [$adapter, $relationship, $collection, $linked, $update, $message, $bulk];
+            }
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  array<string, mixed>  $update
+     */
+    #[DataProvider('invalidRelationshipUpdates')]
+    public function testUpdateRejectsInvalidRelationshipValues(Closure $adapter, Relationship $relationship, string $collection, bool $linked, array $update, string $message, bool $bulk): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, $relationship);
+        $database->createDocument('child', new Document(['$id' => 'child1']));
+        $database->createDocument('parent', new Document(['$id' => 'parent1', ...($linked ? [$relationship->key => 'child1'] : [])]));
+
+        $id = $collection === 'parent' ? 'parent1' : 'child1';
+        $stored = fn (): array => $database->getAuthorization()->skip(fn () => $database->skipRelationships(fn () => $database->getDocument($collection, $id)))->getArrayCopy();
+        $before = $stored();
+
+        try {
+            if ($bulk) {
+                $database->updateDocuments($collection, new Document($update));
+            } else {
+                $database->updateDocument($collection, $id, new Document($update));
+            }
+            $this->fail('An invalid relationship value must be rejected');
+        } catch (RelationshipException $exception) {
+            $this->assertSame($message, $exception->getMessage());
+        }
+
+        $this->assertSame($before, $stored());
+    }
 }

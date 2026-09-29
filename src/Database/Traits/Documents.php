@@ -3642,10 +3642,16 @@ trait Documents
                     : OrderDirection::Asc;
             }
 
-            if (! $vectorSearch || ! empty($cursor)) {
-                foreach (\array_keys($joinedCollections) as $alias) {
+            $aliases = \array_keys($joinedCollections);
+            if ((! $vectorSearch || ! empty($cursor)) && \count($aliases) === \count($joins)) {
+                foreach (\array_values($joins) as $position => $join) {
+                    $alias = $aliases[$position];
                     $joinedId = $alias.'.'.Document::ID;
-                    if (! \in_array($joinedId, $orderAttributes, true) && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)) {
+                    if (
+                        ! $this->joinMatchesAtMostOneRow($join, $alias)
+                        && ! \in_array($joinedId, $orderAttributes, true)
+                        && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)
+                    ) {
                         $orderAttributes[] = $joinedId;
                         $orderTypes[] = OrderDirection::Asc;
                     }
@@ -4203,6 +4209,24 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         return $this->find($collection, $queries);
+    }
+
+    /**
+     * An inner or left join on the joined `$id` pairs each row it joins onto with at most one joined row, so the rows
+     * of the read are told apart without the joined id, and ordering by it would only cost the engine a sort.
+     */
+    private function joinMatchesAtMostOneRow(Query $join, string $alias): bool
+    {
+        if (! \in_array($join->getMethod(), [Method::Join, Method::LeftJoin], true) || $join->isNestedJoin()) {
+            return false;
+        }
+
+        [$left, $operator, $right] = \array_pad($join->getValues(), 3, null);
+        if ($operator !== '=' || ! \is_string($left) || ! \is_string($right)) {
+            return false;
+        }
+
+        return ($right === Document::ID || $right === $alias.'.'.Document::ID) && ! \str_starts_with($left, $alias.'.');
     }
 
     /**

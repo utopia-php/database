@@ -20,6 +20,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Index;
+use Utopia\Database\Profiler\QueryLog;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
@@ -167,9 +168,9 @@ final class JoinCursorTest extends TestCase
         return \array_values(\array_map($this->key(...), $this->database->find('authors', [...$queries, Query::limit(100)])));
     }
 
-    private function key(Document $row): string
+    private function key(Document $row, string $alias = 'n'): string
     {
-        $joined = $row->getAttribute('n.$id');
+        $joined = $row->getAttribute($alias.'.$id');
 
         return ($row->getId() === '' ? '-' : $row->getId()).'/'.(\is_string($joined) ? $joined : '-');
     }
@@ -421,6 +422,50 @@ final class JoinCursorTest extends TestCase
         ));
 
         $this->assertSame($expected, \array_map(static fn (Document $row): string => $row->getId(), $rows));
+    }
+
+    /**
+     * @return iterable<string, array{Query, bool}>
+     */
+    public static function joinTieKeys(): iterable
+    {
+        yield 'join on the joined $id' => [Query::join('authors', 'author', '$id', '=', 'a'), false];
+        yield 'left join on the joined $id, qualified' => [Query::leftJoin('authors', 'author', 'a.$id', '=', 'a'), false];
+        yield 'join on another joined attribute' => [Query::join('authors', 'author', 'name', '=', 'a'), true];
+        yield 'right join on the joined $id' => [Query::rightJoin('authors', 'author', '$id', '=', 'a'), true];
+        yield 'full outer join on the joined $id' => [Query::fullOuterJoin('authors', 'author', '$id', '=', 'a'), true];
+        yield 'join on the joined $id with another operator' => [Query::join('authors', 'author', '$id', '!=', 'a'), true];
+    }
+
+    #[DataProvider('joinTieKeys')]
+    public function testJoinedIdBreaksTiesOnlyWhenAJoinCanPairSeveralRows(Query $join, bool $ordersByJoinedId): void
+    {
+        $this->database->enableProfiling();
+        $this->database->getProfiler()?->reset();
+
+        $rows = $this->database->find('notes', [$join, Query::orderAsc('label')]);
+
+        $selects = \array_values(\array_filter(
+            $this->database->getProfiler()?->getLogs() ?? [],
+            static fn (QueryLog $log): bool => \str_starts_with($log->query, 'SELECT') && \str_contains($log->query, 'ORDER BY'),
+        ));
+        $this->assertNotSame([], $selects);
+        $query = $selects[\count($selects) - 1]->query;
+        $order = \substr($query, (int) \strrpos($query, 'ORDER BY'));
+        $this->assertCount($ordersByJoinedId ? 3 : 2, \explode(',', $order), 'label, the main $sequence and, only when the join can pair several rows, the joined $id: '.$order);
+
+        $keys = \array_map(fn (Document $row): string => $this->key($row, 'a'), $rows);
+        $paged = [];
+        $cursor = null;
+        for ($page = 0; $page <= \count($rows); $page++) {
+            $batch = $this->database->find('notes', [$join, Query::orderAsc('label'), Query::limit(1), ...($cursor === null ? [] : [Query::cursorAfter($cursor)])]);
+            if ($batch === []) {
+                break;
+            }
+            $paged[] = $this->key($batch[0], 'a');
+            $cursor = $batch[0];
+        }
+        $this->assertSame($keys, $paged);
     }
 
     private function useDatabase(SQLite $adapter): void

@@ -9657,4 +9657,84 @@ trait DocumentTests
             $auth->skip(fn () => $database->deleteCollection($collection));
         }
     }
+
+    public function testArrayContainsQueriesOnScalarArrays(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'array_contains_scalars';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'labels', size: 32, array: true),
+                Attribute::integer(key: 'numbers', array: true),
+                Attribute::double(key: 'scores', array: true),
+                Attribute::boolean(key: 'flags', array: true),
+            ],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+
+        try {
+            $documents = [
+                't1' => ['labels' => ['a', 'b'], 'numbers' => [1, 2], 'scores' => [0.1, 1.5], 'flags' => [true]],
+                't2' => ['labels' => ['c'], 'numbers' => [3], 'scores' => [2.5], 'flags' => [false]],
+                't3' => ['labels' => [], 'numbers' => [], 'scores' => [], 'flags' => []],
+                't4' => ['labels' => ['é', 'q"x', '1'], 'numbers' => [10], 'scores' => [], 'flags' => []],
+                't5' => [],
+            ];
+            foreach ($documents as $id => $attributes) {
+                $database->createDocument($collection, new Document(['$id' => $id, ...$attributes]));
+            }
+
+            $cases = [
+                'containsAny strings' => [Query::containsAny('labels', ['a', 'c']), ['t1', 't2']],
+                'containsAny a non-ASCII string' => [Query::containsAny('labels', ['é']), ['t4']],
+                'containsAny a string with a double quote' => [Query::containsAny('labels', ['q"x']), ['t4']],
+                'containsAny a numeric string' => [Query::containsAny('labels', ['1']), ['t4']],
+                'containsAny integers' => [Query::containsAny('numbers', [2, 3]), ['t1', 't2']],
+                'containsAny doubles' => [Query::containsAny('scores', [0.1, 2.5]), ['t1', 't2']],
+                'containsAny true' => [Query::containsAny('flags', [true]), ['t1']],
+                'containsAny false' => [Query::containsAny('flags', [false]), ['t2']],
+                'containsAny no element' => [Query::containsAny('labels', ['z']), []],
+                'containsAll every string present' => [Query::containsAll('labels', ['a', 'b']), ['t1']],
+                'containsAll one string missing' => [Query::containsAll('labels', ['a', 'c']), []],
+                'containsAll non-ASCII and quoted strings' => [Query::containsAll('labels', ['é', 'q"x']), ['t4']],
+                'containsAll integers' => [Query::containsAll('numbers', [1, 2]), ['t1']],
+                'containsAll doubles' => [Query::containsAll('scores', [0.1, 1.5]), ['t1']],
+                'containsAll a boolean' => [Query::containsAll('flags', [false]), ['t2']],
+                'notContains a string' => [Query::notContains('labels', ['a']), ['t2', 't3', 't4']],
+                'notContains any of several strings' => [Query::notContains('labels', ['a', 'c']), ['t3', 't4']],
+                'notContains a non-ASCII string' => [Query::notContains('labels', ['é']), ['t1', 't2', 't3']],
+                'notContains an integer' => [Query::notContains('numbers', [1]), ['t2', 't3', 't4']],
+                'notContains a double' => [Query::notContains('scores', [2.5]), ['t1', 't3', 't4']],
+                'notContains a boolean' => [Query::notContains('flags', [true]), ['t2', 't3', 't4']],
+                'contains a string' => [new Query(Method::Contains, 'labels', ['a']), ['t1']],
+                'contains integers' => [new Query(Method::Contains, 'numbers', [3, 10]), ['t2', 't4']],
+            ];
+            foreach ($cases as $case => [$query, $expected]) {
+                $countQuery = clone $query;
+                $ids = \array_map(
+                    fn (Document $document): string => $document->getId(),
+                    $database->find($collection, [$query]),
+                );
+                \sort($ids);
+
+                $this->assertSame($expected, $ids, $case);
+                $this->assertSame(\count($expected), $database->count($collection, [$countQuery]), $case);
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

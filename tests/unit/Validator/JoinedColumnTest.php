@@ -181,7 +181,7 @@ final class JoinedColumnTest extends TestCase
             'stddevSamp of a joined string' => [Query::stddevSamp('note.body', 'result'), false],
             'varSamp of a bare name resolved to a joined string array' => [Query::varSamp('tags', 'result'), false],
             'min of a joined string' => [Query::min('note.body', 'result'), true],
-            'max of a joined string array' => [Query::max('note.tags', 'result'), true],
+            'max of a joined string array' => [Query::max('note.tags', 'result'), false],
         ];
     }
 

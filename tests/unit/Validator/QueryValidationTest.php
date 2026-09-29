@@ -22,6 +22,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -227,6 +228,114 @@ final class QueryValidationTest extends TestCase
 
         $joined = [Query::join('items', '$id', 'ownerRef', '=', 'it'), Query::exists(['it.title'])];
         $this->assertSame(['ann', 'bob'], $this->ids($this->database->find('owners', $joined)), 'a column under a join alias');
+    }
+
+    /**
+     * @return iterable<string, array{list<Query>, string}>
+     */
+    public static function relationshipSidesWithoutAColumn(): iterable
+    {
+        yield 'groupBy' => [[Query::groupBy(['items']), Query::count('*', 'rows')], 'Cannot group by virtual relationship attribute: items'];
+        yield 'count' => [[Query::count('items', 'rows')], 'Cannot aggregate virtual relationship attribute: items'];
+        yield 'countDistinct' => [[Query::countDistinct('items', 'rows')], 'Cannot aggregate virtual relationship attribute: items'];
+        yield 'min' => [[Query::min('items', 'least')], 'Cannot aggregate virtual relationship attribute: items'];
+        yield 'max' => [[Query::max('items', 'most')], 'Cannot aggregate virtual relationship attribute: items'];
+    }
+
+    /**
+     * The parent side of a one-to-many holds no column, so the engine has nothing to aggregate or
+     * group by; filters and join conditions refuse it already.
+     *
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('relationshipSidesWithoutAColumn')]
+    public function testAggregatesAndGroupsRefuseARelationshipSideWithoutAColumn(array $queries, string $message): void
+    {
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('owners', $queries), 'find()');
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->count('owners', $queries), 'count()');
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->sum('owners', 'score', $queries), 'sum()');
+    }
+
+    /**
+     * @return iterable<string, array{list<Query>, string}>
+     */
+    public static function extremaWithoutAnOrder(): iterable
+    {
+        $join = Query::join('items', '$id', 'ownerRef', '=', 'it');
+
+        yield 'max of a boolean' => [[Query::max('active', 'most')], 'max', 'active'];
+        yield 'min of an array' => [[Query::min('tags', 'least')], 'min', 'tags'];
+        yield 'max of a joined boolean' => [[$join, Query::max('it.featured', 'most')], 'max', 'it.featured'];
+        yield 'min of a joined array' => [[$join, Query::min('it.labels', 'least')], 'min', 'it.labels'];
+        yield 'max of a bare joined boolean' => [[$join, Query::max('featured', 'most')], 'max', 'featured'];
+    }
+
+    /**
+     * PostgreSQL has no min() or max() for booleans, JSON (arrays and objects), geometries or vectors,
+     * so they are refused on every engine.
+     *
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('extremaWithoutAnOrder')]
+    public function testMinAndMaxRefuseValuesWithoutAnOrder(array $queries, string $method, string $attribute): void
+    {
+        $message = 'Aggregate '.$method.' requires an attribute whose values are ordered, not an array, object, boolean, spatial or vector one: '.$attribute;
+
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('owners', $queries), 'find()');
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->count('owners', $queries), 'count()');
+    }
+
+    public function testMinAndMaxAcceptOrderedValues(): void
+    {
+        $join = Query::join('items', '$id', 'ownerRef', '=', 'it');
+
+        $rows = $this->database->find('owners', [
+            $join,
+            Query::min('name', 'first'),
+            Query::max('score', 'best'),
+            Query::max('$createdAt', 'latest'),
+            Query::max('it.price', 'dearest'),
+            Query::min('it.title', 'title'),
+        ]);
+        $this->assertCount(1, $rows);
+        $this->assertSame('Ann', $rows[0]->getAttribute('first'));
+        $this->assertSame(4, $rows[0]->getAttribute('best'));
+        $this->assertSame(7, $rows[0]->getAttribute('dearest'));
+        $this->assertSame('cup', $rows[0]->getAttribute('title'));
+
+        $owners = $this->database->find('items', [Query::groupBy(['owner']), Query::count('*', 'rows'), Query::max('owner', 'last'), Query::orderAsc('owner')]);
+        $this->assertSame(['ann', 'bob'], \array_map(static fn (Document $group): mixed => $group->getAttribute('owner'), $owners), 'the side of a relationship that holds a column');
+    }
+
+    public function testTheAggregateValidatorRefusesExtremaOfUnorderedTypes(): void
+    {
+        $definition = static fn (string $key, ColumnType $type, bool $array = false): Document => new Document(['$id' => $key, 'key' => $key, 'type' => $type->value, 'array' => $array]);
+        $validator = new Aggregate([
+            $definition('meta', ColumnType::Object),
+            $definition('place', ColumnType::Point),
+            $definition('route', ColumnType::Linestring),
+            $definition('area', ColumnType::Polygon),
+            $definition('embedding', ColumnType::Vector),
+            $definition('flag', ColumnType::Boolean),
+            $definition('codes', ColumnType::Integer, true),
+            $definition('name', ColumnType::String),
+            $definition('size', ColumnType::Integer),
+            $definition('ratio', ColumnType::Double),
+            $definition('born', ColumnType::Datetime),
+        ]);
+
+        foreach (['meta', 'place', 'route', 'area', 'embedding', 'flag', 'codes'] as $attribute) {
+            foreach ([Query::min($attribute), Query::max($attribute)] as $query) {
+                $this->assertFalse($validator->isValid($query), $attribute);
+                $this->assertStringEndsWith(': '.$attribute, $validator->getDescription());
+            }
+            $this->assertTrue($validator->isValid(Query::count($attribute)), $attribute.': count needs no order');
+        }
+
+        foreach (['name', 'size', 'ratio', 'born', '$id', '$createdAt'] as $attribute) {
+            $this->assertTrue($validator->isValid(Query::min($attribute)), $attribute.': '.$validator->getDescription());
+            $this->assertTrue($validator->isValid(Query::max($attribute)), $attribute.': '.$validator->getDescription());
+        }
     }
 
     /**

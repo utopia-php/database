@@ -9,6 +9,7 @@ use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -9765,6 +9766,49 @@ trait DocumentTests
             foreach ($roles as $role) {
                 $authorization->addRole($role);
             }
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testSkipDuplicatesStillThrowsUniqueForAnotherUniqueIndex(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::UniqueIndex)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'skipDupUnique';
+        $permissions = [Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'slug', size: 64, required: true));
+        $database->createIndex($collection, Index::unique(key: 'slugUnique', attributes: ['slug'], lengths: [64]));
+
+        try {
+            $database->createDocument($collection, new Document(['$id' => 'taken', '$permissions' => $permissions, 'slug' => 'shared']));
+
+            $created = null;
+            $thrown = null;
+            try {
+                $created = $database->skipDuplicates(fn (): int => $database->createDocuments($collection, [
+                    new Document(['$id' => 'colliding', '$permissions' => $permissions, 'slug' => 'shared']),
+                ]));
+            } catch (DuplicateException $exception) {
+                $thrown = $exception;
+            }
+
+            if ($database->getAdapter() instanceof Postgres) {
+                $this->assertInstanceOf(UniqueException::class, $thrown, 'PostgreSQL skips only a stored id, so a new id colliding on another unique index throws');
+            } elseif ($thrown === null) {
+                $this->assertSame(0, $created, 'An engine that cannot name the index to ignore skips the row');
+            }
+
+            $this->assertTrue($database->getDocument($collection, 'colliding')->isEmpty());
+            $this->assertSame('shared', $database->getDocument($collection, 'taken')->getAttribute('slug'));
+            $this->assertSame(1, $database->count($collection));
+        } finally {
             $database->deleteCollection($collection);
         }
     }

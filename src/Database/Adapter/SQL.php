@@ -867,7 +867,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Build an insert that skips rows colliding with a stored row.
+     * Build the insert skipDuplicates() runs, which skips a row whose id is stored. MariaDB,
+     * MySQL and SQLite cannot name the index to ignore, so they skip any unique collision.
      *
      * @throws DatabaseException
      */
@@ -1057,7 +1058,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @return list<string>
      */
-    private function documentKeyColumns(): array
+    protected function documentKeyColumns(): array
     {
         return $this->sharedTables ? [Storage::UID, Storage::TENANT] : [Storage::UID];
     }

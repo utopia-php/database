@@ -15,7 +15,8 @@ use Utopia\Database\Document;
 /**
  * The statements skipDuplicates() sends on the engines the host cannot run. Engines with
  * RETURNING learn the inserted rows from the insert itself; MySQL locks the batch's stored ids
- * first and inserts only the new ones.
+ * first and inserts only the new ones. PostgreSQL names the id as its conflict target, so only
+ * a stored id is skipped.
  */
 final class SkipDuplicatesStatementTest extends TestCase
 {
@@ -74,7 +75,19 @@ final class SkipDuplicatesStatementTest extends TestCase
 
         $this->assertSame(['fresh'], $created);
         $this->assertCount(1, $statements);
-        $this->assertStringEndsWith(' RETURNING "_uid", "_tenant"', $statements[0]);
+        $this->assertStringEndsWith(' ON CONFLICT ("_uid", "_tenant") DO NOTHING RETURNING "_uid", "_tenant"', $statements[0]);
+    }
+
+    public function testPostgresSkipsOnlyAStoredIdSoAnotherUniqueCollisionFails(): void
+    {
+        $statements = new ArrayObject();
+        $adapter = new Postgres($this->pdo($statements, rows: [['fresh']], written: 1));
+
+        $this->createDocuments($adapter);
+
+        $this->assertCount(1, $statements);
+        $this->assertStringStartsWith('INSERT INTO', $statements[0]);
+        $this->assertStringEndsWith(' ON CONFLICT ("_uid") DO NOTHING RETURNING "_uid"', $statements[0]);
     }
 
     /**

@@ -20,7 +20,7 @@ class QueryCache
 
     private const int PERMANENT = \PHP_INT_MAX;
 
-    private const int VERSION = 1;
+    private const int VERSION = 2;
 
     /** @var array<string, Region> */
     private array $regions = [];
@@ -58,6 +58,9 @@ class QueryCache
      * Resolve a query's entry in the collection's current epoch; null while the
      * collection's region is disabled or a write to it is in progress.
      *
+     * Every result of a collection scope is a field of one hash, keyed by the query, whose value records
+     * the query and the epoch it was filled under: a cache that keeps no fields holds one result per scope.
+     *
      * @param  array<mixed>  $queries
      *
      * @phpstan-impure
@@ -74,12 +77,12 @@ class QueryCache
             return null;
         }
 
-        $hash = \md5(\serialize([
+        $field = \md5(\serialize([
             'queries' => $queries,
             'context' => $context,
         ]));
 
-        return new Entry($key.'#'.$epoch.':'.$hash, $collection);
+        return new Entry($key, $collection, $field, $epoch);
     }
 
     /**
@@ -90,7 +93,7 @@ class QueryCache
     public function get(Entry $entry): ?array
     {
         /** @var mixed $data */
-        $data = $this->cache->load($entry->key, $this->getRegion($entry->collection)->ttl);
+        $data = $this->cache->load($entry->key, $this->getRegion($entry->collection)->ttl, $entry->field);
 
         if ($data === false || $data === null) {
             return null;
@@ -101,8 +104,12 @@ class QueryCache
             || ($data['version'] ?? null) !== self::VERSION
             || ! \is_array($data['documents'] ?? null)
         ) {
-            $this->purgeLoadedKey($entry->key);
+            $this->purgeLoadedEntry($entry);
 
+            return null;
+        }
+
+        if (($data['epoch'] ?? null) !== $entry->epoch || ($data['field'] ?? null) !== $entry->field) {
             return null;
         }
 
@@ -114,7 +121,7 @@ class QueryCache
             }
 
             if (! \is_array($item)) {
-                $this->purgeLoadedKey($entry->key);
+                $this->purgeLoadedEntry($entry);
 
                 return null;
             }
@@ -152,8 +159,10 @@ class QueryCache
 
         return $this->cache->saveWithLease($entry->key, [
             'version' => self::VERSION,
+            'epoch' => $entry->epoch,
+            'field' => $entry->field,
             'documents' => $data,
-        ], '', $generation) !== false;
+        ], $entry->field, $generation) !== false;
     }
 
     public function invalidateCollection(Scope $scope, string $collection): void
@@ -165,7 +174,7 @@ class QueryCache
     }
 
     /**
-     * Publish a shared tombstone before a mutation starts.
+     * Publish a shared tombstone before a mutation starts, and drop the results the previous epoch filled.
      */
     public function blockCollection(string $key, string $token): void
     {
@@ -178,6 +187,7 @@ class QueryCache
         }
 
         $this->cache->purge($this->getStartedKey($key));
+        $this->cache->purge($key);
     }
 
     /**
@@ -329,10 +339,10 @@ class QueryCache
         return $key.'#started';
     }
 
-    private function purgeLoadedKey(string $key): void
+    private function purgeLoadedEntry(Entry $entry): void
     {
-        if (! $this->cache->purge($key)) {
-            throw new RuntimeException("Failed to purge invalid query cache entry '{$key}'");
+        if (! $this->cache->purge($entry->key, $entry->field)) {
+            throw new RuntimeException("Failed to purge invalid query cache entry '{$entry->key}'");
         }
     }
 }

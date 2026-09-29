@@ -113,7 +113,7 @@ class QueryCacheTest extends TestCase
 
         $this->assertNotNull($first);
         $this->assertNotNull($second);
-        $this->assertNotSame($first->key, $second->key);
+        $this->assertNotSame($first->field, $second->field);
     }
 
     public function testDifferentCollectionsProduceDifferentEntries(): void
@@ -143,7 +143,9 @@ class QueryCacheTest extends TestCase
     public function testGetReturnsDocumentArrayForCacheHit(): void
     {
         $this->cache->method('load')->willReturn([
-            'version' => 1,
+            'version' => 2,
+            'epoch' => '',
+            'field' => '',
             'documents' => [
                 ['$id' => 'doc1', 'name' => 'Alice'],
                 ['$id' => 'doc2', 'name' => 'Bob'],
@@ -161,7 +163,9 @@ class QueryCacheTest extends TestCase
     {
         $document = new Document(['$id' => 'doc1', 'name' => 'Alice']);
         $this->cache->method('load')->willReturn([
-            'version' => 1,
+            'version' => 2,
+            'epoch' => '',
+            'field' => '',
             'documents' => [$document],
         ]);
 
@@ -193,7 +197,7 @@ class QueryCacheTest extends TestCase
             ->willReturnCallback(function (string $cacheKey, int $ttl) use ($key): string|false {
                 return match (true) {
                     $cacheKey === $key.'#epoch' && $ttl === \PHP_INT_MAX => 'active:epoch@0',
-                    \str_starts_with($cacheKey, $key.'#active:epoch:') && $ttl === 120 => false,
+                    $cacheKey === $key && $ttl === 120 => false,
                     default => throw new \LogicException("Unexpected load of '{$cacheKey}' for {$ttl} seconds"),
                 };
             });
@@ -202,7 +206,7 @@ class QueryCacheTest extends TestCase
         $entry = $queryCache->getEntry($scope, 'users', [Query::limit(10)]);
 
         $this->assertNotNull($entry);
-        $this->assertStringStartsWith($key.'#active:epoch:', $entry->key);
+        $this->assertSame('active:epoch', $entry->epoch);
         $this->assertNull($queryCache->get($entry));
     }
 
@@ -211,7 +215,7 @@ class QueryCacheTest extends TestCase
         $cache = $this->createMock(Cache::class);
         $queryCache = new QueryCache($cache);
 
-        $cache->method('load')->willReturn(['version' => 1, 'documents' => ['invalid']]);
+        $cache->method('load')->willReturn(['version' => 2, 'epoch' => '', 'field' => '', 'documents' => ['invalid']]);
         $cache->expects($this->once())
             ->method('purge')
             ->with('entry-key')
@@ -232,18 +236,20 @@ class QueryCacheTest extends TestCase
                 $this->callback(function (array $data): bool {
                     $documents = $data['documents'] ?? null;
 
-                    return ($data['version'] ?? null) === 1
+                    return ($data['version'] ?? null) === 2
+                        && ($data['field'] ?? null) === 'field'
+                        && ($data['epoch'] ?? null) === 'epoch'
                         && \is_array($documents)
                         && \is_array($documents[0] ?? null)
                         && ($documents[0]['$id'] ?? null) === 'doc1';
                 }),
-                '',
+                'field',
                 '7',
             )
             ->willReturnArgument(1);
 
         $this->assertTrue($queryCache->set(
-            new Entry('entry-key', 'users'),
+            new Entry('entry-key', 'users', 'field', 'epoch'),
             [new Document(['$id' => 'doc1', 'name' => 'Alice'])],
             '7',
         ));
@@ -404,8 +410,13 @@ class QueryCacheTest extends TestCase
         $this->assertTrue($queryCache->set($first, [new Document(['$id' => 'private-a'])], $queryCache->getGeneration($first)));
         $this->assertTrue($queryCache->set($second, [new Document(['$id' => 'private-b'])], $queryCache->getGeneration($second)));
 
-        $this->assertSame(['private-a'], $this->ids($queryCache->get($first) ?? []));
+        $this->assertNull($queryCache->get($first), 'A cache without fields holds one result per collection: the second query took the slot, so the first must miss instead of being served its rows');
         $this->assertSame(['private-b'], $this->ids($queryCache->get($second) ?? []));
+
+        $this->assertTrue($queryCache->set($first, [new Document(['$id' => 'private-a'])], $queryCache->getGeneration($first)));
+
+        $this->assertSame(['private-a'], $this->ids($queryCache->get($first) ?? []));
+        $this->assertNull($queryCache->get($second));
     }
 
     public function testMemoryAdapterStaysBlockedAfterInvalidation(): void
@@ -564,20 +575,64 @@ class QueryCacheTest extends TestCase
         $this->assertNull($queryCache->getEntry(new Scope(), 'users', []));
     }
 
-    public function testInvalidationsDoNotAddKeysToACacheThatKeepsPurgedKeys(): void
+    public function testInvalidationsAndFillsKeepTheKeyCountBounded(): void
     {
         $adapter = new RedisLeasableCache();
         $queryCache = new QueryCache(new Cache($adapter));
         $scope = new Scope(namespace: 'ns');
-        $queryCache->invalidateCollection($scope, 'users');
-        $keys = $adapter->keys();
+        $keys = [];
+        $fields = [];
 
-        for ($invalidation = 0; $invalidation < 20; $invalidation++) {
+        for ($cycle = 1; $cycle <= 20; $cycle++) {
+            $entry = $queryCache->getEntry($scope, 'users', [Query::limit($cycle)]);
+            $this->assertNotNull($entry);
+            $this->assertNull($queryCache->get($entry));
+            $this->assertTrue($queryCache->set($entry, [new Document(['$id' => 'cycle-'.$cycle])], $queryCache->getGeneration($entry)));
+            $this->assertSame(['cycle-'.$cycle], $this->ids($queryCache->get($entry) ?? []));
             $queryCache->invalidateCollection($scope, 'users');
+            $keys[$cycle] = \count($adapter->keys());
+            $fields[$cycle] = $this->countFields($adapter);
         }
 
-        $this->assertSame($keys, $adapter->keys(), 'A purged key stays behind in Redis, so an invalidation must not leave a key of its own');
-        $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
+        $this->assertSame($keys[1], $keys[20], 'A purged key stays behind in Redis, so fills and invalidations must reuse the same keys (7.3.12 has no query cache; the per-epoch entry keys added one key per cycle)');
+        $this->assertSame($fields[1], $fields[20], 'An invalidation must clear the fields the previous epoch filled');
+        $this->assertNotNull($queryCache->getEntry($scope, 'users', [Query::limit(1)]));
+    }
+
+    public function testAFillUnderARetiredEpochIsNeverServed(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $stale = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNotNull($stale);
+
+        $queryCache->invalidateCollection($scope, 'users');
+        $this->assertTrue($queryCache->set($stale, [new Document(['$id' => 'stale'])], $queryCache->getGeneration($stale)));
+
+        $fresh = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNotNull($fresh);
+        $this->assertSame($stale->field, $fresh->field);
+        $this->assertNull($queryCache->get($fresh), 'A reader that resolved its entry before an invalidation fills the old epoch, which the new one must not serve');
+    }
+
+    public function testQueriesShareTheCollectionSlotWithoutSharingResultsOnACacheWithFields(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $first = $queryCache->getEntry($scope, 'users', [Query::limit(1)], 'role:user-a');
+        $second = $queryCache->getEntry($scope, 'users', [Query::limit(2)], 'role:user-b');
+        $this->assertNotNull($first);
+        $this->assertNotNull($second);
+        $keys = \count($adapter->keys());
+
+        $this->assertTrue($queryCache->set($first, [new Document(['$id' => 'private-a'])], $queryCache->getGeneration($first)));
+        $this->assertTrue($queryCache->set($second, [new Document(['$id' => 'private-b'])], $queryCache->getGeneration($second)));
+
+        $this->assertSame(['private-a'], $this->ids($queryCache->get($first) ?? []));
+        $this->assertSame(['private-b'], $this->ids($queryCache->get($second) ?? []));
+        $this->assertSame($keys + 1, \count($adapter->keys()), 'Every result of a collection scope lives in one hash');
     }
 
     public function testOverlappingInvalidationsSucceedOnACacheWithoutFields(): void
@@ -672,6 +727,16 @@ class QueryCacheTest extends TestCase
         $cache->method('getGeneration')->willReturn('0');
 
         return $cache;
+    }
+
+    private function countFields(RedisLeasableCache $adapter): int
+    {
+        $fields = 0;
+        foreach ($adapter->keys() as $key) {
+            $fields += \count($adapter->list($key));
+        }
+
+        return $fields;
     }
 
     private function epochOf(OwnershipCache $adapter, string $key): string

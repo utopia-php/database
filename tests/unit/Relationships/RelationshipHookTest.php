@@ -16,6 +16,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -776,5 +777,25 @@ final class RelationshipHookTest extends TestCase
         $this->assertTrue($database->deleteDocument('parent', 'parent1'));
         $this->assertSame([], $this->ids($database, 'parent'));
         $this->assertSame([], $this->ids($database, $junction));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCreatingWithAListOnTheChildSideOfAOneWayOneToOneIsRejected(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+
+        try {
+            $database->createDocument('child', new Document(['$id' => 'child1', 'parent' => ['parent1']]));
+            $this->fail('A list on the child side of a one-way one-to-one must be rejected');
+        } catch (RelationshipException $exception) {
+            $this->assertSame('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.', $exception->getMessage());
+        }
+
+        $this->assertSame([], $this->ids($database, 'child'));
     }
 }

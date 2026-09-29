@@ -2314,29 +2314,64 @@ class Database
     }
 
     /**
+     * Convert each filter to what its attribute stores. With the collections a query set's joins
+     * read, a filter on `alias.attribute` is converted by that collection's attribute, and the
+     * filters of each join's ON list and the conditions of each having() are converted too. A
+     * having condition on the alias of a min or max is converted by the aggregated attribute, on
+     * any other aggregate alias it is left as it is. Aggregates and selects are left as they are.
+     *
      * @param  array<Query>  $queries
+     * @param  array<string, Document>  $joinedCollections  The collection each join alias reads
      * @return array<Query>
      *
      * @throws QueryException
      * @throws \Utopia\Database\Exception
      */
-    public function convertQueries(Document $collection, array $queries): array
+    public function convertQueries(Document $collection, array $queries, array $joinedCollections = []): array
     {
-        $attributesById = $this->buildAttributeMap($collection);
+        $attributesById = $this->buildAttributeMap($collection, $joinedCollections);
         $isNestedQueryAttributeSupported = $this->adapter->supports(Capability::DefinedAttributes)
             && $this->adapter->supports(Capability::Objects);
 
-        return $this->convertQueriesWithMap($queries, $attributesById, $isNestedQueryAttributeSupported);
+        $havingAttributesById = null;
+        foreach ($queries as $index => $query) {
+            $method = $query->getMethod();
+
+            if ($method->isAggregate() || $method === Method::Select) {
+                continue;
+            }
+
+            if ($method->isJoin()) {
+                $this->convertQueriesWithMap($query->getJoinOnQueries(), $attributesById, $isNestedQueryAttributeSupported);
+
+                continue;
+            }
+
+            if ($method === Method::Having) {
+                $havingAttributesById ??= $this->withAggregateAliases($attributesById, $queries);
+                /** @var array<Query> $conditions */
+                $conditions = $query->getValues();
+                $query->setValues($this->convertQueriesWithMap($conditions, $havingAttributesById, $isNestedQueryAttributeSupported));
+
+                continue;
+            }
+
+            $queries[$index] = $this->convertQueriesWithMap([$query], $attributesById, $isNestedQueryAttributeSupported)[0];
+        }
+
+        return $queries;
     }
 
     /**
      * Build an `id => Document` map of the collection's attributes plus
-     * shared internal attribute Documents. Hoisted out so it's computed once
-     * per `convertQueries` call rather than per query / per attribute.
+     * shared internal attribute Documents, and of each joined collection's under
+     * `alias.id`. Hoisted out so it's computed once per `convertQueries` call
+     * rather than per query / per attribute.
      *
+     * @param  array<string, Document>  $joinedCollections
      * @return array<string, Document>
      */
-    private function buildAttributeMap(Document $collection): array
+    private function buildAttributeMap(Document $collection, array $joinedCollections = []): array
     {
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
@@ -2347,6 +2382,45 @@ class Database
         }
         foreach (self::internalAttributeDocuments() as $internal) {
             $attributesById[$internal->getId()] = $internal;
+        }
+
+        foreach ($joinedCollections as $alias => $joined) {
+            /** @var array<Document> $joinedAttributes */
+            $joinedAttributes = $joined->getAttribute('attributes', []);
+            foreach ([...$joinedAttributes, ...self::internalAttributeDocuments()] as $attribute) {
+                $attributesById[$alias.'.'.$attribute->getId()] ??= $attribute;
+            }
+        }
+
+        return $attributesById;
+    }
+
+    /**
+     * The attribute map a having condition is converted by: an aggregate alias names the result of
+     * its aggregate, which for min and max has the type of the aggregated attribute.
+     *
+     * @param  array<string, Document>  $attributesById
+     * @param  array<Query>  $queries
+     * @return array<string, Document>
+     */
+    private function withAggregateAliases(array $attributesById, array $queries): array
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            $alias = $query->getValue('');
+            if (! $method->isAggregate() || ! \is_string($alias) || $alias === '') {
+                continue;
+            }
+
+            $aggregated = \in_array($method, [Method::Min, Method::Max], true)
+                ? $attributesById[$query->getAttribute()] ?? null
+                : null;
+
+            if ($aggregated === null) {
+                unset($attributesById[$alias]);
+            } else {
+                $attributesById[$alias] = $aggregated;
+            }
         }
 
         return $attributesById;

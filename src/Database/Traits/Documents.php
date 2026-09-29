@@ -438,8 +438,11 @@ trait Documents
         }
 
         $joinDocumentSecurity = [];
+        $joinedByAlias = [];
         if (! empty($joins)) {
             $joinDocumentSecurity = $this->authorizeJoins($joins, PermissionType::Read);
+            $joinedByAlias = $this->joinedCollectionsByAlias($joins);
+            $queries = $this->convertQueries($collection, $queries, $joinedByAlias);
         }
 
         $selections = $this->validateSelections($collection, $selects);
@@ -598,7 +601,7 @@ trait Documents
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
         if (! empty($joins)) {
-            $document = $this->decodeJoins($document, $this->joinedCollectionsByAlias($joins));
+            $document = $this->decodeJoins($document, $joinedByAlias);
         }
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
@@ -3658,7 +3661,8 @@ trait Documents
             throw new DatabaseException('cursor Document must be from the same Collection.');
         }
 
-        $joinedCollections = $isAggregation ? [] : $this->joinedCollectionsByAlias($joins);
+        $joinedByAlias = $this->joinedCollectionsByAlias($joins);
+        $joinedCollections = $isAggregation ? [] : $joinedByAlias;
 
         if (! empty($cursor)) {
             $cursor = $this->encode($collection, $cursor);
@@ -3681,10 +3685,7 @@ trait Documents
         /** @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
-            $this->convertQueries($collection, $filters),
-            $aggregations,
-            $having,
-            $joins,
+            $this->convertQueries($collection, \array_merge($filters, $aggregations, $having, $joins), $joinedByAlias),
         );
 
         if (! empty($groupByAttrs)) {
@@ -4272,9 +4273,10 @@ trait Documents
             );
         }
 
-        $queries = \array_merge(
-            $this->convertQueries($collection, $filters),
-            $joins,
+        $queries = $this->convertQueries(
+            $collection,
+            \array_merge($filters, $joins),
+            $this->joinedCollectionsByAlias($joins),
         );
 
         $convertedQueries = $this->relationshipHook !== null

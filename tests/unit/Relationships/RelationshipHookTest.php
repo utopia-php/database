@@ -24,9 +24,11 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Operator;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Schema\ForeignKeyAction;
@@ -939,6 +941,50 @@ final class RelationshipHookTest extends TestCase
             $this->fail('A filter on an unknown related attribute must be rejected');
         } catch (QueryException $exception) {
             $this->assertStringContainsString('unknownAttribute', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{Closure(): Adapter, Relationship}>
+     */
+    public static function manySideRelationships(): iterable
+    {
+        foreach (self::adapters() as $adapterName => [$adapter]) {
+            yield "{$adapterName}: one-to-many" => [$adapter, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull)];
+            yield "{$adapterName}: many-to-many" => [$adapter, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull)];
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('manySideRelationships')]
+    public function testSetOperatorsDecideWhichDocumentsStayLinked(Closure $adapter, Relationship $relationship): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, $relationship);
+        foreach (['child1', 'child2', 'child3'] as $id) {
+            $database->createDocument('child', new Document(['$id' => $id]));
+        }
+        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1', 'child2', 'child3']]));
+
+        $steps = [
+            'arrayUnique' => [Operator::arrayUnique(), ['child1', 'child2', 'child3']],
+            'arrayFilter' => [Operator::arrayFilter('isNotNull'), ['child1', 'child2', 'child3']],
+            'arrayIntersect' => [Operator::arrayIntersect(['child1', 'child2']), ['child1', 'child2']],
+            'arrayDiff' => [Operator::arrayDiff(['child1']), ['child2']],
+            'arrayInsert' => [Operator::arrayInsert(0, 'child3'), ['child2', 'child3']],
+        ];
+        foreach ($steps as $step => [$operator, $expected]) {
+            $database->updateDocument('parent', 'parent1', new Document(['children' => $operator]));
+
+            $this->assertSame($expected, $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'), "After {$step}");
+            foreach (['child1', 'child2', 'child3'] as $id) {
+                $linked = $relationship->type === RelationType::OneToMany
+                    ? $database->getDocument('child', $id)->getDocument('parent')->getId() === 'parent1'
+                    : $this->relatedIds($database->getDocument('child', $id), 'parents') === ['parent1'];
+                $this->assertSame(\in_array($id, $expected, true), $linked, "After {$step}, {$id} seen from its own side");
+            }
         }
     }
 }

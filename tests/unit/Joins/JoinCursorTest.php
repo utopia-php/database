@@ -23,6 +23,7 @@ use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\IndexType;
 
 /**
@@ -387,6 +388,39 @@ final class JoinCursorTest extends TestCase
 
         $this->assertSame('d-first', $document->getAttribute('d.$id'));
         $this->assertSame('z', $document->getAttribute('d.label'));
+    }
+
+    /**
+     * @return iterable<string, array{list<Query>, OrderDirection, list<string>}>
+     */
+    public static function unlimitedOffsets(): iterable
+    {
+        yield 'fast path' => [[], OrderDirection::Asc, ['i08', 'i09', 'i10']];
+        yield 'builder path' => [[Query::notEqual('name', 'none')], OrderDirection::Asc, ['i08', 'i09', 'i10']];
+        yield 'builder path, descending' => [[], OrderDirection::Desc, ['i03', 'i02', 'i01']];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     * @param  list<string>  $expected
+     */
+    #[DataProvider('unlimitedOffsets')]
+    public function testAdapterFindWithAnOffsetAndNoLimitReturnsTheRowsAfterIt(array $queries, OrderDirection $direction, array $expected): void
+    {
+        $this->createItems();
+        $collection = $this->database->getCollection('items');
+
+        /** @var list<Document> $rows */
+        $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->getAdapter()->find(
+            $collection,
+            $queries,
+            limit: null,
+            offset: 7,
+            orderAttributes: ['$sequence'],
+            orderTypes: [$direction],
+        ));
+
+        $this->assertSame($expected, \array_map(static fn (Document $row): string => $row->getId(), $rows));
     }
 
     private function useDatabase(SQLite $adapter): void

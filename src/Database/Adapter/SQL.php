@@ -84,6 +84,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
     /**
+     * MariaDB, MySQL and SQLite accept OFFSET only after a LIMIT; this one bounds nothing on any engine.
+     */
+    private const int UNBOUNDED_LIMIT = PHP_INT_MAX;
+
+    /**
      * No aggregate alias can start with `$`, so a projected column never shares a result name with an
      * aggregate.
      */
@@ -1259,8 +1264,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $internalOrder = $this->quote($this->getInternalKeyForAttribute(Document::SEQUENCE));
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
-            $limitClause = $limit !== null ? " LIMIT {$limit}" : '';
-            $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($limit !== null ? ' OFFSET 0' : '');
+            $pageLimit = $limit ?? ($offset !== null && $offset > 0 ? self::UNBOUNDED_LIMIT : null);
+            $limitClause = $pageLimit !== null ? " LIMIT {$pageLimit}" : '';
+            $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($pageLimit !== null ? ' OFFSET 0' : '');
 
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}";
             $stmt = null;
@@ -5156,6 +5162,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         bool $afterUnion = false,
         array $joinAliases = [],
     ): void {
+        if ($limit === null && $offset !== null) {
+            $limit = self::UNBOUNDED_LIMIT;
+        }
+
         if ($afterUnion) {
             $quote = $this->getIdentifierQuoteChar();
             $builder->afterBuild(function (Statement $result) use (

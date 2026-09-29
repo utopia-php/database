@@ -1177,11 +1177,13 @@ trait IndexTests
             Attribute::boolean(key: 'active'),
             Attribute::datetime(key: 'seenAt'),
             Attribute::string(key: 'name', size: 16),
+            Attribute::string(key: 'group', size: 16),
         ];
         $indexes = \array_map(
             fn (string $attribute): Index => Index::key(key: $attribute.'_key', attributes: [$attribute]),
             \array_keys($values),
         );
+        $indexes[] = Index::key(key: 'group_count', attributes: ['group', 'count']);
         $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
 
         $fromCollection = 'key_scan_collection_'.\uniqid();
@@ -1200,6 +1202,7 @@ trait IndexTests
                 'active' => true,
                 'seenAt' => '2026-01-01T00:00:00.000+00:00',
                 'name' => 'first',
+                'group' => 'a',
             ]));
 
             foreach ($values as $attribute => $value) {
@@ -1208,6 +1211,10 @@ trait IndexTests
                 $this->assertStringContainsString('"stage":"IXSCAN"', $plan, $collection.': an equality on '.$attribute.' must scan its key index');
                 $this->assertStringContainsString('"indexName":"'.$attribute.'_key"', $plan, $collection.': an equality on '.$attribute.' must use '.$attribute.'_key');
             }
+
+            $plan = $this->explainMongoFind($adapter, $collection, ['group' => 'a']);
+            $this->assertStringContainsString('"stage":"IXSCAN"', $plan, $collection.': an equality on the leading field of a compound key index must scan it');
+            $this->assertStringContainsString('"indexName":"group_count"', $plan, $collection.': an equality on group alone must use group_count');
 
             $database->deleteCollection($collection);
         }

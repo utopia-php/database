@@ -4015,20 +4015,23 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Both index types leave out documents without the field, so null values neither collide in a unique index nor
-     * fill a key index. Only unique indexes also require the stored type: MongoDB uses a partial index for a query
-     * only when the query implies its filter, and a filter on a value implies `$exists` but never `$type`.
+     * MongoDB uses a partial index for a query only when the query implies its filter, and a filter on a value implies
+     * `$exists` but never `$type`. A unique index requires every field to exist with its stored type, so null values
+     * never collide. A key index requires only its leading field to exist, so a filter on that field, alone or with
+     * the following ones, can use it.
      *
-     * @param  array<string, ColumnType>  $fields  stored field name => attribute type
+     * @param  non-empty-array<string, ColumnType>  $fields  stored field name => attribute type, in index order
      * @return array<string, array<string, mixed>>
      */
     private function getPartialFilterExpression(IndexType $type, array $fields): array
     {
+        if ($type !== IndexType::Unique) {
+            return [\array_key_first($fields) => ['$exists' => true]];
+        }
+
         $filter = [];
         foreach ($fields as $field => $attributeType) {
-            $filter[$field] = $type === IndexType::Unique
-                ? ['$exists' => true, '$type' => $this->getMongoTypeCode($attributeType)]
-                : ['$exists' => true];
+            $filter[$field] = ['$exists' => true, '$type' => $this->getMongoTypeCode($attributeType)];
         }
 
         return $filter;

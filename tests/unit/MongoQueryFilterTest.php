@@ -127,7 +127,7 @@ final class MongoQueryFilterTest extends TestCase
         );
     }
 
-    public function testKeyIndexPartialFiltersRequireOnlyThatTheFieldExists(): void
+    public function testKeyIndexPartialFiltersRequireOnlyThatTheLeadingFieldExists(): void
     {
         $adapter = $this->createAdapter();
         $types = [
@@ -156,16 +156,16 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertSame(
             [
                 'count_key' => ['count' => ['$exists' => true]],
-                'name_seen' => ['name' => ['$exists' => true], 'seenAt' => ['$exists' => true]],
+                'name_seen' => ['name' => ['$exists' => true]],
                 '_uid' => null,
                 '_createdAt' => null,
                 '_updatedAt' => null,
                 '_permissions' => null,
-                'price_active' => ['price' => ['$exists' => true], 'active' => ['$exists' => true]],
+                'price_active' => ['price' => ['$exists' => true]],
                 'count_unique' => ['count' => ['$exists' => true, '$type' => ['int', 'long']]],
             ],
             $this->partialFilters(),
-            'A key index must be usable by any filter on a value, which implies $exists but never $type',
+            'A key index must be usable by any filter on a value of its leading field, which implies $exists but never $type',
         );
     }
 

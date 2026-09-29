@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 
@@ -108,5 +109,58 @@ trait MongoReadFilterTests
         $authorization->addRole(Role::any()->toString());
         $authorization->addRole(Role::users()->toString());
         $authorization->addRole(Role::user($user)->toString());
+    }
+
+    public function testStartsWithAndEndsWithAreAnchored(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar', 'barfoo', 'Foobar', 'barfoobar']);
+
+        $this->assertSame(['foobar'], $this->namesOf($database->find($collection, [Query::startsWith('name', 'foo')])));
+        $this->assertSame(['barfoo'], $this->namesOf($database->find($collection, [Query::endsWith('name', 'foo')])));
+        $this->assertSame(1, $database->count($collection, [Query::startsWith('name', 'foo')]));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  list<string>  $names
+     */
+    private function createNamesCollection(Database $database, array $names): string
+    {
+        $collection = 'names_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::string(key: 'tags', size: 16, array: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        foreach ($names as $name) {
+            $database->createDocument($collection, new Document(['name' => $name, 'tags' => \str_split($name, 3)]));
+        }
+
+        return $collection;
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<string>
+     */
+    private function namesOf(array $documents): array
+    {
+        $names = [];
+        foreach ($documents as $document) {
+            $name = $document->getAttribute('name');
+            $this->assertIsString($name);
+            $names[] = $name;
+        }
+        \sort($names);
+
+        return $names;
     }
 }

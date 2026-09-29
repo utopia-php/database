@@ -3641,8 +3641,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     protected function getQueryValue(Method $method, mixed $value): mixed
     {
         return match ($method) {
-            Method::StartsWith => preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/').'.*',
-            Method::EndsWith => '.*'.preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/'),
+            Method::StartsWith => '^'.preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/'),
+            Method::EndsWith => preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/').'$',
             default => $value,
         };
     }

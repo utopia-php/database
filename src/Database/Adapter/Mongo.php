@@ -1158,9 +1158,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
             $partialFilter = [];
             foreach ($attributes as $i => $attr) {
-                $attrType = Attribute::tryNormalizeType($indexAttributeTypes[$i] ?? '') ?? ColumnType::String;
-                $attrType = $this->getMongoTypeCode($attrType);
-                $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+                $attributeType = Attribute::tryNormalizeType($indexAttributeTypes[$index->attributes[$i]] ?? '') ?? ColumnType::String;
+                $partialFilter[$attr] = ['$exists' => true, '$type' => $this->getMongoTypeCode($attributeType)];
             }
             if (! empty($partialFilter)) {
                 $indexes['partialFilterExpression'] = $partialFilter;
@@ -4019,9 +4018,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Converts Appwrite database type to MongoDB BSON type code.
+     * The BSON types a stored value of the column type can have. PHP integers are written as int
+     * or long by magnitude, and a float attribute also accepts integers.
+     *
+     * @return string|list<string>
      */
-    private function getMongoTypeCode(ColumnType $type): string
+    private function getMongoTypeCode(ColumnType $type): string|array
     {
         return match ($type) {
             ColumnType::String,
@@ -4031,10 +4033,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             ColumnType::LongText,
             ColumnType::Id,
             ColumnType::Uuid7 => 'string',
-            ColumnType::BigInteger => 'long',
-            ColumnType::Integer => 'int',
+            ColumnType::BigInteger,
+            ColumnType::Integer => ['int', 'long'],
             ColumnType::Float,
-            ColumnType::Double => 'double',
+            ColumnType::Double => ['double', 'int', 'long'],
             ColumnType::Boolean => 'bool',
             ColumnType::Datetime => 'date',
             default => 'string'

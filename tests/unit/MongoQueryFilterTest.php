@@ -7,10 +7,12 @@ use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Document;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 use Utopia\Mongo\Exception as MongoException;
+use Utopia\Query\Schema\ColumnType;
 
 final class MongoQueryFilterTest extends TestCase
 {
@@ -87,6 +89,55 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertNull($stored['$tenant']);
     }
 
+    public function testPartialFiltersMatchTheAttributeTypes(): void
+    {
+        $adapter = $this->createAdapter();
+        $types = [
+            'count' => ColumnType::Integer->value,
+            'total' => ColumnType::BigInteger->value,
+            'price' => ColumnType::Float->value,
+            'active' => ColumnType::Boolean->value,
+            'seenAt' => ColumnType::Datetime->value,
+            'name' => ColumnType::String->value,
+        ];
+
+        foreach (\array_keys($types) as $attribute) {
+            $adapter->createIndex(self::COLLECTION, Index::key(key: $attribute.'_key', attributes: [$attribute]), $types);
+        }
+        $adapter->createIndex(self::COLLECTION, Index::key(key: 'name_count', attributes: ['name', 'count']), $types);
+
+        $this->assertSame(
+            [
+                'count_key' => ['count' => ['$exists' => true, '$type' => ['int', 'long']]],
+                'total_key' => ['total' => ['$exists' => true, '$type' => ['int', 'long']]],
+                'price_key' => ['price' => ['$exists' => true, '$type' => ['double', 'int', 'long']]],
+                'active_key' => ['active' => ['$exists' => true, '$type' => 'bool']],
+                'seenAt_key' => ['seenAt' => ['$exists' => true, '$type' => 'date']],
+                'name_key' => ['name' => ['$exists' => true, '$type' => 'string']],
+                'name_count' => [
+                    'name' => ['$exists' => true, '$type' => 'string'],
+                    'count' => ['$exists' => true, '$type' => ['int', 'long']],
+                ],
+            ],
+            $this->partialFilters(),
+        );
+    }
+
+    public function testUniqueIndexOnAnIntegerFiltersOnTheIntegerTypes(): void
+    {
+        $this->createAdapter()->createIndex(
+            self::COLLECTION,
+            Index::unique(key: 'count_unique', attributes: ['count']),
+            ['count' => ColumnType::Integer->value],
+        );
+
+        $this->assertSame(
+            ['count_unique' => ['count' => ['$exists' => true, '$type' => ['int', 'long']]]],
+            $this->partialFilters(),
+        );
+        $this->assertTrue($this->calls['createIndexes'][0]['unique'] ?? false);
+    }
+
     /**
      * @param  array<Query>  $queries
      * @return array<Document>
@@ -94,6 +145,21 @@ final class MongoQueryFilterTest extends TestCase
     private function find(array $queries): array
     {
         return $this->createAdapter()->find(new Document(['$id' => self::COLLECTION]), $queries);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function partialFilters(): array
+    {
+        $filters = [];
+        foreach ($this->calls['createIndexes'] ?? [] as $index) {
+            if (\is_string($index['name'] ?? null)) {
+                $filters[$index['name']] = $index['partialFilterExpression'] ?? null;
+            }
+        }
+
+        return $filters;
     }
 
     private function createAdapter(): Mongo

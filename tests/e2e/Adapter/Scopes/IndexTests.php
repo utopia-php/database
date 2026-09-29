@@ -6,6 +6,7 @@ use Exception;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -17,6 +18,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1103,5 +1105,79 @@ trait IndexTests
         }
 
         $database->deleteCollection($collection);
+    }
+
+    public function testMongoUniqueIndexOnAnIntegerIsEnforced(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createMongoUniqueIndexCollection($database, [Attribute::integer(key: 'count', size: 8)]);
+
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'count', 7);
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'count', 5_000_000_000);
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testMongoUniqueIndexesOnFloatBooleanAndDatetimeAreEnforced(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createMongoUniqueIndexCollection($database, [
+            Attribute::double(key: 'price'),
+            Attribute::boolean(key: 'active'),
+            Attribute::datetime(key: 'seenAt'),
+        ]);
+
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'price', 9.5);
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'active', true);
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'seenAt', '2026-01-01T00:00:00.000+00:00');
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     */
+    private function createMongoUniqueIndexCollection(Database $database, array $attributes): string
+    {
+        $collection = 'unique_types_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: $attributes,
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        foreach ($attributes as $attribute) {
+            $database->createIndex($collection, Index::unique(key: $attribute->key.'_unique', attributes: [$attribute->key]));
+        }
+
+        return $collection;
+    }
+
+    private function assertMongoUniqueIndexRejectsDuplicates(Database $database, string $collection, string $attribute, mixed $value): void
+    {
+        $database->createDocument($collection, new Document([$attribute => $value]));
+
+        try {
+            $database->createDocument($collection, new Document([$attribute => $value]));
+            $this->fail('The unique index on '.$attribute.' must reject a second document with the same value');
+        } catch (UniqueException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
+        }
     }
 }

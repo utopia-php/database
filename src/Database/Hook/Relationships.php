@@ -792,7 +792,7 @@ class Relationships implements Hook
                                 $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]);
 
                                 if ($related->isEmpty()) {
-                                    if (! isset($value[Document::PERMISSIONS])) {
+                                    if (! isset($relation[Document::PERMISSIONS])) {
                                         $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                     }
                                     $related = $this->db->createDocument(

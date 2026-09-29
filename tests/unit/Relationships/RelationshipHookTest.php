@@ -627,4 +627,45 @@ final class RelationshipHookTest extends TestCase
 
         return $ids;
     }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testANewNestedManyToManyDocumentKeepsItsOwnPermissions(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => [Permission::read(Role::any())]]));
+
+        $own = [Permission::read(Role::any()), Permission::update(Role::user('owner'))];
+        $database->updateDocument('parent', 'parent1', new Document([
+            'children' => [new Document(['$id' => 'child1', '$permissions' => $own])],
+        ]));
+
+        $child = $database->getAuthorization()->skip(fn () => $database->getDocument('child', 'child1'));
+        $this->assertSame($own, $child->getPermissions(), 'A nested many-to-many document created with its own permissions must keep them');
+        $this->assertSame(['child1'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testANewNestedManyToManyDocumentWithoutPermissionsTakesTheParentPermissions(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        $parentPermissions = [Permission::read(Role::any()), Permission::update(Role::user('owner'))];
+        $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $parentPermissions]));
+
+        $database->updateDocument('parent', 'parent1', new Document([
+            'children' => [new Document(['$id' => 'child1'])],
+        ]));
+
+        $child = $database->getAuthorization()->skip(fn () => $database->getDocument('child', 'child1'));
+        $this->assertSame($parentPermissions, $child->getPermissions());
+    }
 }

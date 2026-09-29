@@ -2,18 +2,30 @@
 
 namespace Tests\Unit\Event;
 
+use ArrayObject;
 use Closure;
+use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
 use TypeError;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\None;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
 
 final class DocumentPurgeTest extends TestCase
 {
@@ -321,5 +333,304 @@ final class DocumentPurgeTest extends TestCase
         }
 
         return null;
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Database): mixed}>
+     */
+    public static function writes(): iterable
+    {
+        foreach (self::purgingCalls() as $name => $call) {
+            if ($name !== 'purgeCachedDocument') {
+                yield $name => $call;
+            }
+        }
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testPurgeEventsInsideACallerTransactionFireAfterTheCommit(Closure $write): void
+    {
+        [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first']);
+        $inTransaction = $this->observePurges($database, static fn (): bool => $database->getAdapter()->inTransaction());
+
+        $database->withTransaction(static fn (): mixed => $write($database));
+
+        $this->assertSame([false], $inTransaction->getArrayCopy());
+        $this->assertSame(['posts/first'], $this->purged($recorder));
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testPurgeEventsAreDroppedWhenTheCallerTransactionRollsBack(Closure $write): void
+    {
+        [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first']);
+        $abandoned = new RuntimeException('abandoned');
+
+        $this->assertSame($abandoned, $this->failureOf(static fn (): mixed => $database->withTransaction(
+            static function () use ($database, $write, $abandoned): never {
+                $write($database);
+
+                throw $abandoned;
+            },
+        )));
+
+        $this->assertSame([], $this->purged($recorder));
+    }
+
+    /**
+     * @param  Closure(): Database  $database
+     */
+    #[DataProvider('databases')]
+    public function testPurgeEventsOfARolledBackNestedTransactionAreDropped(Closure $database): void
+    {
+        [$database, $recorder] = $this->seeded($database(), ['first', 'second']);
+        $abandoned = new RuntimeException('abandoned');
+
+        $database->withTransaction(function () use ($database, $abandoned): void {
+            $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
+
+            $this->assertSame($abandoned, $this->failureOf(static fn (): mixed => $database->withTransaction(
+                static function () use ($database, $abandoned): never {
+                    $database->updateDocument(HookFixture::COLLECTION, 'second', new Document(['title' => 'renamed']));
+
+                    throw $abandoned;
+                },
+            )));
+        });
+
+        $this->assertSame(['posts/first'], $this->purged($recorder));
+        $this->assertSame('second', $database->getDocument(HookFixture::COLLECTION, 'second')->getAttribute('title'));
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testPurgeEventsOfARetriedCallerTransactionFireOnce(Closure $write): void
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            public int $commitFailures = 0;
+
+            #[\Override]
+            public function commitTransaction(): bool
+            {
+                if ($this->inTransaction === 1 && $this->commitFailures > 0) {
+                    $this->commitFailures--;
+
+                    throw new RuntimeException('commit lost');
+                }
+
+                return parent::commitTransaction();
+            }
+        };
+        [$database, $recorder] = $this->seeded(HookFixture::database($adapter), ['first']);
+
+        $adapter->commitFailures = 1;
+        $database->withTransaction(static fn (): mixed => $write($database));
+
+        $this->assertSame(0, $adapter->commitFailures);
+        $this->assertSame(['posts/first'], $this->purged($recorder));
+    }
+
+    public function testPurgeEventsOfWritesWithoutAnAdapterTransactionFireAtOnce(): void
+    {
+        $adapter = new class () extends Memory {
+            #[\Override]
+            public function withTransaction(callable $callback): mixed
+            {
+                return $callback();
+            }
+        };
+        [$database, $recorder] = $this->seeded(HookFixture::database($adapter), ['first']);
+        $abandoned = new RuntimeException('abandoned');
+
+        $this->assertSame($abandoned, $this->failureOf(static fn (): mixed => $database->withTransaction(
+            static function () use ($database, $abandoned): never {
+                $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
+
+                throw $abandoned;
+            },
+        )));
+
+        $this->assertSame('renamed', $database->getDocument(HookFixture::COLLECTION, 'first')->getAttribute('title'));
+        $this->assertSame(['posts/first'], $this->purged($recorder));
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testPurgeEventFiresWhenThePostCommitInvalidationFails(Closure $write): void
+    {
+        $failure = new RuntimeException('cache unavailable');
+        $cache = new class ($failure) extends MemoryCache {
+            public bool $failing = false;
+
+            public function __construct(private readonly RuntimeException $failure)
+            {
+            }
+
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+            {
+                if ($this->failing) {
+                    throw $this->failure;
+                }
+
+                return parent::save($key, $data, $hash);
+            }
+
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                if ($this->failing) {
+                    throw $this->failure;
+                }
+
+                return parent::purge($key, $hash);
+            }
+        };
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            public ?Closure $afterCommit = null;
+
+            #[\Override]
+            public function commitTransaction(): bool
+            {
+                $committed = parent::commitTransaction();
+                if (! $this->inTransaction()) {
+                    $this->afterCommit?->__invoke();
+                }
+
+                return $committed;
+            }
+        };
+        $database = HookFixture::database($adapter)->setCache(new Cache($cache));
+        [$database, $recorder] = $this->seeded($database, ['first']);
+
+        $adapter->afterCommit = static function () use ($cache): void {
+            $cache->failing = true;
+        };
+
+        $this->assertSame($failure, $this->failureOf(static fn (): mixed => $write($database)));
+        $this->assertSame(['posts/first'], $this->purged($recorder));
+    }
+
+    public function testQueuedPurgeEventsKeepTheirTenant(): void
+    {
+        $database = (new Database(new Memory(), new Cache(new None())))
+            ->setAuthorization(new Authorization())
+            ->setDatabase('hooks')
+            ->setNamespace('hooks_'.\uniqid())
+            ->setSharedTables(true)
+            ->setTenant(null)
+            ->setTenantPerDocument(true);
+        $database->create();
+        $database->createCollection(new Collection(
+            id: HookFixture::COLLECTION,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ));
+        foreach ([7, 8] as $tenant) {
+            $database->createDocument(HookFixture::COLLECTION, new Document([
+                Document::ID => 'first',
+                Document::TENANT => $tenant,
+                'title' => 'first',
+            ]));
+        }
+        $tenants = $this->observePurges($database, static fn (): int|string|null => $database->getTenant());
+
+        $database->withTransaction(static function () use ($database): void {
+            $database->withTenant(7, static fn (): Document => $database->updateDocument(
+                HookFixture::COLLECTION,
+                'first',
+                new Document(['title' => 'renamed']),
+            ));
+            $database->withTenant(8, static fn (): int => $database->updateDocuments(
+                HookFixture::COLLECTION,
+                new Document(['title' => 'renamed']),
+                [Query::equal('$id', ['first'])],
+            ));
+        });
+
+        $this->assertSame([7, 8], $tenants->getArrayCopy());
+        $this->assertNull($database->getTenant());
+    }
+
+    public function testQueuedPurgeEventsStaySilenced(): void
+    {
+        [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first', 'second']);
+        $named = new NamedRecordingLifecycle('audit');
+        $database->addHook($named);
+
+        $database->withTransaction(static function () use ($database): void {
+            $database->silent(static fn (): Document => $database->updateDocument(
+                HookFixture::COLLECTION,
+                'first',
+                new Document(['title' => 'renamed']),
+            ));
+            $database->silent(static fn (): Document => $database->updateDocument(
+                HookFixture::COLLECTION,
+                'second',
+                new Document(['title' => 'renamed']),
+            ), ['audit']);
+        });
+
+        $this->assertSame(['posts/second'], $this->purged($recorder));
+        $this->assertSame([], $named->getPayloads(Event::DocumentPurge));
+    }
+
+    public function testEveryQueuedPurgeEventIsDeliveredWhenAListenerFails(): void
+    {
+        [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first', 'second']);
+        $failure = new RuntimeException('region broadcast failed');
+        $database->addHook(new FailingLifecycle(Event::DocumentPurge, $failure));
+
+        $this->assertSame($failure, $this->failureOf(static fn (): mixed => $database->withTransaction(
+            static function () use ($database): void {
+                $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
+                $database->updateDocument(HookFixture::COLLECTION, 'second', new Document(['title' => 'renamed']));
+            },
+        )));
+
+        $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
+    }
+
+    /**
+     * @param  Closure(): mixed  $observe
+     * @return ArrayObject<int, mixed>
+     */
+    private function observePurges(Database $database, Closure $observe): ArrayObject
+    {
+        /** @var ArrayObject<int, mixed> $observed */
+        $observed = new ArrayObject();
+        $database->addHook(new class ($observe, $observed) implements Lifecycle {
+            /**
+             * @param  Closure(): mixed  $observe
+             * @param  ArrayObject<int, mixed>  $observed
+             */
+            public function __construct(
+                private readonly Closure $observe,
+                private readonly ArrayObject $observed,
+            ) {
+            }
+
+            public function handle(Event $event, mixed $data): void
+            {
+                if ($event === Event::DocumentPurge) {
+                    $this->observed->append(($this->observe)());
+                }
+            }
+        });
+
+        return $observed;
     }
 }

@@ -1427,6 +1427,11 @@ trait Documents
                 $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
             }
 
+            $this->queueDocumentPurge($collection->getId(), $id);
+            if ($document->getId() !== $id) {
+                $this->queueDocumentPurge($collection->getId(), $document->getId());
+            }
+
             if ($hasOperators) {
                 $refetched = $this->refetchDocuments($collection, [$document]);
                 $document = $refetched[0];
@@ -1437,11 +1442,6 @@ trait Documents
 
         if ($document->isEmpty()) {
             return $document;
-        }
-
-        $this->triggerDocumentPurge($collection->getId(), $id);
-        if ($document->getId() !== $id) {
-            $this->triggerDocumentPurge($collection->getId(), $document->getId());
         }
 
         $hook = $this->relationshipHook;
@@ -1680,9 +1680,9 @@ trait Documents
                         fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
                     );
                 }
-            });
 
-            $this->triggerDocumentPurges($collection->getId(), $batch);
+                $this->queueDocumentPurges($collection->getId(), $batch);
+            });
 
             if ($hasOperators) {
                 $batch = $this->refetchDocuments($collection, $batch, $grouped['selections']);
@@ -2077,11 +2077,11 @@ trait Documents
                         );
                     }
 
+                    $this->queueDocumentPurges($collection->getId(), $batch);
+
                     return $batch;
                 }
             );
-
-            $this->triggerDocumentPurges($collection->getId(), $batch);
 
             foreach ($batch as $index => $document) {
                 if (empty($document->getSequence()) && ! empty($chunk[$index]->getOld()->getSequence())) {
@@ -2323,11 +2323,10 @@ trait Documents
             );
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
+            $this->queueDocumentPurge($collection->getId(), $id);
 
             return $document->setAttribute($attribute, $result);
         });
-
-        $this->triggerDocumentPurge($collection->getId(), $id);
 
         $this->triggerHooks(Event::DocumentIncrease, $document);
 
@@ -2447,11 +2446,10 @@ trait Documents
             );
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
+            $this->queueDocumentPurge($collection->getId(), $id);
 
             return $document->setAttribute($attribute, $result);
         });
-
-        $this->triggerDocumentPurge($collection->getId(), $id);
 
         $this->triggerHooks(Event::DocumentDecrease, $document);
 
@@ -2523,6 +2521,10 @@ trait Documents
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
+            if ($result) {
+                $this->queueDocumentPurge($collection->getId(), $id);
+            }
+
             return $result ? $document : null;
         });
 
@@ -2530,7 +2532,6 @@ trait Documents
             return false;
         }
 
-        $this->triggerDocumentPurge($collection->getId(), $id);
         $this->triggerDeleteHooks($deleted, $changed);
 
         return true;
@@ -2710,9 +2711,9 @@ trait Documents
                         fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
                     );
                 }
-            });
 
-            $this->triggerDocumentPurges($collection->getId(), $batch);
+                $this->queueDocumentPurges($collection->getId(), $batch);
+            });
 
             foreach ($batch as $index => $document) {
                 try {
@@ -3203,27 +3204,50 @@ trait Documents
     }
 
     /**
-     * Announce the purge of a written document once its mutation has returned: firing
-     * inside the mutation would repeat the event whenever the adapter retries the
-     * transaction.
+     * Announce the purge of a written document once the outermost transaction of its
+     * invalidation scope has committed, under the tenant and the hook silences in force
+     * when it was written. A write the adapter holds no transaction for is already
+     * durable and announces at once.
      */
-    private function triggerDocumentPurge(string $collectionId, string $id): void
+    private function queueDocumentPurge(string $collectionId, string $id): void
     {
-        $this->triggerPropagatingHooks(Event::DocumentPurge, new Document([
+        $document = new Document([
             Document::ID => $id,
             Document::COLLECTION => $collectionId,
-        ]));
+        ]);
+
+        if (! $this->adapter->inTransaction()) {
+            $this->triggerPropagatingHooks(Event::DocumentPurge, $document);
+
+            return;
+        }
+
+        if ($this->areEventsSilenced()) {
+            return;
+        }
+
+        $context = $this->getEventContext();
+        $tenant = $this->getTenant();
+        $silenced = \array_keys($this->silencedListeners[$context] ?? []);
+        $announce = fn () => $this->triggerPropagatingHooks(Event::DocumentPurge, $document);
+
+        $this->documentPurgeEvents[$context][] = function () use ($tenant, $silenced, $announce): void {
+            $this->withTenant(
+                $tenant,
+                $silenced === [] ? $announce : fn () => $this->silent($announce, $silenced),
+            );
+        };
     }
 
     /**
      * @param  array<Document>  $documents
      */
-    private function triggerDocumentPurges(string $collectionId, array $documents): void
+    private function queueDocumentPurges(string $collectionId, array $documents): void
     {
         foreach ($documents as $document) {
             $this->withDocumentTenant(
                 $document,
-                fn () => $this->triggerDocumentPurge($collectionId, $document->getId())
+                fn () => $this->queueDocumentPurge($collectionId, $document->getId())
             );
         }
     }

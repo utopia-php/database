@@ -270,7 +270,7 @@ class QueryCache
         }
 
         if (! \is_string($value) || $value === '') {
-            throw new RuntimeException("Invalid query cache epoch for '{$key}'");
+            return null;
         }
 
         $separator = \strrpos($value, self::SEPARATOR);

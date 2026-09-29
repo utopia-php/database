@@ -265,6 +265,16 @@ class QueryCacheTest extends TestCase
         $this->assertInvalidated($cache, $queryCache->getCollectionKey(new Scope(), 'users'));
     }
 
+    public function testAnInvalidEpochIsAMiss(): void
+    {
+        $cache = new Cache(new Memory());
+        $queryCache = new QueryCache($cache);
+        $scope = new Scope(namespace: 'ns');
+        $cache->save($queryCache->getCollectionKey($scope, 'users').'#epoch', ['not' => 'an epoch']);
+
+        $this->assertNull($queryCache->getEntry($scope, 'users', []), 'An epoch value the query cache did not write must disable the cache for that read, not fail it');
+    }
+
     public function testEntriesResolveByDefault(): void
     {
         $this->assertNotNull($this->queryCache->getEntry(new Scope(), 'any', []));

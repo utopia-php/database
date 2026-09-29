@@ -2,7 +2,9 @@
 
 namespace Tests\Unit\Cache;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
@@ -70,6 +72,66 @@ final class DatabaseQueryCacheTest extends TestCase
         $this->assertSame(['c'], $this->ids($descending));
         $this->assertSame(['b'], $this->ids($afterA));
         $this->assertSame(['c'], $this->ids($afterB));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function queryCacheFailures(): array
+    {
+        return [
+            'epoch or entry load' => ['load'],
+            'lease' => ['getGeneration'],
+            'fill' => ['saveWithLease'],
+        ];
+    }
+
+    #[DataProvider('queryCacheFailures')]
+    public function testFindFallsBackToTheDatabaseWhenTheQueryCacheFails(string $method): void
+    {
+        $cache = new class (new LeasableHashCache()) extends Cache {
+            public string $failing = '';
+
+            #[\Override]
+            public function load(string $key, int $ttl, string $hash = ''): mixed
+            {
+                $this->assertAvailable('load');
+
+                return parent::load($key, $ttl, $hash);
+            }
+
+            #[\Override]
+            public function getGeneration(string $key): string
+            {
+                $this->assertAvailable('getGeneration');
+
+                return parent::getGeneration($key);
+            }
+
+            #[\Override]
+            public function saveWithLease(string $key, mixed $data, string $hash, string $generation): bool|string|array
+            {
+                $this->assertAvailable('saveWithLease');
+
+                return parent::saveWithLease($key, $data, $hash, $generation);
+            }
+
+            private function assertAvailable(string $method): void
+            {
+                if ($this->failing === $method) {
+                    throw new RuntimeException("Cache unavailable during {$method}");
+                }
+            }
+        };
+        $adapter = new ObservedMemory();
+        [$database] = $this->createDatabase($adapter, queryCache: false);
+        $this->createUsers($database);
+        $database->setQueryCache(new QueryCache($cache));
+        $cache->failing = $method;
+        $adapter->observeFinds('users');
+
+        $this->assertSame(['a', 'b', 'c'], $this->ids($database->find('users', [Query::orderAsc('$id')])));
+        $this->assertSame(1, $adapter->getObservedFinds(), 'A query cache that fails must fall back to reading the database');
     }
 
     public function testRandomOrderAlwaysBypassesQueryCache(): void

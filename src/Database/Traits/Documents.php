@@ -3330,39 +3330,46 @@ trait Documents
                     : $this->getQueryCacheField($collection, $queryCacheQueries, forPermission: $forPermission);
 
                 if ($cacheContext !== null) {
-                    $cacheEntry = $this->queryCache->getEntry(
-                        $this->getQueryCacheScope(),
-                        $collection->getId(),
-                        [
-                            'input' => \array_map(
-                                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
-                                $queryCacheQueries,
-                            ),
-                            'queries' => \array_map(
-                                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
-                                $queries,
-                            ),
-                            'limit' => $limit ?? 25,
-                            'offset' => $offset ?? 0,
-                            'orderAttributes' => $orderAttributes,
-                            'orderTypes' => \array_map(
-                                static fn (\Utopia\Query\OrderDirection $direction): string => $direction->value,
-                                $orderTypes,
-                            ),
-                            'cursor' => $this->normalizeQueryCacheQueryValue($cursor),
-                            'cursorDirection' => $cursorDirection->value,
-                        ],
-                        $cacheContext,
-                    );
-                }
+                    $cacheQueries = [
+                        'input' => \array_map(
+                            fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                            $queryCacheQueries,
+                        ),
+                        'queries' => \array_map(
+                            fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                            $queries,
+                        ),
+                        'limit' => $limit ?? 25,
+                        'offset' => $offset ?? 0,
+                        'orderAttributes' => $orderAttributes,
+                        'orderTypes' => \array_map(
+                            static fn (\Utopia\Query\OrderDirection $direction): string => $direction->value,
+                            $orderTypes,
+                        ),
+                        'cursor' => $this->normalizeQueryCacheQueryValue($cursor),
+                        'cursorDirection' => $cursorDirection->value,
+                    ];
 
-                if ($cacheEntry !== null) {
-                    $cached = $this->queryCache->get($cacheEntry);
-                    if ($cached !== null) {
-                        $results = $cached;
+                    try {
+                        $cacheEntry = $this->queryCache->getEntry(
+                            $this->getQueryCacheScope(),
+                            $collection->getId(),
+                            $cacheQueries,
+                            $cacheContext,
+                        );
+
+                        if ($cacheEntry !== null) {
+                            $cached = $this->queryCache->get($cacheEntry);
+                            if ($cached !== null) {
+                                $results = $cached;
+                                $cacheEntry = null;
+                            } else {
+                                $cacheGeneration = $this->queryCache->getGeneration($cacheEntry);
+                            }
+                        }
+                    } catch (Exception $error) {
+                        Console::warning('Warning: Failed to get query results from cache: '.$error->getMessage());
                         $cacheEntry = null;
-                    } else {
-                        $cacheGeneration = $this->queryCache->getGeneration($cacheEntry);
                     }
                 }
             }
@@ -3408,7 +3415,11 @@ trait Documents
                 }
 
                 if ($cacheEntry !== null && $this->queryCache !== null) {
-                    $this->queryCache->set($cacheEntry, $results, $cacheGeneration);
+                    try {
+                        $this->queryCache->set($cacheEntry, $results, $cacheGeneration);
+                    } catch (Exception $error) {
+                        Console::warning('Failed to save query results to cache: '.$error->getMessage());
+                    }
                 }
             }
         }

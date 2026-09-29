@@ -987,4 +987,32 @@ final class RelationshipHookTest extends TestCase
             }
         }
     }
+
+    public function testLinkingAChildGrantedUpdateOnlyByItsOwnPermissionsWithoutThePermissionsHook(): void
+    {
+        $authorization = new Authorization();
+        $authorization->addRole(Role::any()->toString());
+
+        $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()));
+        $database
+            ->setAuthorization($authorization)
+            ->setDatabase('relationship_hook')
+            ->setNamespace('relationship_hook_'.\uniqid());
+        $database->create();
+        $database->addHook(new Relationships($database));
+
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]]));
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => ['child1']]));
+
+        $child = $database->skipRelationships(fn () => $database->getDocument('child', 'child1'));
+        $this->assertSame('parent1', $child->getAttribute('parent'), 'A child the caller may update through its own permissions must be linked');
+    }
 }

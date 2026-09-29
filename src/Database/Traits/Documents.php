@@ -4141,36 +4141,56 @@ trait Documents
     }
 
     /**
+     * Yield each document matching the queries, read in batches of $batchSize. A limit in the queries caps the
+     * iteration, and an offset or a cursorAfter in them positions the first batch only.
+     *
      * @param  array<Query>  $queries
      * @return Generator<int, Document>
+     *
+     * @throws DatabaseException
      */
     public function cursor(string $collection, array $queries = [], int $batchSize = 100): Generator
     {
-        $lastDocument = null;
+        $grouped = Query::groupForDatabase($queries);
+        $remaining = $grouped['limit'];
+        $offset = $grouped['offset'];
+        $cursor = $grouped['cursor'];
 
-        while (true) {
-            $batchQueries = $queries;
-            $batchQueries[] = Query::limit($batchSize);
+        if ($cursor !== null && $grouped['cursorDirection'] === CursorDirection::Before) {
+            throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
+        }
 
-            if ($lastDocument !== null) {
-                $batchQueries[] = Query::cursorAfter($lastDocument);
+        $queries = \array_values(\array_filter(
+            $queries,
+            static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
+        ));
+
+        while ($remaining === null || $remaining > 0) {
+            $size = $remaining === null ? $batchSize : \min($batchSize, $remaining);
+            $page = [Query::limit($size)];
+            if ($offset !== null) {
+                $page[] = Query::offset($offset);
+            }
+            if ($cursor !== null) {
+                $page[] = Query::cursorAfter($cursor);
             }
 
-            $documents = $this->find($collection, $batchQueries);
-
-            if ($documents === []) {
-                break;
-            }
+            $documents = $this->find($collection, [...$page, ...$queries]);
 
             foreach ($documents as $document) {
                 yield $document;
             }
 
-            $lastDocument = \end($documents);
-
-            if (\count($documents) < $batchSize) {
-                break;
+            $last = \end($documents);
+            if ($last === false || \count($documents) < $size) {
+                return;
             }
+
+            if ($remaining !== null) {
+                $remaining -= \count($documents);
+            }
+            $offset = null;
+            $cursor = $last;
         }
     }
 

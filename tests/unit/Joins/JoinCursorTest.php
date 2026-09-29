@@ -13,6 +13,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
@@ -291,6 +292,69 @@ final class JoinCursorTest extends TestCase
         $this->expectExceptionMessage('A cursor on a distinct() read pages along its orders');
 
         $this->database->find('notes', [Query::distinct(), Query::select(['label']), Query::cursorAfter($this->database->getDocument('notes', 'n1'))]);
+    }
+
+    /**
+     * @return iterable<string, array{list<Query>, ?string, list<string>}>
+     */
+    public static function cursorBatches(): iterable
+    {
+        yield 'no caller page' => [[], null, ['i01', 'i02', 'i03', 'i04', 'i05', 'i06', 'i07', 'i08', 'i09', 'i10']];
+        yield 'an offset applies once' => [[Query::offset(2)], null, ['i03', 'i04', 'i05', 'i06', 'i07', 'i08', 'i09', 'i10']];
+        yield 'a cursor starts the iteration, which then ends' => [[], 'i04', ['i05', 'i06', 'i07', 'i08', 'i09', 'i10']];
+        yield 'a limit caps the iteration' => [[Query::limit(4)], null, ['i01', 'i02', 'i03', 'i04']];
+        yield 'a limit and an offset' => [[Query::offset(5), Query::limit(4)], null, ['i06', 'i07', 'i08', 'i09']];
+        yield 'a limit beyond the matches' => [[Query::limit(40)], null, ['i01', 'i02', 'i03', 'i04', 'i05', 'i06', 'i07', 'i08', 'i09', 'i10']];
+        yield 'a descending order and an offset' => [[Query::orderDesc('$id'), Query::offset(1)], null, ['i09', 'i08', 'i07', 'i06', 'i05', 'i04', 'i03', 'i02', 'i01']];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     * @param  list<string>  $expected
+     */
+    #[DataProvider('cursorBatches')]
+    public function testCursorBuildsEachBatchFromTheCallerQueries(array $queries, ?string $after, array $expected): void
+    {
+        $this->createItems();
+        if ($after !== null) {
+            $queries[] = Query::cursorAfter($this->database->getDocument('items', $after));
+        }
+
+        foreach ([1, 3, 4, 100] as $batchSize) {
+            $ids = [];
+            foreach ($this->database->cursor('items', $queries, $batchSize) as $item) {
+                $ids[] = $item->getId();
+                if (\count($ids) > 20) {
+                    break;
+                }
+            }
+
+            $this->assertSame($expected, $ids, "batches of {$batchSize}");
+        }
+    }
+
+    public function testCursorRefusesCursorBefore(): void
+    {
+        $this->createItems();
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Cursor before not supported in this method.');
+
+        \iterator_to_array($this->database->cursor('items', [Query::cursorBefore($this->database->getDocument('items', 'i04'))]));
+    }
+
+    private function createItems(): void
+    {
+        $this->database->createCollection(new Collection(
+            id: 'items',
+            attributes: [Attribute::string(key: 'name', size: 16)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        for ($number = 1; $number <= 10; $number++) {
+            $id = \sprintf('i%02d', $number);
+            $this->createDocument('items', $id, ['name' => $id]);
+        }
     }
 
     private function useDatabase(SQLite $adapter): void

@@ -2750,13 +2750,17 @@ trait Documents
     {
         if ($collectionId === self::METADATA) {
             $this->purgeCachedDefinitions();
+            $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collectionId);
 
             return true;
         }
 
         [$collectionKey] = $this->getCacheKeys($collectionId);
 
-        return $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId));
+        $purged = $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId));
+        $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collectionId);
+
+        return $purged;
     }
 
     /**
@@ -3233,10 +3237,15 @@ trait Documents
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
         $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
         $epochKey = $this->getQueryCacheKey($collection, $namespace).'#epoch';
-        $existing = $this->cache->load($epochKey, self::TTL);
 
-        $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
-            && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+        try {
+            $existing = $this->cache->load($epochKey, self::TTL);
+            $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
+                && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+        } catch (Exception $error) {
+            Console::warning('Warning: Failed to purge the cached queries: '.$error->getMessage());
+            $rotated = false;
+        }
 
         try {
             $this->queryCache?->invalidateCollection($this->getQueryCacheScope($namespace), $collection);
@@ -3699,39 +3708,46 @@ trait Documents
                     : $this->getQueryCacheField($collection, $queryCacheQueries, forPermission: $forPermission);
 
                 if ($cacheContext !== null) {
-                    $cacheEntry = $this->queryCache->getEntry(
-                        $this->getQueryCacheScope(),
-                        $collection->getId(),
-                        [
-                            'input' => \array_map(
-                                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
-                                $queryCacheQueries,
-                            ),
-                            'queries' => \array_map(
-                                fn (Query $query): array => $this->serializeQueryCacheQuery($query),
-                                $queries,
-                            ),
-                            'limit' => $limit ?? 25,
-                            'offset' => $offset ?? 0,
-                            'orderAttributes' => $orderAttributes,
-                            'orderTypes' => \array_map(
-                                static fn (\Utopia\Query\OrderDirection $direction): string => $direction->value,
-                                $orderTypes,
-                            ),
-                            'cursor' => $this->normalizeQueryCacheQueryValue($cursor),
-                            'cursorDirection' => $cursorDirection->value,
-                        ],
-                        $cacheContext,
-                    );
-                }
+                    $cacheQueries = [
+                        'input' => \array_map(
+                            fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                            $queryCacheQueries,
+                        ),
+                        'queries' => \array_map(
+                            fn (Query $query): array => $this->serializeQueryCacheQuery($query),
+                            $queries,
+                        ),
+                        'limit' => $limit ?? 25,
+                        'offset' => $offset ?? 0,
+                        'orderAttributes' => $orderAttributes,
+                        'orderTypes' => \array_map(
+                            static fn (\Utopia\Query\OrderDirection $direction): string => $direction->value,
+                            $orderTypes,
+                        ),
+                        'cursor' => $this->normalizeQueryCacheQueryValue($cursor),
+                        'cursorDirection' => $cursorDirection->value,
+                    ];
 
-                if ($cacheEntry !== null) {
-                    $cached = $this->queryCache->get($cacheEntry);
-                    if ($cached !== null) {
-                        $results = $cached;
+                    try {
+                        $cacheEntry = $this->queryCache->getEntry(
+                            $this->getQueryCacheScope(),
+                            $collection->getId(),
+                            $cacheQueries,
+                            $cacheContext,
+                        );
+
+                        if ($cacheEntry !== null) {
+                            $cached = $this->queryCache->get($cacheEntry);
+                            if ($cached !== null) {
+                                $results = $cached;
+                                $cacheEntry = null;
+                            } else {
+                                $cacheGeneration = $this->queryCache->getGeneration($cacheEntry);
+                            }
+                        }
+                    } catch (Exception $error) {
+                        Console::warning('Warning: Failed to get query results from cache: '.$error->getMessage());
                         $cacheEntry = null;
-                    } else {
-                        $cacheGeneration = $this->queryCache->getGeneration($cacheEntry);
                     }
                 }
             }
@@ -3752,8 +3768,14 @@ trait Documents
                 );
                 $results = $skipAuth ? $this->authorization->skip($find) : $find();
 
-                if ($cacheEntry !== null && $this->queryCache !== null && ! $this->isReadFromReplica()) {
-                    $this->queryCache->set($cacheEntry, $results, $cacheGeneration);
+                if ($cacheEntry !== null && $this->queryCache !== null) {
+                    try {
+                        if (! $this->isReadFromReplica()) {
+                            $this->queryCache->set($cacheEntry, $results, $cacheGeneration);
+                        }
+                    } catch (Exception $error) {
+                        Console::warning('Failed to save query results to cache: '.$error->getMessage());
+                    }
                 }
             }
         }

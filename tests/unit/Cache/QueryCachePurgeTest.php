@@ -3,6 +3,8 @@
 namespace Tests\Unit\Cache;
 
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Cache\QueryCache;
@@ -60,6 +62,76 @@ final class QueryCachePurgeTest extends TestCase
         $queryCache->failBlocks();
 
         $this->assertFalse($reader->purgeCachedQueries('posts'));
+    }
+
+    public function testPurgeCachedCollectionInvalidatesCachedFinds(): void
+    {
+        [$reader, $bypass] = $this->createDatabases('posts_'.\uniqid());
+
+        $this->assertSame(['first'], $this->ids($reader->find('posts', [Query::orderAsc('$id')])));
+        $bypass->createDocument('posts', new Document(['$id' => 'second']));
+
+        $this->assertTrue($reader->purgeCachedCollection('posts'));
+
+        $this->assertSame(
+            ['first', 'second'],
+            $this->ids($reader->find('posts', [Query::orderAsc('$id')])),
+            'Purging a collection must also drop the results find() cached for it',
+        );
+    }
+
+    public function testPurgeCachedQueriesReturnsFalseWhenTheCacheFails(): void
+    {
+        $cache = new class () extends MemoryCache {
+            public bool $failing = false;
+
+            #[\Override]
+            public function load(string $key, int $ttl, string $hash = ''): mixed
+            {
+                $this->assertAvailable($key);
+
+                return parent::load($key, $ttl, $hash);
+            }
+
+            /**
+             * @param  array<int|string, mixed>|string  $data
+             * @return bool|string|array<int|string, mixed>
+             */
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+            {
+                $this->assertAvailable($key);
+
+                return parent::save($key, $data, $hash);
+            }
+
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                $this->assertAvailable($key);
+
+                return parent::purge($key, $hash);
+            }
+
+            private function assertAvailable(string $key): void
+            {
+                if ($this->failing && \str_ends_with($key, ':query#epoch')) {
+                    throw new RuntimeException('Cache unavailable');
+                }
+            }
+        };
+        $database = new Database(new DatabaseMemory(), new Cache($cache));
+        $database
+            ->setDatabase('purge')
+            ->setNamespace('posts_'.\uniqid());
+        $database->create();
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->createCollection(new Collection(id: 'posts', permissions: [
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+        $cache->failing = true;
+
+        $this->assertFalse($database->purgeCachedQueries('posts'), 'A cache that fails while the cached queries are purged must be reported, not thrown');
     }
 
     /**

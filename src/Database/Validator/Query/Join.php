@@ -6,6 +6,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
+use Utopia\Query\Query as BaseQuery;
 
 /**
  * Validates join query methods: a join names a table, and each of its conditions compares a column of
@@ -16,6 +17,33 @@ class Join extends Base
     public const string ALIAS_PATTERN = '/^[A-Za-z_][A-Za-z0-9_]*$/';
 
     private const array OPERATORS = ['=', '!=', '<', '>', '<=', '>=', '<>'];
+
+    /**
+     * What a join's ON list may hold: the on() conditions and the plain filters the builder compiles
+     * into it.
+     */
+    private const array CONDITION_METHODS = [
+        Method::On,
+        Method::Equal,
+        Method::NotEqual,
+        Method::GreaterThan,
+        Method::GreaterThanEqual,
+        Method::LessThan,
+        Method::LessThanEqual,
+        Method::Between,
+        Method::NotBetween,
+        Method::IsNull,
+        Method::IsNotNull,
+        Method::Contains,
+        Method::ContainsAny,
+        Method::NotContains,
+        Method::StartsWith,
+        Method::NotStartsWith,
+        Method::EndsWith,
+        Method::NotEndsWith,
+        Method::And,
+        Method::Or,
+    ];
 
     /**
      * The internal attributes every table holds a column for that a join condition can compare, as a
@@ -194,12 +222,38 @@ class Join extends Base
         }
 
         foreach ($onQueries as $onQuery) {
+            if (! $this->isCondition($onQuery)) {
+                return false;
+            }
+
             if ($onQuery->getMethod() !== Method::On) {
                 continue;
             }
 
             $values = $onQuery->getValues();
             if (! $this->isValidCondition($values[0] ?? null, $values[1] ?? '=', $values[2] ?? null, $alias, $join)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isCondition(BaseQuery $query): bool
+    {
+        $method = $query->getMethod();
+        if (! \in_array($method, self::CONDITION_METHODS, true)) {
+            $this->message = 'Unsupported join ON condition: '.$method->value;
+
+            return false;
+        }
+
+        if ($method !== Method::And && $method !== Method::Or) {
+            return true;
+        }
+
+        foreach ($query->getValues() as $child) {
+            if ($child instanceof BaseQuery && ! $this->isCondition($child)) {
                 return false;
             }
         }

@@ -227,7 +227,7 @@ class IndexedQueriesTest extends TestCase
         );
     }
 
-    public function testNestedJoinOnSearchRequiresFulltextIndex(): void
+    public function testNestedJoinOnRefusesSearchWithOrWithoutAFulltextIndex(): void
     {
         $attributes = [
             new Document([
@@ -278,19 +278,23 @@ class IndexedQueriesTest extends TestCase
             ]),
         ]));
         $this->assertSame(
-            'Searching by attribute "name" requires a fulltext index.',
+            'Invalid query: Unsupported join ON condition: search',
             $validator->getDescription()
         );
 
-        $this->assertTrue($validator->isValid([
+        $this->assertFalse($validator->isValid([
             Query::leftJoin('meta', 'meta', [
                 Query::on('$id', 'mainId'),
                 Query::search('meta.body', 'needle'),
             ]),
-        ]), $validator->getDescription());
+        ]), 'the builder compiles no search into an ON list, fulltext index or not');
+        $this->assertSame(
+            'Invalid query: Unsupported join ON condition: search',
+            $validator->getDescription()
+        );
     }
 
-    public function testNestedJoinOnVectorCountsTowardLimit(): void
+    public function testNestedJoinOnRefusesAVectorQueryNextToAnother(): void
     {
         $attributes = [
             new Document([
@@ -319,12 +323,12 @@ class IndexedQueriesTest extends TestCase
             ]),
         ]));
         $this->assertSame(
-            'Cannot use multiple vector queries in a single request',
+            'Invalid query: Unsupported join ON condition: vectorCosine',
             $validator->getDescription()
         );
     }
 
-    public function testNestedJoinOnSingleVectorIsValid(): void
+    public function testNestedJoinOnRefusesASingleVectorQuery(): void
     {
         $attributes = [
             new Document([
@@ -345,12 +349,16 @@ class IndexedQueriesTest extends TestCase
             ]
         );
 
-        $this->assertTrue($validator->isValid([
+        $this->assertFalse($validator->isValid([
             Query::leftJoin('meta', 'meta', [
                 Query::on('$id', 'mainId'),
                 Query::vectorCosine('embedding', [0.3, 0.4, 0.5]),
             ]),
-        ]), $validator->getDescription());
+        ]));
+        $this->assertSame(
+            'Invalid query: Unsupported join ON condition: vectorCosine',
+            $validator->getDescription()
+        );
     }
 
     public function test_two_attributes_fulltext(): void

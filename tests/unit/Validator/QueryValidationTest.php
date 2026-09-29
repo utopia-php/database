@@ -4,6 +4,7 @@ namespace Tests\Unit\Validator;
 
 use Closure;
 use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -61,6 +62,34 @@ final class QueryValidationTest extends TestCase
         $this->createDocument('users', 'ann', ['name' => 'Ann']);
         $this->createDocument('posts', 'first', ['owner' => 'bob', 'votes' => 3, 'author' => 'ann']);
         $this->createDocument('posts', 'second', ['owner' => 'ann', 'votes' => 5, 'author' => 'bob']);
+
+        $this->createCollection('owners', [
+            Attribute::string(key: 'name', size: 32),
+            Attribute::integer(key: 'score'),
+            Attribute::boolean(key: 'active'),
+            Attribute::string(key: 'tags', size: 32, array: true),
+        ]);
+        $this->createCollection('items', [
+            Attribute::string(key: 'title', size: 32),
+            Attribute::integer(key: 'price'),
+            Attribute::boolean(key: 'featured'),
+            Attribute::string(key: 'labels', size: 32, array: true),
+            Attribute::string(key: 'ownerRef', size: 32),
+        ]);
+        $this->database->createRelationship(new Relationship(
+            collection: 'owners',
+            relatedCollection: 'items',
+            type: RelationType::OneToMany,
+            twoWay: true,
+            key: 'items',
+            twoWayKey: 'owner',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $this->createDocument('owners', 'ann', ['name' => 'Ann', 'score' => 2, 'active' => true, 'tags' => ['a']]);
+        $this->createDocument('owners', 'bob', ['name' => 'Bob', 'score' => 4, 'active' => false, 'tags' => ['b']]);
+        $this->createDocument('items', 'pen', ['title' => 'pen', 'price' => 5, 'featured' => true, 'labels' => ['x'], 'ownerRef' => 'ann', 'owner' => 'ann']);
+        $this->createDocument('items', 'cup', ['title' => 'cup', 'price' => 7, 'featured' => false, 'labels' => ['y'], 'ownerRef' => 'bob', 'owner' => 'bob']);
     }
 
     /**
@@ -111,6 +140,55 @@ final class QueryValidationTest extends TestCase
 
         $validator->resetJoinAliases();
         $this->assertTrue($validator->isValid(Query::join('users', 'owner', '$id', '=', 'owner')), 'an alias may still equal an attribute that is not a relationship');
+    }
+
+    /**
+     * @return iterable<string, array{Query, string}>
+     */
+    public static function refusedJoinConditions(): iterable
+    {
+        yield 'limit' => [Query::limit(1), 'limit'];
+        yield 'offset' => [Query::offset(1), 'offset'];
+        yield 'cursor' => [Query::cursorAfter(new Document(['$id' => 'pen'])), 'cursorAfter'];
+        yield 'order' => [Query::orderAsc('title'), 'orderAsc'];
+        yield 'select' => [Query::select(['title']), 'select'];
+        yield 'aggregate' => [Query::count('*', 'rows'), 'count'];
+        yield 'join' => [Query::join('owners', '$id', '$id', '=', 'nested'), 'join'];
+        yield 'containsAll' => [Query::containsAll('it.labels', ['x']), 'containsAll'];
+        yield 'search' => [Query::search('it.title', 'pen'), 'search'];
+        yield 'regex' => [Query::regex('it.title', '^p'), 'regex'];
+        yield 'regex inside or()' => [Query::or([Query::equal('it.title', ['pen']), Query::regex('it.title', '^p')]), 'regex'];
+    }
+
+    /**
+     * The builder compiles a join's ON list from on() conditions and plain filters only, and refuses
+     * the rest while it builds the statement.
+     */
+    #[DataProvider('refusedJoinConditions')]
+    public function testAJoinOnListAcceptsOnlyConditionsAndPlainFilters(Query $condition, string $method): void
+    {
+        $queries = [Query::join('items', 'it', [Query::on('$id', 'ownerRef'), $condition])];
+        $message = 'Unsupported join ON condition: '.$method;
+
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('owners', $queries), 'find()');
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->count('owners', $queries), 'count()');
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->sum('owners', 'score', $queries), 'sum()');
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->getDocument('owners', 'ann', $queries), 'getDocument()');
+    }
+
+    public function testAJoinOnListRunsItsPlainFilters(): void
+    {
+        foreach ([
+            'equal' => Query::equal('it.title', ['pen']),
+            'or()' => Query::or([Query::equal('it.title', ['pen']), Query::startsWith('it.title', 'pe')]),
+            'contains on an array' => Query::contains('it.labels', ['x']),
+        ] as $shape => $filter) {
+            $queries = [Query::join('items', 'it', [Query::on('$id', 'ownerRef'), $filter])];
+
+            $this->assertSame(['ann'], $this->ids($this->database->find('owners', $queries)), $shape);
+            $this->assertSame(1, $this->database->count('owners', $queries), $shape);
+            $this->assertSame(2, $this->database->sum('owners', 'score', $queries), $shape);
+        }
     }
 
     /**

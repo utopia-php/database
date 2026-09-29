@@ -264,6 +264,18 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
+    public function setCacheWriterTimeout(int $seconds): static
+    {
+        parent::setCacheWriterTimeout($seconds);
+        $this->source->setCacheWriterTimeout($seconds);
+        $this->destination?->setCacheWriterTimeout($seconds);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function setTenantPerDocument(bool $enabled): static
     {
         parent::setTenantPerDocument($enabled);

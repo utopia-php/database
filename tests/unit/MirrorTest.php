@@ -866,4 +866,16 @@ class MirrorTest extends TestCase
         $this->assertTrue($source->getAdapter()->getAlterLocks());
         $this->assertSame([['enableLocks', 'destination unreachable']], $errors);
     }
+
+    public function testCacheWriterTimeoutReachesSourceAndDestination(): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+
+        $mirror->setCacheWriterTimeout(30);
+
+        $this->assertSame(
+            [30, 30, 30],
+            [$mirror->getCacheWriterTimeout(), $source->getCacheWriterTimeout(), $destination->getCacheWriterTimeout()],
+        );
+    }
 }

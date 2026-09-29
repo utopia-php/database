@@ -789,11 +789,23 @@ class Relationships implements Hook
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds) || $this->db->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])])->isEmpty()) {
+                                if (\in_array($relation, $oldIds)) {
                                     continue;
                                 }
+
+                                $related = $this->db->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]);
+
+                                if ($related->isEmpty()) {
+                                    continue;
+                                }
+
+                                $this->authorizeLink($relatedCollection, $related);
                             } elseif ($relation instanceof Document) {
                                 $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]);
+
+                                if (! $related->isEmpty() && ! \in_array($relation->getId(), $oldIds)) {
+                                    $this->authorizeLink($relatedCollection, $related);
+                                }
 
                                 if ($related->isEmpty()) {
                                     if (! isset($value[Document::PERMISSIONS])) {
@@ -1457,6 +1469,10 @@ class Relationships implements Hook
 
         $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId());
 
+        if ($relationType === RelationType::ManyToMany && ! $related->isEmpty()) {
+            $this->authorizeLink($relatedCollection, $related);
+        }
+
         if ($related->isEmpty()) {
             if (! isset($relation[Document::PERMISSIONS])) {
                 $relation->setAttribute(Document::PERMISSIONS, $document->getPermissions());
@@ -1525,6 +1541,10 @@ class Relationships implements Hook
                 }
                 break;
             case RelationType::ManyToMany:
+                if (! $related->isEmpty()) {
+                    $this->authorizeLink($relatedCollection, $related);
+                }
+
                 $this->db->purgeCachedDocument($relatedCollection->getId(), $relationId);
 
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
@@ -2393,18 +2413,31 @@ class Relationships implements Hook
             return;
         }
 
-        if (! $authorization->isValid(new Input(PermissionType::Update, [
-            ...$collection->getUpdate(),
-            ...($collection->getAttribute('documentSecurity', false) ? $related->getUpdate() : []),
-        ]))) {
-            throw new AuthorizationException($authorization->getDescription());
-        }
+        $this->authorizeLink($collection, $related);
 
         $this->db->skipRelationships(fn () => $this->db->updateDocument(
             $collection->getId(),
             $id,
             new Document([$twoWayKey => $documentId]),
         ));
+    }
+
+    /**
+     * Linking an existing document to another one needs update permission on it, whichever
+     * relationship type holds the link.
+     *
+     * @throws AuthorizationException
+     */
+    private function authorizeLink(Document $collection, Document $related): void
+    {
+        $authorization = $this->db->getAuthorization();
+
+        if (! $authorization->isValid(new Input(PermissionType::Update, [
+            ...$collection->getUpdate(),
+            ...($collection->getAttribute('documentSecurity', false) ? $related->getUpdate() : []),
+        ]))) {
+            throw new AuthorizationException($authorization->getDescription());
+        }
     }
 
     private function notReferencing(string $twoWayKey, string $documentId): Query

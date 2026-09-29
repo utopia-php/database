@@ -198,7 +198,7 @@ final class RelationshipHookTest extends TestCase
 
         $database->createDocument('child', new Document(['$id' => 'deletable', '$permissions' => [Permission::delete(Role::any())]]));
         $database->createDocument('child', new Document(['$id' => 'protected', '$permissions' => [Permission::delete(Role::user('admin'))]]));
-        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['deletable', 'protected']]));
+        $database->getAuthorization()->skip(fn () => $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['deletable', 'protected']])));
 
         $this->assertDeleteRejected($database, 'parent', 'parent1');
 
@@ -227,7 +227,7 @@ final class RelationshipHookTest extends TestCase
         foreach (['child1', 'child2', 'child3'] as $id) {
             $database->createDocument('child', new Document(['$id' => $id, '$permissions' => [Permission::delete(Role::any())]]));
         }
-        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1', 'child2', 'child3']]));
+        $database->getAuthorization()->skip(fn () => $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1', 'child2', 'child3']])));
 
         $database->skipRelationships(fn () => $database->deleteDocument('child', 'child2'));
 
@@ -793,5 +793,109 @@ final class RelationshipHookTest extends TestCase
                 $parentHoldsKey('children'),
             ],
         ];
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAManyToManyDocumentByIdNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('parent', 'parent1', new Document(['children' => ['readonly']])));
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+
+        $database->getAuthorization()->addRole(self::ADMIN);
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => ['readonly']]));
+        $this->assertSame(['readonly'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAManyToManyDocumentGivenAsADocumentNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('parent', 'parent1', new Document(['children' => [new Document(['$id' => 'readonly'])]])));
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAManyToManyDocumentThroughANestedUpdateNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('grandparent', 'grandparent1', new Document([
+            'parent' => new Document(['$id' => 'parent1', 'children' => ['readonly']]),
+        ])));
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAnExistingManyToManyDocumentThroughACreateNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->createDocument('parent', new Document(['$id' => 'parent2', 'children' => ['readonly']])));
+        $this->assertLinkRejected(fn () => $database->createDocument('parent', new Document(['$id' => 'parent3', 'children' => [new Document(['$id' => 'readonly'])]])));
+        $this->assertLinkRejected(fn () => $database->createDocument('grandparent', new Document([
+            '$id' => 'grandparent2',
+            'parent' => new Document(['$id' => 'parent4', 'children' => ['readonly']]),
+        ])));
+
+        $this->assertSame(['parent1'], $this->ids($database, 'parent'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCreatingAManyToManyDocumentThroughALinkNeedsNoUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => [new Document(['$id' => 'created'])]]));
+        $database->createDocument('parent', new Document(['$id' => 'parent2', 'children' => [new Document(['$id' => 'nested'])]]));
+
+        $this->assertSame(['created'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame(['nested'], $this->relatedIds($database->getDocument('parent', 'parent2'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testKeepingOrUnlinkingAManyToManyDocumentNeedsNoUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+        $database->getAuthorization()->skip(fn () => $database->updateDocument('parent', 'parent1', new Document(['children' => ['readonly']])));
+
+        $database->updateDocument('parent', 'parent1', new Document(['name' => 'kept', 'children' => ['readonly']]));
+        $this->assertSame(['readonly'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => []]));
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    private function manyToManyLink(): Relationship
+    {
+        return Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
     }
 }

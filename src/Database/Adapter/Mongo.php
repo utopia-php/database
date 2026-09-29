@@ -3541,6 +3541,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 /** @var array<string, mixed> $attrFilter6 */
                 $attrFilter6 = [];
                 $attrFilter6['$nin'] = $query->getValues();
+                $attrFilter6['$ne'] = null;
                 $filter[$attribute] = $attrFilter6;
             }
         } elseif ($operator == '$search') {

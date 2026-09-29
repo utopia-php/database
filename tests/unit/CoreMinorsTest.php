@@ -15,6 +15,7 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -525,6 +526,42 @@ final class CoreMinorsTest extends TestCase
 
         $this->assertInstanceOf(StructureException::class, $error, 'A list written as an object must still be rejected');
         $this->assertSame([1, 2], $database->getDocument('items', 'stored')->getAttribute('meta'));
+    }
+
+    public function testAnAssociativeVectorIsRejectedNamingItsAttribute(): void
+    {
+        $adapter = new class () extends Memory {
+            #[\Override]
+            public function capabilities(): array
+            {
+                return [...parent::capabilities(), Capability::Vectors];
+            }
+        };
+        $database = $this->interceptingMetadataWrites(static function (): void {
+        }, $adapter);
+        $this->configure($database);
+        $database->createCollection(new Collection(
+            id: 'embeddings',
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->createAttribute('embeddings', Attribute::vector(key: 'embedding', size: 3));
+        $filters = [];
+        foreach ($database->getCollection('embeddings')->attributes as $attribute) {
+            if ($attribute->key === 'embedding') {
+                $filters = $attribute->filters;
+            }
+        }
+        $this->assertContains(ColumnType::Vector->value, $filters, 'createAttribute() must add the vector filter');
+
+        $error = $this->attempt(fn (): Document => $database->createDocument('embeddings', new Document([
+            'embedding' => ['x' => 1.0, 'y' => 0.0, 'z' => 0.0],
+        ])));
+
+        $this->assertInstanceOf(StructureException::class, $error);
+        $this->assertSame(
+            'Invalid document structure: Attribute "embedding" has invalid type. Value must be an array of 3 numeric values',
+            $error->getMessage(),
+        );
     }
 
     /**

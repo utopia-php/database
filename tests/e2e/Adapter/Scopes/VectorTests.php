@@ -2671,4 +2671,39 @@ trait VectorTests
 
         $database->deleteCollection('vectorDistance');
     }
+
+    public function testVectorWithAssociativeArray(): void
+    {
+        /** @var Database $database */
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Vectors)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $database->createCollection(new Collection(
+            id: 'vectorAssociative',
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        try {
+            $database->createAttribute('vectorAssociative', Attribute::vector(key: 'embedding', size: 3));
+
+            try {
+                $database->createDocument('vectorAssociative', new Document([
+                    'embedding' => ['x' => 1.0, 'y' => 0.0, 'z' => 0.0],
+                ]));
+                $this->fail('An associative array must not be stored as a vector');
+            } catch (StructureException $exception) {
+                $this->assertSame(
+                    'Invalid document structure: Attribute "embedding" has invalid type. Value must be an array of 3 numeric values',
+                    $exception->getMessage(),
+                );
+            }
+        } finally {
+            $database->deleteCollection('vectorAssociative');
+        }
+    }
 }

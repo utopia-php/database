@@ -427,4 +427,47 @@ class ColumnPermissionTest extends TestCase
             ]))
         ));
     }
+
+    /**
+     * A rename changes an attribute's key and leaves its identity alone.
+     *
+     * This pins a design decision rather than a caller-visible behaviour, which is why
+     * it sits here and not beside the e2e test that covers what callers need -- that
+     * grants survive a rename. More than one design delivers that: storing the key in
+     * _column and migrating every permission row on rename does too. This says which one
+     * is in force, and it lives in the unit tier because no adapter has a say in it --
+     * stamping and preserving the identity happen in Database, and the adapter only
+     * renames a physical column.
+     *
+     * If the design is ever traded for another, this is the test to delete.
+     */
+    public function testRenamingAColumnDoesNotChangeItsIdentity(): void
+    {
+        [$database, $authorization] = $this->database();
+
+        $identities = fn (): array => $authorization->skip(function () use ($database): array {
+            $map = [];
+
+            foreach ($database->getCollection('employees')->getAttribute('attributes', []) as $attribute) {
+                $map[$attribute['key']] = $attribute[Database::ATTRIBUTE_INTERNAL_ID] ?? '';
+            }
+
+            return $map;
+        });
+
+        $authorization->skip(function () use ($database) {
+            $database->createCollection('employees', documentSecurity: true, columnSecurity: true, permissions: []);
+            $database->createAttribute('employees', 'salary', Database::VAR_INTEGER, 8, false);
+        });
+
+        $before = $identities();
+        $this->assertArrayHasKey('salary', $before);
+        $this->assertNotSame('', $before['salary']);
+
+        $authorization->skip(fn () => $database->updateAttribute('employees', 'salary', newKey: 'pay'));
+
+        $after = $identities();
+        $this->assertArrayNotHasKey('salary', $after, 'the key moved');
+        $this->assertSame($before['salary'], $after['pay'] ?? null, 'the identity did not');
+    }
 }

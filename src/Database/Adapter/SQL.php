@@ -133,37 +133,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private ?\WeakMap $statementEvents = null;
 
     /**
-     * Bind builder-produced positional parameters onto a prepared statement.
-     *
-     * Centralises the find / count / sum binding loops so the
-     * IntegerBooleans capability check is resolved once per call rather
-     * than once per binding. Mirrors the find() superset (handles arrays
-     * via json_encode, floats via float-precision string binding, and
-     * booleans via int coercion when the adapter expects integers).
-     *
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
-     * @param  array<int, mixed>  $bindings
-     */
-    protected function bindStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, array $bindings): void
-    {
-        $intBools = $this->supports(Capability::IntegerBooleans);
-
-        foreach ($bindings as $i => $value) {
-            if ($intBools && \is_bool($value)) {
-                $value = (int) $value;
-            }
-            if (\is_array($value)) {
-                $value = \json_encode($value);
-            }
-            if (\is_float($value)) {
-                $stmt->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
-            } else {
-                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
-            }
-        }
-    }
-
-    /**
      * Accepts Utopia\Database\PDO, a PDO-compatible proxy, or a native PDO.
      */
     public function __construct(object $pdo)
@@ -2028,26 +1997,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     private function fetchAggregateRow(SQLBuilder $builder, Event $event): array
     {
-        $result = $builder->build();
-        $stmt = $this->prepareStatement($result->query, $event);
-        $this->bindStatement($stmt, $result->bindings);
-
-        try {
-            $this->execute($stmt);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        $rows = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (! empty($rows) && \is_array($rows[0])) {
-            /** @var array<string, mixed> $row */
-            $row = $rows[0];
-
-            return $row;
-        }
-
-        return [];
+        return $this->executeSelect($builder, $event)[0] ?? [];
     }
 
     private const array ROW_CONDITION_GROUPS = [Method::And, Method::Or, Method::ContainsAll, Method::ElemMatch];

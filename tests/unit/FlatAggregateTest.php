@@ -11,6 +11,8 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -25,11 +27,14 @@ final class FlatAggregateTest extends TestCase
 {
     private const string NAMESPACE = 'flat_aggregate';
 
+    private PDO $pdo;
+
     private Database $database;
 
     protected function setUp(): void
     {
-        $this->database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $this->pdo = new PDO('sqlite::memory:');
+        $this->database = new Database(new SQLite($this->pdo), new Cache(new NoCache()));
         $this->database
             ->setDatabase('flat_aggregate')
             ->setNamespace(self::NAMESPACE)
@@ -164,6 +169,44 @@ final class FlatAggregateTest extends TestCase
         $this->assertSame(5, $this->database->count('items'));
         $this->assertSame(4, $this->database->count('items', [Query::equal('category', ['a'])]));
         $this->assertSame(110, $this->database->sum('items', 'price', [Query::equal('category', ['a'])]));
+    }
+
+    public function testABuilderRefusalIsAQueryException(): void
+    {
+        $join = Query::join('labels', 'label', [Query::on('category', 'category'), Query::limit(1)]);
+        $this->database->disableValidation();
+
+        foreach ([
+            'count()' => fn (): int => $this->database->count('items', [$join]),
+            'sum()' => fn (): int|float => $this->database->sum('items', 'price', [$join]),
+        ] as $method => $read) {
+            try {
+                $read();
+                $this->fail($method.': the builder\'s refusal was not raised');
+            } catch (QueryException $error) {
+                $this->assertSame('Unsupported join ON condition: limit', $error->getMessage(), $method);
+            }
+        }
+    }
+
+    public function testAnEngineErrorWhilePreparingIsMapped(): void
+    {
+        $this->pdo->exec('DROP TABLE `'.self::NAMESPACE.'_items`');
+
+        foreach ([
+            'filtered count()' => fn (): int => $this->database->count('items', [Query::equal('category', ['a'])]),
+            'filtered sum()' => fn (): int|float => $this->database->sum('items', 'price', [Query::equal('category', ['a'])]),
+            'bounded count()' => fn (): int => $this->database->count('items', [], 2),
+            'unfiltered count()' => fn (): int => $this->database->getAuthorization()->skip(fn (): int => $this->database->count('items')),
+            'unfiltered sum()' => fn (): int|float => $this->database->getAuthorization()->skip(fn (): int|float => $this->database->sum('items', 'price')),
+        ] as $method => $read) {
+            try {
+                $read();
+                $this->fail($method.': the missing table was not reported');
+            } catch (NotFoundException $error) {
+                $this->assertSame('Collection not found', $error->getMessage(), $method);
+            }
+        }
     }
 
     /**

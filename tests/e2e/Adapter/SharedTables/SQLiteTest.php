@@ -112,10 +112,15 @@ class SQLiteTest extends Base
      */
     private function emailIndexes(Database $database, string $collection): array
     {
+        $adapter = $database->getAdapter();
+        $this->assertInstanceOf(SQLite::class, $adapter);
+
         $names = [];
-        foreach ($database->getSchemaIndexes($collection) as $index) {
-            if (\str_ends_with($index->getId(), '_email')) {
-                $names[] = $index->getId();
+        foreach ($adapter->rawQuery("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?", [$database->getNamespace().'_'.$collection]) as $index) {
+            $name = $index->getAttribute('name');
+            $this->assertIsString($name);
+            if (\str_ends_with($name, '_email')) {
+                $names[] = $name;
             }
         }
 

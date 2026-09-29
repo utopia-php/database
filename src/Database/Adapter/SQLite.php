@@ -2751,7 +2751,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     public function getSchemaIndexes(string $collection): array
     {
-        $table = "{$this->getNamespace()}_{$this->filter($collection)}";
+        $filtered = $this->filter($collection);
+        $table = "{$this->getNamespace()}_{$filtered}";
+        $own = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$filtered}_";
+        $anyTenant = '/^'.\preg_quote($this->getNamespace(), '/').'_[A-Za-z0-9_-]*?_'.\preg_quote($filtered, '/').'_(.+)$/';
 
         $stmt = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
         $this->execute($stmt);
@@ -2765,6 +2768,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
             $name = \is_scalar($index['name'] ?? null) ? (string) $index['name'] : '';
             $unique = ! empty($index['unique']);
+
+            $owned = \str_starts_with($name, $own);
+            $id = match (true) {
+                $owned => \substr($name, \strlen($own)),
+                \preg_match($anyTenant, $name, $matches) === 1 => $matches[1],
+                default => $name,
+            };
+            if (! $owned && isset($results[$id])) {
+                continue;
+            }
 
             $colStmt = $this->prepare("PRAGMA index_info(`{$name}`)", event: Event::CollectionRead);
             $this->execute($colStmt);
@@ -2790,15 +2803,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $lengths[] = null;
             }
 
-            $results[] = new Document([
-                Document::ID => $name,
-                'indexName' => $name,
+            $results[$id] = new Document([
+                Document::ID => $id,
+                'indexName' => $id,
                 'indexType' => 'BTREE',
                 'nonUnique' => $unique ? 0 : 1,
                 'columns' => $columns,
                 'lengths' => $lengths,
             ]);
         }
+        $results = \array_values($results);
 
         // PRAGMA index_list misses FTS5 vtables.
         foreach ($this->getFulltextSchemaIndexes($collection) as $entry) {

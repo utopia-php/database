@@ -75,6 +75,86 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $this->assertSame(['fox'], $this->search($database, 'title', 'quick'));
     }
 
+    #[DataProvider('tables')]
+    public function testIndexesAreListedUnderTheirIds(bool $shared): void
+    {
+        $database = $this->database($shared);
+        $database->createIndex(self::COLLECTION, Index::key(key: 'by_title', attributes: ['title']));
+        $database->createIndex(self::COLLECTION, Index::unique(key: 'by_body', attributes: ['body']));
+        $tenant = $shared ? ['_tenant'] : [];
+
+        $indexes = $this->indexes($database);
+
+        $this->assertSame([1, [...$tenant, 'title']], $indexes['by_title'] ?? null);
+        $this->assertSame([0, [...$tenant, 'body']], $indexes['by_body'] ?? null);
+        $this->assertArrayHasKey('_index1', $indexes);
+        foreach (\array_keys($indexes) as $id) {
+            $this->assertStringStartsNotWith($database->getNamespace(), $id);
+        }
+    }
+
+    public function testSharedTablesListEveryTenantsIndexOnceAndPreferTheirOwn(): void
+    {
+        $database = $this->database(true);
+        $database->withTenant(2, function () use ($database): void {
+            $database->createCollection(new Collection(
+                id: self::COLLECTION,
+                attributes: [
+                    Attribute::string(key: 'title', size: 64),
+                    Attribute::string(key: 'body', size: 64),
+                ],
+            ));
+        });
+        $database->createIndex(self::COLLECTION, Index::key(key: 'by_title', attributes: ['title']));
+        $database->getAdapter()->createIndex(self::COLLECTION, Index::key(key: 'lookup', attributes: ['title']));
+        $database->withTenant(2, fn (): bool => $database->getAdapter()->createIndex(self::COLLECTION, Index::unique(key: 'lookup', attributes: ['body'])));
+
+        $first = $this->indexes($database);
+        $second = $database->withTenant(2, fn (): array => $this->indexes($database));
+        $this->assertIsArray($second);
+
+        $this->assertSame(\array_keys($first), \array_keys($second));
+        $this->assertSame([1, ['_tenant', 'title']], $first['by_title'] ?? null);
+        $this->assertSame([1, ['_tenant', 'title']], $second['by_title'] ?? null);
+        $this->assertSame([1, ['_tenant', 'title']], $first['lookup'] ?? null);
+        $this->assertSame([0, ['_tenant', 'body']], $second['lookup'] ?? null);
+    }
+
+    public function testAnOrphanIndexIsListedForReconciliation(): void
+    {
+        $database = $this->database(false);
+        $adapter = $database->getAdapter();
+        $adapter->createIndex(self::COLLECTION, Index::key(key: 'lookup', attributes: ['title']));
+
+        $this->assertSame([1, ['title']], $this->indexes($database)['lookup'] ?? null);
+
+        $this->assertTrue($adapter->deleteIndex(self::COLLECTION, 'lookup'));
+        $this->assertArrayNotHasKey('lookup', $this->indexes($database));
+
+        $this->assertTrue($adapter->createIndex(self::COLLECTION, Index::unique(key: 'lookup', attributes: ['body'])));
+        $this->assertSame([0, ['body']], $this->indexes($database)['lookup'] ?? null);
+    }
+
+    /**
+     * @return array<string, array{int, list<string>}>
+     */
+    private function indexes(Database $database): array
+    {
+        $indexes = [];
+        foreach ($database->getSchemaIndexes(self::COLLECTION) as $index) {
+            $nonUnique = $index->getAttribute('nonUnique');
+            $columns = $index->getAttribute('columns');
+            $this->assertIsInt($nonUnique);
+            $this->assertIsArray($columns);
+            $this->assertArrayNotHasKey($index->getId(), $indexes, 'Each index is listed once');
+            /** @var list<string> $columns */
+            $indexes[$index->getId()] = [$nonUnique, $columns];
+        }
+        \ksort($indexes);
+
+        return $indexes;
+    }
+
     /**
      * @return list<string>
      */

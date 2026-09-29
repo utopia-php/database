@@ -1704,10 +1704,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * Compile a Search/NotSearch query into FTS5 SQL with positional bindings.
      * Falls back to a LIKE expression when no FTS5 table covers the attribute.
      *
+     * @param  list<array{table: string, alias: string}>  $joins
      * @return array{expression: string, bindings: list<mixed>}|null
      */
     #[\Override]
-    protected function compileAdapterFilter(Query $query, string $collection, string $alias): ?array
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?array
     {
         $method = $query->getMethod();
         if ($method !== Method::Search && $method !== Method::NotSearch) {
@@ -1731,7 +1732,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             ];
         }
 
-        $ftsTable = $this->findFulltextTableForAttribute($collection, $rawAttribute);
+        $ftsTable = $this->findSearchFulltextTable($rawAttribute, $collection, $joins);
 
         if ($ftsTable === null) {
             $likeExpr = "{$quotedAlias}.{$quotedAttribute} LIKE ? ESCAPE '\\'";
@@ -3057,6 +3058,26 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
 
         return $result;
+    }
+
+    /**
+     * @param  list<array{table: string, alias: string}>  $joins
+     */
+    private function findSearchFulltextTable(string $attribute, string $collection, array $joins): ?string
+    {
+        $dot = \strpos($attribute, '.');
+        if ($dot === false) {
+            return $this->findFulltextTableForAttribute($collection, $attribute);
+        }
+
+        $prefix = \substr($attribute, 0, $dot);
+        foreach ($joins as $join) {
+            if ($join['alias'] === $prefix) {
+                return $this->findFulltextTableForAttribute($join['table'], \substr($attribute, $dot + 1));
+            }
+        }
+
+        return null;
     }
 
     /**

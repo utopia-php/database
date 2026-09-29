@@ -4540,7 +4540,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $builder->filter($queries);
 
         foreach ($adapterFilterQueries as $query) {
-            $compiled = $this->compileAdapterFilter($query, $name, $alias);
+            $compiled = $this->compileAdapterFilter($query, $name, $alias, $joinTablePrefixes);
             if ($compiled !== null) {
                 $builder->whereRaw($compiled['expression'], $compiled['bindings']);
             }
@@ -6306,9 +6306,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * positional bindings. Called for queries flagged by
      * {@see isAdapterFilterQuery()}. Returning null skips emission.
      *
+     * @param  list<array{table: string, alias: string}>  $joins
      * @return array{expression: string, bindings: list<mixed>}|null
      */
-    protected function compileAdapterFilter(Query $query, string $collection, string $alias): ?array
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?array
     {
         return null;
     }

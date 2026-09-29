@@ -148,6 +148,42 @@ final class CoreMinorsTest extends TestCase
         $this->assertSame($failure, $error->getPrevious(), 'A failed silent rollback must not replace the persistence error');
     }
 
+    public function testRollbackWhoseCleanupKeepsFailingRethrows(): void
+    {
+        $failing = false;
+        $deletes = 0;
+        $adapter = $this->interceptingIndexes(
+            static function (): void {
+            },
+            function () use (&$failing, &$deletes): void {
+                if ($failing) {
+                    $deletes++;
+
+                    throw new RuntimeException('index cleanup failed');
+                }
+            },
+        );
+        $database = $this->interceptingMetadataWrites(function () use (&$failing): void {
+            if ($failing) {
+                throw new StructureException('metadata rejected');
+            }
+        }, $adapter);
+        $this->configure($database);
+        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $failing = true;
+
+        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $failing = false;
+
+        $this->assertInstanceOf(DatabaseException::class, $error, 'createIndex() must fail when its rollback keeps failing');
+        $this->assertStringStartsWith(
+            "Failed to persist metadata after retries and cleanup failed for index creation 'by_count'",
+            $error->getMessage(),
+        );
+        $this->assertSame(3, $deletes, 'The index cleanup must be attempted three times');
+        $this->assertSame([], $database->getCollection('logs')->indexes, 'The metadata must list no index');
+    }
+
     /**
      * A database with a `logs` collection whose later metadata writes count into $writes and throw $failure.
      */

@@ -5,6 +5,7 @@ namespace Utopia\Database;
 use Closure;
 use DateTime;
 use Swoole\Coroutine;
+use Swoole\Coroutine\Channel;
 use Throwable;
 use Utopia\Async\Promise;
 use Utopia\Cache\Cache;
@@ -52,6 +53,20 @@ class Mirror extends Database
     protected const SOURCE_ONLY_COLLECTIONS = [
         'upgrades',
     ];
+
+    /**
+     * The last queued replication of each document, by collection and document id, until it finishes
+     *
+     * @var array<array-key, array<array-key, Channel>>
+     */
+    protected array $documentReplications = [];
+
+    /**
+     * The last queued replication that can reach every document of a collection, by collection, until it finishes
+     *
+     * @var array<array-key, Channel>
+     */
+    protected array $collectionReplications = [];
 
     /**
      * @param  array<Filter>  $filters
@@ -1060,6 +1075,7 @@ class Mirror extends Database
                 );
             }
 
+            $this->awaitReplications($collection, [$document->getId()]);
             $this->destination->setPreserveDates(true);
             $document = $this->destination->createDocument($collection, $clone);
             $this->destination->setPreserveDates(false);
@@ -1131,7 +1147,7 @@ class Mirror extends Database
 
         $skipDuplicates = $this->skipDuplicates;
 
-        $this->replicate('createDocuments', function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
+        $this->replicate('createDocuments', $collection, self::documentIds($documents), function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
             if ($skipDuplicates) {
                 $destination->skipDuplicates(
                     fn () => $destination->withPreserveDates(
@@ -1199,6 +1215,7 @@ class Mirror extends Database
                 );
             }
 
+            $this->awaitReplications($collection, [$id]);
             $this->destination->setPreserveDates(true);
             $this->destination->updateDocument($collection, $id, $clone);
             $this->destination->setPreserveDates(false);
@@ -1263,7 +1280,7 @@ class Mirror extends Database
             );
         }
 
-        $this->replicate('updateDocuments', function () use ($destination, $collection, $clone, $queries, $batchSize): void {
+        $this->replicate('updateDocuments', $collection, null, function () use ($destination, $collection, $clone, $queries, $batchSize): void {
             $destination->withPreserveDates(
                 fn () => $destination->updateDocuments(
                     $collection,
@@ -1340,7 +1357,7 @@ class Mirror extends Database
             $clones[] = $clone;
         }
 
-        $this->replicate($attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease', function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
+        $this->replicate($attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease', $collection, self::documentIds($documents), function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
             $destination->withPreserveDates(
                 fn () => $destination->upsertDocumentsWithIncrease(
                     $collection,
@@ -1394,7 +1411,7 @@ class Mirror extends Database
         }
 
         $destination = $this->destination;
-        $this->replicate('deleteDocument', function () use ($destination, $collection, $id): void {
+        $this->replicate('deleteDocument', $collection, [$id], function () use ($destination, $collection, $id): void {
             $destination->deleteDocument($collection, $id);
 
             foreach ($this->writeFilters as $filter) {
@@ -1450,7 +1467,7 @@ class Mirror extends Database
         }
 
         $destination = $this->destination;
-        $this->replicate('deleteDocuments', function () use ($destination, $collection, $queries, $batchSize): void {
+        $this->replicate('deleteDocuments', $collection, null, function () use ($destination, $collection, $queries, $batchSize): void {
             $destination->deleteDocuments(
                 $collection,
                 $queries,
@@ -1581,6 +1598,8 @@ class Mirror extends Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $max = null): Document
     {
+        $this->awaitReplications($collection, [$id]);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1591,6 +1610,8 @@ class Mirror extends Database
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $min = null): Document
     {
+        $this->awaitReplications($collection, [$id]);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1642,11 +1663,13 @@ class Mirror extends Database
     /**
      * Applies a write to the destination under the authorization, relationship and silence state the caller has at
      * the time of the call, and reports a failure through onError(). Inside a coroutine the write runs in a coroutine
-     * of its own; outside one it runs before this returns, since a task that yields outside a scheduler never resumes.
+     * of its own, once every earlier replication that can reach the same documents has finished; outside one it runs
+     * before this returns, since a task that yields outside a scheduler never resumes.
      *
+     * @param  array<string>|null  $documentIds  The documents the write can reach, or null for every document of the collection
      * @param  Closure(): void  $write
      */
-    private function replicate(string $action, Closure $write): void
+    private function replicate(string $action, string $collection, ?array $documentIds, Closure $write): void
     {
         $destination = $this->destination;
         if ($destination === null) {
@@ -1668,7 +1691,109 @@ class Mirror extends Database
             return;
         }
 
-        Promise::async($apply);
+        $earlier = $this->replicationsBefore($collection, $documentIds);
+        $finished = new Channel(1);
+        $this->queueReplication($collection, $documentIds, $finished);
+
+        Promise::async(function () use ($apply, $earlier, $collection, $documentIds, $finished): void {
+            try {
+                foreach ($earlier as $replication) {
+                    $replication->pop();
+                }
+
+                $apply();
+            } finally {
+                $this->releaseReplication($collection, $documentIds, $finished);
+            }
+        });
+    }
+
+    /**
+     * Waits until every queued replication that can reach these documents has finished, so a write the caller
+     * replicates itself reaches the destination after them.
+     *
+     * @param  array<string>  $documentIds
+     */
+    private function awaitReplications(string $collection, array $documentIds): void
+    {
+        foreach ($this->replicationsBefore($collection, $documentIds) as $replication) {
+            $replication->pop();
+        }
+    }
+
+    /**
+     * @param  array<string>|null  $documentIds
+     * @return array<int, Channel>
+     */
+    private function replicationsBefore(string $collection, ?array $documentIds): array
+    {
+        $pending = $this->documentReplications[$collection] ?? [];
+        $earlier = $documentIds === null
+            ? \array_values($pending)
+            : \array_values(\array_intersect_key($pending, \array_flip($documentIds)));
+
+        if (isset($this->collectionReplications[$collection])) {
+            $earlier[] = $this->collectionReplications[$collection];
+        }
+
+        $unique = [];
+        foreach ($earlier as $replication) {
+            $unique[\spl_object_id($replication)] = $replication;
+        }
+
+        return $unique;
+    }
+
+    /**
+     * @param  array<string>|null  $documentIds
+     */
+    private function queueReplication(string $collection, ?array $documentIds, Channel $finished): void
+    {
+        if ($documentIds === null) {
+            unset($this->documentReplications[$collection]);
+            $this->collectionReplications[$collection] = $finished;
+
+            return;
+        }
+
+        foreach ($documentIds as $id) {
+            $this->documentReplications[$collection][$id] = $finished;
+        }
+    }
+
+    /**
+     * @param  array<string>|null  $documentIds
+     */
+    private function releaseReplication(string $collection, ?array $documentIds, Channel $finished): void
+    {
+        $finished->close();
+
+        if ($documentIds === null) {
+            if (($this->collectionReplications[$collection] ?? null) === $finished) {
+                unset($this->collectionReplications[$collection]);
+            }
+
+            return;
+        }
+
+        foreach ($documentIds as $id) {
+            if (($this->documentReplications[$collection][$id] ?? null) === $finished) {
+                unset($this->documentReplications[$collection][$id]);
+            }
+        }
+
+        if (($this->documentReplications[$collection] ?? null) === []) {
+            unset($this->documentReplications[$collection]);
+        }
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return array<string>
+     */
+    private static function documentIds(array $documents): array
+    {
+        return \array_map(static fn (Document $document): string => $document->getId(), $documents);
     }
 
     protected function logError(string $action, Throwable $err): void

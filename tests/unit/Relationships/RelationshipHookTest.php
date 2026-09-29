@@ -764,11 +764,13 @@ final class RelationshipHookTest extends TestCase
      */
     private function deletePairs(): array
     {
-        $parentHoldsKey = function (string $key): Closure {
-            return function (Database $database, string $parent, string $child) use ($key): void {
-                $database->createDocument('child', new Document(['$id' => $child]));
-                $database->createDocument('parent', new Document(['$id' => $parent, $key => $key === 'children' ? [$child] : $child]));
-            };
+        $parentHoldsChild = function (Database $database, string $parent, string $child): void {
+            $database->createDocument('child', new Document(['$id' => $child]));
+            $database->createDocument('parent', new Document(['$id' => $parent, 'child' => $child]));
+        };
+        $parentListsChild = function (Database $database, string $parent, string $child): void {
+            $database->createDocument('child', new Document(['$id' => $child]));
+            $database->createDocument('parent', new Document(['$id' => $parent, 'children' => [$child]]));
         };
         $childHoldsKey = function (Database $database, string $parent, string $child): void {
             $database->createDocument('parent', new Document(['$id' => $parent]));
@@ -778,7 +780,7 @@ final class RelationshipHookTest extends TestCase
         return [
             'one-to-one' => [
                 fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'child', twoWayKey: 'parent', onDelete: $onDelete),
-                $parentHoldsKey('child'),
+                $parentHoldsChild,
             ],
             'one-to-many' => [
                 fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete),
@@ -790,7 +792,7 @@ final class RelationshipHookTest extends TestCase
             ],
             'many-to-many' => [
                 fn (ForeignKeyAction $onDelete): Relationship => Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: $onDelete),
-                $parentHoldsKey('children'),
+                $parentListsChild,
             ],
         ];
     }

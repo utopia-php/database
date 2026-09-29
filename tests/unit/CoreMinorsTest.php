@@ -16,6 +16,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Character as CharacterException;
@@ -29,6 +30,7 @@ use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 
 final class CoreMinorsTest extends TestCase
 {
@@ -78,6 +80,74 @@ final class CoreMinorsTest extends TestCase
         $this->assertSame(3, $writes, 'An unknown failure must still be retried');
     }
 
+    public function testMetadataFailureKeepsThePersistenceErrorFirst(): void
+    {
+        $failure = new StructureException('metadata rejected');
+        $failing = false;
+        $adapter = $this->interceptingIndexes(
+            static function (): void {
+            },
+            function () use (&$failing): void {
+                if ($failing) {
+                    throw new RuntimeException('index cleanup failed');
+                }
+            },
+        );
+        $database = $this->interceptingMetadataWrites(function () use (&$failing, $failure): void {
+            if ($failing) {
+                throw $failure;
+            }
+        }, $adapter);
+        $this->configure($database);
+        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $failing = true;
+
+        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame(
+            "Failed to persist metadata after retries and cleanup failed for index creation 'by_count': metadata rejected | Cleanup error: index cleanup failed",
+            $error->getMessage(),
+        );
+        $this->assertSame($failure, $error->getPrevious(), 'The persistence error must stay the cause');
+    }
+
+    public function testSilentRollbackKeepsThePersistenceError(): void
+    {
+        $failure = new StructureException('metadata rejected');
+        $failing = false;
+        $adapter = $this->interceptingIndexes(
+            function () use (&$failing): void {
+                if ($failing) {
+                    throw new RuntimeException('index restore failed');
+                }
+            },
+            static function (): void {
+            },
+        );
+        $database = $this->interceptingMetadataWrites(function () use (&$failing, $failure): void {
+            if ($failing) {
+                throw $failure;
+            }
+        }, $adapter);
+        $this->configure($database);
+        $database->createCollection(new Collection(
+            id: 'logs',
+            attributes: [Attribute::integer(key: 'count')],
+            indexes: [Index::key(key: 'by_count', attributes: ['count'])],
+        ));
+        $failing = true;
+
+        $error = $this->attempt(fn (): bool => $database->deleteIndex('logs', 'by_count'));
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame(
+            "Failed to persist metadata after retries for index deletion 'by_count': metadata rejected | Cleanup error: index restore failed",
+            $error->getMessage(),
+        );
+        $this->assertSame($failure, $error->getPrevious(), 'A failed silent rollback must not replace the persistence error');
+    }
+
     /**
      * A database with a `logs` collection whose later metadata writes count into $writes and throw $failure.
      */
@@ -124,6 +194,47 @@ final class CoreMinorsTest extends TestCase
                 }
 
                 return parent::updateDocument($collection, $id, $document);
+            }
+        };
+    }
+
+    /**
+     * An adapter that runs $beforeCreate and $beforeDelete ahead of each index creation and deletion.
+     *
+     * @param  Closure(): void  $beforeCreate
+     * @param  Closure(): void  $beforeDelete
+     */
+    private function interceptingIndexes(Closure $beforeCreate, Closure $beforeDelete): SQLite
+    {
+        return new class (new PDO('sqlite::memory:'), $beforeCreate, $beforeDelete) extends SQLite {
+            /**
+             * @param  Closure(): void  $beforeCreate
+             * @param  Closure(): void  $beforeDelete
+             */
+            public function __construct(PDO $pdo, private readonly Closure $beforeCreate, private readonly Closure $beforeDelete)
+            {
+                parent::__construct($pdo);
+            }
+
+            #[\Override]
+            public function createIndex(
+                string $collection,
+                Index $index,
+                array $indexAttributeTypes = [],
+                array $collation = [],
+                Event $event = Event::IndexCreate,
+            ): bool {
+                ($this->beforeCreate)();
+
+                return parent::createIndex($collection, $index, $indexAttributeTypes, $collation, $event);
+            }
+
+            #[\Override]
+            public function deleteIndex(string $collection, string $id, Event $event = Event::IndexDelete): bool
+            {
+                ($this->beforeDelete)();
+
+                return parent::deleteIndex($collection, $id, $event);
             }
         };
     }

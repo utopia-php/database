@@ -3298,7 +3298,7 @@ class Database
      * @param  bool  $shouldRollback  Whether rollback should be attempted (e.g., false for duplicates in shared tables)
      * @param  string  $operationDescription  Description of the operation for error messages
      * @param  bool  $rollbackReturnsErrors  Whether rollback operation returns error array (true) or throws (false)
-     * @param  bool  $silentRollback  Whether rollback errors should be silently caught (true) or thrown (false)
+     * @param  bool  $silentRollback  Whether a failed rollback is reported after the persistence error (true) or fails the call as a cleanup failure (false)
      *
      * @throws DatabaseException If metadata persistence fails after all retries
      */
@@ -3317,6 +3317,7 @@ class Database
                 );
             }
         } catch (Throwable $e) {
+            $cleanupFailure = '';
             if ($shouldRollback && $rollbackOperation !== null) {
                 if ($rollbackReturnsErrors) {
                     /** @var array<string> $cleanupErrors */
@@ -3330,15 +3331,15 @@ class Database
                 } elseif ($silentRollback) {
                     try {
                         $rollbackOperation();
-                    } catch (Throwable $e) {
-                        // Silent rollback - errors are swallowed
+                    } catch (Throwable $cleanupError) {
+                        $cleanupFailure = ' | Cleanup error: '.$cleanupError->getMessage();
                     }
                 } else {
                     try {
                         $rollbackOperation();
-                    } catch (Throwable $ex) {
+                    } catch (Throwable $cleanupError) {
                         throw new DatabaseException(
-                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: ".$ex->getMessage().' | Cleanup error: '.$e->getMessage(),
+                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: ".$e->getMessage().' | Cleanup error: '.$cleanupError->getMessage(),
                             previous: $e
                         );
                     }
@@ -3346,7 +3347,7 @@ class Database
             }
 
             throw new DatabaseException(
-                "Failed to persist metadata after retries for {$operationDescription}: ".$e->getMessage(),
+                "Failed to persist metadata after retries for {$operationDescription}: ".$e->getMessage().$cleanupFailure,
                 previous: $e
             );
         }

@@ -4725,19 +4725,15 @@ trait RelationshipTests
             'children' => ['child1', 'child2'],
         ]));
 
-        $reported = static function (EventRecorder $recorder): array {
-            $recorder->stop();
-
-            return $recorder->getPayloads(Event::DocumentUpdate);
-        };
-        $ids = static fn (array $documents): array => \array_map(fn (Document $document): string => $document->getId(), $documents);
+        $ids = static fn (Document ...$documents): array => \array_map(fn (Document $document): string => $document->getId(), $documents);
 
         $recorder = new EventRecorder('related-update-test');
         $database->addHook($recorder);
         $database->deleteDocument('related_parent', 'parent1');
-        $related = $reported($recorder);
+        $recorder->stop();
+        $related = $recorder->getDocuments(Event::DocumentUpdate);
 
-        $this->assertEqualsCanonicalizing(['child1', 'child2'], $ids($related));
+        $this->assertEqualsCanonicalizing(['child1', 'child2'], $ids(...$related));
         $this->assertCount(2, $related);
         foreach ($related as $document) {
             $this->assertSame('related_child', $document->getCollection());
@@ -4753,9 +4749,10 @@ trait RelationshipTests
         $recorder = new EventRecorder('related-update-test');
         $database->addHook($recorder);
         $database->deleteDocument('related_child', 'child1');
-        $related = $reported($recorder);
+        $recorder->stop();
+        $related = $recorder->getDocuments(Event::DocumentUpdate);
 
-        $this->assertSame(['parent2'], $ids($related));
+        $this->assertSame(['parent2'], $ids(...$related));
         $this->assertSame('related_parent', $related[0]->getCollection());
 
         $database->updateRelationship(
@@ -4773,8 +4770,9 @@ trait RelationshipTests
         $recorder = new EventRecorder('related-update-test');
         $database->addHook($recorder);
         $database->deleteDocument('related_parent', 'parent2');
+        $recorder->stop();
 
-        $this->assertSame([], $ids($reported($recorder)));
+        $this->assertSame([], $ids(...$recorder->getDocuments(Event::DocumentUpdate)));
         $this->assertTrue($database->getDocument('related_child', 'child3')->isEmpty());
 
         $database->updateRelationship(
@@ -4797,8 +4795,9 @@ trait RelationshipTests
         $recorder = new EventRecorder('related-update-test');
         $database->addHook($recorder);
         $database->deleteDocument('related_child', 'child4');
+        $recorder->stop();
 
-        $this->assertSame(['parent4'], $ids($reported($recorder)));
+        $this->assertSame(['parent4'], $ids(...$recorder->getDocuments(Event::DocumentUpdate)));
 
         $database->createCollection(new Collection(id: 'related_oneway', permissions: $collectionPermissions, documentSecurity: true));
 
@@ -4835,8 +4834,9 @@ trait RelationshipTests
         $recorder = new EventRecorder('related-update-test');
         $database->addHook($recorder);
         $database->deleteDocument('related_parent', 'parent3');
+        $recorder->stop();
 
-        $this->assertSame([], $ids($reported($recorder)));
+        $this->assertSame([], $ids(...$recorder->getDocuments(Event::DocumentUpdate)));
         $this->assertFalse($database->getDocument('related_oneway', 'stray1')->isEmpty());
 
         $database->createCollection(new Collection(id: 'related_pair', permissions: $collectionPermissions, documentSecurity: true));
@@ -4874,8 +4874,9 @@ trait RelationshipTests
         $recorder = new EventRecorder('related-update-test');
         $database->addHook($recorder);
         $database->deleteDocument('related_parent', 'parent5');
+        $recorder->stop();
 
-        $this->assertSame([], $ids($reported($recorder)));
+        $this->assertSame([], $ids(...$recorder->getDocuments(Event::DocumentUpdate)));
         $this->assertTrue($database->getDocument('related_pair', 'pair1')->isEmpty());
 
         $database->updateRelationship(
@@ -4919,8 +4920,9 @@ trait RelationshipTests
         $recorder = new EventRecorder('related-update-test');
         $database->addHook($recorder);
         $database->deleteDocument('related_parent', 'parent6');
+        $recorder->stop();
 
-        $this->assertSame(['child6'], $ids($reported($recorder)));
+        $this->assertSame(['child6'], $ids(...$recorder->getDocuments(Event::DocumentUpdate)));
         $this->assertTrue($database->getDocument('related_child', 'child5')->isEmpty());
 
         $database->deleteCollection('related_parent');

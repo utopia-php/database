@@ -2,6 +2,8 @@
 
 namespace Tests\E2E\Adapter\Support;
 
+use UnexpectedValueException;
+use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
@@ -66,5 +68,25 @@ final class EventRecorder implements Lifecycle, Named
         }
 
         return $payloads;
+    }
+
+    /**
+     * The documents recorded for $event so far, in the order they fired.
+     *
+     * @return list<Document>
+     *
+     * @throws UnexpectedValueException When a payload recorded for $event is not a document
+     */
+    public function getDocuments(Event $event): array
+    {
+        $documents = [];
+        foreach ($this->getPayloads($event) as $payload) {
+            if (! $payload instanceof Document) {
+                throw new UnexpectedValueException($event->value . ' recorded a ' . \get_debug_type($payload) . ', not a document');
+            }
+            $documents[] = $payload;
+        }
+
+        return $documents;
     }
 }

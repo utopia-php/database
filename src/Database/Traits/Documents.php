@@ -2268,14 +2268,14 @@ trait Documents
             : $collection->getId();
         $report = $this->getActiveLifecycleHooks() !== [];
         $changed = [];
-        $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$document, &$changed) {
+        $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
             $document = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
 
             if ($document->isEmpty()) {
-                return false;
+                return null;
             }
 
             if ($collection->getId() !== self::METADATA) {
@@ -2289,7 +2289,6 @@ trait Documents
                 }
             }
 
-            // Check if document was updated after the request timestamp
             try {
                 $oldUpdatedAt = new PhpDateTime($document->getUpdatedAt() ?? 'now');
             } catch (Exception $e) {
@@ -2308,15 +2307,17 @@ trait Documents
 
             $this->purgeCachedDocumentInternal($collection->getId(), $id);
 
-            return $result;
+            return $result ? $document : null;
         });
 
-        if ($deleted) {
-            $this->triggerDocumentPurge($collection->getId(), $id);
-            $this->triggerDeleteHooks($document, $changed);
+        if ($deleted === null) {
+            return false;
         }
 
-        return $deleted;
+        $this->triggerDocumentPurge($collection->getId(), $id);
+        $this->triggerDeleteHooks($deleted, $changed);
+
+        return true;
     }
 
     /**

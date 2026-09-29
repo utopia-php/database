@@ -9948,6 +9948,65 @@ trait DocumentTests
         }
     }
 
+    public function testJoinedGroupSharingAMainGroupNameKeepsItsQualifiedName(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $orders = 'group_name_orders';
+        $items = 'group_name_items';
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $orders,
+            attributes: [Attribute::string(key: 'item', size: 16), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $items,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+
+        try {
+            foreach ([['o1', 'a', 'x'], ['o2', 'b', 'y'], ['o3', 'a', 'x']] as [$id, $item, $name]) {
+                $database->createDocument($orders, new Document(['$id' => $id, '$permissions' => [], 'item' => $item, 'name' => $name]));
+            }
+            foreach ([['a', 'apple'], ['b', 'banana']] as [$code, $name]) {
+                $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'name' => $name]));
+            }
+
+            $rows = static fn (array $documents): array => \array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents);
+
+            foreach (['join' => Query::join($items, 'item', 'code', '=', 'it'), 'full outer join' => Query::fullOuterJoin($items, 'item', 'code', '=', 'it')] as $case => $join) {
+                $this->assertEquals(
+                    [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
+                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')])),
+                    $case,
+                );
+                $this->assertEquals(
+                    [['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
+                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name', 'name']), Query::having([Query::equal('it.name', ['banana'])])])),
+                    $case.': a having on the qualified group',
+                );
+                $this->assertEquals(
+                    [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
+                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')])),
+                    $case.': a joined group alone keeps its bare name',
+                );
+            }
+        } finally {
+            foreach ([$orders, $items] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
     /**
      * Run $read with the profiler on; return its result and the statements it ran on $table.
      *

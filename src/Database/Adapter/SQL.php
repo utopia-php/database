@@ -4432,6 +4432,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         string $alias,
         array $roles,
         PermissionType $forPermission,
+        bool $qualifyCollidingGroups = true,
     ): bool {
         $hasSelectionProjection = false;
         if (! $hasAggregation) {
@@ -4535,10 +4536,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $this->remapDottedQueryAttributes([$columns], $joinTablePrefixes, $collection);
                     /** @var array<string> $groupCols */
                     $groupCols = $columns->getValues();
-                    $builder->select(\array_map(
-                        fn (string $col) => \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col)),
-                        $groupCols
-                    ));
+                    /** @var array<string> $groups */
+                    $groups = $query->getValues();
+                    $qualified = $qualifyCollidingGroups ? $this->qualifiedGroupNames($groups) : [];
+                    $plain = [];
+                    foreach ($groupCols as $index => $col) {
+                        if (! isset($qualified[$index])) {
+                            $plain[] = \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col));
+                        }
+                    }
+                    if ($plain !== []) {
+                        $builder->select($plain);
+                    }
+                    foreach ($qualified as $index => $group) {
+                        [$table, $column] = \explode('.', $groupCols[$index], 2);
+                        $builder->select($this->quote($table).'.'.$this->quote($column).' AS '.$this->quote($group));
+                    }
                 }
             }
         }
@@ -4924,6 +4937,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $alias,
             $roles,
             $forPermission,
+            qualifyCollidingGroups: false,
         ));
         $this->applyFindPage($aggregation, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
         $columns = $this->fullOuterJoinColumns($aggregationQueries, $orderAttributes, $orderTypes, $joinAliases, $aggregateAliases, $alias);
@@ -4949,7 +4963,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aggregation->fromSub($left, self::FOJ_ROWS_ALIAS);
         $aggregation->addHook(new AttributeMap($this->fullOuterJoinColumnSpellings($columns, $aggregateAliases, $alias)));
 
-        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind, $name), $columns);
+        $qualifiedGroups = [];
+        foreach ($aggregationQueries as $query) {
+            if ($query->getMethod() === Method::GroupBy) {
+                /** @var array<string> $groups */
+                $groups = $query->getValues();
+                foreach ($this->qualifiedGroupNames($groups) as $group) {
+                    $dot = (int) \strpos($group, '.');
+                    $qualifiedGroups[\substr($group, 0, $dot).'.'.$this->getInternalKeyForAttribute(\substr($group, $dot + 1))] = $group;
+                }
+            }
+        }
+
+        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind, $name), $columns, $qualifiedGroups);
     }
 
     private function shapesAggregatedRows(Method $method): bool
@@ -5052,30 +5078,72 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Name each result column the way the single statement names it: a derived column after the column
      * it holds, an expression over derived columns after the same expression over the columns they hold.
      *
+     * A joined group that qualifiedGroupNames() names by its alias comes last under that name, where the
+     * single statement selects it.
+     *
      * @param  array<int, array<string, mixed>>  $rows
      * @param  array<string, string>  $columns
+     * @param  array<string, string>  $qualifiedGroups  The name of each joined group qualified by its alias, by the column it holds
      * @return array<int, array<string, mixed>>
      */
-    private function fullOuterJoinResultNames(array $rows, array $columns): array
+    private function fullOuterJoinResultNames(array $rows, array $columns, array $qualifiedGroups = []): array
     {
         $names = [];
+        $qualified = [];
         $expressions = [];
         foreach ($columns as $source => $column) {
             [$table, $name] = \explode('.', $source, 2);
             $names[$column] = $name;
+            if (isset($qualifiedGroups[$source])) {
+                $qualified[$column] = $qualifiedGroups[$source];
+            }
             $expressions[$this->quote(self::FOJ_ROWS_ALIAS).'.'.$this->quote($column)] = $this->quote($table).'.'.$this->quote($name);
         }
 
         foreach ($rows as $index => $row) {
             $named = [];
+            $trailing = [];
             foreach ($row as $key => $value) {
                 $key = (string) $key;
+                if (isset($qualified[$key])) {
+                    $trailing[$qualified[$key]] = $value;
+
+                    continue;
+                }
                 $named[$names[$key] ?? \strtr($key, $expressions)] = $value;
             }
-            $rows[$index] = $named;
+            $rows[$index] = [...$named, ...$trailing];
         }
 
         return $rows;
+    }
+
+    /**
+     * The groups returned under their qualified name (`alias.attribute`), by position: a joined group
+     * whose column name another group of the query is also returned under. Every other group keeps
+     * the column name the engine gives it, so a joined group alone under its name stays reachable
+     * by that bare name, and the main collection's group keeps it when both are grouped.
+     *
+     * @param  array<string>  $groups
+     * @return array<int, string>
+     */
+    private function qualifiedGroupNames(array $groups): array
+    {
+        $names = [];
+        foreach ($groups as $index => $group) {
+            $dot = \strrpos($group, '.');
+            $names[$index] = $this->filter($this->getInternalKeyForAttribute($dot === false ? $group : \substr($group, $dot + 1)));
+        }
+
+        $counts = \array_count_values($names);
+        $qualified = [];
+        foreach ($groups as $index => $group) {
+            if ($counts[$names[$index]] > 1 && \str_contains($group, '.')) {
+                $qualified[$index] = $group;
+            }
+        }
+
+        return $qualified;
     }
 
     /**

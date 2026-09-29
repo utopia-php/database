@@ -5,6 +5,7 @@ namespace Tests\Unit\Joins;
 use PDO;
 use PDOStatement;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\NativeFullOuterJoinSQLite;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
@@ -99,6 +100,53 @@ final class AggregateMinorsTest extends TestCase
         $this->assertSame(200, $database->sum('orders', 'ex.price', [$item, $extra]), 'qualified, the ambiguous name reads its join');
     }
 
+    public function testJoinedGroupKeepsItsQualifiedName(): void
+    {
+        foreach (['join' => [false, 'join'], 'emulated full outer join' => [false, 'fullOuterJoin'], 'native full outer join' => [true, 'fullOuterJoin']] as $case => [$native, $method]) {
+            $database = $this->database($native);
+            $item = Query::$method('items', 'item', 'code', '=', 'it');
+            $extra = Query::join('extras', 'item', 'code', '=', 'ex');
+
+            $this->assertSame(
+                [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
+                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')])),
+                $case.': the main group keeps the bare name',
+            );
+            $this->assertSame(
+                [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
+                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name', 'name']), Query::orderAsc('it.name')])),
+                $case.': in either order',
+            );
+            $this->assertSame(
+                [['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
+                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::having([Query::equal('it.name', ['banana'])])])),
+                $case.': a having on the qualified group',
+            );
+            $this->assertSame(
+                [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
+                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')])),
+                $case.': a joined group alone keeps its bare name',
+            );
+            $this->assertSame(
+                [['orders' => 2, 'code' => 'a'], ['orders' => 1, 'code' => 'b']],
+                $this->rows($database->find('orders', [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderAsc('it.code')])),
+                $case.': a bare name only the join declares',
+            );
+        }
+
+        $database = $this->database();
+        $this->assertSame(
+            [['orders' => 2, 'it.code' => 'a', 'ex.code' => 'a']],
+            $this->rows($database->find('orders', [
+                Query::join('items', 'item', 'code', '=', 'it'),
+                Query::join('extras', 'item', 'code', '=', 'ex'),
+                Query::count('*', 'orders'),
+                Query::groupBy(['it.code', 'ex.code']),
+            ])),
+            'two joined groups of one name are both qualified',
+        );
+    }
+
     /**
      * Run a find on MariaDB, answered as MariaDB answers: an unaliased aggregate is named by its
      * expression, a count is the number of values $inputs gives its column, BIT_AND is every bit set
@@ -166,9 +214,10 @@ final class AggregateMinorsTest extends TestCase
     /**
      * Orders of items: o1 and o3 order a (price 10), o2 orders b (price 20); extras prices a at 100.
      */
-    private function database(): Database
+    private function database(bool $nativeFullOuterJoin = false): Database
     {
-        $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $pdo = new PDO('sqlite::memory:');
+        $database = new Database($nativeFullOuterJoin ? new NativeFullOuterJoinSQLite($pdo) : new SQLite($pdo), new Cache(new NoCache()));
         $database
             ->setDatabase('aggregate_minors')
             ->setNamespace('aggregate_minors_'.\uniqid())

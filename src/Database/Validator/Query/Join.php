@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Validator\Query;
 
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Query\Method;
@@ -30,6 +31,14 @@ class Join extends Base
     private readonly ?array $columns;
 
     /**
+     * The keys of the main collection's relationship attributes. The relationship hook reads an
+     * `alias.attribute` whose first segment is one of them as a related document's attribute.
+     *
+     * @var array<string, true>
+     */
+    private readonly array $relationships;
+
+    /**
      * The joins of the query set whose collection is known.
      *
      * @var list<JoinedCollection>
@@ -50,6 +59,15 @@ class Join extends Base
     public function __construct(?array $attributes = null, private readonly bool $supportForAttributes = true)
     {
         $this->columns = $attributes === null ? null : JoinedCollection::columns($attributes);
+
+        $relationships = [];
+        foreach ($attributes ?? [] as $attribute) {
+            $key = $attribute->getAttribute('key', $attribute->getId());
+            if (\is_string($key) && $key !== '' && Attribute::isRelationship($attribute)) {
+                $relationships[$key] = true;
+            }
+        }
+        $this->relationships = $relationships;
     }
 
     /**
@@ -137,6 +155,12 @@ class Join extends Base
         $invalidAlias = $alias === '' ? null : self::describeInvalidAlias($alias);
         if ($invalidAlias !== null) {
             $this->message = $invalidAlias;
+
+            return false;
+        }
+
+        if (isset($this->relationships[$alias])) {
+            $this->message = "Join alias \"{$alias}\" is the key of the relationship attribute \"{$alias}\": give the join another alias";
 
             return false;
         }

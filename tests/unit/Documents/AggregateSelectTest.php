@@ -68,10 +68,6 @@ final class AggregateSelectTest extends TestCase
         yield 'a main attribute when the joined one is grouped' => [[$note, Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::select(['name'])], 'name'];
         yield 'a joined internal attribute outside the groups' => [[$note, Query::count('*', 'rows'), Query::groupBy(['note.name']), Query::select(['note.$id'])], 'note.$id'];
         yield 'the wildcard of a join alias' => [[$note, Query::count('*', 'rows'), Query::select(['note.*'])], 'note.*'];
-        yield 'the wildcard of a join alias named like a relationship' => [
-            [Query::join('accounts', 'account', '$id', '=', 'account'), Query::count('*', 'rows'), Query::select(['account.*'])],
-            'account.*',
-        ];
     }
 
     /**

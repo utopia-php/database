@@ -1,0 +1,159 @@
+<?php
+
+namespace Tests\Unit\Validator;
+
+use Closure;
+use PDO;
+use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Query\Join;
+use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\ForeignKeyAction;
+
+/**
+ * The query validators refuse the query shapes the library cannot run as written, so find(), count()
+ * and sum() report them as `Exception\Query` before any statement is built.
+ */
+final class QueryValidationTest extends TestCase
+{
+    private Database $database;
+
+    protected function setUp(): void
+    {
+        $this->database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $this->database
+            ->setDatabase('query_validation')
+            ->setNamespace('query_validation_'.\uniqid())
+            ->setAuthorization(new Authorization());
+        $this->database->addHook(new Permissions());
+        $this->database->addHook(new Relationships($this->database));
+        $this->database->create();
+
+        $this->createCollection('authors', [Attribute::string(key: 'name', size: 32)]);
+        $this->createCollection('users', [Attribute::string(key: 'name', size: 32)]);
+        $this->createCollection('posts', [Attribute::string(key: 'owner', size: 32), Attribute::integer(key: 'votes')]);
+        $this->database->createRelationship(new Relationship(
+            collection: 'posts',
+            relatedCollection: 'authors',
+            type: RelationType::ManyToOne,
+            key: 'author',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $this->createDocument('authors', 'ann', ['name' => 'Ann']);
+        $this->createDocument('authors', 'bob', ['name' => 'Bob']);
+        $this->createDocument('users', 'bob', ['name' => 'Bob']);
+        $this->createDocument('users', 'ann', ['name' => 'Ann']);
+        $this->createDocument('posts', 'first', ['owner' => 'bob', 'votes' => 3, 'author' => 'ann']);
+        $this->createDocument('posts', 'second', ['owner' => 'ann', 'votes' => 5, 'author' => 'bob']);
+    }
+
+    /**
+     * With a join aliased `author` next to the relationship `author`, `author.name` would be checked
+     * against the joined users but run as a filter on the related authors, returning the other post.
+     */
+    public function testAJoinAliasEqualToARelationshipKeyIsRejected(): void
+    {
+        $message = 'Join alias "author" is the key of the relationship attribute "author": give the join another alias';
+
+        foreach ([
+            'inline condition' => Query::join('users', 'owner', '$id', '=', 'author'),
+            'on() condition' => Query::join('users', 'author', [Query::on('owner', '$id')]),
+            'left join' => Query::leftJoin('users', 'owner', '$id', '=', 'author'),
+        ] as $shape => $join) {
+            $queries = [$join, Query::equal('author.name', ['Bob'])];
+
+            $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('posts', $queries), $shape.': find()');
+            $this->assertInvalidQuery($message, fn (): mixed => $this->database->count('posts', $queries), $shape.': count()');
+            $this->assertInvalidQuery($message, fn (): mixed => $this->database->sum('posts', 'votes', $queries), $shape.': sum()');
+            $this->assertInvalidQuery($message, fn (): mixed => $this->database->getDocument('posts', 'first', [$join]), $shape.': getDocument()');
+        }
+
+        $this->assertInvalidQuery(
+            $message,
+            fn (): mixed => $this->database->find('posts', [Query::join('users', 'owner', '$id', '=', 'author'), Query::count('*', 'rows'), Query::select(['author.*'])]),
+            'an aggregate next to the relationship wildcard',
+        );
+
+        $joined = $this->database->find('posts', [Query::join('users', 'owner', '$id', '=', 'usr'), Query::equal('usr.name', ['Bob'])]);
+        $this->assertSame(['first'], $this->ids($joined), 'another alias filters the joined users');
+        $this->assertSame(1, $this->database->count('posts', [Query::join('users', 'owner', '$id', '=', 'usr'), Query::equal('usr.name', ['Bob'])]));
+        $this->assertSame(['second'], $this->ids($this->database->find('posts', [Query::equal('author.name', ['Bob'])])), 'without a join author.name filters the related authors');
+    }
+
+    public function testTheJoinValidatorNamesTheRelationshipAnAliasCollidesWith(): void
+    {
+        $validator = new Join([
+            new Document(['$id' => 'owner', 'key' => 'owner', 'type' => ColumnType::String->value]),
+            new Document(['$id' => 'author', 'key' => 'author', 'type' => ColumnType::Relationship->value, 'options' => ['relationType' => RelationType::ManyToOne->value, 'side' => 'parent', 'relatedCollection' => 'authors']]),
+        ]);
+
+        $this->assertFalse($validator->isValid(Query::join('users', 'owner', '$id', '=', 'author')));
+        $this->assertSame('Join alias "author" is the key of the relationship attribute "author": give the join another alias', $validator->getDescription());
+
+        $validator->resetJoinAliases();
+        $this->assertTrue($validator->isValid(Query::join('users', 'owner', '$id', '=', 'Author')), 'relationship keys are matched as the relationship hook matches them, by exact name');
+
+        $validator->resetJoinAliases();
+        $this->assertTrue($validator->isValid(Query::join('users', 'owner', '$id', '=', 'owner')), 'an alias may still equal an attribute that is not a relationship');
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<string>
+     */
+    private function ids(array $documents): array
+    {
+        return \array_map(static fn (Document $document): string => $document->getId(), \array_values($documents));
+    }
+
+    private function assertInvalidQuery(string $message, Closure $run, string $case = ''): void
+    {
+        try {
+            $run();
+            $this->fail($case.': the query ran instead of being rejected with "'.$message.'"');
+        } catch (QueryException $error) {
+            $this->assertStringContainsString($message, $error->getMessage(), $case);
+        }
+    }
+
+    /**
+     * @param  array<Attribute>  $attributes
+     */
+    private function createCollection(string $id, array $attributes): void
+    {
+        $this->database->createCollection(new Collection(
+            id: $id,
+            attributes: $attributes,
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function createDocument(string $collection, string $id, array $attributes): void
+    {
+        $this->database->createDocument($collection, new Document([
+            '$id' => $id,
+            '$permissions' => [Permission::read(Role::any())],
+            ...$attributes,
+        ]));
+    }
+}

@@ -14,13 +14,11 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
-use Utopia\Database\Event;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Interceptor;
 use Utopia\Database\Hook\Permissions;
-use Utopia\Database\Hook\Transform;
 use Utopia\Database\Hook\WriteContext;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
@@ -31,8 +29,8 @@ use Utopia\Database\Validator\Authorization;
  * Under skipDuplicates() a batch document whose id already exists is not written. Its
  * permissions must not be written either: a read grant lands in `_perms`, which find(),
  * count() and sum() consult, so the existing document would become readable by every role
- * the replayed copy names. Each case runs with RETURNING and with the locking read that
- * engines without RETURNING (MySQL) use.
+ * the replayed copy names. Each case runs with RETURNING and with the read-back that engines
+ * without RETURNING (MySQL) use.
  */
 final class SkipDuplicatesPermissionTest extends TestCase
 {
@@ -61,11 +59,6 @@ final class SkipDuplicatesPermissionTest extends TestCase
     private Database $database;
 
     /**
-     * @var ArrayObject<int, string>
-     */
-    private ArrayObject $lockingReads;
-
-    /**
      * @return array<string, array{bool, bool, bool}>
      */
     public static function modes(): array
@@ -87,7 +80,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
     {
         return [
             'returning' => [true],
-            'locking read' => [false],
+            'read-back' => [false],
         ];
     }
 
@@ -98,7 +91,6 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->database->createDocument(self::COLLECTION, $this->note(self::EXISTING, Role::user(self::ALICE), 5));
 
         $recorder = $this->recordCreatedDocuments();
-        $this->lockingReads->exchangeArray([]);
         $emitted = new ArrayObject();
         $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
@@ -119,7 +111,6 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->assertSame(1, $created, 'Only the inserted document is counted as created');
         $this->assertSame([self::FRESH], $emitted->getArrayCopy(), 'Only the inserted document is handed to onNext');
         $this->assertSame([[self::FRESH]], $recorder->created, 'Write hooks see only the inserted documents');
-        $this->assertSame(! $returning, $this->lockingReads->count() > 0, 'Only an engine without RETURNING locks the stored ids first');
 
         $this->authorization->addRole(Role::user(self::ALICE)->toString());
         $this->assertSame([self::EXISTING, self::FRESH], $this->readableIds());
@@ -168,6 +159,27 @@ final class SkipDuplicatesPermissionTest extends TestCase
 
         $this->expectException(DuplicateException::class);
         $this->database->createDocument(self::COLLECTION, $this->note(self::FRESH, Role::any(), 3, slug: self::EXISTING));
+    }
+
+    #[DataProvider('modes')]
+    public function testARepeatedIdWhoseFirstCopyIsSkippedIsNotWrittenFromTheSecond(bool $sharedTables, bool $tenantPerDocument, bool $returning): void
+    {
+        $this->open($sharedTables, $tenantPerDocument, $returning);
+        $this->database->createDocument(self::COLLECTION, $this->note(self::EXISTING, Role::user(self::ALICE), 5));
+
+        $recorder = $this->recordCreatedDocuments();
+        $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
+            self::COLLECTION,
+            [
+                $this->note(self::FRESH, Role::any(), 3, slug: self::EXISTING),
+                $this->note(self::FRESH, Role::user(self::ALICE), 4),
+            ],
+        ));
+
+        $this->assertSame([], $this->grants(self::FRESH), 'The skipped first copy must not lend its grants to a row of the second');
+        $this->assertSame([], $this->readableIds());
+        $this->assertSame(0, $created, 'Of a repeated id only the first copy is written, and it was skipped');
+        $this->assertSame([], $recorder->created);
     }
 
     #[DataProvider('returning')]
@@ -230,14 +242,6 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->assertSame([self::FRESH], $emitted->getArrayCopy());
     }
 
-    public function testTheHostSQLiteReturnsInsertedRows(): void
-    {
-        $version = (new PDO('sqlite::memory:'))->query('SELECT sqlite_version()')?->fetchColumn();
-
-        $this->assertIsString($version);
-        $this->assertTrue(\version_compare($version, '3.35.0', '>='), 'INSERT ... RETURNING needs SQLite 3.35, found '.$version);
-    }
-
     private function open(bool $sharedTables, bool $tenantPerDocument, bool $returning): void
     {
         $this->pdo = new PDO('sqlite::memory:');
@@ -269,7 +273,6 @@ final class SkipDuplicatesPermissionTest extends TestCase
             permissions: [Permission::create(Role::any())],
             documentSecurity: true,
         ));
-        $this->lockingReads = $this->recordLockingReads();
     }
 
     /**
@@ -289,38 +292,6 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->database->addHook($recorder);
 
         return $recorder;
-    }
-
-    /**
-     * SQLite has no row locks (it serialises writers), so the locking read runs without its
-     * `FOR UPDATE` clause; each read that asked for it is recorded.
-     *
-     * @return ArrayObject<int, string>
-     */
-    private function recordLockingReads(): ArrayObject
-    {
-        $lockingReads = new ArrayObject();
-        $this->database->addHook(new class ($lockingReads) implements Transform {
-            /**
-             * @param  ArrayObject<int, string>  $lockingReads
-             */
-            public function __construct(private readonly ArrayObject $lockingReads)
-            {
-            }
-
-            public function transform(Event $event, string $query): string
-            {
-                if ($event !== Event::DocumentRead || ! \str_ends_with($query, ' FOR UPDATE')) {
-                    return $query;
-                }
-
-                $this->lockingReads->append($query);
-
-                return \substr($query, 0, -\strlen(' FOR UPDATE'));
-            }
-        });
-
-        return $lockingReads;
     }
 
     private function note(string $id, Role $reader, int $rank, int $tenant = self::TENANT, ?string $slug = null): Document

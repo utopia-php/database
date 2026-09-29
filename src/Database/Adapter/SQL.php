@@ -50,6 +50,7 @@ use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
+use Utopia\Query\Builder\Feature\MariaDB\Returning as MariaDBReturning;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
@@ -789,8 +790,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Create Documents in batches
      *
-     * Under skipDuplicates() only the documents the statement inserted are returned and handed
-     * to the write hooks, so a skipped document writes no permission rows for the stored one.
+     * Under skipDuplicates() only the documents written are returned and handed to the write
+     * hooks, so a skipped document writes no permission rows for a stored one.
      *
      * @param  array<Document>  $documents
      * @return array<Document>
@@ -813,9 +814,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $hasSequence = $this->batchHasSequence($documents);
 
             if ($this->skipDuplicates) {
+                $documents = $this->firstCopies($documents);
                 $documents = $this->supportsInsertReturning()
-                    ? $this->insertReturningNew($name, $documents, $spatialAttributes, $hasSequence)
-                    : $this->insertLockingStored($name, $documents, $spatialAttributes, $hasSequence);
+                    ? $this->insertReturning($name, $documents, $spatialAttributes, $hasSequence)
+                    : $this->insertThenReadBack($name, $documents, $spatialAttributes, $hasSequence);
             } else {
                 $insert = $this->buildDocumentsInsert($name, $documents, $spatialAttributes, $hasSequence)->insert();
                 $this->execute($this->executeResult($insert, Event::DocumentsCreate));
@@ -832,18 +834,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $documents;
     }
 
-    /**
-     * Whether an insert can return the rows it wrote (`RETURNING`), which lets skipDuplicates()
-     * tell the inserted documents from the skipped ones in the same statement.
-     */
     protected function supportsInsertReturning(): bool
     {
         return true;
     }
 
     /**
-     * Build the insert skipDuplicates() runs, which skips a row whose id is stored. MariaDB,
-     * MySQL and SQLite cannot name the index to ignore, so they skip any unique collision.
+     * MariaDB, MySQL and SQLite cannot name the index to ignore, so they skip any unique collision.
      *
      * @throws DatabaseException
      */
@@ -854,6 +851,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $builder->insertOrIgnore();
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function documentKeyColumns(): array
+    {
+        return $this->sharedTables ? [Storage::UID, Storage::TENANT] : [Storage::UID];
     }
 
     /**
@@ -873,6 +878,30 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $hasSequence ?? false;
+    }
+
+    /**
+     * A single statement writes at most one copy of an id, and a later copy may be written when
+     * the first is skipped for another unique value; keeping only the first copy leaves no row
+     * whose grants could be taken from another copy.
+     *
+     * @param  array<Document>  $documents
+     * @return list<Document>
+     */
+    private function firstCopies(array $documents): array
+    {
+        $seen = [];
+        $firstCopies = [];
+        foreach ($documents as $document) {
+            [$tenant, $id] = $this->documentKey($document);
+            if (isset($seen[$tenant][$id])) {
+                continue;
+            }
+            $seen[$tenant][$id] = true;
+            $firstCopies[] = $document;
+        }
+
+        return $firstCopies;
     }
 
     /**
@@ -921,100 +950,114 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Insert the batch in one statement that returns the key of every row it wrote.
-     *
-     * @param  array<Document>  $documents
+     * @param  list<Document>  $documents
      * @param  list<string>  $spatialAttributes
-     * @return array<Document>
+     * @return list<Document>
      *
      * @throws DatabaseException
      */
-    private function insertReturningNew(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
+    private function insertReturning(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
     {
-        $insert = $this->insertOrIgnore($this->buildDocumentsInsert($name, $documents, $spatialAttributes, $hasSequence));
-        $columns = \array_map($this->quote(...), $this->documentKeyColumns());
-        $statement = $this->executeResult(
-            new Statement($insert->query.' RETURNING '.\implode(', ', $columns), $insert->bindings),
-            Event::DocumentsCreate,
-        );
+        $builder = $this->buildDocumentsInsert($name, $documents, $spatialAttributes, $hasSequence);
+        $columns = $this->documentKeyColumns();
+
+        if ($builder instanceof MariaDBReturning) {
+            $insert = $this->insertOrIgnore($builder->returning($columns));
+        } else {
+            $insert = $this->insertOrIgnore($builder);
+            $quoted = \array_map($this->quote(...), $columns);
+            $insert = new Statement($insert->query.' RETURNING '.\implode(', ', $quoted), $insert->bindings);
+        }
+
+        $statement = $this->executeResult($insert, Event::DocumentsCreate);
         $this->execute($statement);
         /** @var list<list<mixed>> $rows */
         $rows = $statement->fetchAll(PDO::FETCH_NUM);
         $statement->closeCursor();
 
-        return $this->documentsOfRows($documents, $rows);
+        $written = $this->rowKeys($rows);
+
+        return \array_values(\array_filter(
+            $documents,
+            fn (Document $document): bool => $this->hasKey($written, $document),
+        ));
     }
 
     /**
-     * Without RETURNING, lock the stored rows of the batch's ids first (and the gaps of the
-     * missing ones, so no other writer can insert them), insert only the documents whose id is
-     * new, and read the ids back when the statement wrote fewer rows than it was given.
+     * Without RETURNING the ids are read before the insert, which keeps a stored id out of it,
+     * and read back when the insert wrote fewer rows than it was sent. A row read back is taken
+     * as written only when it carries the document's own permissions: a row another writer
+     * stored meanwhile under the same id then gains no grant it does not already state.
      *
-     * @param  array<Document>  $documents
+     * @param  list<Document>  $documents
      * @param  list<string>  $spatialAttributes
-     * @return array<Document>
+     * @return list<Document>
      *
      * @throws DatabaseException
      */
-    private function insertLockingStored(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
+    private function insertThenReadBack(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
     {
-        $insert = function () use ($name, $documents, $spatialAttributes, $hasSequence): array {
-            $taken = $this->documentKeys($this->readDocumentKeys($name, $documents, lock: true));
-            $candidates = [];
-            foreach ($documents as $document) {
-                [$tenant, $id] = $this->documentKeyOf($document);
-                if (isset($taken[$tenant][$id])) {
-                    continue;
-                }
-                $taken[$tenant][$id] = true;
-                $candidates[] = $document;
-            }
+        $stored = $this->rowKeys($this->readRows($name, $documents, $this->documentKeyColumns()));
+        $candidates = \array_values(\array_filter(
+            $documents,
+            fn (Document $document): bool => ! $this->hasKey($stored, $document),
+        ));
 
-            if (empty($candidates)) {
-                return [];
-            }
+        if (empty($candidates)) {
+            return [];
+        }
 
-            $statement = $this->executeResult(
-                $this->insertOrIgnore($this->buildDocumentsInsert($name, $candidates, $spatialAttributes, $hasSequence)),
-                Event::DocumentsCreate,
-            );
-            $this->execute($statement);
-            $written = $statement->rowCount();
-            $statement->closeCursor();
+        $statement = $this->executeResult(
+            $this->insertOrIgnore($this->buildDocumentsInsert($name, $candidates, $spatialAttributes, $hasSequence)),
+            Event::DocumentsCreate,
+        );
+        $this->execute($statement);
+        $written = $statement->rowCount();
+        $statement->closeCursor();
 
-            if ($written === \count($candidates)) {
-                return $candidates;
-            }
+        if ($written === \count($candidates)) {
+            return $candidates;
+        }
 
-            return $this->documentsOfRows($candidates, $this->readDocumentKeys($name, $candidates, lock: false));
-        };
+        $permissions = [];
+        foreach ($this->readRows($name, $candidates, [...$this->documentKeyColumns(), Storage::PERMISSIONS]) as $row) {
+            $rowPermissions = \end($row);
+            $permissions[$this->rowTenant($row)][$this->rowId($row)] = \is_string($rowPermissions) ? \json_decode($rowPermissions, true) : null;
+        }
 
-        return $this->inTransaction() ? $insert() : $this->withTransaction($insert);
+        return \array_values(\array_filter(
+            $candidates,
+            function (Document $document) use ($permissions): bool {
+                [$tenant, $id] = $this->documentKey($document);
+
+                return \array_key_exists($id, $permissions[$tenant] ?? [])
+                    && $permissions[$tenant][$id] === $document->getPermissions();
+            },
+        ));
     }
 
     /**
-     * @param  array<Document>  $documents
+     * @param  list<Document>  $documents
+     * @param  list<string>  $columns
      * @return list<list<mixed>>
      *
      * @throws DatabaseException
      */
-    private function readDocumentKeys(string $name, array $documents, bool $lock): array
+    private function readRows(string $name, array $documents, array $columns): array
     {
         $ids = [];
         $tenants = [];
         foreach ($documents as $document) {
             $ids[] = $document->getId();
-            if ($this->sharedTables && $this->tenantPerDocument && ! \in_array($document->getTenant(), $tenants, true)) {
-                $tenants[] = $document->getTenant();
+            $tenant = $this->documentTenant($document);
+            if ($this->sharedTables && $this->tenantPerDocument && ! \in_array($tenant, $tenants, true)) {
+                $tenants[] = $tenant;
             }
         }
 
         $builder = $this->newBuilder($name, tenants: $tenants);
-        $builder->select($this->documentKeyColumns());
+        $builder->select($columns);
         $builder->filter([BaseQuery::equal(Storage::UID, \array_values(\array_unique($ids)))]);
-        if ($lock) {
-            $builder->forUpdate();
-        }
 
         $statement = $this->executeResult($builder->build(), Event::DocumentRead);
         $this->execute($statement);
@@ -1026,60 +1069,62 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * @return list<string>
-     */
-    protected function documentKeyColumns(): array
-    {
-        return $this->sharedTables ? [Storage::UID, Storage::TENANT] : [Storage::UID];
-    }
-
-    /**
-     * The documents whose key is among the rows, in batch order; of documents sharing a key,
-     * only the first, the one a single insert statement writes.
-     *
-     * @param  array<Document>  $documents
-     * @param  list<list<mixed>>  $rows
-     * @return array<Document>
-     */
-    private function documentsOfRows(array $documents, array $rows): array
-    {
-        $stored = $this->documentKeys($rows);
-        $matched = [];
-        foreach ($documents as $document) {
-            [$tenant, $id] = $this->documentKeyOf($document);
-            if (isset($stored[$tenant][$id])) {
-                unset($stored[$tenant][$id]);
-                $matched[] = $document;
-            }
-        }
-
-        return $matched;
-    }
-
-    /**
-     * @param  list<list<mixed>>  $rows  `[_uid]`, or `[_uid, _tenant]` under shared tables
+     * @param  list<list<mixed>>  $rows  each starting with `_uid`, then `_tenant` under shared tables
      * @return array<string, array<string, true>>
      */
-    private function documentKeys(array $rows): array
+    private function rowKeys(array $rows): array
     {
         $keys = [];
         foreach ($rows as $row) {
-            $id = $row[0] ?? null;
-            $tenant = $this->sharedTables ? ($row[1] ?? null) : null;
-            $keys[\is_scalar($tenant) ? (string) $tenant : ''][\is_scalar($id) ? (string) $id : ''] = true;
+            $keys[$this->rowTenant($row)][$this->rowId($row)] = true;
         }
 
         return $keys;
     }
 
     /**
+     * @param  list<mixed>  $row
+     */
+    private function rowId(array $row): string
+    {
+        $id = $row[0] ?? null;
+
+        return \is_scalar($id) ? (string) $id : '';
+    }
+
+    /**
+     * @param  list<mixed>  $row
+     */
+    private function rowTenant(array $row): string
+    {
+        $tenant = $this->sharedTables ? ($row[1] ?? null) : null;
+
+        return \is_scalar($tenant) ? (string) $tenant : '';
+    }
+
+    /**
+     * @param  array<string, array<string, true>>  $keys
+     */
+    private function hasKey(array $keys, Document $document): bool
+    {
+        [$tenant, $id] = $this->documentKey($document);
+
+        return isset($keys[$tenant][$id]);
+    }
+
+    /**
      * @return array{string, string}
      */
-    private function documentKeyOf(Document $document): array
+    private function documentKey(Document $document): array
     {
-        $tenant = $this->sharedTables ? $document->getTenant() : null;
+        $tenant = $this->documentTenant($document);
 
         return [$tenant === null ? '' : (string) $tenant, $document->getId()];
+    }
+
+    private function documentTenant(Document $document): int|string|null
+    {
+        return $this->sharedTables ? ($document->getTenant() ?? $this->tenant) : null;
     }
 
     /**

@@ -11,96 +11,117 @@ use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 
 /**
- * The statements skipDuplicates() sends on the engines the host cannot run. Engines with
- * RETURNING learn the inserted rows from the insert itself; MySQL locks the batch's stored ids
- * first and inserts only the new ones. PostgreSQL names the id as its conflict target, so only
- * a stored id is skipped.
+ * The statements skipDuplicates() sends on the engines the host cannot run.
  */
 final class SkipDuplicatesStatementTest extends TestCase
 {
-    public function testMariaDBReturnsTheKeysOfTheInsertedRows(): void
+    private const string STORED = 'stored';
+
+    private const string FRESH = 'fresh';
+
+    public function testMariaDBLearnsTheInsertedRowsFromReturning(): void
     {
         $statements = new ArrayObject();
-        $adapter = new MariaDB($this->pdo($statements, rows: [['fresh']], written: 1));
+        $adapter = new MariaDB($this->pdo($statements, [[[[self::FRESH]], 1]]));
 
-        $created = $this->createDocuments($adapter);
-
-        $this->assertSame(['fresh'], $created);
+        $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH]));
         $this->assertCount(1, $statements);
         $this->assertStringStartsWith('INSERT IGNORE INTO', $statements[0]);
         $this->assertStringEndsWith(' RETURNING `_uid`', $statements[0]);
     }
 
-    public function testMySQLInsertsOnlyTheIdsItFoundUnstoredUnderLock(): void
+    public function testARepeatedIdIsSentOnlyOnce(): void
     {
         $statements = new ArrayObject();
-        $adapter = new MySQL($this->pdo($statements, rows: [['stored']], written: 1));
-        $adapter->startTransaction();
+        $adapter = new MariaDB($this->pdo($statements, [[[[self::FRESH]], 1]]));
 
-        $created = $this->createDocuments($adapter);
+        $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::FRESH, self::FRESH]));
+        $this->assertStringNotContainsString('), (', $statements[0], 'Only the first copy of an id is inserted');
+    }
 
-        $this->assertSame(['fresh'], $created);
+    public function testMySQLInsertsOnlyTheIdsItFoundUnstoredWithoutLocking(): void
+    {
+        $statements = new ArrayObject();
+        $adapter = new MySQL($this->pdo($statements, [[[[self::STORED]], 0], [[], 1]]));
+
+        $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH]));
         $this->assertCount(2, $statements);
         $this->assertStringStartsWith('SELECT `_uid` FROM', $statements[0]);
-        $this->assertStringEndsWith(' FOR UPDATE', $statements[0]);
+        $this->assertStringNotContainsString('FOR UPDATE', $statements[0]);
         $this->assertStringStartsWith('INSERT IGNORE INTO', $statements[1]);
         $this->assertStringNotContainsString('), (', $statements[1], 'The stored id is left out of the insert');
         $this->assertStringNotContainsString('RETURNING', $statements[1]);
     }
 
-    public function testMySQLReadsTheIdsBackWhenTheInsertWroteFewerRows(): void
+    public function testMySQLDoesNotReportADocumentTheInsertSkipped(): void
     {
         $statements = new ArrayObject();
-        $adapter = new MySQL($this->pdo($statements, rows: [['stored']], written: 0));
-        $adapter->startTransaction();
+        $adapter = new MySQL($this->pdo($statements, [[[], 0], [[], 0], [[], 0]]));
 
-        $created = $this->createDocuments($adapter);
-
-        $this->assertSame([], $created, 'A document the insert skipped for another unique value is not reported');
+        $this->assertSame([], $this->createDocuments($adapter, [self::FRESH]));
         $this->assertCount(3, $statements);
-        $this->assertStringStartsWith('SELECT `_uid` FROM', $statements[2]);
-        $this->assertStringEndsNotWith(' FOR UPDATE', $statements[2]);
+        $this->assertStringStartsWith('SELECT `_uid`, `_permissions` FROM', $statements[2]);
     }
 
-    public function testPostgresReturnsTheKeysOfTheInsertedRows(): void
+    public function testMySQLReportsARowReadBackOnlyWhenItCarriesTheDocumentsPermissions(): void
     {
-        $statements = new ArrayObject();
-        $adapter = new Postgres($this->pdo($statements, rows: [['fresh', 7]], written: 1));
-        $adapter->setSharedTables(true);
-        $adapter->setTenant(7);
+        $granted = \json_encode([Permission::read(Role::any())], JSON_THROW_ON_ERROR);
+        $foreign = \json_encode([Permission::read(Role::user('alice'))], JSON_THROW_ON_ERROR);
 
-        $created = $this->createDocuments($adapter, tenant: 7);
+        $adapter = new MySQL($this->pdo(new ArrayObject(), [[[], 0], [[], 0], [[[self::FRESH, $foreign]], 0]]));
+        $this->assertSame([], $this->createDocuments($adapter, [self::FRESH]), 'A row another writer stored with other permissions is not ours');
 
-        $this->assertSame(['fresh'], $created);
-        $this->assertCount(1, $statements);
-        $this->assertStringEndsWith(' ON CONFLICT ("_uid", "_tenant") DO NOTHING RETURNING "_uid", "_tenant"', $statements[0]);
+        $adapter = new MySQL($this->pdo(new ArrayObject(), [[[], 0], [[], 0], [[[self::FRESH, $granted]], 0]]));
+        $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::FRESH]));
     }
 
     public function testPostgresSkipsOnlyAStoredIdSoAnotherUniqueCollisionFails(): void
     {
         $statements = new ArrayObject();
-        $adapter = new Postgres($this->pdo($statements, rows: [['fresh']], written: 1));
+        $adapter = new Postgres($this->pdo($statements, [[[[self::FRESH]], 1]]));
 
-        $this->createDocuments($adapter);
-
+        $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH]));
         $this->assertCount(1, $statements);
         $this->assertStringStartsWith('INSERT INTO', $statements[0]);
         $this->assertStringEndsWith(' ON CONFLICT ("_uid") DO NOTHING RETURNING "_uid"', $statements[0]);
     }
 
+    public function testPostgresNamesTheTenantInTheConflictTargetUnderSharedTables(): void
+    {
+        $statements = new ArrayObject();
+        $adapter = new Postgres($this->pdo($statements, [[[[self::FRESH, 7]], 1]]));
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH], tenant: 7));
+        $this->assertStringEndsWith(' ON CONFLICT ("_uid", "_tenant") DO NOTHING RETURNING "_uid", "_tenant"', $statements[0]);
+    }
+
+    public function testADocumentWithoutATenantIsMatchedUnderTheAdaptersTenant(): void
+    {
+        $adapter = new Postgres($this->pdo(new ArrayObject(), [[[[self::FRESH, 7]], 1]]));
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::FRESH]));
+    }
+
     /**
+     * @param  list<string>  $ids
      * @return list<string>
      */
-    private function createDocuments(SQL $adapter, ?int $tenant = null): array
+    private function createDocuments(SQL $adapter, array $ids, ?int $tenant = null): array
     {
         $adapter->setDatabase('database');
         $adapter->setNamespace('namespace');
 
         $documents = [];
-        foreach (['stored', 'fresh'] as $id) {
-            $document = new Document(['$id' => $id, '$permissions' => [], 'title' => $id]);
+        foreach ($ids as $id) {
+            $document = new Document(['$id' => $id, '$permissions' => [Permission::read(Role::any())], 'title' => $id]);
             if ($tenant !== null) {
                 $document->setAttribute('$tenant', $tenant);
             }
@@ -113,26 +134,21 @@ final class SkipDuplicatesStatementTest extends TestCase
     }
 
     /**
-     * Every prepared statement past the transaction reset is recorded; each returns the given
-     * rows and reports the given number of written rows.
+     * Each prepared statement is recorded and answers with the next rows and written-row count.
      *
      * @param  ArrayObject<int, string>  $statements
-     * @param  list<list<mixed>>  $rows
+     * @param  list<array{list<list<mixed>>, int}>  $results
      */
-    private function pdo(ArrayObject $statements, array $rows, int $written): PDO
+    private function pdo(ArrayObject $statements, array $results): PDO
     {
         $pdo = $this->createStub(PDO::class);
-        $pdo->method('beginTransaction')->willReturn(true);
-        $pdo->method('prepare')->willReturnCallback(function (string $query) use ($statements, $rows, $written): PDOStatement {
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use ($statements, &$results): PDOStatement {
+            [$rows, $written] = \array_shift($results) ?? [[], 0];
             $statement = $this->createStub(PDOStatement::class);
             $statement->method('execute')->willReturn(true);
             $statement->method('fetchAll')->willReturn($rows);
             $statement->method('rowCount')->willReturn($written);
-
-            $query = \trim($query);
-            if ($query !== 'ROLLBACK') {
-                $statements->append($query);
-            }
+            $statements->append(\trim($query));
 
             return $statement;
         });

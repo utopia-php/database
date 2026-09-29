@@ -748,4 +748,33 @@ final class RelationshipHookTest extends TestCase
             }
         }
     }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCascadeWithOnlyADanglingJunctionRowDeletesTheParent(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+            false,
+        );
+        $junction = '_'.$database->getCollection('parent')->getSequence().'_'.$database->getCollection('child')->getSequence();
+
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createDocument('child', new Document(['$id' => 'child1']));
+            $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1']]));
+            $database->skipRelationships(fn () => $database->deleteDocument('child', 'child1'));
+        });
+
+        $this->assertSame([], $this->ids($database, 'child'));
+        $this->assertCount(1, $this->ids($database, $junction), 'The junction row must outlive the child it points at');
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+        $this->assertSame([], $this->ids($database, 'parent'));
+        $this->assertSame([], $this->ids($database, $junction));
+    }
 }

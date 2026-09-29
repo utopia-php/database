@@ -495,6 +495,38 @@ final class CoreMinorsTest extends TestCase
         }
     }
 
+    public function testStoredObjectValueDoesNotBlockAnUpdateOfAnotherAttribute(): void
+    {
+        $database = $this->interceptingMetadataWrites(static function (): void {
+        }, new Memory());
+        $this->configure($database);
+        $database->createCollection(new Collection(
+            id: 'items',
+            attributes: [Attribute::string(key: 'title', size: 64), Attribute::object(key: 'meta')],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+            documentSecurity: false,
+        ));
+        $database->skipValidation(fn (): Document => $database->createDocument('items', new Document([
+            Document::ID => 'stored',
+            'title' => 'first',
+            'meta' => [1, 2],
+        ])));
+
+        $renamed = $database->updateDocument('items', 'stored', new Document(['title' => 'renamed']));
+
+        $this->assertSame('renamed', $renamed->getAttribute('title'));
+        $this->assertSame([1, 2], $renamed->getAttribute('meta'));
+
+        $returned = $database->updateDocument('items', 'stored', $database->getDocument('items', 'stored')->setAttribute('title', 'again'));
+
+        $this->assertSame('again', $returned->getAttribute('title'), 'A stored value passed back unchanged must not block the update');
+
+        $error = $this->attempt(fn (): Document => $database->updateDocument('items', 'stored', new Document(['meta' => [3, 4]])));
+
+        $this->assertInstanceOf(StructureException::class, $error, 'A list written as an object must still be rejected');
+        $this->assertSame([1, 2], $database->getDocument('items', 'stored')->getAttribute('meta'));
+    }
+
     /**
      * A database with a `logs` collection whose later metadata writes count into $writes and throw $failure.
      */

@@ -116,7 +116,16 @@ class Structure extends Validator
     private ?array $mergedAttributes = null;
 
     /**
+     * @var array<string, true>
+     */
+    private readonly array $storedAttributes;
+
+    /**
      * Structure constructor.
+     *
+     * @param  list<string>  $storedAttributes  Attributes whose values are the stored ones, unchanged by the
+     *                                         write: they are not validated again, as the rules may have
+     *                                         tightened since those values were stored.
      */
     public function __construct(
         protected readonly Document $collection,
@@ -125,8 +134,10 @@ class Structure extends Validator
         private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         private bool $supportForAttributes = true,
         private readonly bool $supportUnsignedBigInt = true,
-        private readonly ?Document $currentDocument = null
+        private readonly ?Document $currentDocument = null,
+        array $storedAttributes = [],
     ) {
+        $this->storedAttributes = \array_fill_keys($storedAttributes, true);
     }
 
     /**
@@ -335,6 +346,10 @@ class Structure extends Validator
                     return false;
                 }
 
+                continue;
+            }
+
+            if (isset($this->storedAttributes[$key])) {
                 continue;
             }
 

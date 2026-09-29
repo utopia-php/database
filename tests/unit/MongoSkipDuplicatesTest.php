@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use ArrayObject;
+use LogicException;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Adapter\Mongo;
@@ -46,6 +47,21 @@ final class MongoSkipDuplicatesTest extends TestCase
 
         $this->assertSame([2], \array_map(static fn (Document $document): int|string|null => $document->getTenant(), $created));
         $this->assertSame([['shared']], $upserted->getArrayCopy());
+    }
+
+    public function testAnIdDifferingOnlyInCaseIsStored(): void
+    {
+        $upserted = new ArrayObject();
+        $adapter = $this->createAdapter([$this->row('Stored', 'sequence-stored', tenant: null)], $upserted, sharedTables: false);
+
+        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+            new Document(['$id' => 'stored', 'name' => 'replayed']),
+            new Document(['$id' => 'Fresh', 'name' => 'first']),
+            new Document(['$id' => 'fresh', 'name' => 'second']),
+        ]));
+
+        $this->assertSame(['Fresh'], \array_map(static fn (Document $document): string => $document->getId(), $created));
+        $this->assertSame([['Fresh']], $upserted->getArrayCopy());
     }
 
     public function testABatchOfStoredIdsWritesNothing(): void
@@ -106,9 +122,10 @@ final class MongoSkipDuplicatesTest extends TestCase
             #[\Override]
             public function find(string $collection, array $filters = [], array $options = []): stdClass
             {
+                $caseInsensitive = ($options['collation']['strength'] ?? null) === 1;
                 $batch = [];
                 foreach ($this->rows as $row) {
-                    if ($this->matches($row, $filters)) {
+                    if ($this->matches($row, $filters, $caseInsensitive)) {
                         $batch[] = $row;
                     }
                 }
@@ -117,32 +134,35 @@ final class MongoSkipDuplicatesTest extends TestCase
             }
 
             /**
-             * @param  array<mixed>  $operations
-             * @param  array<mixed>  $options
+             * @param  array<string, mixed>  $command
              */
             #[\Override]
-            public function upsert(string $collection, array $operations, array $options = []): int
+            public function query(array $command, ?string $db = null): stdClass|array|int
             {
                 $ids = [];
-                foreach ($operations as $operation) {
-                    $ids[] = (string) $operation['filter'][Storage::UID];
+                foreach ($command['updates'] as $update) {
+                    if (($update['collation']['strength'] ?? null) !== 1) {
+                        throw new LogicException('An upsert by id must use the _uid index collation');
+                    }
+                    $ids[] = (string) $update['q'][Storage::UID];
                 }
                 $this->upserted->append($ids);
 
-                return \count($operations);
+                return \count($ids);
             }
 
             /**
              * @param  array<mixed>  $filters
              */
-            private function matches(stdClass $row, array $filters): bool
+            private function matches(stdClass $row, array $filters, bool $caseInsensitive): bool
             {
+                $normalize = static fn (mixed $value): mixed => $caseInsensitive && \is_string($value) ? \strtolower($value) : $value;
                 foreach ($filters as $field => $condition) {
                     $candidates = \is_array($condition) && \is_array($condition['$in'] ?? null)
                         ? $condition['$in']
                         : [$condition];
 
-                    if (! \in_array($row->{$field} ?? null, $candidates, true)) {
+                    if (! \in_array($normalize($row->{$field} ?? null), \array_map($normalize, $candidates), true)) {
                         return false;
                     }
                 }

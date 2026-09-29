@@ -93,6 +93,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     private const DEFAULT_BATCH_SIZE = 1000;
 
     /**
+     * The collation of the `_uid` index: a lookup or upsert by id must use it to match what the
+     * index treats as the same id.
+     */
+    private const array UID_COLLATION = ['locale' => 'en', 'strength' => 1];
+
+    /**
      * Transaction/session state for MongoDB transactions
      *
      * @var array<mixed>|null
@@ -1460,8 +1466,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 return [];
             }
 
-            $unstored = $this->unstoredDocumentIndexes($collection->getId(), $documents);
-            $operations = [];
+            $unstored = $this->unstoredDocumentIndexes($name, $collection->getId(), $documents, $options);
+            $updates = [];
             $created = [];
             foreach ($records as $index => $record) {
                 if (! isset($unstored[$index])) {
@@ -1481,19 +1487,22 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     continue;
                 }
 
-                $operations[] = [
-                    'filter' => $filter,
-                    'update' => ['$setOnInsert' => $setOnInsert],
+                $updates[] = [
+                    'q' => $filter,
+                    'u' => $this->client->toObject(['$setOnInsert' => $setOnInsert]),
+                    'upsert' => true,
+                    'multi' => false,
+                    'collation' => self::UID_COLLATION,
                 ];
                 $created[] = $documents[$index];
             }
 
-            if (empty($operations)) {
+            if (empty($updates)) {
                 return [];
             }
 
             try {
-                $this->client->upsert($name, $operations, $options);
+                $this->client->query(\array_merge(['update' => $name, 'updates' => $updates], $options));
             } catch (MongoException $e) {
                 throw $this->processException($e);
             }
@@ -2655,25 +2664,58 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     /**
      * The positions of the batch documents whose id is not stored under their tenant yet; of
-     * documents repeating an id, only the first.
+     * documents repeating an id, only the first. Ids compare case-insensitively, as the `_uid`
+     * index does.
      *
      * @param  array<Document>  $documents
+     * @param  array<string, mixed>  $options
      * @return array<array-key, true>
      *
      * @throws DatabaseException
      */
-    private function unstoredDocumentIndexes(string $collection, array $documents): array
+    private function unstoredDocumentIndexes(string $name, string $collection, array $documents, array $options): array
     {
-        $probes = $this->getSequences($collection, \array_map(
-            static fn (Document $document): Document => (clone $document)->setAttribute(Document::SEQUENCE, ''),
-            $documents,
-        ));
+        $ids = [];
+        $tenants = [];
+        foreach ($documents as $document) {
+            $ids[] = $document->getId();
+            $tenants[] = $document->getTenant() ?? $this->getTenant();
+        }
+        $ids = \array_values(\array_unique($ids));
+        $tenants = \array_values(\array_unique($tenants, SORT_REGULAR));
+
+        $filters = [Storage::UID => ['$in' => $ids]];
+        if ($this->sharedTables) {
+            $filters[Storage::TENANT] = $this->getTenantFilters($collection, $tenants);
+        }
+
+        try {
+            $response = $this->client->find($name, $filters, \array_merge($options, [
+                'projection' => [Storage::UID => 1, Storage::TENANT => 1],
+                'collation' => self::UID_COLLATION,
+                'batchSize' => \count($ids) * \max(1, \count($tenants)) + 1,
+                'singleBatch' => true,
+            ]));
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
+
+        /** @var \stdClass $cursor */
+        $cursor = $response->cursor;
+        /** @var array<\stdClass> $rows */
+        $rows = $cursor->firstBatch ?? [];
 
         $seen = [];
+        foreach ($rows as $row) {
+            $tenant = $this->sharedTables ? ($row->{Storage::TENANT} ?? null) : null;
+            $seen[$this->uidKey($tenant, $row->{Storage::UID} ?? null)] = true;
+        }
+
         $unstored = [];
-        foreach ($probes as $index => $probe) {
-            $key = $this->sequenceKey($this->sharedTables ? ($probe->getTenant() ?? $this->getTenant()) : null, $probe->getId());
-            if (! empty($probe->getSequence()) || isset($seen[$key])) {
+        foreach ($documents as $index => $document) {
+            $tenant = $this->sharedTables ? ($document->getTenant() ?? $this->getTenant()) : null;
+            $key = $this->uidKey($tenant, $document->getId());
+            if (isset($seen[$key])) {
                 continue;
             }
             $seen[$key] = true;
@@ -2681,6 +2723,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $unstored;
+    }
+
+    private function uidKey(mixed $tenant, mixed $id): string
+    {
+        return $this->sequenceKey($tenant, \mb_strtolower($this->stringifyIdentifier($id)));
     }
 
     /**

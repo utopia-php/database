@@ -12,6 +12,7 @@ use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -30,8 +31,11 @@ use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Type as TypeException;
+use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Attribute as AttributeValidator;
@@ -374,6 +378,61 @@ final class CoreMinorsTest extends TestCase
 
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertStringContainsString(', bigint, ', $error->getMessage(), 'The listed types must use the stored spelling');
+    }
+
+    /**
+     * @return array<string, array{Closure(): Adapter}>
+     */
+    public static function adapters(): array
+    {
+        return [
+            'memory' => [static fn (): Adapter => new Memory()],
+            'sqlite' => [static fn (): Adapter => new SQLite(new PDO('sqlite::memory:'))],
+        ];
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testEveryUniqueViolationUsesOneMessage(Closure $adapter): void
+    {
+        $database = $this->interceptingMetadataWrites(static function (): void {
+        }, $adapter());
+        $this->configure($database);
+        $database->createCollection(new Collection(
+            id: 'users',
+            attributes: [Attribute::string(key: 'email', size: 64)],
+            indexes: [Index::unique(key: 'by_email', attributes: ['email'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+            documentSecurity: false,
+        ));
+        $database->createDocument('users', new Document([Document::ID => 'first', 'email' => 'a@example.com']));
+        $database->createDocument('users', new Document([Document::ID => 'second', 'email' => 'b@example.com']));
+
+        $violations = [
+            'create' => fn (): Document => $database->createDocument('users', new Document([Document::ID => 'third', 'email' => 'a@example.com'])),
+            'create many' => fn (): int => $database->createDocuments('users', [
+                new Document([Document::ID => 'fourth', 'email' => 'c@example.com']),
+                new Document([Document::ID => 'fifth', 'email' => 'c@example.com']),
+            ]),
+            'update' => fn (): Document => $database->updateDocument('users', 'second', new Document(['email' => 'a@example.com'])),
+            'update many into one value' => fn (): int => $database->updateDocuments('users', new Document(['email' => 'd@example.com'])),
+            'update many into a stored value' => fn (): int => $database->updateDocuments(
+                'users',
+                new Document(['email' => 'a@example.com']),
+                [Query::equal(Document::ID, ['second'])],
+            ),
+        ];
+
+        foreach ($violations as $name => $violation) {
+            $error = $this->attempt($violation);
+
+            $this->assertInstanceOf(UniqueException::class, $error, $name);
+            $this->assertSame(UniqueException::MESSAGE, $error->getMessage(), $name);
+        }
+
+        $this->assertSame('Document with the requested unique attributes already exists', UniqueException::MESSAGE);
     }
 
     /**

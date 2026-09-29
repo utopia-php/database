@@ -1125,66 +1125,54 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     protected function resolveFulltextTableById(string $collection, string $id, array $candidates): ?string
     {
+        $table = $this->getFulltextTablesByIndexId($collection)[$this->filter($id)] ?? null;
+
+        return \in_array($table, $candidates, true) ? $table : null;
+    }
+
+    /**
+     * @return array<string, string> The FTS5 table of each fulltext index in the stored metadata, by index id
+     */
+    private function getFulltextTablesByIndexId(string $collection): array
+    {
         try {
-            $metadataCollection = new Document([Document::ID => Database::METADATA]);
-            $collectionDoc = $this->getDocument($metadataCollection, $collection);
+            $metadata = $this->getDocument(new Document([Document::ID => Database::METADATA]), $collection);
         } catch (NotFoundException) {
             // Metadata not yet seeded (collection drop during bootstrap).
-            // Anything else surfaces — masking PDO errors here would silently
-            // fall through to the single-candidate drop path and tear down
-            // the wrong table.
-            return null;
+            return [];
         }
 
-        if ($collectionDoc->isEmpty()) {
-            return null;
+        $indexes = $metadata->getAttribute('indexes', []);
+        if (\is_string($indexes)) {
+            $indexes = \json_decode($indexes, true);
         }
-
-        $indexes = $collectionDoc->getAttribute('indexes', []);
-        $filteredId = $this->filter($id);
-
         if (! \is_array($indexes)) {
-            return null;
+            return [];
         }
 
+        $tables = [];
         foreach ($indexes as $index) {
-            $indexId = $index instanceof Document
-                ? $index->getId()
-                : (\is_array($index) ? ($index[Document::ID] ?? null) : null);
-
-            if (! \is_scalar($indexId)) {
-                continue;
-            }
-            if ($this->filter((string) $indexId) !== $filteredId) {
-                continue;
-            }
-
-            $type = $index instanceof Document
-                ? $index->getAttribute('type')
-                : (\is_array($index) ? ($index['type'] ?? null) : null);
-
-            if ($type !== IndexType::Fulltext->value) {
-                return null;
-            }
-
             if ($index instanceof Document) {
-                $attributes = $index->getAttribute('attributes', []);
-            } else {
-                $attributes = $index['attributes'] ?? [];
+                $index = $index->getArrayCopy();
+            }
+            if (! \is_array($index) || ($index['type'] ?? null) !== IndexType::Fulltext->value) {
+                continue;
             }
 
-            /** @var array<mixed> $attributesArr */
-            $attributesArr = \is_array($attributes) ? $attributes : [];
-            $internal = \array_map(
-                fn (mixed $a): string => \is_string($a) ? $this->getInternalKeyForAttribute($a) : '',
-                $attributesArr
-            );
-            $candidate = $this->getFulltextTableName($collection, $internal);
+            $id = $index[Document::ID] ?? $index['key'] ?? null;
+            $attributes = $index['attributes'] ?? [];
+            if (! \is_scalar($id) || ! \is_array($attributes)) {
+                continue;
+            }
 
-            return \in_array($candidate, $candidates, true) ? $candidate : null;
+            $internal = \array_map(
+                fn (mixed $attribute): string => \is_string($attribute) ? $this->getInternalKeyForAttribute($attribute) : '',
+                $attributes,
+            );
+            $tables[$this->filter((string) $id)] = $this->getFulltextTableName($collection, $internal);
         }
 
-        return null;
+        return $tables;
     }
 
     /**
@@ -2842,40 +2830,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return [];
         }
 
-        $hashToId = [];
-        try {
-            $metadataCollection = new Document([Document::ID => Database::METADATA]);
-            $collectionDoc = $this->getDocument($metadataCollection, $collection);
-            if (! $collectionDoc->isEmpty()) {
-                $indexes = $collectionDoc->getAttribute('indexes', []);
-                if (\is_array($indexes)) {
-                    foreach ($indexes as $index) {
-                        if ($index instanceof Document) {
-                            $indexId = $index->getId();
-                            $type = $index->getAttribute('type');
-                            $attributes = $index->getAttribute('attributes', []);
-                        } elseif (\is_array($index)) {
-                            $indexId = $index[Document::ID] ?? null;
-                            $type = $index['type'] ?? null;
-                            $attributes = $index['attributes'] ?? [];
-                        } else {
-                            continue;
-                        }
-
-                        if (! \is_scalar($indexId) || $type !== IndexType::Fulltext->value) {
-                            continue;
-                        }
-
-                        $internal = \array_map(
-                            fn (mixed $a): string => \is_string($a) ? $this->getInternalKeyForAttribute($a) : '',
-                            \is_array($attributes) ? $attributes : []
-                        );
-                        $hashToId[$this->getFulltextTableName($collection, $internal)] = $this->filter((string) $indexId);
-                    }
-                }
-            }
-        } catch (\Throwable) {
-        }
+        $hashToId = \array_flip($this->getFulltextTablesByIndexId($collection));
 
         $entries = [];
         foreach ($tables as $ftsTable) {

@@ -164,7 +164,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             Capability::Schemas,
             Capability::Regex,
             Capability::UpdateLock,
-            Capability::QueryContains,
             Capability::Hostname,
             Capability::UpsertOnUniqueIndex,
             Capability::StatisticalAggregates,

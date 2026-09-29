@@ -7,6 +7,7 @@ use PDOException;
 use Redis;
 use RedisException;
 use ReflectionProperty;
+use Tests\Unit\Cache\CountingCache;
 use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
@@ -1616,5 +1617,78 @@ trait GeneralTests
         }
 
         return $statements;
+    }
+
+    public function testDocumentCacheRoundTripsStayWithinSevenThreeCounts(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+        if ($database instanceof Mirror) {
+            $this->markTestSkipped('Mirror writes its destination through the same cache, which the counts would include.');
+        }
+
+        $redis = new Redis();
+        $redis->connect('redis', 6379);
+        $counting = new CountingCache(new RedisAdapter($redis));
+        $original = $database->getCache();
+        $queryCache = $database->getQueryCache();
+        $database->setCache(new Cache($counting))->setQueryCache(null);
+        $counted = $database->getAdapter() instanceof MariaDB;
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
+
+        $collection = 'roundTrips'.ID::unique();
+        $measure = function (string $operation, int $roundTrips, int $statements, callable $callback) use ($counting, $profiler, $counted): mixed {
+            $counting->resetOperations();
+            $profiler->reset();
+            $result = $callback();
+            $this->assertLessThanOrEqual($roundTrips, $counting->getOperations(), "{$operation}: cache round trips on a warm cache (7.3.12: {$roundTrips})");
+            if ($counted) {
+                $this->assertLessThanOrEqual($statements, $profiler->getQueryCount(), "{$operation}: statements on a warm cache (7.3.12: {$statements})");
+            }
+
+            return $result;
+        };
+
+        try {
+            $database->createCollection(new Collection(id: $collection, attributes: [
+                Attribute::string(key: 'name', size: 64, required: true),
+                Attribute::integer(key: 'count', default: 0),
+            ], permissions: [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ]));
+            foreach (['written', 'sibling', 'deleted'] as $id) {
+                $database->createDocument($collection, new Document(['$id' => $id, 'name' => $id]));
+                $database->getDocument($collection, $id);
+            }
+
+            $measure('getCollection()', 1, 0, fn () => $database->getCollection($collection));
+            $measure('getDocument() hit', 2, 0, fn () => $database->getDocument($collection, 'sibling'));
+            $measure('find()', 1, 1, fn () => $database->find($collection, [Query::equal('name', ['sibling'])]));
+            $measure('count()', 1, 1, fn () => $database->count($collection, [Query::equal('name', ['sibling'])]));
+            $measure('sum()', 1, 1, fn () => $database->sum($collection, 'count'));
+            $measure('createDocument()', 3, 5, fn () => $database->createDocument($collection, new Document(['$id' => 'created', 'name' => 'created'])));
+            $measure('updateDocument()', 6, 5, fn () => $database->updateDocument($collection, 'written', new Document(['name' => 'renamed'])));
+            $measure('getDocument() of a sibling after a write', 2, 0, fn () => $database->getDocument($collection, 'sibling'));
+            $measure('increaseDocumentAttribute()', 4, 5, fn () => $database->increaseDocumentAttribute($collection, 'sibling', 'count'));
+            $measure('deleteDocument()', 6, 6, fn () => $database->deleteDocument($collection, 'deleted'));
+            $database->getDocument($collection, 'written');
+            $read = $measure('withTransaction(update + get of a sibling)', 11, 7, fn () => $database->withTransaction(function () use ($database, $collection): Document {
+                $database->updateDocument($collection, 'written', new Document(['name' => 'again']));
+
+                return $database->getDocument($collection, 'created');
+            }));
+            $this->assertSame('created', $read->getAttribute('name'));
+            $this->assertSame('again', $database->getDocument($collection, 'written')->getAttribute('name'));
+        } finally {
+            $database->disableProfiling();
+            $database->setQueryCache($queryCache)->setCache($original);
+            $database->deleteCollection($collection);
+        }
     }
 }

@@ -125,6 +125,100 @@ final class DocumentCacheRoundTripTest extends TestCase
         $this->assertSame(0, $adapter->documentReads + $adapter->metadataReads, 'A read of a sibling after a write (7.3.12: 0 statements)');
     }
 
+    /**
+     * @return array<string, array{Closure(Database): mixed, int, int}>
+     */
+    public static function singleDocumentWrites(): array
+    {
+        return [
+            'createDocument' => [
+                static fn (Database $database): Document => $database->createDocument('webhooks', new Document([
+                    '$id' => 'created',
+                    '$permissions' => [Permission::read(Role::any())],
+                    'name' => 'created',
+                ])),
+                3,
+                3,
+            ],
+            'updateDocument' => [
+                static fn (Database $database): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'renamed'])),
+                4,
+                6,
+            ],
+            'increaseDocumentAttribute' => [
+                static fn (Database $database): Document => $database->increaseDocumentAttribute('webhooks', 'hook', 'count'),
+                4,
+                4,
+            ],
+            'decreaseDocumentAttribute' => [
+                static fn (Database $database): Document => $database->decreaseDocumentAttribute('webhooks', 'hook', 'count'),
+                4,
+                4,
+            ],
+            'deleteDocument' => [
+                static fn (Database $database): bool => $database->deleteDocument('webhooks', 'hook'),
+                4,
+                6,
+            ],
+        ];
+    }
+
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('singleDocumentWrites')]
+    public function testSingleDocumentWritesStayWithinSevenThreeRoundTrips(Closure $write, int $expected, int $baseline): void
+    {
+        [$database, , $cache] = $this->createDatabase();
+        $database->createDocument('webhooks', $this->hook('hook'));
+        $database->getDocument('webhooks', 'hook');
+
+        $cache->resetOperations();
+        $write($database);
+
+        $this->assertSame($expected, $cache->getOperations(), "Cache round trips of the write on a warm cache: one collection lookup, one more for the locking read of writes that read the document first, and one purge inside the transaction and one after it (7.3.12: {$baseline})");
+    }
+
+    public function testAnUpdateAndAReadInATransactionStayWithinSevenThreeRoundTrips(): void
+    {
+        [$database, $adapter, $cache] = $this->createDatabase();
+        $database->createDocument('webhooks', $this->hook('written'));
+        $database->createDocument('webhooks', $this->hook('sibling'));
+        $database->getDocument('webhooks', 'written');
+        $database->getDocument('webhooks', 'sibling');
+
+        $adapter->reset();
+        $cache->resetOperations();
+        $read = $database->withTransaction(function () use ($database): Document {
+            $database->updateDocument('webhooks', 'written', new Document(['name' => 'renamed']));
+
+            return $database->getDocument('webhooks', 'sibling');
+        });
+
+        $this->assertSame('hook', $read->getAttribute('name'));
+        $this->assertSame(6, $cache->getOperations(), 'withTransaction(update + get of a sibling) on a warm cache (7.3.12: 11 round trips)');
+        $this->assertSame(0, $adapter->metadataReads, 'withTransaction(update + get of a sibling) reads no collection definition (7.3.12: 0)');
+        $this->assertSame(1, $adapter->documentReads, 'withTransaction(update + get of a sibling) reads only the written document, with its lock (7.3.12: 1)');
+    }
+
+    public function testAnUpdateAndAReadOfItStayWithinSevenThreeRoundTrips(): void
+    {
+        [$database, $adapter, $cache] = $this->createDatabase();
+        $database->createDocument('webhooks', $this->hook('hook'));
+        $database->getDocument('webhooks', 'hook');
+
+        $adapter->reset();
+        $cache->resetOperations();
+        for ($round = 1; $round <= 10; $round++) {
+            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'round '.$round]));
+            $this->assertSame('round '.$round, $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        }
+
+        $this->assertSame(80, $cache->getOperations(), 'Ten updateDocument() + getDocument() pairs (cache.keys_after_1000_writes; 7.3.12: 110 round trips)');
+        $this->assertSame(20, $adapter->documentReads, 'Each pair reads the document once with its lock and once to refill the cache (7.3.12: 20)');
+        $this->assertSame(0, $adapter->metadataReads);
+    }
+
     public function testATenantNeverServesUnderAnotherTenantsEpochOfAGlobalDefinition(): void
     {
         $adapter = new CountingMemory();

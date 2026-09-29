@@ -3228,7 +3228,7 @@ trait Documents
 
         $context = $this->getEventContext();
         $tenant = $this->getTenant();
-        $silenced = \array_keys($this->silencedListeners[$context] ?? []);
+        $silenced = \array_keys($this->silencedListeners()->get());
         $announce = fn () => $this->triggerPropagatingHooks(Event::DocumentPurge, $document);
 
         $this->documentPurgeEvents[$context][] = function () use ($tenant, $silenced, $announce): void {

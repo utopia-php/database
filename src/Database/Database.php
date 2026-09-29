@@ -2663,7 +2663,7 @@ class Database
 
             $payload = \json_encode([
                 'selects' => $sortedSelects,
-                'relationships' => $this->relationshipHook?->isEnabled() ?? false,
+                'relationships' => $collectionId !== self::METADATA && ($this->relationshipHook?->isEnabled() ?? false),
                 'filters' => $this->getActiveFilterSignatures(),
             ]) ?: '';
             $documentHashKey = $documentKey . ':' . \md5($payload);

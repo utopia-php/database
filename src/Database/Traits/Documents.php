@@ -10,6 +10,7 @@ use RuntimeException;
 use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Owners;
 use Utopia\Database\Capability;
@@ -416,10 +417,13 @@ trait Documents
         // purges that definition's slot; the METADATA epoch does not rotate.
         // Any new schema mutator must keep writing through that path, or its
         // readers will serve a stale schema.
+        $inTransaction = $this->adapter->inTransaction();
         $cacheable = ! $forUpdate
-            && ! $this->adapter->inTransaction()
-            && empty($joins);
+            && empty($joins)
+            && (! $inTransaction || $this->isCachedInTransaction($documentKey));
         $epoch = $cacheable ? $this->getDocumentCacheEpoch($collectionKey) : null;
+        // A transaction reads its own snapshot, which can predate another writer's commit and purge.
+        $fillEpoch = $inTransaction ? null : $epoch;
         $cached = null;
         if ($epoch !== null) {
             try {
@@ -460,7 +464,7 @@ trait Documents
         }
 
         $generation = '0';
-        if ($epoch !== null) {
+        if ($fillEpoch !== null) {
             try {
                 $generation = $this->cache->getGeneration($documentKey);
             } catch (Exception $e) {
@@ -481,19 +485,22 @@ trait Documents
         );
 
         $document = $skipAuth ? $this->authorization->skip($getDocument) : $getDocument();
+        $fillEpoch = $this->isReadFromReplica() ? null : $fillEpoch;
 
         if ($document->isEmpty()) {
             // The marker is shared by every reader, so a miss observed with authorization
             // enabled only proves absence once an unfiltered read agrees: an adapter may have
-            // filtered the row out by the caller's permissions.
+            // filtered the row out by the caller's permissions. Collection definitions are
+            // never filtered that way, as every write resolves its collection through them.
             $missing = true;
-            if ($epoch !== null && empty($relationships) && ! $skipAuth) {
+            if ($fillEpoch !== null && empty($relationships) && ! $skipAuth && $collection->getId() !== self::METADATA) {
                 $missing = $this->authorization->skip($getDocument)->isEmpty();
+                $fillEpoch = $this->isReadFromReplica() ? null : $fillEpoch;
             }
 
-            if ($epoch !== null && empty($relationships) && $missing) {
+            if ($fillEpoch !== null && empty($relationships) && $missing) {
                 try {
-                    $this->saveCachedDocument($documentKey, $field, $epoch, [self::CACHE_EMPTY_MARKER => true], $generation);
+                    $this->saveCachedDocument($documentKey, $field, $fillEpoch, [self::CACHE_EMPTY_MARKER => true], $generation);
                 } catch (Exception $e) {
                     Console::warning('Failed to save empty document to cache: '.$e->getMessage());
                 }
@@ -543,11 +550,9 @@ trait Documents
             fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        // Locking reads happen inside a transaction and must never cache the
-        // pre-commit row. Register the key only after the leased save succeeds.
-        if ($epoch !== null && empty($relationships)) {
+        if ($fillEpoch !== null && empty($relationships)) {
             try {
-                $this->saveCachedDocument($documentKey, $field, $epoch, $document->getArrayCopy(), $generation);
+                $this->saveCachedDocument($documentKey, $field, $fillEpoch, $document->getArrayCopy(), $generation);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: '.$e->getMessage());
             }
@@ -558,6 +563,26 @@ trait Documents
         $this->trigger(Event::DocumentRead, $document);
 
         return $document;
+    }
+
+    /**
+     * Whether a read inside a transaction may serve the document's cached copy: only when this
+     * context's invalidation scope started the transaction and has not written the document. Ids
+     * compare case-insensitively, as an adapter may match any casing of a written id.
+     */
+    private function isCachedInTransaction(string $documentKey): bool
+    {
+        $written = $this->transactionWrites[$this->getEventContext()] ?? null;
+
+        return $written !== null && ! isset($written[\strtolower($documentKey)]);
+    }
+
+    /**
+     * A replica may lag the primary, so what it served must not be cached for other readers.
+     */
+    private function isReadFromReplica(): bool
+    {
+        return $this->adapter instanceof ReadWritePool && $this->adapter->servedByReplica();
     }
 
     /**
@@ -2579,6 +2604,9 @@ trait Documents
         if (isset($this->documentCachePurges[$context])) {
             $this->documentCachePurges[$context][$documentKey] = $collectionKey;
         }
+        if (isset($this->transactionWrites[$context])) {
+            $this->transactionWrites[$context][\strtolower($documentKey)] = true;
+        }
 
         $this->cache->purge($documentKey);
 
@@ -3413,7 +3441,7 @@ trait Documents
                 );
                 $results = $skipAuth ? $this->authorization->skip($find) : $find();
 
-                if ($cacheEntry !== null && $this->queryCache !== null) {
+                if ($cacheEntry !== null && $this->queryCache !== null && ! $this->isReadFromReplica()) {
                     $this->queryCache->set($cacheEntry, $results, $cacheGeneration);
                 }
             }

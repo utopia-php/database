@@ -13,6 +13,9 @@ trait Transactions
     /** @var array<int, array<string, string>> Collection keys of the documents written in the open invalidation scope, by coroutine id and document key. */
     protected array $documentCachePurges = [];
 
+    /** @var array<int, array<string, true>> Lower-cased keys of the documents written in the open invalidation scope, by coroutine id, kept only while that scope owns the adapter's transaction. */
+    protected array $transactionWrites = [];
+
     /**
      * Run a callback inside a transaction.
      *
@@ -82,6 +85,9 @@ trait Transactions
             $this->queryCacheMutations[$context] = [];
             $this->documentCacheMutations[$context] = [];
             $this->documentCachePurges[$context] = [];
+            if (! $this->adapter->inTransaction()) {
+                $this->transactionWrites[$context] = [];
+            }
         }
 
         try {
@@ -95,6 +101,7 @@ trait Transactions
                     $this->queryCacheMutations[$context],
                     $this->documentCacheMutations[$context],
                     $this->documentCachePurges[$context],
+                    $this->transactionWrites[$context],
                 );
                 try {
                     $this->purgeWrittenDocuments($documents);
@@ -124,6 +131,7 @@ trait Transactions
                 $this->queryCacheMutations[$context],
                 $this->documentCacheMutations[$context],
                 $this->documentCachePurges[$context],
+                $this->transactionWrites[$context],
             );
 
             $failure = null;

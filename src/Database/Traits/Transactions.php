@@ -103,7 +103,8 @@ trait Transactions
     /**
      * Keep all nested mutation tombstones blocked, and purge every written document
      * again, once the outer transaction has committed or rolled back. Document purge
-     * events queued in the scope fire after a commit and are dropped with a rollback.
+     * events queued in the scope fire after a commit, even when the invalidation after it
+     * fails, and are dropped with a rollback.
      *
      * @template T
      *
@@ -183,10 +184,6 @@ trait Transactions
                 $this->activateInvalidation($queryTokens);
             } catch (Throwable $error) {
                 $failure ??= $error;
-            }
-
-            if ($failure !== null) {
-                throw $failure;
             }
 
             foreach ($purgeEvents as $announce) {

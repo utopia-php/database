@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
 use TypeError;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
@@ -460,6 +461,65 @@ final class DocumentPurgeTest extends TestCase
         $this->assertSame(['posts/first'], $this->purged($recorder));
     }
 
+    /**
+     * @param  Closure(Database): mixed  $write
+     */
+    #[DataProvider('writes')]
+    public function testPurgeEventFiresWhenThePostCommitInvalidationFails(Closure $write): void
+    {
+        $failure = new RuntimeException('cache unavailable');
+        $cache = new class ($failure) extends MemoryCache {
+            public bool $failing = false;
+
+            public function __construct(private readonly RuntimeException $failure)
+            {
+            }
+
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+            {
+                if ($this->failing) {
+                    throw $this->failure;
+                }
+
+                return parent::save($key, $data, $hash);
+            }
+
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                if ($this->failing) {
+                    throw $this->failure;
+                }
+
+                return parent::purge($key, $hash);
+            }
+        };
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            public ?Closure $afterCommit = null;
+
+            #[\Override]
+            public function commitTransaction(): bool
+            {
+                $committed = parent::commitTransaction();
+                if (! $this->inTransaction()) {
+                    $this->afterCommit?->__invoke();
+                }
+
+                return $committed;
+            }
+        };
+        $database = HookFixture::database($adapter)->setCache(new Cache($cache));
+        [$database, $recorder] = $this->seeded($database, ['first']);
+
+        $adapter->afterCommit = static function () use ($cache): void {
+            $cache->failing = true;
+        };
+
+        $this->assertSame($failure, $this->failureOf(static fn (): mixed => $write($database)));
+        $this->assertSame(['posts/first'], $this->purged($recorder));
+    }
+
     public function testQueuedPurgeEventsKeepTheirTenant(): void
     {
         $database = (new Database(new Memory(), new Cache(new None())))
@@ -526,6 +586,22 @@ final class DocumentPurgeTest extends TestCase
 
         $this->assertSame(['posts/second'], $this->purged($recorder));
         $this->assertSame([], $named->getPayloads(Event::DocumentPurge));
+    }
+
+    public function testEveryQueuedPurgeEventIsDeliveredWhenAListenerFails(): void
+    {
+        [$database, $recorder] = $this->seeded(HookFixture::sqlite(), ['first', 'second']);
+        $failure = new RuntimeException('region broadcast failed');
+        $database->addHook(new FailingLifecycle(Event::DocumentPurge, $failure));
+
+        $this->assertSame($failure, $this->failureOf(static fn (): mixed => $database->withTransaction(
+            static function () use ($database): void {
+                $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
+                $database->updateDocument(HookFixture::COLLECTION, 'second', new Document(['title' => 'renamed']));
+            },
+        )));
+
+        $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
     }
 
     /**

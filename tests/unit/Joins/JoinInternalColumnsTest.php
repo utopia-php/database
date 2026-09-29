@@ -256,7 +256,7 @@ final class JoinInternalColumnsTest extends TestCase
         yield 'a joined string' => ['note.body', true, $numeric.'note.body'];
         yield 'a joined array' => ['note.tags', true, $numeric.'note.tags'];
         yield 'an unknown joined attribute' => ['note.nothing', true, $notFound.'note.nothing'];
-        yield 'an attribute only a join declares, unqualified' => ['body', true, $notFound.'body'];
+        yield 'a string only a join declares, unqualified' => ['body', true, $numeric.'body'];
         yield 'an alias no join declares' => ['other.score', true, $notFound.'other.score'];
     }
 

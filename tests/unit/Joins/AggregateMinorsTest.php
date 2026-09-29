@@ -5,8 +5,18 @@ namespace Tests\Unit\Joins;
 use PDO;
 use PDOStatement;
 use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -48,6 +58,45 @@ final class AggregateMinorsTest extends TestCase
             [['BIT_AND(`flags`)' => '18446744073709551615', 'BIT_OR(`mask`)' => null, 'BIT_XOR(`_id`)' => '0']],
             $rows,
         );
+    }
+
+    public function testSumResolvesAJoinDeclaredAttribute(): void
+    {
+        $database = $this->database();
+        $item = Query::join('items', 'item', 'code', '=', 'it');
+
+        $this->assertSame(40, $database->sum('orders', 'price', [$item]), 'a name only the join declares');
+        $this->assertSame(
+            [['total' => 40]],
+            $this->rows($database->find('orders', [$item, Query::sum('price', 'total')])),
+            'find() reads the same attribute',
+        );
+        $this->assertSame(40, $database->sum('orders', 'it.price', [$item]), 'the qualified name');
+        $this->assertSame(20, $database->sum('orders', 'price', [$item, Query::equal('it.code', ['a'])]));
+        $this->assertSame(6, $database->sum('orders', 'quantity', [$item]), 'a name the main collection declares reads the main table');
+        $this->assertSame(0, $database->sum('orders', 'price', [$item, Query::equal('it.code', ['z'])]));
+    }
+
+    public function testSumRefusesABareNameNoCollectionOrSeveralJoinsDeclare(): void
+    {
+        $database = $this->database();
+        $item = Query::join('items', 'item', 'code', '=', 'it');
+        $extra = Query::join('extras', 'item', 'code', '=', 'ex');
+
+        foreach ([
+            'two joins declare it' => [fn (): int|float => $database->sum('orders', 'price', [$item, $extra]), 'Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias'],
+            'no join' => [fn (): int|float => $database->sum('orders', 'price'), 'Invalid query: Attribute not found in schema: price'],
+            'no collection declares it' => [fn (): int|float => $database->sum('orders', 'weight', [$item]), 'Invalid query: Attribute not found in schema: weight'],
+        ] as $case => [$sum, $message]) {
+            try {
+                $sum();
+                $this->fail($case.': the sum ran');
+            } catch (QueryException $error) {
+                $this->assertSame($message, $error->getMessage(), $case);
+            }
+        }
+
+        $this->assertSame(200, $database->sum('orders', 'ex.price', [$item, $extra]), 'qualified, the ambiguous name reads its join');
     }
 
     /**
@@ -103,5 +152,67 @@ final class AggregateMinorsTest extends TestCase
         ));
 
         return [$rows, $sql];
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<array<string, mixed>>
+     */
+    private function rows(array $documents): array
+    {
+        return \array_values(\array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents));
+    }
+
+    /**
+     * Orders of items: o1 and o3 order a (price 10), o2 orders b (price 20); extras prices a at 100.
+     */
+    private function database(): Database
+    {
+        $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $database
+            ->setDatabase('aggregate_minors')
+            ->setNamespace('aggregate_minors_'.\uniqid())
+            ->setAuthorization(new Authorization());
+        $database->addHook(new Permissions());
+        $database->create();
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: 'orders',
+            attributes: [
+                Attribute::string(key: 'item', size: 16),
+                Attribute::integer(key: 'quantity'),
+                Attribute::string(key: 'name', size: 16),
+            ],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: 'items',
+            attributes: [
+                Attribute::string(key: 'code', size: 16),
+                Attribute::integer(key: 'price'),
+                Attribute::integer(key: 'quantity'),
+                Attribute::string(key: 'name', size: 16),
+            ],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: 'extras',
+            attributes: [
+                Attribute::string(key: 'code', size: 16),
+                Attribute::integer(key: 'price'),
+            ],
+            permissions: $permissions,
+        ));
+
+        foreach ([['o1', 'a', 1, 'x'], ['o2', 'b', 2, 'y'], ['o3', 'a', 3, 'x']] as [$id, $item, $quantity, $name]) {
+            $database->createDocument('orders', new Document(['$id' => $id, '$permissions' => [], 'item' => $item, 'quantity' => $quantity, 'name' => $name]));
+        }
+        foreach ([['a', 10, 'apple'], ['b', 20, 'banana']] as [$code, $price, $name]) {
+            $database->createDocument('items', new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'price' => $price, 'quantity' => 100, 'name' => $name]));
+        }
+        $database->createDocument('extras', new Document(['$id' => 'a', '$permissions' => [], 'code' => 'a', 'price' => 100]));
+
+        return $database;
     }
 }

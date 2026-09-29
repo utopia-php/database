@@ -21,6 +21,7 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -9875,6 +9876,75 @@ trait DocumentTests
             $this->assertSame(['document_find', 'document_count'], $operations);
         } finally {
             $database->deleteCollection($collection);
+        }
+    }
+
+    public function testSumResolvesABareNameOnlyAJoinDeclares(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $orders = 'sum_join_orders';
+        $items = 'sum_join_items';
+        $extras = 'sum_join_extras';
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $orders,
+            attributes: [Attribute::string(key: 'item', size: 16), Attribute::integer(key: 'quantity')],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $items,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price'), Attribute::integer(key: 'quantity')],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $extras,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price')],
+            permissions: $permissions,
+        ));
+
+        try {
+            foreach ([['o1', 'a', 1], ['o2', 'b', 2], ['o3', 'a', 3]] as [$id, $item, $quantity]) {
+                $database->createDocument($orders, new Document(['$id' => $id, '$permissions' => [], 'item' => $item, 'quantity' => $quantity]));
+            }
+            foreach ([['a', 10], ['b', 20]] as [$code, $price]) {
+                $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'price' => $price, 'quantity' => 100]));
+            }
+            $database->createDocument($extras, new Document(['$id' => 'a', '$permissions' => [], 'code' => 'a', 'price' => 100]));
+
+            $item = Query::join($items, 'item', 'code', '=', 'it');
+            $extra = Query::join($extras, 'item', 'code', '=', 'ex');
+
+            $this->assertEquals(40, $database->sum($orders, 'price', [$item]));
+            $this->assertEquals(40, $database->sum($orders, 'it.price', [$item]));
+            $this->assertEquals(20, $database->sum($orders, 'price', [$item, Query::equal('it.code', ['a'])]));
+            $this->assertEquals(6, $database->sum($orders, 'quantity', [$item]), 'the main collection declares quantity');
+            $this->assertEquals(200, $database->sum($orders, 'ex.price', [$item, $extra]));
+
+            try {
+                $database->sum($orders, 'price', [$item, $extra]);
+                $this->fail('a name two joins declare was summed');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias', $error->getMessage());
+            }
+
+            try {
+                $database->sum($orders, 'weight', [$item]);
+                $this->fail('a name no collection declares was summed');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute not found in schema: weight', $error->getMessage());
+            }
+        } finally {
+            foreach ([$orders, $items, $extras] as $collection) {
+                $database->deleteCollection($collection);
+            }
         }
     }
 

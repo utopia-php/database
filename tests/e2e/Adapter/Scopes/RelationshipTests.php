@@ -5115,6 +5115,57 @@ trait RelationshipTests
         }
     }
 
+    public function testContainsAllOnRelationshipEdgeCases(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $projects = 'containsAllProjects';
+        $developers = 'containsAllDevelopers';
+        $database->createCollection(new Collection(id: $projects, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $developers, attributes: [Attribute::string(key: 'devName', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::manyToMany(collection: $projects, relatedCollection: $developers, twoWay: true, key: 'developers', twoWayKey: 'projects', onDelete: ForeignKeyAction::SetNull));
+
+        try {
+            foreach (['dev1' => 'Alice', 'dev2' => 'Bob', 'dev3' => 'Carol'] as $id => $name) {
+                $database->createDocument($developers, new Document(['$id' => $id, 'devName' => $name]));
+            }
+            $database->createDocument($projects, new Document(['$id' => 'project1', 'developers' => ['dev1', 'dev2']]));
+            $database->createDocument($projects, new Document(['$id' => 'project2', 'developers' => ['dev1', 'dev3']]));
+
+            $found = function (Query $query) use ($database, $projects): array {
+                $ids = \array_map(fn (Document $project): string => $project->getId(), $database->find($projects, [$query]));
+                \sort($ids);
+
+                return $ids;
+            };
+
+            $this->assertSame(['project1'], $found(Query::containsAll('developers.$id', ['dev2'])));
+            $this->assertSame(['project2'], $found(Query::containsAll('developers.$id', ['dev1', 'dev3'])));
+            $this->assertSame([], $found(Query::containsAll('developers.$id', ['dev1', 'nobody'])));
+            $this->assertSame([], $found(Query::containsAll('developers.$id', ['dev2', 'dev3'])));
+            $this->assertSame([], $found(Query::equal('developers.devName', ['Nobody'])));
+
+            if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+                try {
+                    $database->find($projects, [Query::equal('developers.unknownAttribute', ['x'])]);
+                    $this->fail('A filter on an unknown related attribute must be rejected');
+                } catch (QueryException $exception) {
+                    $this->assertStringContainsString('unknownAttribute', $exception->getMessage());
+                }
+            }
+        } finally {
+            $database->deleteCollection($projects);
+            $database->deleteCollection($developers);
+        }
+    }
+
     /**
      * @return array<string>
      */

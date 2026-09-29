@@ -13,6 +13,8 @@ use Utopia\Query\Query;
  * SQLite has no default LIKE escape character, so every LIKE declares the
  * backslash that escapeLikeValue() puts in front of `%`, `_` and `\`.
  *
+ * REGEXP resolves to the user function the SQLite adapter registers.
+ *
  * Document ids are unique in the COLLATION of their unique indexes, and SQLite
  * only uses an index for a comparison made in the index's collation, so every
  * equality on an id column compares in that collation.
@@ -65,6 +67,17 @@ class SQLite extends Base
     protected function compileNotIn(string $attribute, array $values, ?string $column = null): string
     {
         return parent::compileNotIn($this->collate($attribute, $column), $values, $column);
+    }
+
+    /**
+     * @param  array<mixed>  $values
+     */
+    #[\Override]
+    protected function compileRegex(string $attribute, array $values, ?string $column = null): string
+    {
+        $this->addBinding($values[0], $column);
+
+        return $attribute.' REGEXP ?';
     }
 
     /**

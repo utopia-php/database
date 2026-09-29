@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Traits;
 
+use Closure;
 use DateTime as PhpDateTime;
 use Exception;
 use Generator;
@@ -53,19 +54,38 @@ use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
+use WeakMap;
 
 /**
  * Provides document CRUD operations including find, create, update, upsert, delete, and cache management.
  */
 trait Documents
 {
+    private const string DOCUMENT_CACHE_ACTIVE_PREFIX = 'active:';
+
     private const string DOCUMENT_CACHE_BLOCKED_PREFIX = 'blocked:';
+
+    private const string DOCUMENT_CACHE_SEPARATOR = '@';
+
+    private const int DOCUMENT_CACHE_PERMANENT = \PHP_INT_MAX;
+
+    private const int DOCUMENT_CACHE_RECHECK = 60;
 
     private const string DOCUMENT_CACHE_EPOCH = 'epoch';
 
     private const string DOCUMENT_CACHE_FIELD = 'field';
 
     private const string DOCUMENT_CACHE_VALUE = 'document';
+
+    private const string DOCUMENT_CACHE_COLLECTION_EPOCH = 'collectionEpoch';
+
+    private const string DOCUMENT_CACHE_CHECKED_AT = 'checkedAt';
+
+    /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
+    private array $documentCacheDefinitions = [];
+
+    /** @var WeakMap<Document, string>|null The document-cache epoch each collection definition was read with, until the definition is let go. */
+    private static ?WeakMap $collectionCacheEpochs = null;
 
     private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
     {
@@ -408,29 +428,40 @@ trait Documents
             $id,
             $selections
         );
+        $definition = $collection->getId() === self::METADATA;
         // The cache lower-cases keys; the hash key keeps the id's case, so casings an adapter tells apart keep separate fields.
-        $field = \md5($hashKey);
+        // A global collection's definition has one key for every tenant, and each tenant has its own collection epoch.
+        $field = \md5($definition ? $hashKey.':'.\json_encode($this->adapter->getTenant()) : $hashKey);
 
         // Collection definitions are cacheable because every schema mutation
         // persists the definition through updateMetadata(), which writes the
         // row via the METADATA collection's own document path and therefore
-        // purges that definition's slot; the METADATA epoch does not rotate.
-        // Any new schema mutator must keep writing through that path, or its
-        // readers will serve a stale schema.
+        // purges that definition's slot; a cached definition is served without
+        // an epoch check. Any new schema mutator must keep writing through that
+        // path, or its readers will serve a stale schema.
         $inTransaction = $this->adapter->inTransaction();
         $cacheable = ! $forUpdate
             && empty($joins)
-            && (! $inTransaction || $this->isCachedInTransaction($documentKey));
-        $epoch = $cacheable ? $this->getDocumentCacheEpoch($collectionKey) : null;
+            && (! $inTransaction || $this->isCachedInTransaction($documentKey))
+            && ! isset($this->documentCacheMutations[$this->getEventContext()][$collectionKey]);
+        $epoch = $cacheable && ! $definition ? $this->getCollectionCacheEpoch($collection) : null;
         // A transaction reads its own snapshot, which can predate another writer's commit and purge.
         $fillEpoch = $inTransaction ? null : $epoch;
+        $fillDefinition = $cacheable && $definition && ! $inTransaction;
         $cached = null;
-        if ($epoch !== null) {
-            try {
+        $collectionEpoch = null;
+        try {
+            if ($cacheable && $definition) {
+                $entry = $this->loadCachedDefinition($documentKey, $field);
+                if ($entry !== null) {
+                    $cached = $entry[self::DOCUMENT_CACHE_VALUE];
+                    $collectionEpoch = $entry[self::DOCUMENT_CACHE_COLLECTION_EPOCH] ?? null;
+                }
+            } elseif ($epoch !== null) {
                 $cached = $this->loadCachedDocument($documentKey, $field, $epoch);
-            } catch (Exception $e) {
-                Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
             }
+        } catch (Exception $e) {
+            Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
         }
 
         if (\is_array($cached) && isset($cached[self::CACHE_EMPTY_MARKER])) {
@@ -460,11 +491,13 @@ trait Documents
                 return $this->createDocumentInstance($collection->getId(), []);
             }
 
+            $this->attachCollectionCacheEpoch($document, \is_string($collectionEpoch) ? $collectionEpoch : null);
+
             return $document;
         }
 
         $generation = '0';
-        if ($fillEpoch !== null) {
+        if ($fillEpoch !== null || $fillDefinition) {
             try {
                 $generation = $this->cache->getGeneration($documentKey);
             } catch (Exception $e) {
@@ -486,6 +519,7 @@ trait Documents
 
         $document = $skipAuth ? $this->authorization->skip($getDocument) : $getDocument();
         $fillEpoch = $this->isReadFromReplica() ? null : $fillEpoch;
+        $fillDefinition = $fillDefinition && ! $this->isReadFromReplica();
 
         if ($document->isEmpty()) {
             // The marker is shared by every reader, so a miss observed with authorization
@@ -498,12 +532,14 @@ trait Documents
                 $fillEpoch = $this->isReadFromReplica() ? null : $fillEpoch;
             }
 
-            if ($fillEpoch !== null && empty($relationships) && $missing) {
-                try {
+            try {
+                if ($fillEpoch !== null && empty($relationships) && $missing) {
                     $this->saveCachedDocument($documentKey, $field, $fillEpoch, [self::CACHE_EMPTY_MARKER => true], $generation);
-                } catch (Exception $e) {
-                    Console::warning('Failed to save empty document to cache: '.$e->getMessage());
+                } elseif ($fillDefinition) {
+                    $this->saveCachedDefinition($documentKey, $field, [self::CACHE_EMPTY_MARKER => true], [], $generation);
                 }
+            } catch (Exception $e) {
+                Console::warning('Failed to save empty document to cache: '.$e->getMessage());
             }
 
             return $this->createDocumentInstance($collection->getId(), []);
@@ -512,6 +548,10 @@ trait Documents
         if ($this->isTtlExpired($collection, $document)) {
             return $this->createDocumentInstance($collection->getId(), []);
         }
+
+        $collectionState = $cacheable && $definition
+            ? $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])
+            : null;
 
         $document = $this->castingAfter($collection, $document);
 
@@ -550,17 +590,31 @@ trait Documents
             fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        if ($fillEpoch !== null && empty($relationships)) {
-            try {
+        try {
+            if ($fillEpoch !== null && empty($relationships)) {
                 $this->saveCachedDocument($documentKey, $field, $fillEpoch, $document->getArrayCopy(), $generation);
-            } catch (Exception $e) {
-                Console::warning('Failed to save document to cache: '.$e->getMessage());
+            } elseif ($fillDefinition) {
+                $this->saveCachedDefinition(
+                    $documentKey,
+                    $field,
+                    $document->getArrayCopy(),
+                    [
+                        self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionState,
+                        self::DOCUMENT_CACHE_CHECKED_AT => \time(),
+                    ],
+                    $generation,
+                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]) === $collectionState,
+                );
             }
+        } catch (Exception $e) {
+            Console::warning('Failed to save document to cache: '.$e->getMessage());
         }
 
         $document = $this->decorateDocument(Event::DocumentRead, $collection, $document);
 
         $this->trigger(Event::DocumentRead, $document);
+
+        $this->attachCollectionCacheEpoch($document, $collectionState);
 
         return $document;
     }
@@ -620,6 +674,86 @@ trait Documents
             self::DOCUMENT_CACHE_FIELD => $field,
             self::DOCUMENT_CACHE_VALUE => $document,
         ], $field, $generation);
+    }
+
+    /**
+     * What a read may serve from a collection definition's cache slot: its entry, carrying the epoch
+     * the collection's documents are cached under, or null when the slot holds nothing for this read
+     * or holds a blocked collection due for another look.
+     *
+     * @return array{document: array<mixed>, collectionEpoch?: mixed}|null
+     */
+    private function loadCachedDefinition(string $documentKey, string $field): ?array
+    {
+        $entry = $this->cache->load($documentKey, self::TTL, $field);
+        if (
+            ! \is_array($entry)
+            || ! \is_array($entry[self::DOCUMENT_CACHE_VALUE] ?? null)
+            || ($entry[self::DOCUMENT_CACHE_FIELD] ?? null) !== $field
+        ) {
+            return null;
+        }
+
+        if (isset($entry[self::DOCUMENT_CACHE_VALUE][self::CACHE_EMPTY_MARKER])) {
+            return [self::DOCUMENT_CACHE_VALUE => $entry[self::DOCUMENT_CACHE_VALUE]];
+        }
+
+        $collectionEpoch = $entry[self::DOCUMENT_CACHE_COLLECTION_EPOCH] ?? null;
+        if ($collectionEpoch === null) {
+            $checkedAt = $entry[self::DOCUMENT_CACHE_CHECKED_AT] ?? null;
+            if (! \is_int($checkedAt) || $checkedAt + self::DOCUMENT_CACHE_RECHECK <= \time()) {
+                return null;
+            }
+        }
+
+        return [
+            self::DOCUMENT_CACHE_VALUE => $entry[self::DOCUMENT_CACHE_VALUE],
+            self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionEpoch,
+        ];
+    }
+
+    /**
+     * Without generations a fill can land after the purge that should have removed it, so the state it
+     * was filled under is read again and the fill is dropped when that state has moved on.
+     *
+     * @param  array<mixed>  $document
+     * @param  array<string, mixed>  $validity
+     * @param  (Closure(): bool)|null  $isCurrent
+     */
+    private function saveCachedDefinition(string $documentKey, string $field, array $document, array $validity, string $generation, ?Closure $isCurrent = null): void
+    {
+        $saved = $this->cache->saveWithLease($documentKey, [
+            ...$validity,
+            self::DOCUMENT_CACHE_FIELD => $field,
+            self::DOCUMENT_CACHE_VALUE => $document,
+        ], $field, $generation);
+
+        if ($saved !== false && $generation === '0' && $isCurrent !== null && ! $isCurrent()) {
+            $this->cache->purge($documentKey);
+        }
+    }
+
+    private function attachCollectionCacheEpoch(Document $definition, ?string $epoch): void
+    {
+        self::$collectionCacheEpochs ??= new WeakMap();
+        if ($epoch === null) {
+            unset(self::$collectionCacheEpochs[$definition]);
+
+            return;
+        }
+
+        self::$collectionCacheEpochs[$definition] = $epoch;
+    }
+
+    /**
+     * The epoch a collection's documents may be cached under, as read with its definition; null when
+     * they must not be.
+     */
+    private function getCollectionCacheEpoch(Document $definition): ?string
+    {
+        $epochs = self::$collectionCacheEpochs;
+
+        return $epochs !== null && isset($epochs[$definition]) ? $epochs[$definition] : null;
     }
 
     private function isTtlExpired(Document $collection, Document $document): bool
@@ -947,7 +1081,7 @@ trait Documents
                     foreach ($batch as $document) {
                         $this->withDocumentTenant(
                             $document,
-                            fn () => $this->advanceCollectionCacheEpoch($collection->getId())
+                            fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
                         );
                     }
 
@@ -1511,7 +1645,7 @@ trait Documents
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
                         $document,
-                        fn () => $this->advanceCollectionCacheEpoch($collection->getId())
+                        fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
                     );
                 }
             });
@@ -1907,7 +2041,7 @@ trait Documents
                     foreach ($batch as $document) {
                         $this->withDocumentTenant(
                             $document,
-                            fn () => $this->advanceCollectionCacheEpoch($collection->getId())
+                            fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
                         );
                     }
 
@@ -2503,7 +2637,7 @@ trait Documents
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
                         $document,
-                        fn () => $this->advanceCollectionCacheEpoch($collection->getId())
+                        fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())
                     );
                 }
             });
@@ -2544,9 +2678,15 @@ trait Documents
      */
     public function purgeCachedCollection(string $collectionId): bool
     {
+        if ($collectionId === self::METADATA) {
+            $this->purgeCachedDefinitions();
+
+            return true;
+        }
+
         [$collectionKey] = $this->getCacheKeys($collectionId);
 
-        return $this->advanceDocumentCacheEpoch($collectionKey);
+        return $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId));
     }
 
     /**
@@ -2565,6 +2705,9 @@ trait Documents
         $context = $this->getEventContext();
         if (isset($this->documentCachePurges[$context])) {
             $this->documentCachePurges[$context][$documentKey] = $collectionKey;
+            if ($collectionId !== self::METADATA) {
+                $this->documentCacheDefinitions[$context][$collectionKey] = $this->getDefinitionCacheKey($collectionId);
+            }
         }
         if (isset($this->transactionWrites[$context])) {
             $this->transactionWrites[$context][\strtolower($documentKey)] = true;
@@ -2575,22 +2718,51 @@ trait Documents
         return true;
     }
 
-    private function advanceCollectionCacheEpoch(string $collectionId): bool
+    /**
+     * A batch write retires the documents of their collection at once; a batch write to `_metadata`
+     * purges each definition it wrote instead, as a cached definition is checked against no epoch.
+     */
+    private function advanceCollectionCacheEpoch(string $collectionId, string $documentId): bool
     {
+        if ($collectionId === self::METADATA) {
+            return $this->purgeCachedDocumentInternal(self::METADATA, $documentId);
+        }
+
         [$collectionKey] = $this->getCacheBaseKeys($collectionId);
 
-        return $this->advanceDocumentCacheEpoch($collectionKey);
+        return $this->advanceDocumentCacheEpoch($collectionKey, $this->getDefinitionCacheKey($collectionId));
+    }
+
+    /**
+     * The cache key of a collection's definition, which carries the epoch its documents are cached under.
+     */
+    private function getDefinitionCacheKey(string $collectionId): string
+    {
+        return $this->getCacheBaseKeys(self::METADATA, $collectionId)[1];
+    }
+
+    /**
+     * Cached definitions are checked against no epoch, so each one the database lists is purged.
+     */
+    private function purgeCachedDefinitions(): void
+    {
+        $this->silent(fn () => $this->authorization->skip(fn () => $this->foreach(
+            self::METADATA,
+            fn (Document $definition) => $this->cache->purge($this->getDefinitionCacheKey($definition->getId())),
+        )));
     }
 
     /**
      * Purge the documents a transaction wrote once it has committed or rolled back. A reader
      * outside the transaction may have cached the pre-commit row after the purge inside it, so
      * when this purge fails the collection's epoch is retired instead, which no such fill survives.
+     * A collection definition has no epoch of its own: its purge is tried once more.
      *
      * @param  array<string, string>  $documents  Collection keys by document key
      */
     protected function purgeWrittenDocuments(array $documents): void
     {
+        $definitions = $this->documentCacheDefinitions[$this->getEventContext()] ?? [];
         $failure = null;
         $retired = [];
         foreach ($documents as $documentKey => $collectionKey) {
@@ -2598,12 +2770,13 @@ trait Documents
                 $this->cache->purge($documentKey);
             } catch (Throwable $error) {
                 $failure ??= $error;
-                if (isset($retired[$collectionKey])) {
-                    continue;
-                }
-                $retired[$collectionKey] = true;
                 try {
-                    $this->advanceDocumentCacheEpoch($collectionKey);
+                    if (! isset($definitions[$collectionKey])) {
+                        $this->cache->purge($documentKey);
+                    } elseif (! isset($retired[$collectionKey])) {
+                        $retired[$collectionKey] = true;
+                        $this->advanceDocumentCacheEpoch($collectionKey, $definitions[$collectionKey]);
+                    }
                 } catch (Throwable) {
                     // The purge failure below reaches the caller either way.
                 }
@@ -2615,46 +2788,34 @@ trait Documents
         }
     }
 
-    private function getDocumentCacheEpoch(string $collectionKey): ?string
+    /**
+     * The epoch a collection's documents may be cached under, or null while a write to the collection
+     * is in flight.
+     */
+    private function loadDocumentCacheState(string $collectionKey): ?string
     {
-        $epochKey = $collectionKey.'#epoch';
-        $startedKey = $collectionKey.'#started';
-        $finishedKey = $collectionKey.'#finished';
-
         try {
-            $started = $this->cache->getGeneration($startedKey);
-            $finished = $this->cache->getGeneration($finishedKey);
-            if ($started !== $finished) {
+            $record = $this->cache->load($collectionKey.'#epoch', self::DOCUMENT_CACHE_PERMANENT);
+            if (! \is_string($record) || $record === '') {
+                return $this->restoreDocumentCacheEpoch($collectionKey);
+            }
+
+            if (\str_starts_with($record, self::DOCUMENT_CACHE_BLOCKED_PREFIX)) {
                 return null;
             }
 
-            $epoch = $this->cache->load($epochKey, self::TTL);
-            if ($epoch === false || $epoch === null) {
-                $epoch = \bin2hex(\random_bytes(16));
-                if ($this->cache->save($epochKey, $epoch) === false) {
-                    return null;
-                }
-            }
-
+            $separator = \strrpos($record, self::DOCUMENT_CACHE_SEPARATOR);
+            $marker = $separator === false ? $record : \substr($record, 0, $separator);
+            $stamp = $separator === false ? '' : \substr($record, $separator + 1);
+            $started = $this->cache->getGeneration($collectionKey.'#started');
             if (
-                ! \is_string($epoch)
-                || $epoch === ''
-                || \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX)
+                ($separator !== false && $started === $stamp)
+                || $started === $this->cache->getGeneration($collectionKey.'#finished')
             ) {
-                return null;
+                return $marker;
             }
 
-            $nextStarted = $this->cache->getGeneration($startedKey);
-            $nextFinished = $this->cache->getGeneration($finishedKey);
-            if (
-                $started !== $nextStarted
-                || $finished !== $nextFinished
-                || $nextStarted !== $nextFinished
-            ) {
-                return null;
-            }
-
-            return $epoch;
+            return null;
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to load document cache epoch: '.$error->getMessage());
 
@@ -2662,7 +2823,25 @@ trait Documents
         }
     }
 
-    private function advanceDocumentCacheEpoch(string $collectionKey): bool
+    /**
+     * Replace a missing epoch with a fresh one when no write is counted in flight.
+     */
+    private function restoreDocumentCacheEpoch(string $collectionKey): ?string
+    {
+        $started = $this->cache->getGeneration($collectionKey.'#started');
+        if ($started !== $this->cache->getGeneration($collectionKey.'#finished')) {
+            return null;
+        }
+
+        $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
+        if ($this->cache->save($collectionKey.'#epoch', $epoch.self::DOCUMENT_CACHE_SEPARATOR.$started) === false) {
+            return null;
+        }
+
+        return $epoch;
+    }
+
+    private function advanceDocumentCacheEpoch(string $collectionKey, string $definitionKey): bool
     {
         $context = $this->getEventContext();
         if (isset($this->documentCacheMutations[$context][$collectionKey])) {
@@ -2670,26 +2849,31 @@ trait Documents
         }
 
         $token = \bin2hex(\random_bytes(16));
-        if (! $this->blockDocumentCacheEpoch($collectionKey, $token)) {
+        if (! $this->blockDocumentCacheEpoch($collectionKey, $token, $definitionKey)) {
             return true;
         }
 
         if (isset($this->documentCacheMutations[$context])) {
             $this->documentCacheMutations[$context][$collectionKey] = $token;
+            $this->documentCacheDefinitions[$context][$collectionKey] = $definitionKey;
 
             return true;
         }
 
-        $this->activateDocumentInvalidation([$collectionKey => $token]);
+        $this->activateDocumentCacheEpoch($collectionKey, $token, $definitionKey);
 
         return true;
     }
 
-    private function blockDocumentCacheEpoch(string $collectionKey, string $token): bool
+    /**
+     * Publish a tombstone before the write, then drop the definition that carried the previous
+     * epoch, so readers refill it with the tombstone.
+     */
+    private function blockDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): bool
     {
         $epochKey = $collectionKey.'#epoch';
         if (! (new Owners($this->cache))->register($collectionKey, $token)) {
-            $epoch = $this->cache->load($epochKey, self::TTL);
+            $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
             if ($epoch === false || $epoch === null) {
                 return false;
             }
@@ -2697,18 +2881,21 @@ trait Documents
             throw new RuntimeException("Failed to register document cache owner '{$token}' for '{$collectionKey}'");
         }
 
-        $startedKey = $collectionKey.'#started';
-        $this->cache->purge($startedKey);
-
-        $existing = $this->cache->load($epochKey, self::TTL);
-        if ($existing !== false && $existing !== null) {
-            $this->cache->purge($epochKey);
-        }
         if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token) === false) {
             throw new RuntimeException("Failed to block document cache epoch '{$epochKey}'");
         }
 
+        $this->cache->purge($collectionKey.'#started');
+        $this->purgeCachedDefinition($definitionKey);
+
         return true;
+    }
+
+    private function purgeCachedDefinition(string $definitionKey): void
+    {
+        if ($definitionKey !== '') {
+            $this->cache->purge($definitionKey);
+        }
     }
 
     /**
@@ -2716,10 +2903,14 @@ trait Documents
      */
     protected function activateDocumentInvalidation(array $tokens): void
     {
+        $context = $this->getEventContext();
+        $definitions = $this->documentCacheDefinitions[$context] ?? [];
+        unset($this->documentCacheDefinitions[$context]);
+
         $failure = null;
         foreach ($tokens as $collectionKey => $token) {
             try {
-                $this->activateDocumentCacheEpoch($collectionKey, $token);
+                $this->activateDocumentCacheEpoch($collectionKey, $token, $definitions[$collectionKey] ?? '');
             } catch (Throwable $error) {
                 $failure ??= $error;
             }
@@ -2730,7 +2921,11 @@ trait Documents
         }
     }
 
-    private function activateDocumentCacheEpoch(string $collectionKey, string $token): void
+    /**
+     * Replace this write's tombstone with a fresh epoch once no other write to the collection is in
+     * flight; the last write to finish publishes it.
+     */
+    private function activateDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): void
     {
         $registration = (new Owners($this->cache))->find($collectionKey, $token);
         $owner = $this->cache->load($registration->key, self::TTL, $registration->field);
@@ -2751,41 +2946,55 @@ trait Documents
         $started = $this->cache->getGeneration($startedKey);
         $finished = $this->cache->getGeneration($finishedKey);
         $epochKey = $collectionKey.'#epoch';
-        $epoch = $this->cache->load($epochKey, self::TTL);
-        $blocked = self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token;
+        $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
+        $blocked = \is_string($epoch) && \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX);
+        $ours = $epoch === self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token;
 
         if ($started === $finished) {
-            if (
-                \is_string($epoch)
-                && \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX)
-                && $epoch !== $blocked
-            ) {
-                return;
+            if (! $blocked || $ours) {
+                $this->publishDocumentCacheEpoch($collectionKey, $finished, $definitionKey);
             }
-        } elseif (! $owned && $epoch !== $blocked) {
+
+            return;
+        }
+
+        if (! $owned && ! $ours) {
             // This token was cleared by a cache flush while another writer's
             // barrier survived. Leave that writer's barrier fail-closed.
             return;
         }
 
-        if ($started !== $finished) {
-            $this->cache->purge($finishedKey);
+        $this->cache->purge($finishedKey);
+        $nextFinished = $this->cache->getGeneration($finishedKey);
 
-            // A cache flush restarts generations, so an unchanged #finished
-            // only proves this purge was lost while the epoch read with it is
-            // still in place; publish the new epoch after this check, not before.
-            if (
-                $this->cache->getGeneration($finishedKey) === $finished
-                && \is_string($epoch)
-                && $this->cache->load($epochKey, self::TTL) === $epoch
-            ) {
-                throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
-            }
+        // A cache flush restarts generations, so an unchanged #finished
+        // only proves this purge was lost while the epoch read with it is
+        // still in place; publish the new epoch after this check, not before.
+        if (
+            $nextFinished === $finished
+            && \is_string($epoch)
+            && $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT) === $epoch
+        ) {
+            throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
         }
 
-        if ($this->cache->save($epochKey, \bin2hex(\random_bytes(16))) === false) {
+        if ($this->cache->getGeneration($startedKey) === $nextFinished) {
+            $this->publishDocumentCacheEpoch($collectionKey, $nextFinished, $definitionKey);
+        }
+    }
+
+    /**
+     * An epoch carries the started generation it was published at: it is current until the next write starts.
+     */
+    private function publishDocumentCacheEpoch(string $collectionKey, string $started, string $definitionKey): void
+    {
+        $epochKey = $collectionKey.'#epoch';
+        $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16)).self::DOCUMENT_CACHE_SEPARATOR.$started;
+        if ($this->cache->save($epochKey, $epoch) === false) {
             throw new RuntimeException("Failed to activate document cache epoch '{$epochKey}'");
         }
+
+        $this->purgeCachedDefinition($definitionKey);
     }
 
     /**

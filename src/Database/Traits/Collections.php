@@ -301,18 +301,19 @@ trait Collections
      */
     public function getCollection(string $id): Collection
     {
-        $collection = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
+        $definition = $this->silent(fn () => $this->getDocument(self::METADATA, $id));
 
         if (
             $id !== self::METADATA
             && $this->adapter->getSharedTables()
-            && $collection->getTenant() !== null
-            && $collection->getTenant() !== $this->adapter->getTenant()
+            && $definition->getTenant() !== null
+            && $definition->getTenant() !== $this->adapter->getTenant()
         ) {
             return new Collection();
         }
 
-        $collection = $this->hydrateCollectionModels($collection);
+        $collection = $this->hydrateCollectionModels($definition);
+        $this->attachCollectionCacheEpoch($collection, $this->getCollectionCacheEpoch($definition));
 
         $this->trigger(Event::CollectionRead, $collection);
 

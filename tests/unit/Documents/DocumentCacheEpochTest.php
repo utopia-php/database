@@ -452,6 +452,119 @@ final class DocumentCacheEpochTest extends TestCase
             }
         }
     }
+
+    public function testAWriteFinishingWhileAnotherIsInFlightLeavesTheCollectionBlocked(): void
+    {
+        $cache = new AbandoningCache();
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing($cache);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            try {
+                $writer->withTransaction(function () use ($writer, $reader, $cache): void {
+                    $this->renameDocument($writer, 'users', 'user', 'updated');
+                    $this->assertTrue($reader->purgeCachedCollection('users'));
+                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                    $cache->abandonNextWrite();
+                });
+                $this->fail('The abandoned write released its registration');
+            } catch (\RuntimeException $error) {
+                $this->assertStringContainsString('release document cache owner', $error->getMessage());
+            }
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write that finishes while another is in flight must not re-enable the collection');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testATransactionReadsItsBatchWriteAfterAnotherReaderRefilledTheDefinition(): void
+    {
+        $cache = new MemoryCache();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $definitionKey = \strtolower($database->getCacheBaseKeys(Database::METADATA, 'webhooks')[1]);
+        $definition = $cache->load($definitionKey, Database::TTL);
+        $this->assertIsArray($definition);
+
+        $read = $database->withTransaction(function () use ($database, $cache, $definitionKey, $definition): mixed {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $cache->save($definitionKey, $definition);
+
+            return $database->getDocument('webhooks', 'hook')->getAttribute('name');
+        });
+
+        $this->assertSame('updated', $read, 'A transaction must read what its batch write changed even when another reader saved the definition as it was before the write');
+    }
+
+    public function testADefinitionFilledAcrossAWriteOnACacheWithoutGenerationsIsDropped(): void
+    {
+        $cache = new InterleavingMemory();
+        $database = $this->createDatabaseWithCache($cache);
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+
+        $database->purgeCachedDocument(Database::METADATA, 'webhooks');
+        $cache->beforeNextSave(':_metadata:webhooks', function () use ($database): void {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+        });
+        $database->getCollection('webhooks');
+
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A definition saved after a write retired its epoch must not keep serving that epoch');
+    }
+
+    /**
+     * @return array{Database, Database, string}
+     */
+    private function createSQLiteDatabasesSharing(CacheAdapter $cache): array
+    {
+        $path = \tempnam(\sys_get_temp_dir(), 'document-cache-lapse-');
+        if ($path === false) {
+            throw new \RuntimeException('Failed to create SQLite test database');
+        }
+
+        $attributes = SQLite::getPDOAttributes();
+        $attributes[\PDO::ATTR_PERSISTENT] = false;
+        $writerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $readerConnection = new \PDO('sqlite:'.$path, null, null, $attributes);
+        $writerConnection->exec('PRAGMA journal_mode = WAL');
+        $writerConnection->exec('PRAGMA busy_timeout = 1000');
+        $readerConnection->exec('PRAGMA busy_timeout = 1000');
+
+        $writer = new Database(new SQLite($writerConnection), new Cache($cache));
+        $reader = new Database(new SQLite($readerConnection), new Cache($cache));
+        $namespace = 'lapse_'.\uniqid();
+        foreach ([$writer, $reader] as $database) {
+            $database
+                ->setDatabase('utopiaTests')
+                ->setNamespace($namespace);
+            $database->getAuthorization()->addRole(Role::any()->toString());
+        }
+
+        $writer->create();
+        $writer->createCollection(new Collection(id: 'users', attributes: [
+            Attribute::string(key: 'name', required: true),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $writer->createDocument('users', new Document([
+            '$id' => 'user',
+            'name' => 'original',
+        ]));
+
+        return [$writer, $reader, $path];
+    }
 }
 
 final class PausedDocumentSQLite extends SQLite
@@ -603,5 +716,117 @@ final class FlushDuringActivationMemory extends MemoryCache implements Leasable
         $this->generations = [];
 
         return parent::flush();
+    }
+}
+
+/**
+ * A Redis-like cache that can abandon a write the way a killed worker does: the write stays registered and its
+ * collection stays blocked, because the release of its registration is refused and its activation stops there.
+ */
+final class AbandoningCache implements CacheAdapter, Leasable
+{
+    private RedisLeasableCache $cache;
+
+    private bool $abandoning = false;
+
+    public function __construct()
+    {
+        $this->cache = new RedisLeasableCache();
+    }
+
+    public function abandonNextWrite(): void
+    {
+        $this->abandoning = true;
+    }
+
+    public function load(string $key, int $ttl, string $hash = ''): mixed
+    {
+        return $this->cache->load($key, $ttl, $hash);
+    }
+
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+    {
+        return $this->cache->save($key, $data, $hash);
+    }
+
+    public function touch(string $key, string $hash = ''): bool
+    {
+        return $this->cache->touch($key, $hash);
+    }
+
+    /** @return array<string> */
+    public function list(string $key): array
+    {
+        return $this->cache->list($key);
+    }
+
+    public function purge(string $key, string $hash = ''): bool
+    {
+        if ($this->abandoning && $hash !== '' && \str_ends_with($key, '#owners')) {
+            $this->abandoning = false;
+
+            return false;
+        }
+
+        return $this->cache->purge($key, $hash);
+    }
+
+    public function flush(): bool
+    {
+        return $this->cache->flush();
+    }
+
+    public function ping(): bool
+    {
+        return true;
+    }
+
+    public function getSize(): int
+    {
+        return $this->cache->getSize();
+    }
+
+    public function getName(?string $key = null): string
+    {
+        return 'abandoning';
+    }
+
+    public function getGeneration(string $key): string
+    {
+        return $this->cache->getGeneration($key);
+    }
+
+    public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
+    {
+        return $this->cache->saveWithLease($key, $data, $hash, $generation);
+    }
+}
+
+/**
+ * A cache without generations that runs a callback just before one save lands, as when a write commits between a
+ * reader's database read and its fill.
+ */
+final class InterleavingMemory extends MemoryCache
+{
+    private ?string $fragment = null;
+
+    private ?Closure $callback = null;
+
+    public function beforeNextSave(string $fragment, Closure $callback): void
+    {
+        $this->fragment = $fragment;
+        $this->callback = $callback;
+    }
+
+    #[\Override]
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+    {
+        $callback = $this->callback;
+        if ($callback !== null && $this->fragment !== null && \str_contains($key, $this->fragment)) {
+            $this->callback = null;
+            $callback();
+        }
+
+        return parent::save($key, $data, $hash);
     }
 }

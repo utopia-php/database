@@ -452,6 +452,11 @@ trait Documents
             $queries = $this->convertQueries($collection, $queries, $joinedByAlias);
         }
 
+        $outerJoinIds = $this->outerJoinIdSelections($selects, $joins, $joinedByAlias);
+        if ($outerJoinIds !== []) {
+            $queries[] = Query::select($outerJoinIds);
+        }
+
         $selections = $this->validateSelections($collection, $selects);
         $nestedSelections = $this->relationshipHook?->processQueries($relationships, $queries) ?? [];
 
@@ -609,6 +614,9 @@ trait Documents
         $document = $this->decode($collection, $document, $selections);
         if (! empty($joins)) {
             $document = $this->decodeJoins($document, $joinedByAlias);
+            foreach ($outerJoinIds as $outerJoinId) {
+                $document->removeAttribute($outerJoinId);
+            }
         }
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
@@ -3695,9 +3703,12 @@ trait Documents
             $cursor = [];
         }
 
+        $outerJoinIds = $distinct ? [] : $this->outerJoinIdSelections($selects, $joins, $joinedCollections);
+
         /** @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
+            $outerJoinIds === [] ? [] : [Query::select($outerJoinIds)],
             $this->convertQueries($collection, \array_merge($filters, $aggregations, $having, $joins), $joinedByAlias),
         );
 
@@ -3843,6 +3854,9 @@ trait Documents
             $node = $this->decode($collection, $node, $selections);
             if ($joinedCollections !== []) {
                 $node = $this->decodeJoins($node, $joinedCollections);
+                foreach ($outerJoinIds as $outerJoinId) {
+                    $node->removeAttribute($outerJoinId);
+                }
             }
 
             // Convert to custom document type if mapped
@@ -4500,6 +4514,59 @@ trait Documents
         }
 
         return $collections;
+    }
+
+    /**
+     * The `alias.$id` of each join whose attributes a select names without it, when an outer join
+     * can leave a joined row unmatched: the joined `$id` is what tells an unmatched row from a
+     * matched one when the row is decoded, so it is selected for that and left out of the result.
+     *
+     * @param  array<Query>  $selects
+     * @param  array<Query>  $joins
+     * @param  array<string, Document>  $joinedCollections  The collection each join alias reads
+     * @return list<string>
+     */
+    private function outerJoinIdSelections(array $selects, array $joins, array $joinedCollections): array
+    {
+        if ($selects === [] || $joinedCollections === []) {
+            return [];
+        }
+
+        $outer = false;
+        foreach ($joins as $join) {
+            if (\in_array($join->getMethod(), [Method::LeftJoin, Method::RightJoin, Method::FullOuterJoin], true)) {
+                $outer = true;
+                break;
+            }
+        }
+        if (! $outer) {
+            return [];
+        }
+
+        $selectedAliases = [];
+        foreach ($selects as $select) {
+            foreach ($select->getValues() as $value) {
+                if (! \is_string($value)) {
+                    continue;
+                }
+                if ($value === '*') {
+                    return [];
+                }
+                $dot = \strpos($value, '.');
+                if ($dot !== false) {
+                    $selectedAliases[\substr($value, 0, $dot)][\substr($value, $dot + 1)] = true;
+                }
+            }
+        }
+
+        $ids = [];
+        foreach ($selectedAliases as $alias => $attributes) {
+            if (isset($joinedCollections[$alias]) && ! isset($attributes[Document::ID])) {
+                $ids[] = $alias.'.'.Document::ID;
+            }
+        }
+
+        return $ids;
     }
 
     /**

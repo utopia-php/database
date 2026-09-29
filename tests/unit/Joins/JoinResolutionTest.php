@@ -229,6 +229,50 @@ final class JoinResolutionTest extends TestCase
         }
     }
 
+    public function testAnUnmatchedOuterRowWithoutASelectedIdIsDropped(): void
+    {
+        $join = Query::leftJoin('themes', 'theme', '$id', '=', 'th');
+        $select = Query::select(['name', 'th.tags', 'th.when']);
+
+        $rows = [];
+        foreach ($this->database->find('tickets', [$join, $select]) as $row) {
+            $rows[$row->getId()] = $row;
+        }
+        $rows['k4 read by id'] = $this->database->getDocument('tickets', 'k4', [$join, $select]);
+        $rows['k2 read by id'] = $this->database->getDocument('tickets', 'k2', [$join, $select]);
+
+        foreach ($rows as $name => $row) {
+            $this->assertFalse($row->offsetExists('th.$id'), $name.': the joined $id was not selected');
+        }
+        foreach (['k4', 'k4 read by id'] as $name) {
+            $this->assertNull($rows[$name]->getAttribute('th.tags'), $name);
+            $this->assertNull($rows[$name]->getAttribute('th.when'), $name);
+        }
+        foreach (['k2', 'k2 read by id'] as $name) {
+            $this->assertSame(['a', 'b'], $rows[$name]->getAttribute('th.tags'), $name);
+            $this->assertSame('2024-01-01T07:00:00.000+00:00', $rows[$name]->getAttribute('th.when'), $name);
+        }
+
+        $selected = $this->database->find('tickets', [$join, Query::select(['name', 'th.$id', 'th.tags']), Query::equal('$id', ['k2', 'k4'])]);
+        $this->assertSame(
+            [['k2', 't2', ['a', 'b']], ['k4', null, null]],
+            \array_map(static fn (Document $row): array => [$row->getId(), $row->getAttribute('th.$id'), $row->getAttribute('th.tags')], $selected),
+        );
+    }
+
+    public function testADistinctOuterJoinReadSelectsNoJoinedIdOfItsOwn(): void
+    {
+        $rows = $this->database->find('tickets', [
+            Query::leftJoin('themes', 'theme', '$id', '=', 'th'),
+            Query::select(['th.score']),
+            Query::distinct(),
+        ]);
+
+        $scores = \array_map(static fn (Document $row): mixed => $row->getAttribute('th.score'), $rows);
+        \sort($scores);
+        $this->assertSame([null, 5], $scores);
+    }
+
     /**
      * @param  array<Document>  $themes
      * @return list<string>

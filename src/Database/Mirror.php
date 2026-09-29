@@ -363,13 +363,14 @@ class Mirror extends Database
     }
 
     /**
+     * A destination that cannot apply the setting is reported through onError(), like setTimeout().
+     *
      * {@inheritdoc}
      */
     public function enableLocks(bool $enabled): static
     {
         parent::enableLocks($enabled);
-        $this->source->enableLocks($enabled);
-        $this->destination?->enableLocks($enabled);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;
     }

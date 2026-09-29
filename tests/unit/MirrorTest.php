@@ -837,4 +837,33 @@ class MirrorTest extends TestCase
 
         return [new Mirror($source, $destination), $source, $destination];
     }
+
+    public function testEnableLocksFailureOnTheDestinationReachesOnError(): void
+    {
+        $source = new Database(self::configurableAdapter(), new Cache(new None()));
+        $destination = new Database(new class () extends Memory {
+            /**
+             * @return array<Capability>
+             */
+            public function capabilities(): array
+            {
+                return [...parent::capabilities(), Capability::AlterLock];
+            }
+
+            public function enableAlterLocks(bool $enable): self
+            {
+                throw new RuntimeException('destination unreachable');
+            }
+        }, new Cache(new None()));
+        $mirror = new Mirror($source, $destination);
+        $errors = [];
+        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+
+        $mirror->enableLocks(true);
+
+        $this->assertTrue($source->getAdapter()->getAlterLocks());
+        $this->assertSame([['enableLocks', 'destination unreachable']], $errors);
+    }
 }

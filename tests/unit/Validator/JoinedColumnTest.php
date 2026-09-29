@@ -7,6 +7,8 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Query;
+use Utopia\Database\RelationSide;
+use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Queries\Document as DocumentQueries;
 use Utopia\Database\Validator\Query\Aggregate;
@@ -104,7 +106,7 @@ final class JoinedColumnTest extends TestCase
         $this->assertFalse($validator->isValid([self::join(), $query('note.visits')]), 'an attribute of the main collection is not a column of the join');
         $this->assertSame('Invalid query: Attribute not found in schema: note.visits', $validator->getDescription());
 
-        $this->assertFalse($validator->isValid([self::join(), $query('note.customer')]), 'a relationship has no column a join reads');
+        $this->assertFalse($validator->isValid([self::join(), $query('note.customer')]), 'a relationship side that holds no column is no column a join reads');
         $this->assertSame('Invalid query: Attribute not found in schema: note.customer', $validator->getDescription());
     }
 
@@ -301,7 +303,12 @@ final class JoinedColumnTest extends TestCase
             $this->attribute('score', ColumnType::Integer),
             $this->attribute('ratio', ColumnType::Double),
             $this->attribute('tags', ColumnType::String, array: true),
-            $this->attribute('customer', ColumnType::Relationship),
+            new Document([
+                '$id' => 'customer',
+                'key' => 'customer',
+                'type' => ColumnType::Relationship->value,
+                'options' => ['relationType' => RelationType::ManyToMany->value, 'side' => RelationSide::Parent->value],
+            ]),
         ]);
     }
 

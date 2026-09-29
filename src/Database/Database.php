@@ -427,7 +427,7 @@ class Database
 
                 /** @var array<string, mixed> $decoded */
                 if (array_key_exists(Document::ID, $decoded)) {
-                    return new Document($decoded);
+                    return Document::fromStorage($decoded);
                 }
 
                 $decoded = array_map(function ($item) use ($document, $attribute) {
@@ -442,7 +442,7 @@ class Database
                         return Index::fromArray($item);
                     }
 
-                    return new Document($item);
+                    return Document::fromStorage($item);
                 }, $decoded);
 
                 return $decoded;
@@ -3031,16 +3031,63 @@ class Database
     }
 
     /**
-     * Create a document instance of the appropriate type
+     * Create a document instance of the appropriate type from data read back from storage or the
+     * cache. Non-string permissions are dropped, as Document::fromStorage() does, instead of failing
+     * the read; a mapped type is kept.
      *
      * @param  string  $collection  Collection ID
      * @param  array<string, mixed>  $data  Document data
      */
     protected function createDocumentInstance(string $collection, array $data): Document
     {
-        $className = $this->documentTypes[$collection] ?? Document::class;
+        $className = $this->documentTypes[$collection] ?? null;
+        if ($className === null) {
+            return Document::fromStorage($data);
+        }
 
-        return $className::fromArray($data);
+        try {
+            return $className::fromArray($data);
+        } catch (StructureException) {
+            return $className::fromArray(self::withStringPermissions($data));
+        }
+    }
+
+    /**
+     * The data with the non-string permissions of the document, and of the documents nested in it
+     * the way the Document constructor nests them, dropped.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function withStringPermissions(array $data): array
+    {
+        $permissions = $data[Document::PERMISSIONS] ?? null;
+        if (\is_array($permissions)) {
+            $data[Document::PERMISSIONS] = \array_values(\array_filter($permissions, \is_string(...)));
+        }
+
+        foreach ($data as $key => $value) {
+            if (! \is_array($value)) {
+                continue;
+            }
+
+            if (isset($value[Document::ID]) || isset($value[Document::COLLECTION])) {
+                /** @var array<string, mixed> $value */
+                $data[$key] = self::withStringPermissions($value);
+
+                continue;
+            }
+
+            foreach ($value as $childKey => $child) {
+                if (\is_array($child) && (isset($child[Document::ID]) || isset($child[Document::COLLECTION]))) {
+                    /** @var array<string, mixed> $child */
+                    $value[$childKey] = self::withStringPermissions($child);
+                }
+            }
+            $data[$key] = $value;
+        }
+
+        return $data;
     }
 
     /**

@@ -18,6 +18,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 
 final class DocumentCacheEpochTest extends TestCase
 {
@@ -65,21 +66,21 @@ final class DocumentCacheEpochTest extends TestCase
         $this->assertNotSame($before, $after);
     }
 
-    public function testCreateDocumentDoesNotFailWhenEpochPurgeReturnsFalse(): void
+    public function testCreateDocumentsDoesNotFailWhenEpochPurgeReturnsFalse(): void
     {
         [$database, $adapter] = $this->createDatabase();
         $this->assertTrue($database->purgeCachedCollection('webhooks'));
         $adapter->failPurges();
 
-        $document = $database->createDocument('webhooks', new Document([
+        $created = $database->createDocuments('webhooks', [new Document([
             '$id' => 'hook',
             '$permissions' => [
                 Permission::read(Role::any()),
                 Permission::update(Role::any()),
             ],
-        ]));
+        ])]);
 
-        $this->assertSame('hook', $document->getId());
+        $this->assertSame(1, $created);
         $this->assertSame('hook', $database->getDocument('webhooks', 'hook')->getId());
     }
 
@@ -95,7 +96,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache->failBlocks();
 
         try {
-            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
             $this->fail('Document cache block failure was not propagated');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('block document cache epoch', $error->getMessage());
@@ -116,7 +117,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache->failActivations();
 
         try {
-            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
             $this->fail('Document cache activation failure was not propagated');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
@@ -154,8 +155,8 @@ final class DocumentCacheEpochTest extends TestCase
 
         try {
             $database->withTransaction(function () use ($database): void {
-                $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
-                $database->updateDocument('logs', 'log', new Document(['name' => 'updated']));
+                $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+                $this->renameDocument($database, 'logs', 'log', 'updated');
             });
             $this->fail('Document cache activation failure was not propagated');
         } catch (\RuntimeException $error) {
@@ -210,9 +211,8 @@ final class DocumentCacheEpochTest extends TestCase
 
         $this->assertTrue($cache->flush());
         $cache->flushDuringActivation();
-        $updated = $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
 
-        $this->assertSame('updated', $updated->getAttribute('name'));
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
     }
 
@@ -240,7 +240,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache->failDuringActivation();
 
         try {
-            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
             $this->fail('Document cache activation purge failure was not propagated');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('finish document cache invalidation', $error->getMessage());
@@ -288,10 +288,10 @@ final class DocumentCacheEpochTest extends TestCase
         }
 
         $writer->withTransaction(function () use ($writer, $other, $cache): void {
-            $writer->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->renameDocument($writer, 'webhooks', 'hook', 'updated');
             $cache->failBlocks();
             try {
-                $other->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+                $this->renameDocument($other, 'webhooks', 'hook', 'updated');
                 $this->fail('The other writer\'s block did not fail');
             } catch (\RuntimeException $error) {
                 $this->assertStringContainsString('block document cache epoch', $error->getMessage());
@@ -314,7 +314,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache->corruptFieldWrites();
 
         try {
-            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
             $this->fail('A corrupted document cache owner registration was accepted');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('Invalid document cache owner', $error->getMessage());
@@ -336,7 +336,7 @@ final class DocumentCacheEpochTest extends TestCase
         $cache->failFieldPurges();
 
         try {
-            $database->updateDocument('webhooks', 'hook', new Document(['name' => 'updated']));
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
             $this->fail('A document cache owner release failure was not propagated');
         } catch (\RuntimeException $error) {
             $this->assertStringContainsString('Failed to release document cache owner', $error->getMessage());
@@ -345,6 +345,11 @@ final class DocumentCacheEpochTest extends TestCase
         [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
         $this->assertDocumentCacheEpochBlocked($database, $collectionKey);
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+    }
+
+    private function renameDocument(Database $database, string $collection, string $id, string $name): int
+    {
+        return $database->updateDocuments($collection, new Document(['name' => $name]), [Query::equal('$id', [$id])]);
     }
 
     private function assertDocumentCacheEpochBlocked(Database $database, string $collectionKey): void

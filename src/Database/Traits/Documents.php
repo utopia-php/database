@@ -41,6 +41,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
@@ -4491,14 +4492,8 @@ trait Documents
         $collections = [];
         foreach (\array_values($joins) as $position => $join) {
             $alias = $join->getJoinAlias();
-            // The adapter returns an undeclared join's values under the alias SQL::generateJoinAlias()
-            // gives it; this must name it the same way.
             if ($alias === '') {
-                $number = $position;
-                do {
-                    $alias = 'j'.$number++;
-                } while (isset($taken[$alias]));
-                $taken[$alias] = true;
+                $alias = Storage::joinAlias($position, $taken);
             }
 
             $collections[$alias] = $joinedCollections[$join->getAttribute()] ?? new Document();

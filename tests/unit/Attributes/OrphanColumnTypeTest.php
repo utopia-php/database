@@ -17,6 +17,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
@@ -29,6 +30,10 @@ final class OrphanColumnTypeTest extends TestCase
     private const string KEY = 'value';
 
     private const string DOCUMENT = 'row';
+
+    private const string UNVALIDATED = 'unvalidated';
+
+    private const int OVERSIZED_NAME_LENGTH = 257;
 
     private PDO $pdo;
 
@@ -188,6 +193,93 @@ final class OrphanColumnTypeTest extends TestCase
         $document = $database->getDocument(self::COLLECTION, self::DOCUMENT);
         $this->assertSame(self::DOCUMENT, $document->getId());
         $this->assertNull($document->getAttribute(self::KEY));
+    }
+
+    public function testRenameAdoptsAnExistingSchemaOnlyTarget(): void
+    {
+        [$database, $adapter] = $this->database();
+        $database->createAttribute(self::COLLECTION, Attribute::string(key: 'before', size: 64));
+        $adapter->createAttribute(self::COLLECTION, Attribute::string(key: 'after', size: 64));
+
+        $this->assertTrue($database->renameAttribute(self::COLLECTION, 'before', 'after'));
+
+        $this->assertSame(['after'], $this->keys($database));
+    }
+
+    public function testCreateAttributesRollbackDropsTheBatch(): void
+    {
+        $adapter = new SQLite(new PDO('sqlite::memory:'));
+        $database = $this->unvalidatedDatabase($adapter);
+
+        try {
+            $database->createAttributes(self::UNVALIDATED, [
+                Attribute::integer(key: 'age'),
+                Attribute::string(key: 'nick', size: 16),
+            ]);
+            $this->fail('The metadata write of an oversized collection name must fail');
+        } catch (DatabaseException $error) {
+            $this->assertStringStartsWith('Failed to persist metadata after retries for attributes creation: ', $error->getMessage());
+            $this->assertInstanceOf(StructureException::class, $error->getPrevious());
+        }
+
+        $this->assertSame([], \array_intersect(['age', 'nick'], $this->columns($database, self::UNVALIDATED)));
+        $this->assertSame([], $database->getCollection(self::UNVALIDATED)->attributes);
+    }
+
+    public function testCreateAttributesRollbackCollectsCleanupErrors(): void
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            public function deleteAttribute(string $collection, string $id): bool
+            {
+                if ($id === 'nick') {
+                    throw new DatabaseException('Column is locked');
+                }
+
+                return parent::deleteAttribute($collection, $id);
+            }
+        };
+        $database = $this->unvalidatedDatabase($adapter);
+
+        try {
+            $database->createAttributes(self::UNVALIDATED, [
+                Attribute::integer(key: 'age'),
+                Attribute::string(key: 'nick', size: 16),
+            ]);
+            $this->fail('The metadata write of an oversized collection name must fail');
+        } catch (DatabaseException $error) {
+            $this->assertStringStartsWith('Failed to persist metadata after retries and cleanup encountered errors for attributes creation: ', $error->getMessage());
+            $this->assertStringEndsWith(' | Cleanup errors: Column is locked', $error->getMessage());
+            $this->assertInstanceOf(StructureException::class, $error->getPrevious());
+        }
+
+        $columns = $this->columns($database, self::UNVALIDATED);
+        $this->assertNotContains('age', $columns);
+        $this->assertContains('nick', $columns);
+    }
+
+    private function unvalidatedDatabase(SQLite $adapter): Database
+    {
+        $database = new Database($adapter, new Cache(new None()));
+        $database
+            ->setAuthorization(new Authorization())
+            ->setDatabase('orphan_column_type')
+            ->setNamespace('orphan_column_type_'.\uniqid());
+        $database->create();
+        $collection = new Collection(id: self::UNVALIDATED, name: \str_repeat('n', self::OVERSIZED_NAME_LENGTH));
+        $database->skipValidation(fn (): Collection => $database->createCollection($collection));
+
+        return $database;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function columns(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Document $column): string => $column->getId(),
+            $database->getSchemaAttributes($collection),
+        );
     }
 
     /**

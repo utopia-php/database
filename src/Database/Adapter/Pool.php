@@ -527,20 +527,6 @@ class Pool extends Adapter
         return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
-    /**
-     * Unreachable: _perms._column holds the attribute's immutable identity, which a
-     * rename does not change, so Database::renameAttribute() moves no permission rows.
-     * Kept only to satisfy the Adapter contract until that method is removed from it.
-     *
-     * @param Document $collection
-     * @param string $old
-     * @param string $new
-     * @return int documents whose permissions changed
-     */
-    public function renameColumnPermissions(Document $collection, string $old, string $new): int
-    {
-        return 0;
-    }
 
     public function deleteColumnPermissions(Document $collection, string $column): int
     {

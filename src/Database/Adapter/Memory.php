@@ -2092,28 +2092,14 @@ class Memory extends Adapter
         return true;
     }
 
-    /**
-     * Unreachable: _perms._column holds the attribute's immutable identity, which a
-     * rename does not change, so Database::renameAttribute() moves no permission rows.
-     * Kept only to satisfy the Adapter contract until that method is removed from it.
-     *
-     * @param Document $collection
-     * @param string $old
-     * @param string $new
-     * @return int documents whose permissions changed
-     */
-    public function renameColumnPermissions(Document $collection, string $old, string $new): int
-    {
-        return 0;
-    }
 
     public function deleteColumnPermissions(Document $collection, string $column): int
     {
-        return $this->repointColumnPermissions($collection, $column, null);
+        return $this->deleteColumnPermissionRows($collection, $column);
     }
 
     /**
-     * Move or drop the permissions scoped to one column.
+     * Drop the permissions scoped to one column.
      *
      * Both the stored _permissions and this adapter's role index are rewritten. The
      * index holds roles with the column stripped, so it cannot be left alone: dropping
@@ -2124,12 +2110,11 @@ class Memory extends Adapter
      * them settles both at once; here they are separate and both have to be told.
      *
      * @param Document $collection
-     * @param string $old
-     * @param string|null $new new column key, or null to drop the permissions
+     * @param string $column
      * @return int documents whose permissions changed
      * @throws DatabaseException
      */
-    private function repointColumnPermissions(Document $collection, string $old, ?string $new): int
+    private function deleteColumnPermissionRows(Document $collection, string $column): int
     {
         $key = $this->key($collection->getId());
         $updated = 0;
@@ -2148,26 +2133,12 @@ class Memory extends Adapter
             $changed = false;
 
             foreach ($permissions as $permission) {
-                $parsed = Permission::parse($permission);
-
-                if ($parsed->getColumn() !== $old) {
-                    $rewritten[] = $permission;
+                if (Permission::parse($permission)->getColumn() === $column) {
+                    $changed = true;
                     continue;
                 }
 
-                $changed = true;
-
-                if (\is_null($new)) {
-                    continue;
-                }
-
-                $rewritten[] = (new Permission(
-                    $parsed->getPermission(),
-                    $parsed->getRole(),
-                    $parsed->getIdentifier(),
-                    $parsed->getDimension(),
-                    $new
-                ))->toString();
+                $rewritten[] = $permission;
             }
 
             if (!$changed) {

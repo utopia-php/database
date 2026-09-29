@@ -1021,15 +1021,6 @@ abstract class Adapter
      */
     abstract public function getSupportForColumnPermissions(): bool;
 
-    /**
-     * Repoint column-scoped permissions at a renamed column.
-     *
-     * @param Document $collection
-     * @param string $old
-     * @param string $new
-     * @return int documents whose $permissions changed
-     */
-    abstract public function renameColumnPermissions(Document $collection, string $old, string $new): int;
 
     /**
      * Drop every permission scoped to a column that no longer exists.

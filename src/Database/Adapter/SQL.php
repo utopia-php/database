@@ -2094,35 +2094,7 @@ abstract class SQL extends Adapter
     }
 
     /**
-     * Repoint column-scoped permissions at a renamed column.
-     *
-     * @param Document $collection
-     * @param string $old
-     * @param string $new
-     * @return int documents whose permissions changed
-     * @throws DatabaseException
-     */
-    /**
-     * Unreachable: _perms._column holds the attribute's immutable identity, which a
-     * rename does not change, so Database::renameAttribute() moves no permission rows.
-     * Kept only to satisfy the Adapter contract until that method is removed from it.
-     *
-     * @param Document $collection
-     * @param string $old
-     * @param string $new
-     * @return int documents whose permissions changed
-     */
-    public function renameColumnPermissions(Document $collection, string $old, string $new): int
-    {
-        return 0;
-    }
-
-    /**
-     * Drop every permission scoped to a column that no longer exists.
-     *
-     * Required, not hygiene: because permissions name the column by key, leaving
-     * rows behind means re-creating a column under the same name inherits the old
-     * column's grants.
+     * Drop the permissions scoped to one column.
      *
      * @param Document $collection
      * @param string $column
@@ -2131,7 +2103,7 @@ abstract class SQL extends Adapter
      */
     public function deleteColumnPermissions(Document $collection, string $column): int
     {
-        return $this->repointColumnPermissions($collection, $column, null);
+        return $this->deleteColumnPermissionRows($collection, $column);
     }
 
     /**
@@ -2147,12 +2119,11 @@ abstract class SQL extends Adapter
      * targeted instead of scanning the whole collection.
      *
      * @param Document $collection
-     * @param string $old
-     * @param string|null $new new column key, or null to drop the permissions
+     * @param string $column
      * @return int documents whose permissions changed
      * @throws DatabaseException
      */
-    private function repointColumnPermissions(Document $collection, string $old, ?string $new): int
+    private function deleteColumnPermissionRows(Document $collection, string $column): int
     {
         $name = $this->filter($collection->getId());
         $tenantQuery = $this->getTenantQuery($collection->getId());
@@ -2170,11 +2141,9 @@ abstract class SQL extends Adapter
         // read cannot seek and scans whatever it returns; taking more per pass is the
         // only way to scan fewer times.
         //
-        // The loop advances on _id rather than trusting the work to remove its own rows
-        // from the predicate. A delete does remove them, but a repoint only rewrites
-        // _column -- and under a case-insensitive collation, which is the default for
-        // utf8mb4, a rename that changes only case leaves every rewritten row still
-        // matching _column = :_old. The predicate would return the same batch forever.
+        // The loop advances on _id rather than trusting the deletes to drain the
+        // predicate. They do, but paging on the primary key makes the whole sweep one
+        // ordered walk of the table instead of restarting the scan on every pass.
         $cursor = 0;
 
         while (true) {
@@ -2190,7 +2159,7 @@ abstract class SQL extends Adapter
                 ORDER BY _id
                 LIMIT " . self::SELECT_BATCH_SIZE . "
             ");
-            $stmt->bindValue(':_column', $old);
+            $stmt->bindValue(':_column', $column);
             $stmt->bindValue(':_cursor', $cursor);
             if ($this->sharedTables) {
                 $stmt->bindValue(':_tenant', $this->tenant);
@@ -2214,40 +2183,19 @@ abstract class SQL extends Adapter
                 ));
 
                 // The stored $permissions on the row and the _perms rows hold the same
-                // fact, so they move together, scoped to this batch.
-                $updated += $this->repointPermissionsJson($name, $documents, $placeholders, $tenantQuery, $old, $new);
+                // fact, so they go together, scoped to this batch.
+                $updated += $this->removePermissionsJson($name, $documents, $placeholders, $tenantQuery, $column);
 
-                if (!\is_null($new)) {
-                    // A document can already hold the same role and action scoped to the
-                    // destination column. Repointing the old scope onto it would then be a
-                    // second identical row, which _index1 refuses -- and by this point the
-                    // physical column has been renamed, so the failure would leave the
-                    // schema renamed with permissions still describing the old state.
-                    // The old scope is redundant once the destination exists, so drop it
-                    // instead of repointing it.
-                    $this->dropCollidingColumnPermissions($table, $documents, $placeholders, $tenantQuery, $old, $new);
-                }
-
-                // Addressed by primary key. Rows the collision pass above already removed
-                // simply match nothing.
+                // Addressed by primary key.
                 $sequencePlaceholders = \implode(', ', \array_map(
                     fn ($index) => ":_id_{$index}",
                     \array_keys($sequences)
                 ));
 
-                if (\is_null($new)) {
-                    $mutate = $this->getPDO()->prepare("
+                $mutate = $this->getPDO()->prepare("
                     DELETE FROM {$table}
                     WHERE _id IN ({$sequencePlaceholders})
                 ");
-                } else {
-                    $mutate = $this->getPDO()->prepare("
-                    UPDATE {$table}
-                    SET _column = :_new
-                    WHERE _id IN ({$sequencePlaceholders})
-                ");
-                    $mutate->bindValue(':_new', $new);
-                }
 
                 foreach ($sequences as $index => $sequence) {
                     $mutate->bindValue(":_id_{$index}", $sequence);
@@ -2262,84 +2210,6 @@ abstract class SQL extends Adapter
         return $updated;
     }
 
-    /**
-     * Drop old-column rows whose destination scope already exists on the same
-     * document, role and action.
-     *
-     * @param string $table
-     * @param array<string> $documents
-     * @param string $placeholders
-     * @param string $tenantQuery
-     * @param string $old
-     * @param string $new
-     * @return void
-     * @throws DatabaseException
-     */
-    private function dropCollidingColumnPermissions(
-        string $table,
-        array $documents,
-        string $placeholders,
-        string $tenantQuery,
-        string $old,
-        string $new
-    ): void {
-        $stmt = $this->getPDO()->prepare("
-            SELECT _document, _type, _permission, _column
-            FROM {$table}
-            WHERE _column IN (:_old, :_new)
-              AND _document IN ({$placeholders})
-            {$tenantQuery}
-        ");
-        $stmt->bindValue(':_old', $old);
-        $stmt->bindValue(':_new', $new);
-        foreach ($documents as $index => $id) {
-            $stmt->bindValue(":_uid_{$index}", $id);
-        }
-        if ($this->sharedTables) {
-            $stmt->bindValue(':_tenant', $this->tenant);
-        }
-        $this->execute($stmt);
-
-        $rows = $stmt->fetchAll();
-        $stmt->closeCursor();
-
-        // Resolved here rather than in SQL: a DELETE whose subquery reads the table it
-        // deletes from is rejected by MySQL, and the workarounds differ per engine.
-        $seen = [];
-        foreach ($rows as $row) {
-            if ($row['_column'] === $new) {
-                $seen[$row['_document'] . "\0" . $row['_type'] . "\0" . $row['_permission']] = true;
-            }
-        }
-
-        $delete = $this->getPDO()->prepare("
-            DELETE FROM {$table}
-            WHERE _document = :_document
-              AND _type = :_type
-              AND _permission = :_permission
-              AND _column = :_old
-            {$tenantQuery}
-        ");
-
-        foreach ($rows as $row) {
-            if ($row['_column'] !== $old) {
-                continue;
-            }
-
-            if (!isset($seen[$row['_document'] . "\0" . $row['_type'] . "\0" . $row['_permission']])) {
-                continue;
-            }
-
-            $delete->bindValue(':_document', $row['_document']);
-            $delete->bindValue(':_type', $row['_type']);
-            $delete->bindValue(':_permission', $row['_permission']);
-            $delete->bindValue(':_old', $old);
-            if ($this->sharedTables) {
-                $delete->bindValue(':_tenant', $this->tenant);
-            }
-            $this->execute($delete);
-        }
-    }
 
     /**
      * Rewrite the stored $permissions of one batch of documents.
@@ -2348,18 +2218,16 @@ abstract class SQL extends Adapter
      * @param array<string> $documents
      * @param string $placeholders
      * @param string $tenantQuery
-     * @param string $old
-     * @param string|null $new
+     * @param string $column
      * @return int documents whose $permissions changed
      * @throws DatabaseException
      */
-    private function repointPermissionsJson(
+    private function removePermissionsJson(
         string $name,
         array $documents,
         string $placeholders,
         string $tenantQuery,
-        string $old,
-        ?string $new
+        string $column
     ): int {
         $select = $this->getPDO()->prepare("
             SELECT _uid, _permissions
@@ -2399,7 +2267,7 @@ abstract class SQL extends Adapter
             $current = $row['_permissions'] ?? '[]';
 
             for ($attempt = 0; $attempt < self::REWRITE_MAX_ATTEMPTS; $attempt++) {
-                $rewritten = $this->withoutColumnPermissions($current, $old, $new);
+                $rewritten = $this->withoutColumnPermissions($current, $column);
 
                 if ($rewritten === null) {
                     // Nothing on this row names the column any more.
@@ -2437,11 +2305,10 @@ abstract class SQL extends Adapter
      * Rebuild a stored permissions JSON without the grants scoped to one column.
      *
      * @param string $stored the JSON as it is on the row
-     * @param string $old the column whose grants are going
-     * @param string|null $new new column key, or null to drop the grants
-     * @return string|null the new JSON, or null when nothing names $old
+     * @param string $column the column whose grants are going
+     * @return string|null the new JSON, or null when nothing names $column
      */
-    private function withoutColumnPermissions(string $stored, string $old, ?string $new): ?string
+    private function withoutColumnPermissions(string $stored, string $column): ?string
     {
         $permissions = \json_decode($stored, true);
 
@@ -2453,26 +2320,12 @@ abstract class SQL extends Adapter
         $changed = false;
 
         foreach ($permissions as $permission) {
-            $parsed = Permission::parse($permission);
-
-            if ($parsed->getColumn() !== $old) {
-                $rewritten[] = $permission;
+            if (Permission::parse($permission)->getColumn() === $column) {
+                $changed = true;
                 continue;
             }
 
-            $changed = true;
-
-            if (\is_null($new)) {
-                continue;
-            }
-
-            $rewritten[] = (new Permission(
-                $parsed->getPermission(),
-                $parsed->getRole(),
-                $parsed->getIdentifier(),
-                $parsed->getDimension(),
-                $new
-            ))->toString();
+            $rewritten[] = $permission;
         }
 
         if (!$changed) {

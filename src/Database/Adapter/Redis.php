@@ -776,19 +776,6 @@ class Redis extends Adapter
         return false;
     }
 
-    /**
-     * Column-level permissions are not supported by this adapter, so a rename
-     * can never have column-scoped permissions to repoint.
-     *
-     * @param Document $collection
-     * @param string $old
-     * @param string $new
-     * @return int documents whose permissions changed
-     */
-    public function renameColumnPermissions(Document $collection, string $old, string $new): int
-    {
-        return 0;
-    }
 
     public function deleteColumnPermissions(Document $collection, string $column): int
     {

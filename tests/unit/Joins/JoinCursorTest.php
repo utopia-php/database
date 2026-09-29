@@ -5,6 +5,7 @@ namespace Tests\Unit\Joins;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\NativeFullOuterJoinSQLite;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -13,6 +14,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Order as OrderException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -166,6 +168,52 @@ final class JoinCursorTest extends TestCase
         $joined = $row->getAttribute('n.$id');
 
         return ($row->getId() === '' ? '-' : $row->getId()).'/'.(\is_string($joined) ? $joined : '-');
+    }
+
+    /**
+     * @return iterable<string, array{Method, bool, list<Query>, list<string>}>
+     */
+    public static function outerJoins(): iterable
+    {
+        $inner = ['a1/n1', 'a1/n2', 'a1/n3', 'a2/n4', 'a2/n6'];
+        $orders = [
+            'joined ascending' => [Query::orderAsc('n.rank')],
+            'joined descending' => [Query::orderDesc('n.rank')],
+            'main attribute' => [Query::orderAsc('rank')],
+            'default order' => [],
+        ];
+
+        foreach ([
+            'right join' => [Method::RightJoin, false, [...$inner, '-/n5']],
+            'emulated full outer join' => [Method::FullOuterJoin, false, [...$inner, 'a3/-', '-/n5']],
+            'native full outer join' => [Method::FullOuterJoin, true, [...$inner, 'a3/-', '-/n5']],
+        ] as $joinName => [$join, $native, $rows]) {
+            foreach ($orders as $orderName => $order) {
+                yield "{$joinName}, {$orderName}" => [$join, $native, $order, $rows];
+            }
+        }
+    }
+
+    /**
+     * @param  list<Query>  $order
+     * @param  list<string>  $rows
+     */
+    #[DataProvider('outerJoins')]
+    public function testCursorPagingOverAnOuterJoinPassesRowsWithoutAMainDocument(Method $join, bool $native, array $order, array $rows): void
+    {
+        if ($native) {
+            $this->useDatabase(new NativeFullOuterJoinSQLite(new PDO('sqlite::memory:')));
+        }
+
+        $this->assertPagesEveryRowOnce([new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$order], $rows);
+    }
+
+    public function testPlainReadRefusesACursorWithoutAnIdAsBefore(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('Invalid query: Invalid cursor: UID must contain at most');
+
+        $this->database->find('authors', [Query::cursorAfter(new Document(['$collection' => 'authors', 'name' => 'a1', 'rank' => 1]))]);
     }
 
     private function useDatabase(SQLite $adapter): void

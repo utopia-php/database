@@ -50,6 +50,7 @@ use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\JoinedCollection;
 use Utopia\Database\Validator\Structure;
+use Utopia\Database\Validator\UID;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
 use Utopia\Query\OrderDirection;
@@ -3655,6 +3656,10 @@ trait Documents
         if (! empty($cursor)) {
             if ($isAggregation) {
                 throw new QueryException('Cursor pagination is not supported with aggregation queries');
+            }
+
+            if ($joins === [] && ! $distinct && $this->validate && $cursor->getId() === '') {
+                throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->getMaxUIDLength()))->getDescription());
             }
 
             if ($joins !== []) {

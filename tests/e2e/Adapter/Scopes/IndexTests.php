@@ -2,7 +2,10 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use DateTime as NativeDateTime;
 use Exception;
+use MongoDB\BSON\UTCDateTime;
+use stdClass;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
@@ -24,7 +27,9 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Mongo\Client;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\Order;
@@ -1146,6 +1151,96 @@ trait IndexTests
         $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'seenAt', '2026-01-01T00:00:00.000+00:00');
 
         $database->deleteCollection($collection);
+    }
+
+    public function testMongoKeyIndexesServeEqualityFilters(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $values = [
+            'count' => 7,
+            'price' => 9.5,
+            'active' => true,
+            'seenAt' => new UTCDateTime(new NativeDateTime('2026-01-01T00:00:00+00:00')),
+            'name' => 'first',
+        ];
+        $attributes = [
+            Attribute::integer(key: 'count'),
+            Attribute::double(key: 'price'),
+            Attribute::boolean(key: 'active'),
+            Attribute::datetime(key: 'seenAt'),
+            Attribute::string(key: 'name', size: 16),
+        ];
+        $indexes = \array_map(
+            fn (string $attribute): Index => Index::key(key: $attribute.'_key', attributes: [$attribute]),
+            \array_keys($values),
+        );
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+
+        $fromCollection = 'key_scan_collection_'.\uniqid();
+        $database->createCollection(new Collection(id: $fromCollection, attributes: $attributes, indexes: $indexes, permissions: $permissions, documentSecurity: false));
+
+        $fromIndex = 'key_scan_index_'.\uniqid();
+        $database->createCollection(new Collection(id: $fromIndex, attributes: $attributes, permissions: $permissions, documentSecurity: false));
+        foreach ($indexes as $index) {
+            $database->createIndex($fromIndex, $index);
+        }
+
+        foreach ([$fromCollection, $fromIndex] as $collection) {
+            $database->createDocument($collection, new Document([
+                'count' => 7,
+                'price' => 9.5,
+                'active' => true,
+                'seenAt' => '2026-01-01T00:00:00.000+00:00',
+                'name' => 'first',
+            ]));
+
+            foreach ($values as $attribute => $value) {
+                $plan = $this->explainMongoFind($adapter, $collection, [$attribute => $value]);
+
+                $this->assertStringContainsString('"stage":"IXSCAN"', $plan, $collection.': an equality on '.$attribute.' must scan its key index');
+                $this->assertStringContainsString('"indexName":"'.$attribute.'_key"', $plan, $collection.': an equality on '.$attribute.' must use '.$attribute.'_key');
+            }
+
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filter
+     */
+    private function explainMongoFind(Mongo $adapter, string $collection, array $filter): string
+    {
+        if ($adapter->getSharedTables()) {
+            $filter = [Storage::TENANT => $adapter->getTenant(), ...$filter];
+        }
+
+        $client = $adapter->getDriver();
+        $this->assertInstanceOf(Client::class, $client);
+
+        $explain = $client->query([
+            'explain' => [
+                'find' => $adapter->getNamespace().'_'.$adapter->filter($collection),
+                'filter' => $filter,
+            ],
+            'verbosity' => 'queryPlanner',
+        ]);
+        $this->assertInstanceOf(stdClass::class, $explain);
+
+        $planner = $explain->queryPlanner ?? null;
+        $this->assertInstanceOf(stdClass::class, $planner);
+
+        $plan = \json_encode($planner->winningPlan ?? null);
+        $this->assertIsString($plan);
+
+        return $plan;
     }
 
     /**

@@ -749,33 +749,21 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     }
                 }
 
-                // Add partial filter for indexes to avoid indexing null values
-                if (in_array($index->type, [
-                    IndexType::Unique,
-                    IndexType::Key,
-                ])) {
-                    $partialFilter = [];
+                if (in_array($index->type, [IndexType::Unique, IndexType::Key])) {
+                    $fields = [];
                     foreach ($attributes as $attr) {
-                        $attr = (string) $attr;
-                        // Find the matching attribute in collectionAttributes to get its type
-                        $attrType = 'string'; // Default fallback
+                        $attributeType = ColumnType::String;
                         foreach ($collectionAttributes as $collectionAttr) {
                             if ($collectionAttr->key === $attr) {
-                                $attrType = $this->getMongoTypeCode($collectionAttr->type);
+                                $attributeType = $collectionAttr->type;
                                 break;
                             }
                         }
 
-                        $attr = $this->filter($this->getInternalKeyForAttribute($attr));
-
-                        // Use both $exists: true and $type to exclude nulls and ensure correct type
-                        $partialFilter[$attr] = [
-                            '$exists' => true,
-                            '$type' => $attrType,
-                        ];
+                        $fields[$this->filter($this->getInternalKeyForAttribute($attr))] = $attributeType;
                     }
-                    if (! empty($partialFilter)) {
-                        $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
+                    if (! empty($fields)) {
+                        $newIndexes[$i]['partialFilterExpression'] = $this->getPartialFilterExpression($index->type, $fields);
                     }
                 }
             }
@@ -1151,15 +1139,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $indexes['expireAfterSeconds'] = $ttl;
         }
 
-        // Add partial filter for indexes to avoid indexing null values
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
-            $partialFilter = [];
+            $fields = [];
             foreach ($attributes as $i => $attr) {
-                $attributeType = Attribute::tryNormalizeType($indexAttributeTypes[$index->attributes[$i]] ?? '') ?? ColumnType::String;
-                $partialFilter[$attr] = ['$exists' => true, '$type' => $this->getMongoTypeCode($attributeType)];
+                $fields[$attr] = Attribute::tryNormalizeType($indexAttributeTypes[$index->attributes[$i]] ?? '') ?? ColumnType::String;
             }
-            if (! empty($partialFilter)) {
-                $indexes['partialFilterExpression'] = $partialFilter;
+            if (! empty($fields)) {
+                $indexes['partialFilterExpression'] = $this->getPartialFilterExpression($type, $fields);
             }
         }
         try {
@@ -4026,6 +4012,26 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         } catch (MongoException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * Both index types leave out documents without the field, so null values neither collide in a unique index nor
+     * fill a key index. Only unique indexes also require the stored type: MongoDB uses a partial index for a query
+     * only when the query implies its filter, and a filter on a value implies `$exists` but never `$type`.
+     *
+     * @param  array<string, ColumnType>  $fields  stored field name => attribute type
+     * @return array<string, array<string, mixed>>
+     */
+    private function getPartialFilterExpression(IndexType $type, array $fields): array
+    {
+        $filter = [];
+        foreach ($fields as $field => $attributeType) {
+            $filter[$field] = $type === IndexType::Unique
+                ? ['$exists' => true, '$type' => $this->getMongoTypeCode($attributeType)]
+                : ['$exists' => true];
+        }
+
+        return $filter;
     }
 
     /**

@@ -6,6 +6,7 @@ use Closure;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Attribute;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Index;
@@ -92,7 +93,7 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertNull($stored['$tenant']);
     }
 
-    public function testPartialFiltersMatchTheAttributeTypes(): void
+    public function testUniquePartialFiltersMatchTheAttributeTypes(): void
     {
         $adapter = $this->createAdapter();
         $types = [
@@ -105,9 +106,9 @@ final class MongoQueryFilterTest extends TestCase
         ];
 
         foreach (\array_keys($types) as $attribute) {
-            $adapter->createIndex(self::COLLECTION, Index::key(key: $attribute.'_key', attributes: [$attribute]), $types);
+            $adapter->createIndex(self::COLLECTION, Index::unique(key: $attribute.'_key', attributes: [$attribute]), $types);
         }
-        $adapter->createIndex(self::COLLECTION, Index::key(key: 'name_count', attributes: ['name', 'count']), $types);
+        $adapter->createIndex(self::COLLECTION, Index::unique(key: 'name_count', attributes: ['name', 'count']), $types);
 
         $this->assertSame(
             [
@@ -123,6 +124,48 @@ final class MongoQueryFilterTest extends TestCase
                 ],
             ],
             $this->partialFilters(),
+        );
+    }
+
+    public function testKeyIndexPartialFiltersRequireOnlyThatTheFieldExists(): void
+    {
+        $adapter = $this->createAdapter();
+        $types = [
+            'count' => ColumnType::Integer->value,
+            'price' => ColumnType::Float->value,
+            'active' => ColumnType::Boolean->value,
+            'seenAt' => ColumnType::Datetime->value,
+            'name' => ColumnType::String->value,
+        ];
+
+        $adapter->createIndex(self::COLLECTION, Index::key(key: 'count_key', attributes: ['count']), $types);
+        $adapter->createIndex(self::COLLECTION, Index::key(key: 'name_seen', attributes: ['name', 'seenAt']), $types);
+        $adapter->createCollection(
+            'created',
+            [
+                Attribute::integer(key: 'count'),
+                Attribute::double(key: 'price'),
+                Attribute::boolean(key: 'active'),
+            ],
+            [
+                Index::key(key: 'price_active', attributes: ['price', 'active']),
+                Index::unique(key: 'count_unique', attributes: ['count']),
+            ],
+        );
+
+        $this->assertSame(
+            [
+                'count_key' => ['count' => ['$exists' => true]],
+                'name_seen' => ['name' => ['$exists' => true], 'seenAt' => ['$exists' => true]],
+                '_uid' => null,
+                '_createdAt' => null,
+                '_updatedAt' => null,
+                '_permissions' => null,
+                'price_active' => ['price' => ['$exists' => true], 'active' => ['$exists' => true]],
+                'count_unique' => ['count' => ['$exists' => true, '$type' => ['int', 'long']]],
+            ],
+            $this->partialFilters(),
+            'A key index must be usable by any filter on a value, which implies $exists but never $type',
         );
     }
 
@@ -258,6 +301,15 @@ final class MongoQueryFilterTest extends TestCase
             #[\Override]
             public function close(): void
             {
+            }
+
+            /**
+             * @param  array<mixed>  $options
+             */
+            #[\Override]
+            public function createCollection(string $name, array $options = []): bool
+            {
+                return true;
             }
 
             /**

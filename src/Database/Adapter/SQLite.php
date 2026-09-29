@@ -26,11 +26,13 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
@@ -1522,6 +1524,21 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return new SQLiteBuilder();
     }
 
+    #[Override]
+    protected function collateDocumentId(string $column): string
+    {
+        return $column.' COLLATE '.SQLiteBuilder::COLLATION;
+    }
+
+    /**
+     * @param  array<string>  $roles
+     */
+    #[Override]
+    protected function newPermissionHook(string $collection, array $roles, string $type = PermissionType::Read->value, string $documentColumn = Storage::UID): PermissionFilter
+    {
+        return parent::newPermissionHook($collection, $roles, $type, $documentColumn)->collate(SQLiteBuilder::COLLATION);
+    }
+
     protected function getSQLType(ColumnType $type, int $size, bool $signed = true, bool $array = false, bool $required = false): string
     {
         if (in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon], true)) {
@@ -1617,7 +1634,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         [$sqlType, $postfix] = match ($type) {
             IndexType::Key => ['INDEX', ''],
-            IndexType::Unique => ['UNIQUE INDEX', 'COLLATE NOCASE'],
+            IndexType::Unique => ['UNIQUE INDEX', 'COLLATE '.SQLiteBuilder::COLLATION],
             default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value),
         };
 
@@ -1633,7 +1650,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         $attributes = implode(', ', $attributes);
 
         if ($this->sharedTables) {
-            $attributes = "{$this->quote(Storage::TENANT)} {$postfix}, {$attributes}";
+            $attributes = "{$this->quote(Storage::TENANT)}, {$attributes}";
         }
 
         return "CREATE {$sqlType} {$key} ON `{$this->getNamespace()}_{$collection}` ({$attributes})";

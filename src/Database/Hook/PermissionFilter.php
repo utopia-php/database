@@ -22,6 +22,10 @@ class PermissionFilter implements Filter, JoinFilter
 
     private const string NO_SEMIJOIN = '/*+ NO_SEMIJOIN() */ ';
 
+    private const string COLLATION_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_]*$/';
+
+    protected string $documentCollation = '';
+
     /**
      * @param  list<string>  $roles
      * @param  Closure(string): string  $permissionsTable  Receives the base table name, returns the permissions table name
@@ -99,9 +103,26 @@ class PermissionFilter implements Filter, JoinFilter
         $hint = $this->semiJoin ? '' : self::NO_SEMIJOIN;
 
         return new Condition(
-            "{$quotedDocumentColumn} IN (SELECT {$hint}DISTINCT {$this->permDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permRoleColumn} IN ({$rolePlaceholders}) AND {$this->permTypeColumn} = ?{$columnClause}{$subFilterClause})",
+            "{$quotedDocumentColumn}{$this->documentCollation} IN (SELECT {$hint}DISTINCT {$this->permDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permRoleColumn} IN ({$rolePlaceholders}) AND {$this->permTypeColumn} = ?{$columnClause}{$subFilterClause})",
             [...$this->roles, $this->type, ...$columnBindings, ...$subFilterBindings],
         );
+    }
+
+    /**
+     * Compare the document column in the collation of the index that serves it.
+     *
+     * @throws InvalidArgumentException If the collation name is invalid
+     */
+    public function collate(string $collation): static
+    {
+        if (! \preg_match(self::COLLATION_PATTERN, $collation)) {
+            throw new InvalidArgumentException('Invalid collation name: '.$collation);
+        }
+
+        $filter = clone $this;
+        $filter->documentCollation = ' COLLATE '.$collation;
+
+        return $filter;
     }
 
     public function withoutSemiJoin(): static

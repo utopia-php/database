@@ -664,7 +664,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
             $uidQuoted = $this->quote(Storage::UID);
-            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$uidQuoted} = " . ':'.Storage::UID;
+            $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} WHERE {$this->collateDocumentId($uidQuoted)} = " . ':'.Storage::UID;
             $stmt = null;
             $row = false;
             $exception = null;
@@ -3247,6 +3247,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function getIdentifierQuoteChar(): string
     {
         return '`';
+    }
+
+    /**
+     * The expression a raw lookup compares a document id column through, so it
+     * can use the engine's unique index on that column.
+     */
+    protected function collateDocumentId(string $column): string
+    {
+        return $column;
     }
 
     /**

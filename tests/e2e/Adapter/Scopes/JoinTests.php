@@ -4,6 +4,7 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -7954,5 +7955,71 @@ trait JoinTests
         }
 
         $this->cleanupAggCollections($database, $collections);
+    }
+
+    public function testSqliteJoinPlansSearchAnIndexPerAlias(): void
+    {
+        $database = static::getDatabase();
+        $adapter = $database->getAdapter();
+        if (! $adapter instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'sqlite_join_plans';
+        $this->cleanupAggCollections($database, [$collection]);
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any()), Permission::read(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'name', size: 64, required: true));
+
+        $documents = [];
+        for ($position = 0; $position < 50; $position++) {
+            $documents[] = new Document(['$id' => 'doc'.$position, 'name' => 'name'.$position]);
+        }
+        $database->createDocuments($collection, $documents);
+
+        $table = '`'.$database->getNamespace().'_'.$collection.'`';
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
+
+        try {
+            for ($joins = 1; $joins <= 4; $joins++) {
+                $queries = [];
+                for ($join = 1; $join <= $joins; $join++) {
+                    $queries[] = Query::join($collection, '$id', '$id', '=', 'p'.$join);
+                }
+
+                $profiler->reset();
+                $this->assertCount(25, $database->find($collection, $queries), $joins.' self-joins');
+
+                $plans = 0;
+                foreach ($profiler->getLogs() as $log) {
+                    if (! \str_contains($log->query, 'SELECT') || ! \str_contains($log->query, $table.' AS `p1`')) {
+                        continue;
+                    }
+                    $plans++;
+
+                    $details = \array_map(
+                        static fn (Document $row): string => (string) $row->getAttribute('detail'),
+                        $adapter->rawQuery('EXPLAIN QUERY PLAN '.$log->query),
+                    );
+                    $report = $log->query."\n  ".\implode("\n  ", $details);
+
+                    for ($join = 1; $join <= $joins; $join++) {
+                        $lookups = \array_filter($details, static fn (string $detail): bool => \str_starts_with($detail, 'SEARCH p'.$join.' '));
+                        $this->assertCount(1, $lookups, 'Alias p'.$join.' must be searched through an index: '.$report);
+                        $this->assertStringContainsString('_uid=?', (string) \current($lookups), 'Alias p'.$join.' must be looked up by id: '.$report);
+                    }
+                    foreach ($details as $detail) {
+                        $this->assertStringNotContainsString('AUTOMATIC', $detail, $report);
+                        $this->assertDoesNotMatchRegularExpression('/^SCAN p\d+\b/', $detail, $report);
+                    }
+                }
+                $this->assertSame(1, $plans, $joins.' self-joins must read the collection in one statement');
+            }
+        } finally {
+            $database->disableProfiling();
+            $this->cleanupAggCollections($database, [$collection]);
+        }
     }
 }

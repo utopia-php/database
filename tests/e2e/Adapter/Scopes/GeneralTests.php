@@ -832,21 +832,32 @@ trait GeneralTests
         $destinationCache = $destination?->getCache();
         $database->setCache($cache)->setQueryCache(new QueryCache($cache));
 
+        $documents = 10;
         try {
-            $database->createDocument($collection, new Document(['$id' => 'doc0', 'name' => 'doc 0']));
-            $keys = $this->scanKeys($redis, $collection);
-
-            for ($index = 1; $index <= 10; $index++) {
+            for ($index = 0; $index < $documents; $index++) {
                 $database->createDocument($collection, new Document(['$id' => 'doc'.$index, 'name' => 'doc '.$index]));
             }
-            $database->withTransaction(function () use ($database, $collection): void {
-                $database->updateDocument($collection, 'doc1', new Document(['name' => 'updated']));
-                $database->updateDocument($collection, 'doc2', new Document(['name' => 'updated']));
-            });
 
-            $this->assertNotEmpty($keys);
-            $this->assertSame($keys, $this->scanKeys($redis, $collection), 'Redis keeps a purged key with no expiry, so a write must not leave a key of its own');
-            $this->assertCount(11, $database->find($collection, [Query::limit(100)]));
+            $keysAfterFirstRound = 0;
+            for ($round = 1; $round <= 10; $round++) {
+                $database->withTransaction(function () use ($database, $collection, $documents, $round): void {
+                    for ($index = 0; $index < $documents; $index++) {
+                        $database->updateDocument($collection, 'doc'.$index, new Document(['name' => 'round '.$round]));
+                    }
+                });
+                for ($index = 0; $index < $documents; $index++) {
+                    $this->assertSame('round '.$round, $database->getDocument($collection, 'doc'.$index)->getAttribute('name'));
+                }
+
+                if ($round === 1) {
+                    $keysAfterFirstRound = \count($this->scanKeys($redis, $collection));
+                }
+            }
+
+            $keys = \count($this->scanKeys($redis, $collection));
+            $this->assertSame($keysAfterFirstRound, $keys, 'Redis keeps a purged key with no expiry, so writes and reads of the same documents must not add keys');
+            $this->assertLessThanOrEqual(3 * $documents, $keys, 'The cache holds at most one key per document plus a few per collection');
+            $this->assertCount($documents, $database->find($collection, [Query::limit(100)]));
         } finally {
             $database->setQueryCache($queryCache)->setCache($original);
             if ($destination !== null && $destinationCache !== null) {

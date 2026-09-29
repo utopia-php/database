@@ -254,25 +254,31 @@ final class DocumentCacheEpochTest extends TestCase
         $cache = new RedisLeasableCache();
         $database = $this->createDatabaseWithCache($cache);
         $database->setQueryCache(new QueryCache(new Cache($cache)));
-        $database->createDocument('webhooks', new Document([
-            '$id' => 'hook0',
-            'name' => 'hook 0',
-        ]));
-        $keys = $cache->keys();
-
-        for ($index = 1; $index <= 20; $index++) {
+        for ($index = 0; $index <= 20; $index++) {
             $database->createDocument('webhooks', new Document([
                 '$id' => 'hook'.$index,
                 'name' => 'hook '.$index,
             ]));
         }
-        $database->withTransaction(function () use ($database): void {
-            $database->updateDocument('webhooks', 'hook1', new Document(['name' => 'updated']));
-            $database->updateDocument('webhooks', 'hook2', new Document(['name' => 'updated']));
-        });
+        $readEveryHook = function () use ($database): void {
+            for ($index = 0; $index <= 20; $index++) {
+                $this->assertFalse($database->getDocument('webhooks', 'hook'.$index)->isEmpty());
+            }
+        };
+        $readEveryHook();
+        $keys = \count($cache->keys());
 
-        $this->assertSame($keys, $cache->keys(), 'A purged key stays behind in Redis, so a write must not leave a key of its own');
-        $this->assertSame('updated', $database->getDocument('webhooks', 'hook1')->getAttribute('name'));
+        for ($round = 1; $round <= 3; $round++) {
+            $database->withTransaction(function () use ($database, $round): void {
+                $database->updateDocument('webhooks', 'hook1', new Document(['name' => 'updated '.$round]));
+                $database->updateDocument('webhooks', 'hook2', new Document(['name' => 'updated '.$round]));
+            });
+            $this->renameDocument($database, 'webhooks', 'hook3', 'updated '.$round);
+            $readEveryHook();
+        }
+
+        $this->assertSame($keys, \count($cache->keys()), 'A purged key stays behind in Redis, so writes and the reads between them must not leave keys of their own');
+        $this->assertSame('updated 3', $database->getDocument('webhooks', 'hook1')->getAttribute('name'));
     }
 
     public function testOverlappingWritesSucceedOnACacheWithoutFields(): void

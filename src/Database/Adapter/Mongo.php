@@ -997,8 +997,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -1059,8 +1057,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 $this->getClient()->dropCollection($junction);
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;

@@ -15,6 +15,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 
 /**
  * Base registers Hook\Permissions on every lane's shared Database, so these tests build their own
@@ -132,6 +133,21 @@ trait MongoReadFilterTests
         $this->assertSame(2, $database->count($collection, [Query::containsAll('tags', ['foo', 'bar'])]));
 
         $database->deleteCollection($collection);
+    }
+
+    public function testCountReportsDriverErrors(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar']);
+
+        try {
+            $database->getAdapter()->count($database->getCollection($collection), [Query::regex('name', '(')]);
+            $this->fail('count() must report the driver error for an invalid regular expression instead of 0');
+        } catch (MongoException $e) {
+            $this->assertNotSame(0, $e->getCode());
+        } finally {
+            $database->deleteCollection($collection);
+        }
     }
 
     /**

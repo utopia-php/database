@@ -2458,12 +2458,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             return 0;
         } catch (MongoException $e) {
-            $processed = $this->processException($e);
-            if ($processed instanceof TimeoutException) {
-                throw $processed;
-            }
-
-            return 0;
+            throw $this->processException($e);
         }
     }
 

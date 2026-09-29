@@ -64,6 +64,16 @@ final class MongoQueryFilterTest extends TestCase
         );
     }
 
+    public function testCountRethrowsDriverErrors(): void
+    {
+        $this->aggregateError = new MongoException('invalid pipeline', 2);
+
+        $this->expectException(MongoException::class);
+        $this->expectExceptionMessage('invalid pipeline');
+
+        $this->createAdapter()->count(new Document(['$id' => self::COLLECTION]));
+    }
+
     /**
      * @param  array<Query>  $queries
      * @return array<Document>

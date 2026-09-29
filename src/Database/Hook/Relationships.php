@@ -2,8 +2,11 @@
 
 namespace Utopia\Database\Hook;
 
+use Closure;
 use Exception;
+use Swoole\Coroutine;
 use Utopia\Async\Promise;
+use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -22,6 +25,8 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship as RelationshipVO;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\State\Snapshot;
+use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Query\Hook;
 use Utopia\Query\Method;
@@ -34,13 +39,22 @@ use Utopia\Query\Schema\ForeignKeyAction;
  */
 class Relationships implements Hook
 {
-    private bool $enabled = true;
+    /**
+     * @var Value<bool>
+     */
+    private Value $enabled;
 
-    private bool $checkExist = true;
+    /**
+     * @var Value<bool>
+     */
+    private Value $checkExist;
 
     private int $fetchDepth = 0;
 
-    private bool $inBatchPopulation = false;
+    /**
+     * @var Value<bool>
+     */
+    private Value $inBatchPopulation;
 
     /** @var array<string> */
     private array $writeStack = [];
@@ -54,6 +68,9 @@ class Relationships implements Hook
     public function __construct(
         private Database $db,
     ) {
+        $this->enabled = new Value(true);
+        $this->checkExist = new Value(true);
+        $this->inBatchPopulation = new Value(false);
     }
 
     /**
@@ -70,6 +87,53 @@ class Relationships implements Hook
     private function relationQueryChunkSize(): int
     {
         return \max(1, \min(Database::RELATION_QUERY_CHUNK_SIZE, $this->db->getMaxQueryValues()));
+    }
+
+    /**
+     * Run one read per chunk and return their documents in chunk order. The reads run at the same time only where
+     * each can borrow its own connection: inside a coroutine, on a pooled adapter, outside a transaction. Each
+     * concurrent read starts from its caller's authorization, relationship and silence state, and what it changes
+     * stays in its own coroutine.
+     *
+     * @param  array<Closure(): array<Document>>  $reads
+     * @return array<Document>
+     */
+    private function readChunks(array $reads): array
+    {
+        if ($this->readsConcurrently(\count($reads))) {
+            $snapshot = $this->db->snapshot();
+            $tasks = [];
+            foreach ($reads as $read) {
+                $tasks[] = fn (): array => $this->db->withSnapshot($snapshot, $read);
+            }
+
+            /** @var array<int, array<Document>> $chunks */
+            $chunks = Promise::map($tasks)->await();
+            \ksort($chunks);
+        } else {
+            $chunks = [];
+            foreach ($reads as $read) {
+                $chunks[] = $read();
+            }
+        }
+
+        $documents = [];
+        foreach ($chunks as $chunk) {
+            \array_push($documents, ...$chunk);
+        }
+
+        return $documents;
+    }
+
+    private function readsConcurrently(int $reads): bool
+    {
+        if ($reads < 2 || ! \extension_loaded('swoole') || Coroutine::getCid() <= 0) {
+            return false;
+        }
+
+        $adapter = $this->db->getAdapter();
+
+        return $adapter instanceof Pool && ! $adapter->inTransaction();
     }
 
     private function coerceToDocument(Document $document, string $key, mixed $value): mixed
@@ -91,7 +155,7 @@ class Relationships implements Hook
      */
     public function isEnabled(): bool
     {
-        return $this->enabled;
+        return $this->enabled->get();
     }
 
     /**
@@ -99,7 +163,20 @@ class Relationships implements Hook
      */
     public function setEnabled(bool $enabled): void
     {
-        $this->enabled = $enabled;
+        $this->enabled->set($enabled);
+    }
+
+    /**
+     * Run the callback with relationships enabled or disabled for the calling coroutine and the coroutines it starts.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withEnabled(bool $enabled, callable $callback): mixed
+    {
+        return $this->enabled->with($enabled, $callback);
     }
 
     /**
@@ -107,7 +184,7 @@ class Relationships implements Hook
      */
     public function shouldCheckExist(): bool
     {
-        return $this->checkExist;
+        return $this->checkExist->get();
     }
 
     /**
@@ -115,7 +192,20 @@ class Relationships implements Hook
      */
     public function setCheckExist(bool $check): void
     {
-        $this->checkExist = $check;
+        $this->checkExist->set($check);
+    }
+
+    /**
+     * Run the callback with existence checks on or off for the calling coroutine and the coroutines it starts.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withCheckExist(bool $check, callable $callback): mixed
+    {
+        return $this->checkExist->with($check, $callback);
     }
 
     /**
@@ -139,7 +229,26 @@ class Relationships implements Hook
      */
     public function isInBatchPopulation(): bool
     {
-        return $this->inBatchPopulation;
+        return $this->inBatchPopulation->get();
+    }
+
+    /**
+     * Run the callback under the relationship state a snapshot carries.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withSnapshot(Snapshot $snapshot, callable $callback): mixed
+    {
+        return $this->enabled->with(
+            $snapshot->relationships,
+            fn () => $this->checkExist->with(
+                $snapshot->existCheck,
+                fn () => $this->inBatchPopulation->with($snapshot->population, $callback),
+            ),
+        );
     }
 
     /**
@@ -916,9 +1025,7 @@ class Relationships implements Hook
      */
     public function populateDocuments(array $documents, Document $collection, int $fetchDepth, array $selects = []): array
     {
-        $this->inBatchPopulation = true;
-
-        try {
+        return $this->inBatchPopulation->with(true, function () use ($documents, $collection, $fetchDepth, $selects): array {
             $queue = [
                 [
                     'documents' => $documents,
@@ -1042,11 +1149,9 @@ class Relationships implements Hook
                 $queue = $nextQueue;
                 $currentDepth++;
             }
-        } finally {
-            $this->inBatchPopulation = false;
-        }
 
-        return $documents;
+            return $documents;
+        });
     }
 
     /**
@@ -1392,7 +1497,7 @@ class Relationships implements Hook
     ): void {
         $related = $this->db->skipRelationships(fn () => $this->db->getDocument($relatedCollection->getId(), $relationId));
 
-        if ($related->isEmpty() && $this->checkExist) {
+        if ($related->isEmpty() && $this->checkExist->get()) {
             return;
         }
 
@@ -1558,34 +1663,15 @@ class Relationships implements Hook
 
         /** @var array<string> $uniqueRelatedIds */
         $uniqueRelatedIds = \array_unique($relatedIds);
-        $relatedDocuments = [];
-
-        $chunks = \array_chunk($uniqueRelatedIds, $this->relationQueryChunkSize());
-
-        if (\count($chunks) > 1) {
-            $collectionId = $relatedCollection->getId();
-            $tasks = \array_map(
-                fn (array $chunk) => fn () => $this->db->find($collectionId, [
-                    Query::equal(Document::ID, $chunk),
-                    Query::limit(PHP_INT_MAX),
-                    ...$otherQueries,
-                ]),
-                $chunks
-            );
-
-            /** @var array<array<Document>> $chunkResults */
-            $chunkResults = Promise::map($tasks)->await();
-
-            foreach ($chunkResults as $chunkDocs) {
-                \array_push($relatedDocuments, ...$chunkDocs);
-            }
-        } elseif (\count($chunks) === 1) {
-            $relatedDocuments = $this->db->find($relatedCollection->getId(), [
-                Query::equal(Document::ID, $chunks[0]),
+        $collectionId = $relatedCollection->getId();
+        $relatedDocuments = $this->readChunks(\array_map(
+            fn (array $chunk): Closure => fn (): array => $this->db->find($collectionId, [
+                Query::equal(Document::ID, $chunk),
                 Query::limit(PHP_INT_MAX),
                 ...$otherQueries,
-            ]);
-        }
+            ]),
+            \array_chunk($uniqueRelatedIds, $this->relationQueryChunkSize()),
+        ));
 
         $relatedById = [];
         foreach ($relatedDocuments as $related) {
@@ -1656,34 +1742,15 @@ class Relationships implements Hook
             }
         }
 
-        $relatedDocuments = [];
-
-        $chunks = \array_chunk($parentIds, $this->relationQueryChunkSize());
-
-        if (\count($chunks) > 1) {
-            $collectionId = $relatedCollection->getId();
-            $tasks = \array_map(
-                fn (array $chunk) => fn () => $this->db->find($collectionId, [
-                    Query::equal($twoWayKey, $chunk),
-                    Query::limit(PHP_INT_MAX),
-                    ...$otherQueries,
-                ]),
-                $chunks
-            );
-
-            /** @var array<array<Document>> $chunkResults */
-            $chunkResults = Promise::map($tasks)->await();
-
-            foreach ($chunkResults as $chunkDocs) {
-                \array_push($relatedDocuments, ...$chunkDocs);
-            }
-        } elseif (\count($chunks) === 1) {
-            $relatedDocuments = $this->db->find($relatedCollection->getId(), [
-                Query::equal($twoWayKey, $chunks[0]),
+        $collectionId = $relatedCollection->getId();
+        $relatedDocuments = $this->readChunks(\array_map(
+            fn (array $chunk): Closure => fn (): array => $this->db->find($collectionId, [
+                Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX),
                 ...$otherQueries,
-            ]);
-        }
+            ]),
+            \array_chunk($parentIds, $this->relationQueryChunkSize()),
+        ));
 
         $relatedByParentId = [];
         foreach ($relatedDocuments as $related) {
@@ -1760,34 +1827,15 @@ class Relationships implements Hook
             }
         }
 
-        $relatedDocuments = [];
-
-        $chunks = \array_chunk($childIds, $this->relationQueryChunkSize());
-
-        if (\count($chunks) > 1) {
-            $collectionId = $relatedCollection->getId();
-            $tasks = \array_map(
-                fn (array $chunk) => fn () => $this->db->find($collectionId, [
-                    Query::equal($twoWayKey, $chunk),
-                    Query::limit(PHP_INT_MAX),
-                    ...$otherQueries,
-                ]),
-                $chunks
-            );
-
-            /** @var array<array<Document>> $chunkResults */
-            $chunkResults = Promise::map($tasks)->await();
-
-            foreach ($chunkResults as $chunkDocs) {
-                \array_push($relatedDocuments, ...$chunkDocs);
-            }
-        } elseif (\count($chunks) === 1) {
-            $relatedDocuments = $this->db->find($relatedCollection->getId(), [
-                Query::equal($twoWayKey, $chunks[0]),
+        $collectionId = $relatedCollection->getId();
+        $relatedDocuments = $this->readChunks(\array_map(
+            fn (array $chunk): Closure => fn (): array => $this->db->find($collectionId, [
+                Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX),
                 ...$otherQueries,
-            ]);
-        }
+            ]),
+            \array_chunk($childIds, $this->relationQueryChunkSize()),
+        ));
 
         $relatedByChildId = [];
         foreach ($relatedDocuments as $related) {
@@ -1848,31 +1896,13 @@ class Relationships implements Hook
 
         $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
 
-        $junctions = [];
-
-        $junctionChunks = \array_chunk($documentIds, $this->relationQueryChunkSize());
-
-        if (\count($junctionChunks) > 1) {
-            $tasks = \array_map(
-                fn (array $chunk) => fn () => $this->db->skipRelationships(fn () => $this->db->find($junction, [
-                    Query::equal($twoWayKey, $chunk),
-                    Query::limit(PHP_INT_MAX),
-                ])),
-                $junctionChunks
-            );
-
-            /** @var array<array<Document>> $junctionChunkResults */
-            $junctionChunkResults = Promise::map($tasks)->await();
-
-            foreach ($junctionChunkResults as $chunkJunctions) {
-                \array_push($junctions, ...$chunkJunctions);
-            }
-        } elseif (\count($junctionChunks) === 1) {
-            $junctions = $this->db->skipRelationships(fn () => $this->db->find($junction, [
-                Query::equal($twoWayKey, $junctionChunks[0]),
+        $junctions = $this->readChunks(\array_map(
+            fn (array $chunk): Closure => fn (): array => $this->db->skipRelationships(fn (): array => $this->db->find($junction, [
+                Query::equal($twoWayKey, $chunk),
                 Query::limit(PHP_INT_MAX),
-            ]));
-        }
+            ])),
+            \array_chunk($documentIds, $this->relationQueryChunkSize()),
+        ));
 
         /** @var array<string> $relatedIds */
         $relatedIds = [];
@@ -1911,34 +1941,15 @@ class Relationships implements Hook
         $allRelatedDocs = [];
         if (! empty($relatedIds)) {
             $uniqueRelatedIds = array_unique($relatedIds);
-            $foundRelated = [];
-
-            $relatedChunks = \array_chunk($uniqueRelatedIds, $this->relationQueryChunkSize());
-
-            if (\count($relatedChunks) > 1) {
-                $relatedCollectionId = $relatedCollection->getId();
-                $tasks = \array_map(
-                    fn (array $chunk) => fn () => $this->db->find($relatedCollectionId, [
-                        Query::equal(Document::ID, $chunk),
-                        Query::limit(PHP_INT_MAX),
-                        ...$otherQueries,
-                    ]),
-                    $relatedChunks
-                );
-
-                /** @var array<array<Document>> $relatedChunkResults */
-                $relatedChunkResults = Promise::map($tasks)->await();
-
-                foreach ($relatedChunkResults as $chunkDocs) {
-                    \array_push($foundRelated, ...$chunkDocs);
-                }
-            } elseif (\count($relatedChunks) === 1) {
-                $foundRelated = $this->db->find($relatedCollection->getId(), [
-                    Query::equal(Document::ID, $relatedChunks[0]),
+            $relatedCollectionId = $relatedCollection->getId();
+            $foundRelated = $this->readChunks(\array_map(
+                fn (array $chunk): Closure => fn (): array => $this->db->find($relatedCollectionId, [
+                    Query::equal(Document::ID, $chunk),
                     Query::limit(PHP_INT_MAX),
                     ...$otherQueries,
-                ]);
-            }
+                ]),
+                \array_chunk($uniqueRelatedIds, $this->relationQueryChunkSize()),
+            ));
 
             $allRelatedDocs = $foundRelated;
 

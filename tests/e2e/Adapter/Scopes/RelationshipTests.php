@@ -4,6 +4,8 @@ namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Swoole\Coroutine;
+use Swoole\Runtime;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
@@ -27,6 +29,8 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ForeignKeyAction;
+
+use function Swoole\Coroutine\run;
 
 trait RelationshipTests
 {
@@ -4929,5 +4933,93 @@ trait RelationshipTests
         $database->deleteCollection('related_child');
         $database->deleteCollection('related_oneway');
         $database->deleteCollection('related_pair');
+    }
+
+    public function testParallelPopulationInsideATransactionReadsTheTransactionsRows(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! \extension_loaded('swoole') || ! $database->getAdapter()->hasFeature(Feature\Relationships::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection(new Collection(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions));
+        $database->createCollection(new Collection(id: $children, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions));
+        $database->createRelationship(Relationship::manyToMany(
+            collection: $parents,
+            relatedCollection: $children,
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parents',
+        ));
+
+        $childIds = ['child1', 'child2', 'child3', 'child4', 'child5'];
+        $max = $database->getMaxQueryValues();
+        $hookFlags = Runtime::getHookFlags();
+        $runtimeFlags = Coroutine::getOptions()['hook_flags'] ?? SWOOLE_HOOK_ALL;
+        $populated = [];
+        $failure = null;
+
+        $database->setMaxQueryValues(2);
+        Coroutine::set(['hook_flags' => $hookFlags]);
+
+        try {
+            run(function () use ($database, $parents, $children, $childIds, &$populated, &$failure): void {
+                try {
+                    $populated['transaction'] = $database->withTransaction(function () use ($database, $parents, $childIds): array {
+                        $database->createDocument($parents, new Document([
+                            '$id' => 'parent',
+                            'name' => 'parent',
+                            'children' => \array_map(
+                                static fn (string $id): Document => new Document(['$id' => $id, 'name' => $id]),
+                                $childIds,
+                            ),
+                        ]));
+
+                        return $this->childIdsOf($database->find($parents, [Query::equal('$id', ['parent'])]));
+                    });
+                    $populated['committed'] = $this->childIdsOf($database->find($parents, [Query::equal('$id', ['parent'])]));
+                    $populated['children'] = \count($database->find($children, [Query::limit(10)]));
+                } catch (\Throwable $error) {
+                    $failure = $error;
+                }
+            });
+        } finally {
+            Coroutine::set(['hook_flags' => $runtimeFlags]);
+            Runtime::setHookFlags($hookFlags);
+            $database->setMaxQueryValues($max);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
+
+        if ($failure !== null) {
+            throw $failure;
+        }
+
+        $this->assertSame(['transaction' => $childIds, 'committed' => $childIds, 'children' => 5], $populated);
+    }
+
+    /**
+     * @param  array<Document>  $parents
+     * @return array<string>
+     */
+    private function childIdsOf(array $parents): array
+    {
+        $this->assertCount(1, $parents);
+        $ids = \array_map(static fn (Document $child): string => $child->getId(), $parents[0]->getDocuments('children'));
+        \sort($ids);
+
+        return $ids;
     }
 }

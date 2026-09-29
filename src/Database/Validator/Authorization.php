@@ -2,15 +2,22 @@
 
 namespace Utopia\Database\Validator;
 
+use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Validator;
 
 /**
  * Validates authorization by checking if any of the current roles match the required permissions.
+ *
+ * The status is shared by every caller, except inside skip() and withStatus(): those scopes belong to the calling
+ * coroutine and the coroutines it starts (see {@see Value}).
  */
 class Authorization extends Validator
 {
-    protected bool $status = true;
+    /**
+     * @var Value<bool>
+     */
+    private Value $status;
 
     /**
      * Default value in case we need
@@ -26,6 +33,16 @@ class Authorization extends Validator
     ];
 
     protected string $message = 'Authorization Error';
+
+    public function __construct()
+    {
+        $this->status = new Value(true);
+    }
+
+    public function __clone()
+    {
+        $this->status = new Value($this->status->get());
+    }
 
     /**
      * Get Description.
@@ -54,7 +71,7 @@ class Authorization extends Validator
         $permissions = $input->getPermissions();
         $action = $input->getAction();
 
-        if (! $this->status) {
+        if (! $this->status->get()) {
             return true;
         }
 
@@ -136,7 +153,7 @@ class Authorization extends Validator
     public function setDefaultStatus(bool $status): void
     {
         $this->statusDefault = $status;
-        $this->status = $status;
+        $this->status->set($status);
     }
 
     /**
@@ -144,7 +161,7 @@ class Authorization extends Validator
      */
     public function setStatus(bool $status): void
     {
-        $this->status = $status;
+        $this->status->set($status);
     }
 
     /**
@@ -152,7 +169,7 @@ class Authorization extends Validator
      */
     public function getStatus(): bool
     {
-        return $this->status;
+        return $this->status->get();
     }
 
     /**
@@ -167,14 +184,20 @@ class Authorization extends Validator
      */
     public function skip(callable $callback): mixed
     {
-        $initialStatus = $this->status;
-        $this->disable();
+        return $this->status->with(false, $callback);
+    }
 
-        try {
-            return $callback();
-        } finally {
-            $this->status = $initialStatus;
-        }
+    /**
+     * Run the callback with the given status for the calling coroutine and the coroutines it starts
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withStatus(bool $status, callable $callback): mixed
+    {
+        return $this->status->with($status, $callback);
     }
 
     /**
@@ -182,7 +205,7 @@ class Authorization extends Validator
      */
     public function enable(): void
     {
-        $this->status = true;
+        $this->status->set(true);
     }
 
     /**
@@ -190,15 +213,15 @@ class Authorization extends Validator
      */
     public function disable(): void
     {
-        $this->status = false;
+        $this->status->set(false);
     }
 
     /**
-     * Disable Authorization checks
+     * Reset the status to the default status
      */
     public function reset(): void
     {
-        $this->status = $this->statusDefault;
+        $this->status->set($this->statusDefault);
     }
 
     /**

@@ -3329,42 +3329,18 @@ trait Documents
             if (! isset($results)) {
                 $adapterCollection = $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins);
 
-                // Inline the auth-skip toggle to avoid the per-find Closure
-                // allocation that authorization->skip() requires. Mirrors
-                // Authorization::skip's restore semantics: the previous status
-                // is reapplied unconditionally so any nested toggle inside the
-                // try block cannot leak past this scope.
-                if ($skipAuth) {
-                    $previousStatus = $this->authorization->getStatus();
-                    $this->authorization->disable();
-                    try {
-                        $results = $this->adapter->find(
-                            $adapterCollection,
-                            $queries,
-                            $limit ?? 25,
-                            $offset ?? 0,
-                            $orderAttributes,
-                            $orderTypes,
-                            $cursor,
-                            $cursorDirection,
-                            $forPermission
-                        );
-                    } finally {
-                        $this->authorization->setStatus($previousStatus);
-                    }
-                } else {
-                    $results = $this->adapter->find(
-                        $adapterCollection,
-                        $queries,
-                        $limit ?? 25,
-                        $offset ?? 0,
-                        $orderAttributes,
-                        $orderTypes,
-                        $cursor,
-                        $cursorDirection,
-                        $forPermission
-                    );
-                }
+                $find = fn (): array => $this->adapter->find(
+                    $adapterCollection,
+                    $queries,
+                    $limit ?? 25,
+                    $offset ?? 0,
+                    $orderAttributes,
+                    $orderTypes,
+                    $cursor,
+                    $cursorDirection,
+                    $forPermission
+                );
+                $results = $skipAuth ? $this->authorization->skip($find) : $find();
 
                 if ($cacheEntry !== null && $this->queryCache !== null) {
                     $this->queryCache->set($cacheEntry, $results, $cacheGeneration);

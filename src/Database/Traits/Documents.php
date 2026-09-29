@@ -65,7 +65,11 @@ trait Documents
 
     private const string DOCUMENT_CACHE_BLOCKED_PREFIX = 'blocked:';
 
+    private const string DOCUMENT_CACHE_LAPSED_PREFIX = 'lapsed:';
+
     private const string DOCUMENT_CACHE_SEPARATOR = '@';
+
+    private const string DOCUMENT_CACHE_TOKEN_SEPARATOR = '.';
 
     private const int DOCUMENT_CACHE_PERMANENT = \PHP_INT_MAX;
 
@@ -79,13 +83,33 @@ trait Documents
 
     private const string DOCUMENT_CACHE_COLLECTION_EPOCH = 'collectionEpoch';
 
+    private const string DOCUMENT_CACHE_BLOCKED_AT = 'blockedAt';
+
     private const string DOCUMENT_CACHE_CHECKED_AT = 'checkedAt';
+
+    private int $cacheWriterTimeout = 3600;
 
     /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
     private array $documentCacheDefinitions = [];
 
     /** @var WeakMap<Document, string>|null The document-cache epoch each collection definition was read with, until the definition is let go. */
     private static ?WeakMap $collectionCacheEpochs = null;
+
+    /**
+     * Seconds after which an invalidation that has not finished is treated as abandoned (a worker killed
+     * mid-transaction): readers stop waiting for it, and the next write re-enables the collection's cache.
+     */
+    public function setCacheWriterTimeout(int $seconds): static
+    {
+        $this->cacheWriterTimeout = \max(0, $seconds);
+
+        return $this;
+    }
+
+    public function getCacheWriterTimeout(): int
+    {
+        return $this->cacheWriterTimeout;
+    }
 
     private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
     {
@@ -551,7 +575,7 @@ trait Documents
 
         $collectionState = $cacheable && $definition
             ? $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])
-            : null;
+            : ['epoch' => null, 'blockedAt' => null];
 
         $document = $this->castingAfter($collection, $document);
 
@@ -599,11 +623,12 @@ trait Documents
                     $field,
                     $document->getArrayCopy(),
                     [
-                        self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionState,
+                        self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionState['epoch'],
+                        self::DOCUMENT_CACHE_BLOCKED_AT => $collectionState['blockedAt'],
                         self::DOCUMENT_CACHE_CHECKED_AT => \time(),
                     ],
                     $generation,
-                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0]) === $collectionState,
+                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])['epoch'] === $collectionState['epoch'],
                 );
             }
         } catch (Exception $e) {
@@ -614,7 +639,7 @@ trait Documents
 
         $this->trigger(Event::DocumentRead, $document);
 
-        $this->attachCollectionCacheEpoch($document, $collectionState);
+        $this->attachCollectionCacheEpoch($document, $collectionState['epoch']);
 
         return $document;
     }
@@ -700,8 +725,15 @@ trait Documents
 
         $collectionEpoch = $entry[self::DOCUMENT_CACHE_COLLECTION_EPOCH] ?? null;
         if ($collectionEpoch === null) {
+            $now = \time();
+            $blockedAt = $entry[self::DOCUMENT_CACHE_BLOCKED_AT] ?? null;
             $checkedAt = $entry[self::DOCUMENT_CACHE_CHECKED_AT] ?? null;
-            if (! \is_int($checkedAt) || $checkedAt + self::DOCUMENT_CACHE_RECHECK <= \time()) {
+            if (
+                ! \is_int($blockedAt)
+                || ! \is_int($checkedAt)
+                || $blockedAt + $this->cacheWriterTimeout <= $now
+                || $checkedAt + self::DOCUMENT_CACHE_RECHECK <= $now
+            ) {
                 return null;
             }
         }
@@ -2790,55 +2822,83 @@ trait Documents
 
     /**
      * The epoch a collection's documents may be cached under, or null while a write to the collection
-     * is in flight.
+     * is in flight, with the time that write blocked it. A tombstone older than the writer timeout
+     * lapses into an epoch of its own, which a later activation changes.
+     *
+     * @return array{epoch: ?string, blockedAt: ?int}
      */
-    private function loadDocumentCacheState(string $collectionKey): ?string
+    private function loadDocumentCacheState(string $collectionKey): array
     {
+        $now = \time();
+
         try {
             $record = $this->cache->load($collectionKey.'#epoch', self::DOCUMENT_CACHE_PERMANENT);
             if (! \is_string($record) || $record === '') {
-                return $this->restoreDocumentCacheEpoch($collectionKey);
-            }
-
-            if (\str_starts_with($record, self::DOCUMENT_CACHE_BLOCKED_PREFIX)) {
-                return null;
+                return $this->restoreDocumentCacheEpoch($collectionKey, $now);
             }
 
             $separator = \strrpos($record, self::DOCUMENT_CACHE_SEPARATOR);
             $marker = $separator === false ? $record : \substr($record, 0, $separator);
             $stamp = $separator === false ? '' : \substr($record, $separator + 1);
+
+            if (\str_starts_with($record, self::DOCUMENT_CACHE_BLOCKED_PREFIX)) {
+                $blockedAt = \ctype_digit($stamp) ? (int) $stamp : 0;
+                if ($blockedAt + $this->cacheWriterTimeout > $now) {
+                    return ['epoch' => null, 'blockedAt' => $blockedAt];
+                }
+
+                $tombstone = \substr($record, \strlen(self::DOCUMENT_CACHE_BLOCKED_PREFIX));
+                $finished = $this->cache->getGeneration($collectionKey.'#finished');
+
+                return ['epoch' => self::DOCUMENT_CACHE_LAPSED_PREFIX.$tombstone.self::DOCUMENT_CACHE_SEPARATOR.$finished, 'blockedAt' => null];
+            }
+
             $started = $this->cache->getGeneration($collectionKey.'#started');
             if (
                 ($separator !== false && $started === $stamp)
                 || $started === $this->cache->getGeneration($collectionKey.'#finished')
             ) {
-                return $marker;
+                return ['epoch' => $marker, 'blockedAt' => null];
             }
 
-            return null;
+            return $this->restoreDocumentCacheEpoch($collectionKey, $now);
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to load document cache epoch: '.$error->getMessage());
 
-            return null;
+            return ['epoch' => null, 'blockedAt' => $now];
         }
     }
 
     /**
-     * Replace a missing epoch with a fresh one when no write is counted in flight.
+     * Replace a missing or unusable epoch: with a fresh one when no write is counted in flight, or
+     * else with a tombstone of its own, so the collection lapses back into the cache after the writer
+     * timeout even when the write that blocked it left no tombstone behind.
+     *
+     * @return array{epoch: ?string, blockedAt: ?int}
      */
-    private function restoreDocumentCacheEpoch(string $collectionKey): ?string
+    private function restoreDocumentCacheEpoch(string $collectionKey, int $now): array
     {
         $started = $this->cache->getGeneration($collectionKey.'#started');
         if ($started !== $this->cache->getGeneration($collectionKey.'#finished')) {
-            return null;
+            $this->cache->save($collectionKey.'#epoch', self::DOCUMENT_CACHE_BLOCKED_PREFIX.$this->createDocumentCacheToken().self::DOCUMENT_CACHE_SEPARATOR.$now);
+
+            return ['epoch' => null, 'blockedAt' => $now];
         }
 
         $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
         if ($this->cache->save($collectionKey.'#epoch', $epoch.self::DOCUMENT_CACHE_SEPARATOR.$started) === false) {
-            return null;
+            return ['epoch' => null, 'blockedAt' => $now];
         }
 
-        return $epoch;
+        return ['epoch' => $epoch, 'blockedAt' => null];
+    }
+
+    /**
+     * A write's token, which records when it was created so a later activation can tell an abandoned write.
+     */
+    private function createDocumentCacheToken(): string
+    {
+        return \time().self::DOCUMENT_CACHE_TOKEN_SEPARATOR.\bin2hex(\random_bytes(16));
     }
 
     private function advanceDocumentCacheEpoch(string $collectionKey, string $definitionKey): bool
@@ -2848,7 +2908,7 @@ trait Documents
             return true;
         }
 
-        $token = \bin2hex(\random_bytes(16));
+        $token = $this->createDocumentCacheToken();
         if (! $this->blockDocumentCacheEpoch($collectionKey, $token, $definitionKey)) {
             return true;
         }
@@ -2881,7 +2941,7 @@ trait Documents
             throw new RuntimeException("Failed to register document cache owner '{$token}' for '{$collectionKey}'");
         }
 
-        if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token) === false) {
+        if ($this->cache->save($epochKey, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR.\time()) === false) {
             throw new RuntimeException("Failed to block document cache epoch '{$epochKey}'");
         }
 
@@ -2923,7 +2983,8 @@ trait Documents
 
     /**
      * Replace this write's tombstone with a fresh epoch once no other write to the collection is in
-     * flight; the last write to finish publishes it.
+     * flight. Writes older than the writer timeout no longer count as in flight: their registrations
+     * are released and the epoch is published.
      */
     private function activateDocumentCacheEpoch(string $collectionKey, string $token, string $definitionKey): void
     {
@@ -2948,7 +3009,7 @@ trait Documents
         $epochKey = $collectionKey.'#epoch';
         $epoch = $this->cache->load($epochKey, self::DOCUMENT_CACHE_PERMANENT);
         $blocked = \is_string($epoch) && \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX);
-        $ours = $epoch === self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token;
+        $ours = $blocked && \str_starts_with($epoch, self::DOCUMENT_CACHE_BLOCKED_PREFIX.$token.self::DOCUMENT_CACHE_SEPARATOR);
 
         if ($started === $finished) {
             if (! $blocked || $ours) {
@@ -2959,8 +3020,12 @@ trait Documents
         }
 
         if (! $owned && ! $ours) {
-            // This token was cleared by a cache flush while another writer's
-            // barrier survived. Leave that writer's barrier fail-closed.
+            // This token was cleared by a cache flush or released as abandoned. Leave another
+            // writer's tombstone fail-closed, but retire whatever readers filled while it ran.
+            if (\is_string($epoch) && ! $blocked) {
+                $this->publishDocumentCacheEpoch($collectionKey, $started, $definitionKey);
+            }
+
             return;
         }
 
@@ -2978,13 +3043,25 @@ trait Documents
             throw new RuntimeException("Failed to finish document cache invalidation '{$epochKey}'");
         }
 
-        if ($this->cache->getGeneration($startedKey) === $nextFinished) {
+        $nextStarted = $this->cache->getGeneration($startedKey);
+        if ($nextStarted === $nextFinished) {
             $this->publishDocumentCacheEpoch($collectionKey, $nextFinished, $definitionKey);
+
+            return;
         }
+
+        if ($registration->field !== '' && $this->releaseAbandonedDocumentCacheOwners($registration->key)) {
+            $this->publishDocumentCacheEpoch($collectionKey, $nextStarted, $definitionKey);
+
+            return;
+        }
+
+        $this->purgeCachedDefinition($definitionKey);
     }
 
     /**
-     * An epoch carries the started generation it was published at: it is current until the next write starts.
+     * An epoch carries the started generation it was published at: until the next write starts, it is
+     * current even while writes judged abandoned still count as unfinished.
      */
     private function publishDocumentCacheEpoch(string $collectionKey, string $started, string $definitionKey): void
     {
@@ -2995,6 +3072,31 @@ trait Documents
         }
 
         $this->purgeCachedDefinition($definitionKey);
+    }
+
+    /**
+     * Release every other writer still registered when all of them are older than the writer timeout.
+     * A token without a creation time counts as live.
+     */
+    private function releaseAbandonedDocumentCacheOwners(string $owners): bool
+    {
+        $now = \time();
+        $abandoned = [];
+        foreach ($this->cache->list($owners) as $token) {
+            $separator = \strpos($token, self::DOCUMENT_CACHE_TOKEN_SEPARATOR);
+            $created = $separator === false ? '' : \substr($token, 0, $separator);
+            if (! \ctype_digit($created) || (int) $created + $this->cacheWriterTimeout > $now) {
+                return false;
+            }
+
+            $abandoned[] = $token;
+        }
+
+        foreach ($abandoned as $token) {
+            $this->cache->purge($owners, $token);
+        }
+
+        return true;
     }
 
     /**

@@ -5,6 +5,7 @@ namespace Tests\Unit\Documents;
 use Closure;
 use PHPUnit\Framework\TestCase;
 use Tests\Unit\Cache\RedisLeasableCache;
+use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
@@ -453,6 +454,112 @@ final class DocumentCacheEpochTest extends TestCase
         }
     }
 
+    public function testALostActivationDoesNotKeepTheCollectionUncached(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->failActivations();
+
+        try {
+            $this->renameDocument($database, 'webhooks', 'hook', 'updated');
+            $this->fail('The activation did not fail');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
+        }
+
+        $adapter->reset();
+        for ($read = 0; $read < 3; $read++) {
+            $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        }
+        $this->assertSame(3, $adapter->documentReads, 'A collection whose write has not activated stays uncached while the write is younger than the writer timeout');
+
+        $database->setCacheWriterTimeout(0);
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $adapter->reset();
+        for ($read = 0; $read < 3; $read++) {
+            $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        }
+        $this->assertSame(0, $adapter->documentReads, 'Past the writer timeout the lost activation lapses and reads are served from the cache again, without a flush');
+    }
+
+    public function testAWriteAfterAnAbandonedWriteReenablesTheCollection(): void
+    {
+        $cache = new AbandoningCache();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->abandonNextWrite();
+
+        try {
+            $this->renameDocument($database, 'webhooks', 'hook', 'abandoned');
+            $this->fail('The abandoned write released its registration');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('release document cache owner', $error->getMessage());
+        }
+
+        $this->renameDocument($database, 'webhooks', 'hook', 'second');
+        $adapter->reset();
+        $this->assertSame('second', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame('second', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame(2, $adapter->documentReads, 'A write younger than the writer timeout counts as in flight, so the next write leaves the collection blocked');
+
+        $database->setCacheWriterTimeout(0);
+        $this->renameDocument($database, 'webhooks', 'hook', 'third');
+        $database->setCacheWriterTimeout(3600);
+
+        $this->assertSame('third', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $adapter->reset();
+        $this->assertSame('third', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame(0, $adapter->documentReads, 'The first write after the abandoned one passed the writer timeout releases it and re-enables the collection');
+    }
+
+    public function testAWriterYoungerThanTheTimeoutKeepsItsBlockUntilItsActivation(): void
+    {
+        $cache = new FailDocumentEpochMemory();
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing($cache);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            try {
+                $writer->withTransaction(function () use ($writer, $reader, $cache): void {
+                    $this->renameDocument($writer, 'users', 'user', 'updated');
+                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                    $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                    $cache->failActivations();
+                });
+                $this->fail('The activation did not fail');
+            } catch (\RuntimeException $error) {
+                $this->assertStringContainsString('activate document cache epoch', $error->getMessage());
+            }
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A reader must not cache what it read while a write younger than the writer timeout was in flight');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testAWriterPastTheTimeoutRetiresWhatReadersFilledWhileItRan(): void
+    {
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing(new MemoryCache());
+        $writer->setCacheWriterTimeout(0);
+        $reader->setCacheWriterTimeout(0);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $writer->withTransaction(function () use ($writer, $reader): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+            });
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'What readers filled after the block lapsed must be retired when the write activates');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
     public function testAWriteFinishingWhileAnotherIsInFlightLeavesTheCollectionBlocked(): void
     {
         $cache = new AbandoningCache();
@@ -475,6 +582,27 @@ final class DocumentCacheEpochTest extends TestCase
             }
 
             $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write that finishes while another is in flight must not re-enable the collection');
+        } finally {
+            $this->removeSQLiteFiles($path);
+        }
+    }
+
+    public function testAWriterReleasedAsAbandonedStillRetiresWhatReadersFilledWhileItRan(): void
+    {
+        [$writer, $reader, $path] = $this->createSQLiteDatabasesSharing(new RedisLeasableCache());
+        $reader->setCacheWriterTimeout(0);
+
+        try {
+            $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+
+            $writer->withTransaction(function () use ($writer, $reader): void {
+                $this->renameDocument($writer, 'users', 'user', 'updated');
+                $this->assertTrue($reader->purgeCachedCollection('users'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+                $this->assertSame('original', $reader->getDocument('users', 'user')->getAttribute('name'));
+            });
+
+            $this->assertSame('updated', $reader->getDocument('users', 'user')->getAttribute('name'), 'A write another writer released as abandoned must still retire, when it activates, what readers filled while it ran');
         } finally {
             $this->removeSQLiteFiles($path);
         }
@@ -520,6 +648,29 @@ final class DocumentCacheEpochTest extends TestCase
         $database->getCollection('webhooks');
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A definition saved after a write retired its epoch must not keep serving that epoch');
+    }
+
+    private function createCountedDatabase(CountingMemory $adapter, CacheAdapter $cache): Database
+    {
+        $database = new Database($adapter, new Cache($cache));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('epoch_'.\uniqid());
+        $database->create();
+        $database->createCollection(new Collection(id: 'webhooks', attributes: [
+            Attribute::string(key: 'name'),
+        ], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+        ]));
+        $database->createDocument('webhooks', new Document([
+            '$id' => 'hook',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+
+        return $database;
     }
 
     /**

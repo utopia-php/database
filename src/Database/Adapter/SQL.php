@@ -2006,7 +2006,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * drop the input counts populationStatistics() added.
      *
      * @param  array<string, mixed>  $row
-     * @param  array<string, BaseQuery>  $inputs  Each aliased bitwise aggregate, keyed by its input count, as bitwiseInputs() gives them
+     * @param  array<string, BaseQuery>  $inputs  Each bitwise aggregate, keyed by its input count, as bitwiseInputs() gives them
      * @return array<string, mixed>
      */
     private function bitwiseResults(array $row, array $inputs): array
@@ -2019,13 +2019,58 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $value = $row[$count];
             unset($row[$count]);
 
-            $alias = $aggregate->getValue('');
-            if (\is_string($alias) && \array_key_exists($alias, $row) && \is_numeric($value) && (int) $value === 0) {
-                $row[$alias] = null;
+            $name = $this->bitwiseResultName($row, $aggregate);
+            if ($name !== null && \is_numeric($value) && (int) $value === 0) {
+                $row[$name] = null;
             }
         }
 
         return $row;
+    }
+
+    /**
+     * The column a bitwise aggregate is returned in: its alias, or for an unaliased one the name
+     * MariaDB and MySQL give it, the aggregate's own text (`BIT_AND(`flags`)`, qualified under a
+     * join). PostgreSQL names every unaliased BIT_AND `bit_and`, which does not tell two apart; it
+     * answers an empty set with NULL itself, so such a column is left as it is.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function bitwiseResultName(array $row, BaseQuery $aggregate): ?string
+    {
+        $alias = $aggregate->getValue('');
+        if (\is_string($alias) && $alias !== '') {
+            return \array_key_exists($alias, $row) ? $alias : null;
+        }
+
+        $function = ($aggregate->getMethod()->sqlFunction() ?? '').'(';
+        $quote = $this->getIdentifierQuoteChar();
+        $expressions = [];
+        foreach (\array_keys($row) as $name) {
+            if (\str_starts_with(\strtoupper($name), $function) && \str_ends_with($name, ')')) {
+                $expressions[\str_replace($quote, '', \substr($name, \strlen($function), -1))] = $name;
+            }
+        }
+
+        $attribute = $aggregate->getAttribute();
+        $dot = \strrpos($attribute, '.');
+        $column = $this->filter($this->getInternalKeyForAttribute($dot === false ? $attribute : \substr($attribute, $dot + 1)));
+        $exact = $dot === false
+            ? [$column, Query::DEFAULT_ALIAS.'.'.$column]
+            : [$this->filter(\substr($attribute, 0, $dot)).'.'.$column];
+        foreach ($exact as $expression) {
+            if (isset($expressions[$expression])) {
+                return $expressions[$expression];
+            }
+        }
+
+        foreach ($expressions as $expression => $name) {
+            if (\str_ends_with((string) $expression, '.'.$column)) {
+                return $name;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -4637,7 +4682,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Each aliased bitwise aggregate, keyed by the alias of the input count populationStatistics()
+     * Each bitwise aggregate, keyed by the alias of the input count populationStatistics()
      * adds for it: `$inputs:<n>` for the n-th of them. The name stays short because PostgreSQL
      * truncates an identifier to 63 bytes, and a truncated count named another aggregate's alias.
      *
@@ -4648,8 +4693,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $inputs = [];
         foreach ($queries as $query) {
-            $alias = $query->getValue('');
-            if (\in_array($query->getMethod(), self::BITWISE_AGGREGATES, true) && \is_string($alias) && $alias !== '') {
+            if (\in_array($query->getMethod(), self::BITWISE_AGGREGATES, true)) {
                 $inputs[self::BITWISE_INPUTS.\count($inputs)] = $query;
             }
         }

@@ -9767,6 +9767,66 @@ trait DocumentTests
         }
     }
 
+    public function testUnaliasedBitwiseAggregatesOfAnEmptySetAreNull(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'bitwise_unaliased';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'category', size: 16),
+                Attribute::integer(key: 'flags'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        try {
+            foreach ([['b1', 'a', 6], ['b2', 'a', 3]] as [$id, $category, $flags]) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    '$permissions' => [Permission::read(Role::any())],
+                    'category' => $category,
+                    'flags' => $flags,
+                ]));
+            }
+
+            $aggregates = [
+                'bitAnd' => static fn (string $alias = ''): Query => Query::bitAnd('flags', $alias),
+                'bitOr' => static fn (string $alias = ''): Query => Query::bitOr('flags', $alias),
+                'bitXor' => static fn (string $alias = ''): Query => Query::bitXor('flags', $alias),
+            ];
+            foreach ($aggregates as $method => $aggregate) {
+                $empty = $database->find($collection, [Query::equal('category', ['none']), $aggregate()]);
+                $this->assertCount(1, $empty, $method);
+                $values = $empty[0]->getArrayCopy();
+                $this->assertNotSame([], $values, $method);
+                foreach ($values as $name => $value) {
+                    $this->assertStringStartsNotWith('$inputs:', (string) $name, $method);
+                    $this->assertNull($value, $method.': '.$name);
+                }
+
+                $filled = $database->find($collection, [Query::equal('category', ['a']), $aggregate(), $aggregate('named')]);
+                $this->assertCount(1, $filled, $method);
+                $values = $filled[0]->getArrayCopy();
+                $named = $values['named'] ?? null;
+                unset($values['named']);
+                $this->assertNotNull($named, $method);
+                $this->assertCount(1, $values, $method);
+                $this->assertEquals($named, \array_values($values)[0], $method.': the unaliased value is the aliased one');
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     /**
      * Run $read with the profiler on; return its result and the statements it ran on $table.
      *

@@ -5774,7 +5774,7 @@ trait DocumentTests
             Permission::create(Role::user('asd')),
             Permission::update(Role::user('asd')),
             Permission::delete(Role::user('asd')),
-        ], documentSecurity: false);
+        ], documentSecurity: false, columnSecurity: false);
 
         try {
             $database->updateDocuments($collection, new Document([
@@ -5786,7 +5786,7 @@ trait DocumentTests
         }
 
         // Check document level permissions
-        $database->updateCollection($collection, permissions: [], documentSecurity: true);
+        $database->updateCollection($collection, permissions: [], documentSecurity: true, columnSecurity: false);
 
         $this->getDatabase()->getAuthorization()->skip(function () use ($collection, $database) {
             $database->updateDocument($collection, 'doc0', new Document([
@@ -6353,7 +6353,7 @@ trait DocumentTests
         }
 
         // TEST (FAIL): Bulk delete all documents with invalid collection permission
-        $database->updateCollection('bulk_delete', [], false);
+        $database->updateCollection('bulk_delete', [], false, false);
         try {
             $database->deleteDocuments('bulk_delete');
             $this->fail('Bulk deleted documents with invalid collection permission');
@@ -6364,7 +6364,7 @@ trait DocumentTests
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::delete(Role::any())
-        ], false);
+        ], false, false);
 
         $this->assertEquals(5, $database->deleteDocuments('bulk_delete'));
         $this->assertEquals(0, \count($this->getDatabase()->find('bulk_delete')));
@@ -6372,7 +6372,7 @@ trait DocumentTests
         // TEST: Make sure we can't delete documents we don't have permissions for
         $database->updateCollection('bulk_delete', [
             Permission::create(Role::any()),
-        ], true);
+        ], true, false);
         $this->propagateBulkDocuments('bulk_delete', documentSecurity: true);
 
         $this->assertEquals(0, $database->deleteDocuments('bulk_delete'));
@@ -6387,7 +6387,7 @@ trait DocumentTests
             Permission::create(Role::any()),
             Permission::read(Role::any()),
             Permission::delete(Role::any())
-        ], false);
+        ], false, false);
 
         $database->deleteDocuments('bulk_delete');
 

@@ -12,6 +12,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
@@ -1633,14 +1634,14 @@ class Memory extends Adapter
         return $count;
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, $forPermission);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, $forPermission, $columnPermissions);
         $rows = $this->applyOrdering($rows, $orderAttributes, $orderTypes, $cursorDirection);
         $rows = $this->applyCursor($rows, $orderAttributes, $orderTypes, $cursor, $cursorDirection);
 
@@ -1664,14 +1665,14 @@ class Memory extends Adapter
         return $results;
     }
 
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ, $columnPermissions);
 
         if (! is_null($max)) {
             // MariaDB applies LIMIT :max inside the COUNT subquery — LIMIT 0
@@ -1682,14 +1683,14 @@ class Memory extends Adapter
         return \count($rows);
     }
 
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): float|int
     {
         $key = $this->key($collection->getId());
         if (! isset($this->data[$key])) {
             throw new NotFoundException('Collection not found');
         }
 
-        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ);
+        $rows = $this->fusedFilter($key, $collection->getId(), $queries, Database::PERMISSION_READ, $columnPermissions);
 
         if (! is_null($max)) {
             $rows = \array_slice($rows, 0, $max);
@@ -2084,6 +2085,99 @@ class Memory extends Adapter
     public function getSchemaIndexes(string $collection): array
     {
         return [];
+    }
+
+    public function getSupportForColumnPermissions(): bool
+    {
+        return true;
+    }
+
+
+    public function deleteColumnPermissions(Document $collection, string $column): int
+    {
+        return $this->deleteColumnPermissionRows($collection, $column);
+    }
+
+    /**
+     * Drop the permissions scoped to one column.
+     *
+     * Both the stored _permissions and this adapter's role index are rewritten. The
+     * index holds roles with the column stripped, so it cannot be left alone: dropping
+     * a row's last column-scoped grant takes the permission out of _permissions but
+     * would leave the role still indexed, and the row gate reads the index -- so the
+     * document would stay countable by a caller who can no longer read any of it. On
+     * the SQL adapters the _perms rows are the index and carry _column, so removing
+     * them settles both at once; here they are separate and both have to be told.
+     *
+     * @param Document $collection
+     * @param string $column
+     * @return int documents whose permissions changed
+     * @throws DatabaseException
+     */
+    private function deleteColumnPermissionRows(Document $collection, string $column): int
+    {
+        $key = $this->key($collection->getId());
+        $updated = 0;
+
+        /** @var array<string, array<string>> $touched */
+        $touched = [];
+
+        foreach ($this->data[$key]['documents'] ?? [] as $documentKey => $row) {
+            $permissions = $row['_permissions'] ?? [];
+
+            if (!\is_array($permissions)) {
+                continue;
+            }
+
+            $rewritten = [];
+            $changed = false;
+
+            foreach ($permissions as $permission) {
+                if (Permission::parse($permission)->getColumn() === $column) {
+                    $changed = true;
+                    continue;
+                }
+
+                $rewritten[] = $permission;
+            }
+
+            if (!$changed) {
+                continue;
+            }
+
+            $touched[$documentKey] = $permissions;
+            $rewritten = \array_values(\array_unique($rewritten));
+            $this->data[$key]['documents'][$documentKey]['_permissions'] = $rewritten;
+
+            $uid = $row['_uid'] ?? $documentKey;
+            $tenant = $row['_tenant'] ?? null;
+
+            $this->removePermissionsForDocument($key, (string) $uid, $tenant, $this->sharedTables);
+
+            $indexed = new Document(['$permissions' => $rewritten]);
+            foreach (Database::PERMISSIONS as $type) {
+                foreach ($indexed->getPermissionsByType($type) as $permission) {
+                    $this->addPermissionEntry($key, (string) $uid, (string) $type, (string) $permission, $tenant);
+                }
+            }
+
+            $updated++;
+        }
+
+        // One inverse for the whole sweep, like renameAttribute() above. Without it a
+        // rollback would undo the rename or delete but keep the rewritten grants, and
+        // rowGrantsColumns() would then deny access on a column that still exists.
+        if (!empty($touched)) {
+            $this->journal(function () use ($key, $touched): void {
+                foreach ($touched as $documentKey => $permissions) {
+                    if (isset($this->data[$key]['documents'][$documentKey])) {
+                        $this->data[$key]['documents'][$documentKey]['_permissions'] = $permissions;
+                    }
+                }
+            });
+        }
+
+        return $updated;
     }
 
     public function getTenantQuery(string $collection, string $alias = ''): string
@@ -2551,7 +2645,12 @@ class Memory extends Adapter
      * @param  array<Query>  $queries
      * @return array<array<string, mixed>>
      */
-    protected function fusedFilter(string $key, string $collectionId, array $queries, string $forPermission): array
+    /**
+     * @param array<Query> $queries
+     * @param array<string> $columnPermissions columns that must be readable on the row
+     * @return array<array<string, mixed>>
+     */
+    protected function fusedFilter(string $key, string $collectionId, array $queries, string $forPermission, array $columnPermissions = []): array
     {
         $documents = $this->data[$key]['documents'] ?? [];
         if (empty($documents)) {
@@ -2588,6 +2687,12 @@ class Memory extends Adapter
                 continue;
             }
 
+            // The in-memory equivalent of the EXISTS the SQL adapters emit: a row must
+            // grant read on every column the query reaches, or it cannot match at all.
+            if (! empty($columnPermissions) && ! $this->rowGrantsColumns($row, $columnPermissions)) {
+                continue;
+            }
+
             $matched = true;
             foreach ($effectiveQueries as $query) {
                 if (! $this->matches($row, $query)) {
@@ -2603,6 +2708,50 @@ class Memory extends Adapter
         }
 
         return $output;
+    }
+
+    /**
+     * Does this row grant the current roles read access to every one of these columns?
+     *
+     * Only document permissions are consulted, which is correct by construction:
+     * Database only asks about columns the collection itself does not grant, so a
+     * collection-level grant can never be the thing that satisfies this.
+     *
+     * @param array<string, mixed> $row
+     * @param array<string> $columns
+     * @return bool
+     */
+    protected function rowGrantsColumns(array $row, array $columns): bool
+    {
+        $permissions = $row['_permissions'] ?? [];
+
+        if (! \is_array($permissions)) {
+            return false;
+        }
+
+        $granted = [];
+
+        $document = new Document(['$permissions' => $permissions]);
+
+        foreach ($document->getPermissionsByTypeWithColumns(Database::PERMISSION_READ) as $permission) {
+            if (! $this->authorization->hasRole($permission['role'])) {
+                continue;
+            }
+
+            if ($permission['column'] === Permission::COLUMN_ALL) {
+                return true;
+            }
+
+            $granted[$permission['column']] = true;
+        }
+
+        foreach ($columns as $column) {
+            if (! isset($granted[$column])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

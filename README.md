@@ -416,7 +416,8 @@ $database->updateCollection(
         Permission::update(Role::any()),
         Permission::delete(Role::any())
     ],
-    documentSecurity: true
+    documentSecurity: true,
+    columnSecurity: false
 );
 
 // Get Collection

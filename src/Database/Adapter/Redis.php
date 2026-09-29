@@ -771,6 +771,17 @@ class Redis extends Adapter
         return true;
     }
 
+    public function getSupportForColumnPermissions(): bool
+    {
+        return false;
+    }
+
+
+    public function deleteColumnPermissions(Document $collection, string $column): int
+    {
+        return 0;
+    }
+
     public function getSupportForSchemaAttributes(): bool
     {
         return false;
@@ -2821,7 +2832,7 @@ class Redis extends Adapter
         });
     }
 
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array
     {
         $collectionId = $this->filter($collection->getId());
         $metaKey = $this->key($this->ns(), 'meta', $collectionId);
@@ -2860,7 +2871,7 @@ class Redis extends Adapter
         });
     }
 
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): float|int
     {
         $collectionId = $this->filter($collection->getId());
         $metaKey = $this->key($this->ns(), 'meta', $collectionId);
@@ -2896,7 +2907,7 @@ class Redis extends Adapter
         });
     }
 
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int
     {
         $collectionId = $this->filter($collection->getId());
         $metaKey = $this->key($this->ns(), 'meta', $collectionId);

@@ -7,6 +7,7 @@ use ReflectionClass;
 use ReflectionMethod;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Validator\Authorization;
 
 class MongoPermissionStringsTest extends TestCase
@@ -77,8 +78,12 @@ class MongoPermissionStringsTest extends TestCase
 
         $method = new ReflectionMethod(Mongo::class, 'permissionStrings');
 
+        // These cases are about how a role becomes a match string, which does not
+        // involve columns; an attribute-less collection keeps that the only variable.
+        $collection = new Document(['$id' => 'test', 'attributes' => []]);
+
         /** @var list<string> $values */
-        $values = $method->invoke($adapter, $type);
+        $values = $method->invoke($adapter, $type, $collection);
 
         return $values;
     }

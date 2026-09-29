@@ -23,6 +23,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Exception\Unique as UniqueException;
+use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -2461,16 +2462,103 @@ class Mongo extends Adapter
     }
 
     /**
+     * Candidate permission strings to match against the inline _permissions array.
+     *
+     * Mongo keeps permissions as the assembled strings rather than splitting the role
+     * from the column the way the SQL adapters do, so an exact $in has to enumerate
+     * both shapes: the unscoped grant and one per column of the collection. Without
+     * the column-scoped variants a document whose only read grant is column-scoped
+     * matches nothing and disappears from find(), count() and sum(), even though
+     * getDocument() -- which carries no permission filter -- still returns it.
+     *
+     * @param string $type
+     * @param Document $collection
      * @return list<string>
      */
-    private function permissionStrings(string $type): array
+    private function permissionStrings(string $type, Document $collection): array
     {
+        // Identities, not keys. A column-scoped grant is stored against the
+        // attribute's $internalId so that renaming the column moves nothing, and this
+        // has to enumerate what the stored strings actually contain.
+        $columns = [];
+
+        foreach ($collection->getAttribute('attributes', []) as $attribute) {
+            $internalId = $attribute[Database::ATTRIBUTE_INTERNAL_ID] ?? null;
+
+            if (\is_string($internalId) && $internalId !== '') {
+                $columns[$internalId] = true;
+            }
+        }
+
         $permissions = [];
+
         foreach ($this->authorization->getRoles() as $role) {
             $permissions[] = $type . '("' . $role . '")';
+
+            foreach (\array_keys($columns) as $column) {
+                $permissions[] = $type . '("' . $role . '", "' . $column . '")';
+            }
         }
 
         return $permissions;
+    }
+
+    /**
+     * Candidates that grant one specific column: the unscoped form, and that column.
+     *
+     * The row filter enumerates every column, because a grant on any one of them
+     * makes the row visible. That is the wrong test for a query that reads a column's
+     * value -- a grant on "name" would let a filter on "salary" through and expose
+     * the hidden value by which rows come back. This narrows the set to the grants
+     * that actually cover the column being read.
+     *
+     * @param string $type
+     * @param string $column
+     * @return list<string>
+     */
+    private function columnPermissionStrings(string $type, string $column): array
+    {
+        $permissions = [];
+
+        foreach ($this->authorization->getRoles() as $role) {
+            $permissions[] = $type . '("' . $role . '")';
+            $permissions[] = $type . '("' . $role . '", "' . $column . '")';
+        }
+
+        return $permissions;
+    }
+
+    /**
+     * Require read access to each of these columns on every matched document.
+     *
+     * @param array<string, mixed> $filters
+     * @param array<string> $columnPermissions
+     * @param string $type
+     * @return array<string, mixed>
+     */
+    private function applyColumnPermissions(array $filters, array $columnPermissions, string $type): array
+    {
+        // Not gated on authorization->getStatus(). That flag is also false when the
+        // caller holds a collection-level grant, because Database wraps the call in
+        // authorization->skip() -- and a column-scoped collection grant is exactly the
+        // case that needs column filtering. Skipping row authorization means the caller
+        // may see every row, never that it may see every column. Database decides
+        // whether to pass any columns at all; an empty list filters nothing. The SQL
+        // adapters keep their column conditions outside the same guard.
+        if (empty($columnPermissions)) {
+            return $filters;
+        }
+
+        // One clause per column, ANDed: a document has to grant every column the
+        // query reads, not merely one of them. Expressed through $and because each
+        // clause constrains the same _permissions field.
+        foreach ($columnPermissions as $column) {
+            $filters['$and'][] = [
+                '_permissions' => ['$in' => $this->columnPermissionStrings($type, $column)],
+            ];
+        }
+
+        return $filters;
     }
 
     /**
@@ -2488,11 +2576,12 @@ class Mongo extends Adapter
      * @param string $cursorDirection
      * @param string $forPermission
      *
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return array<Document>
      * @throws Exception
      * @throws TimeoutException
      */
-    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ): array
+    public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], string $cursorDirection = Database::CURSOR_AFTER, string $forPermission = Database::PERMISSION_READ, array $columnPermissions = []): array
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
         $queries = array_map(fn ($query) => clone $query, $queries);
@@ -2509,8 +2598,10 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) {
-            $filters['_permissions']['$in'] = $this->permissionStrings($forPermission);
+            $filters['_permissions']['$in'] = $this->permissionStrings($forPermission, $collection);
         }
+
+        $filters = $this->applyColumnPermissions($filters, $columnPermissions, Database::PERMISSION_READ);
 
         $options = [];
 
@@ -2738,10 +2829,11 @@ class Mongo extends Adapter
      * @param Document $collection
      * @param array<Query> $queries
      * @param int|null $max
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int
      * @throws Exception
      */
-    public function count(Document $collection, array $queries = [], ?int $max = null): int
+    public function count(Document $collection, array $queries = [], ?int $max = null, array $columnPermissions = []): int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
@@ -2761,8 +2853,10 @@ class Mongo extends Adapter
 
         // Add permissions filter if authorization is enabled
         if ($this->authorization->getStatus()) {
-            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ, $collection);
         }
+
+        $filters = $this->applyColumnPermissions($filters, $columnPermissions, Database::PERMISSION_READ);
 
         /**
          * Use MongoDB aggregation pipeline for accurate counting
@@ -2842,11 +2936,12 @@ class Mongo extends Adapter
      * @param array<Query> $queries
      * @param int|null $max
      *
+     * @param array<string> $columnPermissions columns that must be readable on the row
      * @return int|float
      * @throws Exception
      */
 
-    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
+    public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null, array $columnPermissions = []): float|int
     {
         $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
 
@@ -2860,8 +2955,10 @@ class Mongo extends Adapter
 
         // permissions
         if ($this->authorization->getStatus()) { // skip if authorization is disabled
-            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ);
+            $filters['_permissions']['$in'] = $this->permissionStrings(Database::PERMISSION_READ, $collection);
         }
+
+        $filters = $this->applyColumnPermissions($filters, $columnPermissions, Database::PERMISSION_READ);
 
         // using aggregation to get sum an attribute as described in
         // https://docs.mongodb.com/manual/reference/method/db.collection.aggregate/
@@ -4202,6 +4299,126 @@ class Mongo extends Adapter
         return [];
     }
 
+    public function getSupportForColumnPermissions(): bool
+    {
+        return true;
+    }
+
+
+    public function deleteColumnPermissions(Document $collection, string $column): int
+    {
+        return $this->deleteColumnPermissionRows($collection, $column);
+    }
+
+    /**
+     * Drop the permissions scoped to one column.
+     *
+     * This adapter keeps permissions inline on each document and authorizes column
+     * access from those same strings, so a dropped column leaves grants a recreated
+     * one could inherit if they were not cleared.
+     *
+     * Deletion only. Renaming is not reachable -- _column carries the attribute's
+     * immutable identity, which a rename does not change -- and the removal below is
+     * expressed as a $pull, which can take elements out but cannot rewrite them.
+     *
+     * @param Document $collection
+     * @param string $column
+     * @return int documents whose permissions changed
+     * @throws Exception
+     */
+    private function deleteColumnPermissionRows(Document $collection, string $column): int
+    {
+        $name = $this->getNamespace() . '_' . $this->filter($collection->getId());
+        $updated = 0;
+        $cursor = null;
+
+        // Paged by _uid rather than by matching the column, because the column lives
+        // inside an assembled permission string that no index can answer. Renames and
+        // deletes are rare, administrator-initiated operations, so a single ordered
+        // pass is the right shape; the cursor is the last id seen, which keeps it
+        // stable as rows are rewritten underneath it.
+        while (true) {
+            $filters = [];
+
+            if (!\is_null($cursor)) {
+                $filters['_uid'] = ['$gt' => $cursor];
+            }
+
+            if ($this->sharedTables) {
+                $filters['_tenant'] = $this->getTenantFilters($collection->getId());
+            }
+
+            // Both the read and the write below join the open transaction. Without the
+            // session they run outside it, so a rollback would restore the column while
+            // leaving its grants rewritten or dropped.
+            // batchSize matches the limit so the whole batch arrives in firstBatch and
+            // the server closes the cursor itself. Left to its default, MongoDB returns
+            // 101 documents and keeps the cursor open for a getMore that never comes --
+            // this loop only ever reads firstBatch -- so a sweep over a column with many
+            // grants would abandon one server cursor per pass. It also turns roughly ten
+            // round trips per batch into one.
+            //
+            // find() and count() solve the same problem the other way, draining the
+            // cursor with getMore() and killing the remainder in a finally. They have to:
+            // they honour a caller's limit and cannot size a batch to fit it. This sweep
+            // owns its own limit, so not opening a cursor is simpler than closing one.
+            $found = $this->client->find($name, $filters, $this->getTransactionOptions([
+                'limit' => Database::DELETE_BATCH_SIZE,
+                'batchSize' => Database::DELETE_BATCH_SIZE,
+                'sort' => ['_uid' => 1],
+                'projection' => ['_uid' => 1, '_permissions' => 1],
+            ]))->cursor->firstBatch ?? [];
+
+            if (empty($found)) {
+                break;
+            }
+
+            foreach ($found as $row) {
+                $row = $this->client->toArray($row);
+                $cursor = $row['_uid'];
+
+                $permissions = $row['_permissions'] ?? [];
+
+                if (!\is_array($permissions)) {
+                    continue;
+                }
+
+                // Collected as the exact strings to drop rather than as a rewritten
+                // array. $set would write the whole field back, so a grant added or
+                // revoked between the read above and this write would be silently
+                // undone -- a lost revocation being the one that matters. $pull removes
+                // only these elements and leaves everything else as it stands, which is
+                // a single atomic server-side operation and needs no re-read or retry.
+                $remove = [];
+
+                foreach ($permissions as $permission) {
+                    $permission = (string)$permission;
+
+                    if (Permission::parse($permission)->getColumn() === $column) {
+                        $remove[] = $permission;
+                    }
+                }
+
+                if (empty($remove)) {
+                    continue;
+                }
+
+                $where = ['_uid' => $row['_uid']];
+                if ($this->sharedTables) {
+                    $where['_tenant'] = $this->getTenantFilters($collection->getId());
+                }
+
+                $this->client->update($name, $where, [
+                    '$pull' => ['_permissions' => ['$in' => \array_values(\array_unique($remove))]],
+                ], $this->getTransactionOptions());
+
+                $updated++;
+            }
+        }
+
+        return $updated;
+    }
+
     /**
      * Get the query to check for tenant when in shared tables mode
      *
@@ -4209,6 +4426,7 @@ class Mongo extends Adapter
      * @param string $alias The alias of the parent collection if in a subquery
      * @return string
      */
+
     public function getTenantQuery(string $collection, string $alias = ''): string
     {
         return '';

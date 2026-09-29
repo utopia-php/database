@@ -13,6 +13,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -416,6 +417,25 @@ final class QueryValidationTest extends TestCase
         }
 
         $this->assertTrue($disabled->isValid([Query::select(['name'])]), $disabled->getDescription());
+    }
+
+    /**
+     * rawQuery() runs SQL as written, with no permission or tenant scope, so like from() and
+     * execute() it runs only while authorization is skipped.
+     */
+    public function testRawQueryRunsOnlyWhileAuthorizationIsSkipped(): void
+    {
+        try {
+            $this->database->rawQuery('SELECT ? AS answer', [42]);
+            $this->fail('rawQuery() ran with authorization enabled');
+        } catch (AuthorizationException $error) {
+            $this->assertStringContainsString('getAuthorization()->skip()', $error->getMessage());
+        }
+
+        $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->rawQuery('SELECT ? AS answer', [42]));
+
+        $this->assertCount(1, $rows);
+        $this->assertSame(42, $rows[0]->getAttribute('answer'));
     }
 
     /**

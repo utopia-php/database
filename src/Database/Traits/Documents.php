@@ -3857,16 +3857,21 @@ trait Documents
     }
 
     /**
-     * Execute a raw query bypassing the query builder.
+     * Execute a raw query bypassing the query builder. The statement runs as written, with no
+     * permission or tenant scope, so like from() and execute() it runs only while authorization is
+     * disabled: inside getAuthorization()->skip().
      *
      * @param string $query The raw query string
      * @param array<mixed> $bindings Parameter bindings
      * @return array<Document>
      *
+     * @throws AuthorizationException While authorization is enabled
      * @throws DatabaseException
      */
     public function rawQuery(string $query, array $bindings = []): array
     {
+        $this->requireSkippedAuthorization();
+
         if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }

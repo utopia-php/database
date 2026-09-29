@@ -25,6 +25,8 @@ use Utopia\Database\Hook\Named;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\State\Snapshot;
+use Utopia\Database\State\Value;
 use Utopia\Database\Type\TypeRegistry;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Authorization\Input;
@@ -274,11 +276,11 @@ class Database
      */
     protected array $decorators = [];
 
-    /** @var array<int, int> Lifecycle silence depth by coroutine id. */
-    protected array $silencedEvents = [];
+    /** @var Value<bool>|null Whether every lifecycle hook is silenced. */
+    private ?Value $silenced = null;
 
-    /** @var array<int, array<string, true>> Names of the silenced lifecycle hooks by coroutine id. */
-    protected array $silencedListeners = [];
+    /** @var Value<array<string, true>>|null Names of the silenced lifecycle hooks. */
+    private ?Value $silencedListeners = null;
 
     /** @var array<int, array<string, string>> Pending query-cache tombstones by coroutine id. */
     protected array $queryCacheMutations = [];
@@ -1496,7 +1498,7 @@ class Database
     /**
      * Silence lifecycle hooks for calls inside the callback: every hook, or only the
      * {@see Named} hooks listed. A nested silence never narrows the one around it, and
-     * silences are scoped to the calling coroutine.
+     * silences are scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
      *
@@ -1510,19 +1512,7 @@ class Database
             return $this->silenceListeners($callback, $listeners);
         }
 
-        $context = $this->getEventContext();
-        $this->silencedEvents[$context] = ($this->silencedEvents[$context] ?? 0) + 1;
-
-        try {
-            return $callback();
-        } finally {
-            $depth = $this->silencedEvents[$context] - 1;
-            if ($depth === 0) {
-                unset($this->silencedEvents[$context]);
-            } else {
-                $this->silencedEvents[$context] = $depth;
-            }
-        }
+        return $this->silenced()->with(true, $callback);
     }
 
     /**
@@ -1534,24 +1524,75 @@ class Database
      */
     private function silenceListeners(callable $callback, array $listeners): mixed
     {
-        $context = $this->getEventContext();
-        $previous = $this->silencedListeners[$context] ?? [];
-        $this->silencedListeners[$context] = $previous + \array_fill_keys($listeners, true);
+        $silencedListeners = $this->silencedListeners();
 
-        try {
-            return $callback();
-        } finally {
-            if ($previous === []) {
-                unset($this->silencedListeners[$context]);
-            } else {
-                $this->silencedListeners[$context] = $previous;
-            }
-        }
+        return $silencedListeners->with($silencedListeners->get() + \array_fill_keys($listeners, true), $callback);
     }
 
     protected function areEventsSilenced(): bool
     {
-        return ($this->silencedEvents[$this->getEventContext()] ?? 0) > 0;
+        return $this->silenced()->get();
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function silenced(): Value
+    {
+        return $this->silenced ??= new Value(false);
+    }
+
+    /**
+     * @return Value<array<string, true>>
+     */
+    private function silencedListeners(): Value
+    {
+        if ($this->silencedListeners === null) {
+            /** @var Value<array<string, true>> $silencedListeners */
+            $silencedListeners = new Value([]);
+            $this->silencedListeners = $silencedListeners;
+        }
+
+        return $this->silencedListeners;
+    }
+
+    /**
+     * Capture the authorization, relationship and silence state the calling coroutine sees, so work started
+     * elsewhere can run under it with withSnapshot().
+     */
+    public function snapshot(): Snapshot
+    {
+        return new Snapshot(
+            authorization: $this->authorization->getStatus(),
+            relationships: $this->relationshipHook?->isEnabled() ?? true,
+            existCheck: $this->relationshipHook?->shouldCheckExist() ?? true,
+            population: $this->relationshipHook?->isInBatchPopulation() ?? false,
+            silenced: $this->areEventsSilenced(),
+            silencedListeners: $this->silencedListeners()->get(),
+        );
+    }
+
+    /**
+     * Run the callback under a snapshot's state. The state is scoped to the calling coroutine and the coroutines it
+     * starts, so what the callback changes never reaches the coroutine the snapshot was taken in.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withSnapshot(Snapshot $snapshot, callable $callback): mixed
+    {
+        $hook = $this->relationshipHook;
+        $scoped = fn () => $this->silenced()->with(
+            $snapshot->silenced,
+            fn () => $this->silencedListeners()->with($snapshot->silencedListeners, $callback),
+        );
+
+        return $this->authorization->withStatus(
+            $snapshot->authorization,
+            $hook === null ? $scoped : fn () => $hook->withSnapshot($snapshot, $scoped),
+        );
     }
 
     private function getEventContext(): int
@@ -2952,7 +2993,7 @@ class Database
             return [];
         }
 
-        $silenced = $this->silencedListeners[$this->getEventContext()] ?? [];
+        $silenced = $this->silencedListeners()->get();
         if ($silenced === []) {
             return $this->lifecycleHooks;
         }

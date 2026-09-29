@@ -47,14 +47,7 @@ trait Relationships
             return $callback();
         }
 
-        $previous = $this->relationshipHook->isEnabled();
-        $this->relationshipHook->setEnabled(false);
-
-        try {
-            return $callback();
-        } finally {
-            $this->relationshipHook->setEnabled($previous);
-        }
+        return $this->relationshipHook->withEnabled(false, $callback);
     }
 
     /**
@@ -71,14 +64,7 @@ trait Relationships
             return $callback();
         }
 
-        $previous = $this->relationshipHook->shouldCheckExist();
-        $this->relationshipHook->setCheckExist(false);
-
-        try {
-            return $callback();
-        } finally {
-            $this->relationshipHook->setCheckExist($previous);
-        }
+        return $this->relationshipHook->withCheckExist(false, $callback);
     }
 
     /**

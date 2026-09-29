@@ -3252,6 +3252,10 @@ class Database
 
     private function isRetryable(Throwable $error): bool
     {
+        if ($this->failedAfterCommit($error)) {
+            return false;
+        }
+
         foreach (self::DETERMINISTIC_FAILURES as $deterministic) {
             if ($error instanceof $deterministic) {
                 return false;
@@ -3293,6 +3297,9 @@ class Database
      * 2. Rolling back database operations if metadata persistence fails
      * 3. Providing detailed error messages for both success and failure scenarios
      *
+     * A failure raised after the metadata write committed (its cache invalidation or events) is
+     * rethrown unchanged and rolls nothing back: the definition it reports on is stored.
+     *
      * @param  Document  $collection  The collection document to persist
      * @param  callable|null  $rollbackOperation  Cleanup operation to run if persistence fails (null if no cleanup needed)
      * @param  bool  $shouldRollback  Whether rollback should be attempted (e.g., false for duplicates in shared tables)
@@ -3317,6 +3324,10 @@ class Database
                 );
             }
         } catch (Throwable $e) {
+            if ($this->failedAfterCommit($e)) {
+                throw $e;
+            }
+
             $cleanupFailure = '';
             if ($shouldRollback && $rollbackOperation !== null) {
                 if ($rollbackReturnsErrors) {

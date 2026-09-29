@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -84,15 +85,11 @@ final class CoreMinorsTest extends TestCase
     {
         $failure = new StructureException('metadata rejected');
         $failing = false;
-        $adapter = $this->interceptingIndexes(
-            static function (): void {
-            },
-            function () use (&$failing): void {
-                if ($failing) {
-                    throw new RuntimeException('index cleanup failed');
-                }
-            },
-        );
+        $adapter = $this->interceptingAdapter(beforeDeleteIndex: function () use (&$failing): void {
+            if ($failing) {
+                throw new RuntimeException('index cleanup failed');
+            }
+        });
         $database = $this->interceptingMetadataWrites(function () use (&$failing, $failure): void {
             if ($failing) {
                 throw $failure;
@@ -116,15 +113,11 @@ final class CoreMinorsTest extends TestCase
     {
         $failure = new StructureException('metadata rejected');
         $failing = false;
-        $adapter = $this->interceptingIndexes(
-            function () use (&$failing): void {
-                if ($failing) {
-                    throw new RuntimeException('index restore failed');
-                }
-            },
-            static function (): void {
-            },
-        );
+        $adapter = $this->interceptingAdapter(beforeCreateIndex: function () use (&$failing): void {
+            if ($failing) {
+                throw new RuntimeException('index restore failed');
+            }
+        });
         $database = $this->interceptingMetadataWrites(function () use (&$failing, $failure): void {
             if ($failing) {
                 throw $failure;
@@ -152,17 +145,13 @@ final class CoreMinorsTest extends TestCase
     {
         $failing = false;
         $deletes = 0;
-        $adapter = $this->interceptingIndexes(
-            static function (): void {
-            },
-            function () use (&$failing, &$deletes): void {
-                if ($failing) {
-                    $deletes++;
+        $adapter = $this->interceptingAdapter(beforeDeleteIndex: function () use (&$failing, &$deletes): void {
+            if ($failing) {
+                $deletes++;
 
-                    throw new RuntimeException('index cleanup failed');
-                }
-            },
-        );
+                throw new RuntimeException('index cleanup failed');
+            }
+        });
         $database = $this->interceptingMetadataWrites(function () use (&$failing): void {
             if ($failing) {
                 throw new StructureException('metadata rejected');
@@ -182,6 +171,80 @@ final class CoreMinorsTest extends TestCase
         );
         $this->assertSame(3, $deletes, 'The index cleanup must be attempted three times');
         $this->assertSame([], $database->getCollection('logs')->indexes, 'The metadata must list no index');
+    }
+
+    /**
+     * The definition with the new index committed and only the cache invalidation after the commit
+     * failed: the index stays, the write is not repeated, and the failure reaches the caller as raised.
+     */
+    public function testCreateIndexKeepsItsIndexWhenTheInvalidationAfterTheCommitFails(): void
+    {
+        $failure = new RuntimeException('cache unavailable');
+        $cache = $this->failingCache($failure);
+        $armed = false;
+        $writes = 0;
+        $deletes = 0;
+        $adapter = $this->interceptingAdapter(
+            beforeDeleteIndex: function () use (&$deletes): void {
+                $deletes++;
+            },
+            afterCommit: function () use (&$armed, $cache): void {
+                if ($armed) {
+                    $cache->failing = true;
+                }
+            },
+        );
+        $database = $this->interceptingMetadataWrites(function () use (&$armed, &$writes): void {
+            if ($armed) {
+                $writes++;
+            }
+        }, $adapter, new Cache($cache));
+        $this->configure($database);
+        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $armed = true;
+
+        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $armed = false;
+        $cache->failing = false;
+
+        $this->assertSame(0, $deletes, 'An index whose definition committed must not be rolled back');
+        $this->assertSame(1, $writes, 'A write that committed must not be repeated');
+        $this->assertSame($failure, $error, 'The failure after the commit must reach the caller as it was raised');
+        $this->assertSame(['by_count'], \array_map(
+            static fn (Index $index): string => $index->key,
+            \array_values($database->getCollection('logs')->indexes),
+        ));
+        $this->assertCount(1, \array_filter(
+            $database->getSchemaIndexes('logs'),
+            static fn (Document $index): bool => \str_contains($index->getId(), 'by_count'),
+        ), 'The committed index must still exist');
+    }
+
+    /**
+     * A failure of the metadata write itself still rolls the index back.
+     */
+    public function testCreateIndexRollsItsIndexBackWhenTheDefinitionIsNotStored(): void
+    {
+        $failing = false;
+        $deletes = 0;
+        $adapter = $this->interceptingAdapter(beforeDeleteIndex: function () use (&$deletes): void {
+            $deletes++;
+        });
+        $database = $this->interceptingMetadataWrites(function () use (&$failing): void {
+            if ($failing) {
+                throw new StructureException('metadata rejected');
+            }
+        }, $adapter);
+        $this->configure($database);
+        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::integer(key: 'count')]));
+        $failing = true;
+
+        $error = $this->attempt(fn (): bool => $database->createIndex('logs', Index::key(key: 'by_count', attributes: ['count'])));
+        $failing = false;
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame(1, $deletes, 'An index without a stored definition must be dropped');
+        $this->assertSame([], $database->getCollection('logs')->indexes);
     }
 
     /**
@@ -211,9 +274,9 @@ final class CoreMinorsTest extends TestCase
      *
      * @param  Closure(): void  $intercept
      */
-    private function interceptingMetadataWrites(Closure $intercept, ?Adapter $adapter = null): Database
+    private function interceptingMetadataWrites(Closure $intercept, ?Adapter $adapter = null, ?Cache $cache = null): Database
     {
-        return new class ($adapter ?? $this->adapter(), new Cache(new None()), $intercept) extends Database {
+        return new class ($adapter ?? $this->adapter(), $cache ?? new Cache(new None()), $intercept) extends Database {
             /**
              * @param  Closure(): void  $intercept
              */
@@ -235,20 +298,30 @@ final class CoreMinorsTest extends TestCase
     }
 
     /**
-     * An adapter that runs $beforeCreate and $beforeDelete ahead of each index creation and deletion.
+     * An adapter that runs the given hooks ahead of each index creation and deletion, and after
+     * each outermost commit.
      *
-     * @param  Closure(): void  $beforeCreate
-     * @param  Closure(): void  $beforeDelete
+     * @param  Closure(): void|null  $beforeCreateIndex
+     * @param  Closure(): void|null  $beforeDeleteIndex
+     * @param  Closure(): void|null  $afterCommit
      */
-    private function interceptingIndexes(Closure $beforeCreate, Closure $beforeDelete): SQLite
-    {
-        return new class (new PDO('sqlite::memory:'), $beforeCreate, $beforeDelete) extends SQLite {
+    private function interceptingAdapter(
+        ?Closure $beforeCreateIndex = null,
+        ?Closure $beforeDeleteIndex = null,
+        ?Closure $afterCommit = null,
+    ): SQLite {
+        return new class (new PDO('sqlite::memory:'), $beforeCreateIndex, $beforeDeleteIndex, $afterCommit) extends SQLite {
             /**
-             * @param  Closure(): void  $beforeCreate
-             * @param  Closure(): void  $beforeDelete
+             * @param  Closure(): void|null  $beforeCreateIndex
+             * @param  Closure(): void|null  $beforeDeleteIndex
+             * @param  Closure(): void|null  $afterCommit
              */
-            public function __construct(PDO $pdo, private readonly Closure $beforeCreate, private readonly Closure $beforeDelete)
-            {
+            public function __construct(
+                PDO $pdo,
+                private readonly ?Closure $beforeCreateIndex,
+                private readonly ?Closure $beforeDeleteIndex,
+                private readonly ?Closure $afterCommit,
+            ) {
                 parent::__construct($pdo);
             }
 
@@ -260,7 +333,7 @@ final class CoreMinorsTest extends TestCase
                 array $collation = [],
                 Event $event = Event::IndexCreate,
             ): bool {
-                ($this->beforeCreate)();
+                $this->beforeCreateIndex?->__invoke();
 
                 return parent::createIndex($collection, $index, $indexAttributeTypes, $collation, $event);
             }
@@ -268,9 +341,54 @@ final class CoreMinorsTest extends TestCase
             #[\Override]
             public function deleteIndex(string $collection, string $id, Event $event = Event::IndexDelete): bool
             {
-                ($this->beforeDelete)();
+                $this->beforeDeleteIndex?->__invoke();
 
                 return parent::deleteIndex($collection, $id, $event);
+            }
+
+            #[\Override]
+            public function commitTransaction(): bool
+            {
+                $committed = parent::commitTransaction();
+                if (! $this->inTransaction()) {
+                    $this->afterCommit?->__invoke();
+                }
+
+                return $committed;
+            }
+        };
+    }
+
+    /**
+     * @return MemoryCache&object{failing: bool}
+     */
+    private function failingCache(Throwable $failure): MemoryCache
+    {
+        return new class ($failure) extends MemoryCache {
+            public bool $failing = false;
+
+            public function __construct(private readonly Throwable $failure)
+            {
+            }
+
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+            {
+                if ($this->failing) {
+                    throw $this->failure;
+                }
+
+                return parent::save($key, $data, $hash);
+            }
+
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                if ($this->failing) {
+                    throw $this->failure;
+                }
+
+                return parent::purge($key, $hash);
             }
         };
     }

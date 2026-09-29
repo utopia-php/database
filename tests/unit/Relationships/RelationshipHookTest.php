@@ -21,8 +21,11 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\PermissionType;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\CursorDirection;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 final class RelationshipHookTest extends TestCase
@@ -667,5 +670,82 @@ final class RelationshipHookTest extends TestCase
 
         $child = $database->getAuthorization()->skip(fn () => $database->getDocument('child', 'child1'));
         $this->assertSame($parentPermissions, $child->getPermissions());
+    }
+
+    public function testNestedPathFiltersStayWithinTheQueryValueLimit(): void
+    {
+        $adapter = new class () extends Memory {
+            /** @var array<string, int> */
+            public array $largestValueCounts = [];
+
+            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+            {
+                $this->largestValueCounts[$collection->getId()] = \max($this->largestValueCounts[$collection->getId()] ?? 0, $this->largestValueCount($queries));
+
+                return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+            }
+
+            /**
+             * @param  array<mixed>  $queries
+             */
+            private function largestValueCount(array $queries): int
+            {
+                $largest = 0;
+                foreach ($queries as $query) {
+                    if (! $query instanceof Query) {
+                        continue;
+                    }
+                    $largest = \max($largest, $query->isNested() ? $this->largestValueCount($query->getValues()) : \count($query->getValues()));
+                }
+
+                return $largest;
+            }
+        };
+
+        $database = $this->database(fn (): Adapter => $adapter);
+        $database->createCollection(new Collection(id: 'parent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'child', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'tag', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'label', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'owner', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::manyToMany(collection: 'child', relatedCollection: 'tag', twoWay: true, key: 'tags', twoWayKey: 'children', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: 'tag', relatedCollection: 'label', twoWay: true, key: 'labels', twoWayKey: 'tag', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::manyToOne(collection: 'child', relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'children', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::manyToMany(collection: 'parent', relatedCollection: 'tag', twoWay: true, key: 'topics', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        foreach (\range(1, 6) as $number) {
+            $name = $number === 6 ? 'other' : 'match';
+            $database->createDocument('owner', new Document(['$id' => "owner{$number}", 'name' => $name]));
+            $database->createDocument('tag', new Document(['$id' => "tag{$number}"]));
+            $database->createDocument('label', new Document(['$id' => "label{$number}", 'name' => $name, 'tag' => "tag{$number}"]));
+            $database->createDocument('child', new Document(['$id' => "child{$number}", 'tags' => ["tag{$number}"], 'owner' => "owner{$number}"]));
+            $database->createDocument('parent', new Document(['$id' => "parent{$number}", 'children' => ["child{$number}"], 'topics' => ["tag{$number}"]]));
+        }
+
+        $database->setMaxQueryValues(2);
+
+        $matching = ['parent1', 'parent2', 'parent3', 'parent4', 'parent5'];
+        $filters = [
+            'children.tags.labels.name' => [['match'], $matching, ['child', 'junction', 'label']],
+            'children.owner.name' => [['match'], $matching, ['child', 'owner']],
+            'topics.labels.name' => [['match'], $matching, ['junction', 'label', 'tag']],
+            'children.$id' => [['child1', 'child2'], ['parent1', 'parent2'], ['child']],
+        ];
+        foreach ($filters as $path => [$values, $expected, $collections]) {
+            $adapter->largestValueCounts = [];
+
+            $ids = \array_map(fn (Document $parent): string => $parent->getId(), $database->find('parent', [Query::equal($path, $values), Query::select(['$id'])]));
+            \sort($ids);
+            $this->assertSame($expected, $ids, "Filtering by {$path}");
+
+            unset($adapter->largestValueCounts['parent']);
+            $collectionsRead = \array_values(\array_unique(\array_map(fn (string $collection): string => \str_starts_with($collection, '_') ? 'junction' : $collection, \array_keys($adapter->largestValueCounts))));
+            \sort($collectionsRead);
+            $this->assertSame($collections, $collectionsRead, "Filtering by {$path} reads only the collections on the path");
+            foreach ($adapter->largestValueCounts as $collection => $largest) {
+                $this->assertLessThanOrEqual(2, $largest, "A read of {$collection} while filtering by {$path} carried {$largest} values");
+            }
+        }
     }
 }

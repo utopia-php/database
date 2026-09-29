@@ -721,17 +721,19 @@ class Mirror extends Database
         }
 
         try {
+            $filtered = $result;
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeCreateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collectionId,
-                    collection: $result,
+                    collection: $filtered,
                 );
-                if ($filtered !== null) {
-                    $result = $filtered;
+                if ($filtered === null) {
+                    return $result;
                 }
             }
+            $result = $filtered;
 
             $this->destination->createCollection($collection);
 
@@ -763,17 +765,19 @@ class Mirror extends Database
         }
 
         try {
+            $filtered = $result;
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeUpdateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $id,
-                    collection: $result,
+                    collection: $filtered,
                 );
-                if ($filtered !== null) {
-                    $result = $filtered;
+                if ($filtered === null) {
+                    return $result;
                 }
             }
+            $result = $filtered;
 
             $this->destination->updateCollection($id, $permissions, $documentSecurity);
         } catch (Throwable $err) {

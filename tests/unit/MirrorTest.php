@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use ArrayObject;
 use Closure;
 use DateTime;
 use PDO;
@@ -32,6 +33,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Mirror;
+use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Query;
 use Utopia\Database\Type\TypeRegistry;
 
@@ -1030,5 +1032,257 @@ class MirrorTest extends TestCase
 
         $this->assertSame([false, false], $inside);
         $this->assertSame([true, true], [$mirror->isValidationEnabled(), $source->isValidationEnabled()]);
+    }
+
+    public function testCreateCollectionRunsWriteFilters(): void
+    {
+        $calls = new ArrayObject();
+        $destination = self::sqlite();
+        $mirror = $this->filtered(
+            [self::recordingFilter($calls, static fn (string $hook, ?Document $collection): ?Document => $collection === null ? null : (clone $collection)->setAttribute('filtered', true))],
+            self::sqlite(),
+            $destination,
+        );
+
+        $created = $mirror->createCollection(new Collection(id: 'filtered', attributes: [Attribute::string(key: 'title', size: 64)]));
+
+        $this->assertSame([['beforeCreateCollection', 'filtered', 'filtered']], $calls->getArrayCopy());
+        $this->assertTrue($created->getAttribute('filtered'), 'The filtered collection is what the caller receives');
+        $this->assertFalse($destination->getCollection('filtered')->isEmpty());
+        $this->assertSame('upgraded', self::upgradeStatus($mirror, 'filtered'));
+    }
+
+    public function testCreateCollectionFilterReturningNullSkipsTheDestination(): void
+    {
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter($calls, static fn (): ?Document => null)], $source, $destination);
+        $errors = self::errors($mirror);
+
+        $created = $mirror->createCollection(new Collection(id: 'skipped', attributes: [Attribute::string(key: 'title', size: 64)]));
+
+        $this->assertSame([['beforeCreateCollection', 'skipped', 'skipped']], $calls->getArrayCopy());
+        $this->assertSame('skipped', $created->getId());
+        $this->assertFalse($source->getCollection('skipped')->isEmpty());
+        $this->assertTrue($destination->getCollection('skipped')->isEmpty());
+        $this->assertNull(self::upgradeStatus($mirror, 'skipped'), 'Documents of a collection the destination lacks must not be replicated');
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    public function testUpdateCollectionRunsWriteFilters(): void
+    {
+        $calls = new ArrayObject();
+        $destination = self::sqlite();
+        $mirror = $this->filtered(
+            [self::recordingFilter($calls, static fn (string $hook, ?Document $collection): ?Document => $collection === null ? null : (clone $collection)->setAttribute('filtered', true))],
+            self::sqlite(),
+            $destination,
+        );
+
+        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+
+        $this->assertSame([['beforeUpdateCollection', self::COLLECTION, self::COLLECTION]], $calls->getArrayCopy());
+        $this->assertTrue($updated->getAttribute('filtered'), 'The filtered collection is what the caller receives');
+        $this->assertSame([Permission::read(Role::users())], $destination->getCollection(self::COLLECTION)->getPermissions());
+        $this->assertFalse($destination->getCollection(self::COLLECTION)->getAttribute('documentSecurity'));
+    }
+
+    public function testUpdateCollectionFilterReturningNullSkipsTheDestination(): void
+    {
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter(new ArrayObject(), static fn (): ?Document => null)], $source, $destination);
+        $permissions = $destination->getCollection(self::COLLECTION)->getPermissions();
+
+        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+
+        $this->assertFalse($updated->getAttribute('documentSecurity'));
+        $this->assertSame([Permission::read(Role::users())], $source->getCollection(self::COLLECTION)->getPermissions());
+        $this->assertSame($permissions, $destination->getCollection(self::COLLECTION)->getPermissions());
+        $this->assertTrue($destination->getCollection(self::COLLECTION)->getAttribute('documentSecurity'));
+    }
+
+    public function testUpdateCollectionReplicationFailureIsReportedNotThrown(): void
+    {
+        $source = self::sqlite();
+        $mirror = $this->filtered([], $source, self::sqlite());
+        $errors = self::errors($mirror);
+        $source->createCollection(new Collection(id: 'sourceOnly', attributes: [Attribute::string(key: 'title', size: 64)]));
+
+        $updated = $mirror->updateCollection('sourceOnly', [Permission::read(Role::any())], false);
+
+        $this->assertFalse($updated->getAttribute('documentSecurity'));
+        $this->assertSame([Permission::read(Role::any())], $source->getCollection('sourceOnly')->getPermissions());
+        $this->assertSame([['updateCollection', 'Collection not found']], $errors->getArrayCopy());
+    }
+
+    /**
+     * The mirror seeded over $source and $destination, as a mirror with $filters over the same two databases.
+     *
+     * @param  array<Filter>  $filters
+     */
+    private function filtered(array $filters, Database $source, Database $destination): Mirror
+    {
+        $seeded = $this->seed(new Mirror($source, $destination));
+
+        return (new Mirror($source, $destination, $filters))
+            ->setDatabase($seeded->getDatabase())
+            ->setNamespace($seeded->getNamespace());
+    }
+
+    private static function upgradeStatus(Mirror $mirror, string $collection): mixed
+    {
+        $source = $mirror->getSource();
+        if ($source->getCollection('upgrades')->isEmpty()) {
+            return null;
+        }
+
+        return $source->getAuthorization()->skip(
+            static fn (): mixed => $source->getDocument('upgrades', $collection)->getAttribute('status'),
+        );
+    }
+
+    /**
+     * @return ArrayObject<int, array{string, string}>
+     */
+    private static function errors(Mirror $mirror): ArrayObject
+    {
+        /** @var ArrayObject<int, array{string, string}> $errors */
+        $errors = new ArrayObject();
+        $mirror->onError(static function (string $action, Throwable $error) use ($errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+
+        return $errors;
+    }
+
+    /**
+     * A write filter that records every hook it runs as [hook, collection id, subject] and returns what $transform
+     * makes of the document the hook receives; hooks without a document pass null and ignore the result.
+     *
+     * @param  ArrayObject<int, array{string, string, mixed}>  $calls
+     * @param  Closure(string, ?Document): ?Document  $transform
+     */
+    private static function recordingFilter(ArrayObject $calls, Closure $transform): Filter
+    {
+        return new class ($calls, $transform) extends Filter {
+            /**
+             * @param  ArrayObject<int, array{string, string, mixed}>  $calls
+             * @param  Closure(string, ?Document): ?Document  $transform
+             */
+            public function __construct(
+                private readonly ArrayObject $calls,
+                private readonly Closure $transform,
+            ) {
+            }
+
+            public function beforeCreateCollection(Database $source, Database $destination, string $collectionId, ?Document $collection = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $collection?->getId(), $collection);
+            }
+
+            public function beforeUpdateCollection(Database $source, Database $destination, string $collectionId, ?Document $collection = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $collection?->getId(), $collection);
+            }
+
+            public function beforeDeleteCollection(Database $source, Database $destination, string $collectionId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $collectionId);
+            }
+
+            public function beforeCreateAttribute(Database $source, Database $destination, string $collectionId, string $attributeId, ?Document $attribute = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $attributeId, $attribute);
+            }
+
+            public function beforeUpdateAttribute(Database $source, Database $destination, string $collectionId, string $attributeId, ?Document $attribute = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $attributeId, $attribute);
+            }
+
+            public function beforeDeleteAttribute(Database $source, Database $destination, string $collectionId, string $attributeId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $attributeId);
+            }
+
+            public function beforeCreateIndex(Database $source, Database $destination, string $collectionId, string $indexId, ?Document $index = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $indexId, $index);
+            }
+
+            public function beforeDeleteIndex(Database $source, Database $destination, string $collectionId, string $indexId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $indexId);
+            }
+
+            public function beforeCreateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function afterCreateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function beforeUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function afterUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function beforeUpdateDocuments(Database $source, Database $destination, string $collectionId, Document $updates, array $queries): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $updates->getAttribute('title'), $updates) ?? $updates;
+            }
+
+            public function afterUpdateDocuments(Database $source, Database $destination, string $collectionId, Document $updates, array $queries): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $updates->getAttribute('title'));
+            }
+
+            public function beforeDeleteDocument(Database $source, Database $destination, string $collectionId, string $documentId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $documentId);
+            }
+
+            public function afterDeleteDocument(Database $source, Database $destination, string $collectionId, string $documentId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $documentId);
+            }
+
+            public function beforeDeleteDocuments(Database $source, Database $destination, string $collectionId, array $queries): void
+            {
+                $this->run(__FUNCTION__, $collectionId, \count($queries));
+            }
+
+            public function afterDeleteDocuments(Database $source, Database $destination, string $collectionId, array $queries): void
+            {
+                $this->run(__FUNCTION__, $collectionId, \count($queries));
+            }
+
+            public function beforeCreateOrUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function afterCreateOrUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            private function run(string $hook, string $collectionId, mixed $subject, ?Document $document = null): ?Document
+            {
+                $this->calls[] = [$hook, $collectionId, $subject];
+
+                return ($this->transform)($hook, $document);
+            }
+        };
     }
 }

@@ -629,21 +629,33 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     {
         $sleep = 50_000; // 50 milliseconds
         $retries = 2;
+        $depth = $this->inTransaction;
 
         for ($attempts = 0; $attempts <= $retries; $attempts++) {
+            $started = false;
             try {
                 $this->startTransaction();
+                $started = true;
                 $result = $callback();
                 $this->commitTransaction();
 
                 return $result;
             } catch (Throwable $action) {
                 $rollback = null;
-                try {
-                    $this->rollbackTransaction();
-                } catch (Throwable $rollbackError) {
-                    $rollback = $rollbackError;
-                    $this->inTransaction = 0;
+                $lost = $started && $this->inTransaction <= $depth;
+                if (! $lost) {
+                    try {
+                        $this->rollbackTransaction();
+                    } catch (Throwable $rollbackError) {
+                        $rollback = $rollbackError;
+                        $this->inTransaction = 0;
+                    }
+
+                    $lost = $this->inTransaction < $depth;
+                }
+
+                if ($lost) {
+                    throw new TransactionException('Failed to execute transaction: the transaction was lost before it could commit', previous: $action);
                 }
 
                 if (

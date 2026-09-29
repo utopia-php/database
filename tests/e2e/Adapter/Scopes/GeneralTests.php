@@ -12,6 +12,7 @@ use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Capability;
@@ -26,6 +27,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1553,6 +1555,65 @@ trait GeneralTests
             $database->deleteCollection('preserve_update_dates');
             $database->setPreserveDates(false);
             $database->getAuthorization()->reset();
+        }
+    }
+
+    /**
+     * The server ends the session after the outer transaction wrote A. The nested
+     * transaction must not begin a fresh transaction on the new connection and commit B
+     * alone: both calls fail and neither document is stored.
+     */
+    public function testLostConnectionInsideANestedTransactionFailsTheOuterTransaction(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\ConnectionId::class) || ! $adapter->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'lostConnectionNestedTransaction';
+        $database->createCollection(new Collection(id: $collection));
+        $database->createAttribute($collection, Attribute::string(key: 'title', size: 16, required: true));
+
+        $create = fn (string $id): Document => $database->createDocument($collection, new Document([
+            '$id' => $id,
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'title' => $id,
+        ]));
+
+        try {
+            $thrown = null;
+            try {
+                $database->withTransaction(function () use ($adapter, $create, $database): void {
+                    $create('outer');
+
+                    $end = $adapter instanceof Postgres
+                        ? 'SELECT pg_terminate_backend(pg_backend_pid())'
+                        : 'KILL '.$database->getConnectionId();
+                    try {
+                        $database->rawQuery($end);
+                    } catch (Throwable) {
+                        // The server ends the session that runs the statement, so the statement itself may fail.
+                    }
+
+                    $database->withTransaction(fn (): Document => $create('nested'));
+                });
+            } catch (Throwable $error) {
+                $thrown = $error;
+            }
+
+            $this->assertInstanceOf(TransactionException::class, $thrown, 'The outer transaction must fail once the server ended its session');
+            $this->assertFalse($adapter->inTransaction(), 'The adapter must not count a transaction after the failure');
+            $this->assertTrue($database->getDocument($collection, 'outer')->isEmpty(), 'The outer write must not be stored');
+            $this->assertTrue($database->getDocument($collection, 'nested')->isEmpty(), 'The nested write must not be committed on its own');
+        } finally {
+            $database->deleteCollection($collection);
         }
     }
 }

@@ -15,7 +15,10 @@ use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ColumnType;
 
@@ -24,6 +27,10 @@ final class OrphanColumnTypeTest extends TestCase
     private const string COLLECTION = 'items';
 
     private const string KEY = 'value';
+
+    private const string DOCUMENT = 'row';
+
+    private PDO $pdo;
 
     /**
      * @var list<ColumnType>
@@ -123,12 +130,101 @@ final class OrphanColumnTypeTest extends TestCase
         $this->assertSame([], $database->getCollection(self::COLLECTION)->attributes);
     }
 
+    public function testCreateAttributeReusesAnOrphanColumnOfTheSameType(): void
+    {
+        [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::string(key: self::KEY, size: 64));
+        $orphan = $this->schemaColumnType($database);
+
+        $this->assertTrue($database->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64)));
+
+        $this->assertSame($orphan, $this->schemaColumnType($database));
+        $this->assertSame([self::KEY], $this->keys($database));
+        $this->assertSame('kept', $database->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute(self::KEY));
+    }
+
+    public function testCreateAttributeReplacesAnOrphanColumnOfAnotherType(): void
+    {
+        [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::integer(key: self::KEY));
+        $orphan = $this->schemaColumnType($database);
+
+        $this->assertTrue($database->createAttribute(self::COLLECTION, Attribute::string(key: self::KEY, size: 64)));
+
+        $this->assertNotSame($orphan, $this->schemaColumnType($database));
+        $this->assertSame(\strtolower($adapter->getColumnType(ColumnType::String->value, 64)), $this->schemaColumnType($database));
+        $this->assertSame([self::KEY], $this->keys($database));
+        $document = $database->getDocument(self::COLLECTION, self::DOCUMENT);
+        $this->assertSame(self::DOCUMENT, $document->getId());
+        $this->assertNull($document->getAttribute(self::KEY));
+    }
+
+    public function testCreateAttributesReusesAnOrphanColumnOfTheSameType(): void
+    {
+        [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::string(key: self::KEY, size: 64));
+        $orphan = $this->schemaColumnType($database);
+
+        $this->assertTrue($database->createAttributes(self::COLLECTION, [
+            Attribute::string(key: self::KEY, size: 64),
+            Attribute::integer(key: 'count'),
+        ]));
+
+        $this->assertSame($orphan, $this->schemaColumnType($database));
+        $this->assertSame([self::KEY, 'count'], $this->keys($database));
+        $this->assertSame('kept', $database->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute(self::KEY));
+    }
+
+    public function testCreateAttributesReplacesAnOrphanColumnOfAnotherType(): void
+    {
+        [$database, $adapter] = $this->databaseWithAnOrphanValue(Attribute::integer(key: self::KEY));
+        $orphan = $this->schemaColumnType($database);
+
+        $this->assertTrue($database->createAttributes(self::COLLECTION, [
+            Attribute::string(key: self::KEY, size: 64),
+            Attribute::integer(key: 'count'),
+        ]));
+
+        $this->assertNotSame($orphan, $this->schemaColumnType($database));
+        $this->assertSame(\strtolower($adapter->getColumnType(ColumnType::String->value, 64)), $this->schemaColumnType($database));
+        $this->assertSame([self::KEY, 'count'], $this->keys($database));
+        $document = $database->getDocument(self::COLLECTION, self::DOCUMENT);
+        $this->assertSame(self::DOCUMENT, $document->getId());
+        $this->assertNull($document->getAttribute(self::KEY));
+    }
+
+    /**
+     * @return array{Database, SQLite}
+     */
+    private function databaseWithAnOrphanValue(Attribute $orphan): array
+    {
+        [$database, $adapter] = $this->database();
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->createDocument(self::COLLECTION, new Document([
+            Document::ID => self::DOCUMENT,
+            Document::PERMISSIONS => [Permission::read(Role::any())],
+        ]));
+        $adapter->createAttribute(self::COLLECTION, $orphan);
+        $this->pdo->exec('UPDATE `'.$database->getNamespace().'_'.self::COLLECTION.'` SET `'.self::KEY.'` = \'kept\'');
+
+        return [$database, $adapter];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function keys(Database $database): array
+    {
+        return \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection(self::COLLECTION)->attributes),
+        );
+    }
+
     /**
      * @return array{Database, SQLite}
      */
     private function database(): array
     {
-        $adapter = new SQLite(new PDO('sqlite::memory:'));
+        $this->pdo = new PDO('sqlite::memory:');
+        $adapter = new SQLite($this->pdo);
         $database = new Database($adapter, new Cache(new None()));
         $database
             ->setAuthorization(new Authorization())

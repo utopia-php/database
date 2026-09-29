@@ -2667,4 +2667,98 @@ trait AttributeTests
             $this->assertInstanceOf(DatabaseException::class, $e);
         }
     }
+
+    public function testCreateAttributesSkipsAColumnThatExistsOnlyInTheSchema(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'schemaOnlyColumn';
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+        $database->getAdapter()->createAttribute($collection, Attribute::string(key: 'b', size: 64));
+
+        $this->assertTrue($database->createAttributes($collection, [
+            Attribute::integer(key: 'a'),
+            Attribute::string(key: 'b', size: 64),
+        ]));
+
+        $this->assertSame(['a', 'b'], \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection($collection)->attributes),
+        ));
+
+        $database->createDocument($collection, new Document([Document::ID => 'one', 'a' => 1, 'b' => 'kept']));
+        $document = $database->getDocument($collection, 'one');
+        $this->assertSame(1, $document->getAttribute('a'));
+        $this->assertSame('kept', $document->getAttribute('b'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testSharedTablesNeverDropAnotherTenantsColumn(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $originalTenant = $database->getTenant();
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $first = $integerTenants ? 301 : 'tenant_301';
+        $second = $integerTenants ? 302 : 'tenant_302';
+        $collection = 'sharedColumn_'.\uniqid();
+        $definition = new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        try {
+            $database->setTenant($first);
+            $database->createCollection($definition);
+            $database->createAttribute($collection, Attribute::integer(key: 'age'));
+            $database->createDocument($collection, new Document([Document::ID => 'first', 'age' => 7]));
+
+            $database->setTenant($second);
+            $database->createCollection($definition);
+
+            if ($database->getAdapter()->hasFeature(Feature\SchemaAttributes::class)) {
+                try {
+                    $database->createAttribute($collection, Attribute::string(key: 'age', size: 64));
+                    $this->fail('A column another tenant stores with another type must be refused');
+                } catch (DuplicateException $error) {
+                    $this->assertSame('Attribute exists in the shared table with another type', $error->getMessage());
+                }
+
+                $this->assertTrue($database->createAttribute($collection, Attribute::integer(key: 'age')));
+                $this->assertSame(['age'], \array_map(
+                    static fn (Attribute $attribute): string => $attribute->key,
+                    \array_values($database->getCollection($collection)->attributes),
+                ));
+            } else {
+                $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'age', size: 64)));
+            }
+
+            $database->setTenant($first);
+            $this->assertSame(7, $database->getDocument($collection, 'first')->getAttribute('age'));
+        } finally {
+            foreach ([$second, $first] as $tenant) {
+                try {
+                    $database->setTenant($tenant)->deleteCollection($collection);
+                } catch (Throwable) {
+                }
+            }
+            $database->setTenant($originalTenant);
+        }
+    }
 }

@@ -20,8 +20,10 @@ use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Index;
 use Utopia\Database\SetType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * Provides CRUD operations for collection indexes including creation, renaming, and deletion.
@@ -151,17 +153,19 @@ trait Indexes
 
         $created = false;
 
-        try {
-            $created = $this->adapter->createIndex($collection->getId(), $index, $indexAttributesWithTypes);
+        if (! $this->reconcileSchemaOnlyIndex($collection->getId(), $index)) {
+            try {
+                $created = $this->adapter->createIndex($collection->getId(), $index, $indexAttributesWithTypes);
 
-            if (! $created) {
-                throw new DatabaseException('Failed to create index');
+                if (! $created) {
+                    throw new DatabaseException('Failed to create index');
+                }
+            } catch (DuplicateException $e) {
+                // Metadata check (lines above) already verified index is absent
+                // from metadata. A DuplicateException from the adapter means the
+                // index exists only in physical schema — an orphan from a prior
+                // partial failure. Skip creation and proceed to metadata update.
             }
-        } catch (DuplicateException $e) {
-            // Metadata check (lines above) already verified index is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // index exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata update.
         }
 
         $collection->setAttribute('indexes', $index, SetType::Append);
@@ -181,6 +185,101 @@ trait Indexes
         );
 
         return true;
+    }
+
+    /**
+     * An index in the schema but not in this collection's metadata is reused when its
+     * definition matches the request, and dropped to be recreated otherwise. Under shared
+     * tables it serves another tenant's collection, so a mismatch is refused instead.
+     *
+     * @return bool True when the existing index is reused
+     *
+     * @throws DuplicateException
+     */
+    private function reconcileSchemaOnlyIndex(string $collection, Index $index): bool
+    {
+        if (! $this->adapter->hasFeature(Feature\SchemaIndexes::class)
+            || ($this->getSharedTables() && $this->isMigrating())) {
+            return false;
+        }
+
+        $id = \strtolower($this->adapter->filter($index->key));
+        foreach ($this->adapter->getInternalIndexesKeys() as $internal) {
+            if (\strtolower($this->adapter->filter($internal)) === $id) {
+                return false;
+            }
+        }
+
+        foreach ($this->getSchemaIndexes($collection) as $schemaIndex) {
+            if (\strtolower($schemaIndex->getId()) !== $id) {
+                continue;
+            }
+
+            if ($this->schemaIndexMatches($schemaIndex, $index)) {
+                return true;
+            }
+
+            if ($this->getSharedTables()) {
+                throw new DuplicateException('Index exists in the shared table with another definition');
+            }
+
+            try {
+                $this->adapter->deleteIndex($collection, $index->key);
+            } catch (NotFoundException) {
+                // Already absent from the schema
+            }
+
+            return false;
+        }
+
+        return false;
+    }
+
+    private function schemaIndexMatches(Document $schemaIndex, Index $index): bool
+    {
+        $rawColumns = $schemaIndex->getAttribute('columns', []);
+        $rawLengths = $schemaIndex->getAttribute('lengths', []);
+        $schemaLengths = \is_array($rawLengths) ? \array_values($rawLengths) : [];
+
+        $columns = [];
+        $lengths = [];
+        foreach (\is_array($rawColumns) ? \array_values($rawColumns) : [] as $position => $column) {
+            $length = $schemaLengths[$position] ?? null;
+            $columns[] = \is_string($column) ? \strtolower($column) : '';
+            $lengths[] = \is_numeric($length) ? (int) $length : 0;
+        }
+
+        if ($this->getSharedTables() && ($columns[0] ?? '') === Storage::TENANT) {
+            \array_shift($columns);
+            \array_shift($lengths);
+        }
+
+        if (\count($columns) !== \count($index->attributes)) {
+            return false;
+        }
+
+        foreach (\array_values($index->attributes) as $position => $attribute) {
+            if ($columns[$position] === '') {
+                continue;
+            }
+            if ($columns[$position] !== \strtolower($this->adapter->filter(Storage::column($attribute)))) {
+                return false;
+            }
+            if ($lengths[$position] !== (int) ($index->lengths[$position] ?? 0)) {
+                return false;
+            }
+        }
+
+        $indexType = $schemaIndex->getAttribute('indexType', '');
+        $nonUnique = $schemaIndex->getAttribute('nonUnique', 1);
+        $schemaType = match (\is_string($indexType) ? \strtoupper($indexType) : '') {
+            'FULLTEXT' => IndexType::Fulltext,
+            'SPATIAL' => IndexType::Spatial,
+            default => \is_numeric($nonUnique) && (int) $nonUnique === 0 ? IndexType::Unique : IndexType::Key,
+        };
+        $requestedType = $index->type === IndexType::Index ? IndexType::Key : $index->type;
+
+        return $schemaType === $requestedType;
     }
 
     /**

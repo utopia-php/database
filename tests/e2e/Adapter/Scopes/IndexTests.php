@@ -22,6 +22,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -1103,5 +1104,87 @@ trait IndexTests
         }
 
         $database->deleteCollection($collection);
+    }
+
+    public function testCreateIndexReplacesMismatchedOrphanIndex(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\SchemaIndexes::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'orphanIndex';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'name', size: 64),
+            Attribute::string(key: 'email', size: 64),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $database->getAdapter()->createIndex($collection, Index::key(key: 'lookup', attributes: ['name']));
+
+            if ($this->getSchemaIndexColumns($database, $collection, 'lookup') === null) {
+                $this->markTestSkipped('getSchemaIndexes() does not report indexes under their id on this adapter');
+            }
+
+            if ($database->getSharedTables()) {
+                try {
+                    $database->createIndex($collection, Index::unique(key: 'lookup', attributes: ['email']));
+                    $this->fail('An index another tenant may use must not be replaced under shared tables');
+                } catch (DuplicateException $error) {
+                    $this->assertSame('Index exists in the shared table with another definition', $error->getMessage());
+                }
+
+                $this->assertSame(['name'], $this->getSchemaIndexColumns($database, $collection, 'lookup'));
+                $this->assertSame([], $database->getCollection($collection)->indexes);
+
+                return;
+            }
+
+            $this->assertTrue($database->createIndex($collection, Index::unique(key: 'lookup', attributes: ['email'])));
+            $this->assertSame(['email'], $this->getSchemaIndexColumns($database, $collection, 'lookup'));
+
+            $database->createDocument($collection, new Document(['email' => 'user@example.com']));
+            try {
+                $database->createDocument($collection, new Document(['email' => 'user@example.com']));
+                $this->fail('The replaced index must enforce uniqueness on email');
+            } catch (DuplicateException) {
+                $this->assertSame(1, $database->count($collection));
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @return list<string>|null The index's columns without the tenant column, or null when the schema does not list it
+     */
+    private function getSchemaIndexColumns(Database $database, string $collection, string $index): ?array
+    {
+        foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
+            if ($schemaIndex->getId() !== $index) {
+                continue;
+            }
+
+            $columns = $schemaIndex->getAttribute('columns');
+            $this->assertIsArray($columns);
+
+            $names = [];
+            foreach ($columns as $column) {
+                $this->assertIsString($column);
+                if ($column !== Storage::TENANT) {
+                    $names[] = $column;
+                }
+            }
+
+            return $names;
+        }
+
+        return null;
     }
 }

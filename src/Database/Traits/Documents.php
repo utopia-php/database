@@ -2521,7 +2521,10 @@ trait Documents
     {
         [$collectionKey] = $this->getCacheKeys($collectionId);
 
-        return $this->advanceDocumentCacheEpoch($collectionKey);
+        $purged = $this->advanceDocumentCacheEpoch($collectionKey);
+        $this->queryCache?->invalidateCollection($this->getQueryCacheScope(), $collectionId);
+
+        return $purged;
     }
 
     /**
@@ -2856,10 +2859,15 @@ trait Documents
         $collectionDocument = $this->silent(fn () => $this->getCollection($collection));
         $collection = $collectionDocument->isEmpty() ? $collection : $collectionDocument->getId();
         $epochKey = $this->getQueryCacheKey($collection, $namespace).'#epoch';
-        $existing = $this->cache->load($epochKey, self::TTL);
 
-        $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
-            && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+        try {
+            $existing = $this->cache->load($epochKey, self::TTL);
+            $rotated = ($existing === false || $existing === null || $this->cache->purge($epochKey))
+                && $this->cache->save($epochKey, \bin2hex(\random_bytes(16))) !== false;
+        } catch (Exception $error) {
+            Console::warning('Warning: Failed to purge the cached queries: '.$error->getMessage());
+            $rotated = false;
+        }
 
         try {
             $this->queryCache?->invalidateCollection($this->getQueryCacheScope($namespace), $collection);

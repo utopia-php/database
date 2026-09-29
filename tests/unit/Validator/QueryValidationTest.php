@@ -23,6 +23,7 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\Query\Join;
+use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 
@@ -189,6 +190,43 @@ final class QueryValidationTest extends TestCase
             $this->assertSame(1, $this->database->count('owners', $queries), $shape);
             $this->assertSame(2, $this->database->sum('owners', 'score', $queries), $shape);
         }
+    }
+
+    /**
+     * @return iterable<string, array{Query, string}>
+     */
+    public static function refusedExistsQueries(): iterable
+    {
+        yield 'an internal column next to an attribute' => [new Query(Method::Exists, 'name', ['_permissions']), 'Attribute not found in schema: _permissions'];
+        yield 'an internal column' => [Query::exists(['_uid']), 'Attribute not found in schema: _uid'];
+        yield 'an internal column, notExists' => [Query::notExists(['_permissions']), 'Attribute not found in schema: _permissions'];
+        yield 'an unknown attribute' => [Query::exists(['name', 'missing']), 'Attribute not found in schema: missing'];
+        yield 'a relationship side without a column' => [Query::exists(['items']), 'Cannot query on virtual relationship attribute'];
+        yield 'a related document\'s attribute' => [Query::exists(['items.title']), 'Exists queries take attributes of the collection or of a join alias: items.title'];
+        yield 'a value that is not a name' => [Query::notExists([7]), 'NotExists queries take attribute names'];
+    }
+
+    /**
+     * exists() and notExists() test the columns their values name, so each value has to name an
+     * attribute a filter could name.
+     */
+    #[DataProvider('refusedExistsQueries')]
+    public function testExistsValuesNameAttributesOfTheCollection(Query $query, string $message): void
+    {
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('owners', [$query]), 'find()');
+        $this->assertInvalidQuery($message, fn (): mixed => $this->database->count('owners', [$query]), 'count()');
+    }
+
+    public function testExistsInItsDocumentedFormRuns(): void
+    {
+        $this->assertSame(['ann', 'bob'], $this->ids($this->database->find('owners', [Query::exists(['name'])])));
+        $this->assertSame(['ann', 'bob'], $this->ids($this->database->find('owners', [Query::exists(['name', 'score', '$createdAt'])])));
+        $this->assertSame([], $this->ids($this->database->find('owners', [Query::notExists('name')])));
+        $this->assertSame(2, $this->database->count('owners', [Query::exists(['tags'])]));
+        $this->assertSame(['pen', 'cup'], $this->ids($this->database->find('items', [Query::exists(['owner'])])), 'the side of a relationship that holds a column');
+
+        $joined = [Query::join('items', '$id', 'ownerRef', '=', 'it'), Query::exists(['it.title'])];
+        $this->assertSame(['ann', 'bob'], $this->ids($this->database->find('owners', $joined)), 'a column under a join alias');
     }
 
     /**

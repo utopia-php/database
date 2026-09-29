@@ -10007,6 +10007,86 @@ trait DocumentTests
         }
     }
 
+    public function testJoinWildcardSelectAndBareJoinedOrder(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $orders = 'joined_shape_orders';
+        $items = 'joined_shape_items';
+        $extras = 'joined_shape_extras';
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $orders,
+            attributes: [Attribute::string(key: 'item', size: 16), Attribute::integer(key: 'quantity'), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $items,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price'), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $extras,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price')],
+            permissions: $permissions,
+        ));
+
+        try {
+            foreach ([['o1', 'a', 1, 'x'], ['o2', 'b', 2, 'y'], ['o3', 'a', 3, 'x']] as [$id, $item, $quantity, $name]) {
+                $database->createDocument($orders, new Document(['$id' => $id, '$permissions' => [], 'item' => $item, 'quantity' => $quantity, 'name' => $name]));
+            }
+            foreach ([['a', 10, 'apple'], ['b', 20, 'banana']] as [$code, $price, $name]) {
+                $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'price' => $price, 'name' => $name]));
+            }
+            $database->createDocument($extras, new Document(['$id' => 'a', '$permissions' => [], 'code' => 'a', 'price' => 100]));
+
+            $item = Query::join($items, 'item', 'code', '=', 'it');
+            $extra = Query::join($extras, 'item', 'code', '=', 'ex');
+            $ids = static fn (array $documents): array => \array_map(static fn (Document $document): string => $document->getId(), $documents);
+
+            $rows = $database->find($orders, [$item, Query::select(['name', 'it.*']), Query::orderAsc('$id')]);
+            $this->assertSame(['o1', 'o2', 'o3'], $ids($rows));
+            $this->assertSame('y', $rows[1]->getAttribute('name'));
+            $this->assertSame('banana', $rows[1]->getAttribute('it.name'));
+            $this->assertEquals(20, $rows[1]->getAttribute('it.price'));
+            $this->assertSame('b', $rows[1]->getAttribute('it.$id'));
+            $this->assertNull($rows[1]->getAttribute('quantity'));
+
+            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('price'), Query::orderAsc('$id')])));
+            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [Query::fullOuterJoin($items, 'item', 'code', '=', 'it'), Query::orderDesc('price'), Query::orderAsc('$id')])));
+            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('name'), Query::orderAsc('$id')])), 'a name the main collection declares reads the main table');
+            $this->assertEquals(
+                [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
+                \array_map(static fn (Document $row): array => $row->getArrayCopy(), $database->find($orders, [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')])),
+            );
+
+            foreach ([
+                'Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias' => [$item, $extra, Query::orderAsc('price')],
+                'Invalid query: Attribute not found in schema: weight' => [$item, Query::orderAsc('weight')],
+                'Invalid query: Cannot select "it.*": an aggregation query can only select the attributes it groups by' => [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::select(['it.*'])],
+                'Invalid query: Attribute not found in schema: zz' => [$item, Query::select(['name', 'zz.*'])],
+            ] as $message => $queries) {
+                try {
+                    $database->find($orders, $queries);
+                    $this->fail('accepted: '.$message);
+                } catch (QueryException $error) {
+                    $this->assertSame($message, $error->getMessage());
+                }
+            }
+        } finally {
+            foreach ([$orders, $items, $extras] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
     /**
      * Run $read with the profiler on; return its result and the statements it ran on $table.
      *

@@ -1389,6 +1389,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
+        if ($joinTablePrefixes !== []) {
+            [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($orderAttributes, $cursor, $collectionDoc, $joinTablePrefixes);
+        }
+
         $joinAliases = \array_column($joinTablePrefixes, 'alias');
         $internalKeyCache = [];
         $resolveInternalKey = function (string $attribute) use (&$internalKeyCache, $joinAliases): string {
@@ -3716,16 +3720,29 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * database column names (like _uid, _id) and ensures internal columns
      * are always included.
      *
+     * An `alias.*` selection stands for the columns the join returns without a select, from $joinSelections.
+     *
      * @param  array<string>  $selections
      * @param  array<string>  $joinAliases
+     * @param  array<string, list<string>>  $joinSelections  The selections a read without a select makes under each join alias
      */
     private function applySelectionProjection(
         SQLBuilder $builder,
         array $selections,
         bool $includeInternal = true,
         array $joinAliases = [],
+        array $joinSelections = [],
     ): void {
-        $mapped = $this->mapSelectionsToColumns($selections, $includeInternal, $joinAliases);
+        $expanded = [];
+        foreach ($selections as $selection) {
+            if (\str_ends_with($selection, '.*') && isset($joinSelections[\substr($selection, 0, -2)])) {
+                \array_push($expanded, ...$joinSelections[\substr($selection, 0, -2)]);
+            } else {
+                $expanded[] = $selection;
+            }
+        }
+
+        $mapped = $this->mapSelectionsToColumns(\array_values(\array_unique($expanded)), $includeInternal, $joinAliases);
         $simple = [];
         foreach ($mapped as $column) {
             if (\str_contains($column, ' AS ')) {
@@ -3911,25 +3928,38 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $builder->select([$this->filter($alias).'.*']);
 
+        $this->applySelectionProjection(
+            $builder,
+            \array_merge(...\array_values($this->joinSelections($collection, $joinTablePrefixes))),
+            includeInternal: false,
+            joinAliases: \array_column($joinTablePrefixes, 'alias'),
+        );
+    }
+
+    /**
+     * What a read without a select returns under each join alias: the joined collection's `$id` and
+     * the attributes the Database layer handed over for it.
+     *
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @return array<string, list<string>>
+     */
+    private function joinSelections(Document $collection, array $joinTablePrefixes): array
+    {
         $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
         $selections = [];
         foreach ($joinTablePrefixes as $join) {
-            $selections[] = $join['alias'].'.'.Document::ID;
+            $selections[$join['alias']] ??= [];
+            $selections[$join['alias']][] = $join['alias'].'.'.Document::ID;
 
             $attributes = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? []) : [];
             foreach (\is_array($attributes) ? $attributes : [] as $attribute) {
                 if (\is_string($attribute) && $attribute !== '') {
-                    $selections[] = $join['alias'].'.'.$attribute;
+                    $selections[$join['alias']][] = $join['alias'].'.'.$attribute;
                 }
             }
         }
 
-        $this->applySelectionProjection(
-            $builder,
-            $selections,
-            includeInternal: false,
-            joinAliases: \array_column($joinTablePrefixes, 'alias'),
-        );
+        return $selections;
     }
 
     /**
@@ -4451,6 +4481,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $selections,
                     includeInternal: ! $hasDistinct,
                     joinAliases: \array_column($joinTablePrefixes, 'alias'),
+                    joinSelections: $this->joinSelections($collection, $joinTablePrefixes),
                 );
                 // The projection replaces the select; forwarded as well, the builder would compile the caller's
                 // raw attribute names whenever the projection holds only aliased joined columns.
@@ -5423,6 +5454,61 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $name = \substr($column, $dot + 1);
 
         return $prefix.'.'.$this->getInternalKeyForAttribute($name);
+    }
+
+    /**
+     * An order names a bare attribute the main collection does not declare by the one join whose
+     * collection declares it, as an aggregate or a group does, and the cursor value under that name
+     * follows it. A name several joins declare is refused rather than read from one of them.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<string, mixed>  $cursor
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @return array{array<string>, array<string, mixed>}
+     *
+     * @throws QueryException
+     */
+    private function qualifyJoinedOrders(array $orderAttributes, array $cursor, Document $collection, array $joinTablePrefixes): array
+    {
+        $main = [];
+        foreach (Database::internalAttributes() as $attribute) {
+            $main[$attribute->key] = true;
+        }
+        /** @var array<Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            $main[$attribute->getId()] = true;
+        }
+
+        $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
+        $declared = [];
+        foreach ($joinTablePrefixes as $join) {
+            $keys = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? []) : [];
+            foreach (\is_array($keys) ? $keys : [] as $key) {
+                if (\is_string($key)) {
+                    $declared[$key][] = $join['alias'];
+                }
+            }
+        }
+
+        foreach ($orderAttributes as $index => $attribute) {
+            if (\str_contains($attribute, '.') || isset($main[$attribute]) || ! isset($declared[$attribute])) {
+                continue;
+            }
+
+            $aliases = \array_values(\array_unique($declared[$attribute]));
+            if (\count($aliases) > 1) {
+                throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+            }
+
+            $qualified = $aliases[0].'.'.$attribute;
+            $orderAttributes[$index] = $qualified;
+            if (\array_key_exists($attribute, $cursor) && ! \array_key_exists($qualified, $cursor)) {
+                $cursor[$qualified] = $cursor[$attribute];
+            }
+        }
+
+        return [$orderAttributes, $cursor];
     }
 
     /**

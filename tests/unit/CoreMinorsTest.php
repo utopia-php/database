@@ -436,6 +436,66 @@ final class CoreMinorsTest extends TestCase
     }
 
     /**
+     * @return array<string, array{ColumnType, array<mixed>, string}>
+     */
+    public static function invalidSpatialDefaults(): array
+    {
+        return [
+            'point with one coordinate' => [ColumnType::Point, [1.0], 'Point must be an array of two numeric values [x, y]'],
+            'point out of range' => [ColumnType::Point, [200.0, 0.0], 'Longitude'],
+            'linestring with one point' => [ColumnType::Linestring, [[0.0, 0.0]], 'LineString must contain at least two points'],
+            'polygon with an open ring' => [ColumnType::Polygon, [[[0.0, 0.0], [1.0, 1.0]]], 'must contain at least 4 points'],
+        ];
+    }
+
+    /**
+     * @param  array<mixed>  $default
+     */
+    #[DataProvider('invalidSpatialDefaults')]
+    public function testSpatialDefaultsAreValidated(ColumnType $type, array $default, string $reason): void
+    {
+        $validator = new AttributeValidator(attributes: [], supportForSpatialAttributes: true);
+        $created = $this->attempt(fn (): bool => $validator->isValid(new Attribute(key: 'shape', type: $type, default: $default)));
+
+        $this->assertInstanceOf(DatabaseException::class, $created, 'A create must reject the default');
+        $this->assertStringContainsString($reason, $created->getMessage());
+
+        $database = new class ($this->adapter(), new Cache(new None())) extends Database {
+            public function checkDefault(ColumnType $type, mixed $default): void
+            {
+                $this->validateDefaultTypes($type->value, $default);
+            }
+        };
+        $updated = $this->attempt(function () use ($database, $type, $default): void {
+            $database->checkDefault($type, $default);
+        });
+
+        $this->assertInstanceOf(DatabaseException::class, $updated, 'An update must reject the default');
+        $this->assertStringContainsString($reason, $updated->getMessage());
+    }
+
+    public function testValidSpatialDefaultsAreAccepted(): void
+    {
+        $defaults = [
+            [ColumnType::Point, [1.0, 2.0]],
+            [ColumnType::Linestring, [[0.0, 0.0], [1.0, 1.0]]],
+            [ColumnType::Polygon, [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]]],
+        ];
+        $validator = new AttributeValidator(attributes: [], supportForSpatialAttributes: true);
+        $database = new class ($this->adapter(), new Cache(new None())) extends Database {
+            public function checkDefault(ColumnType $type, mixed $default): void
+            {
+                $this->validateDefaultTypes($type->value, $default);
+            }
+        };
+
+        foreach ($defaults as [$type, $default]) {
+            $this->assertTrue($validator->isValid(new Attribute(key: 'shape', type: $type, default: $default)), $type->value);
+            $database->checkDefault($type, $default);
+        }
+    }
+
+    /**
      * A database with a `logs` collection whose later metadata writes count into $writes and throw $failure.
      */
     private function metadataFailing(Throwable $failure, int &$writes): Database

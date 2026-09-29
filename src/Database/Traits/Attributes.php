@@ -26,6 +26,7 @@ use Utopia\Database\Validator\Attribute as AttributeValidator;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
+use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -480,8 +481,16 @@ trait Attributes
         }
 
         if ($defaultType === 'array') {
-            // Spatial types require the array itself
-            if (! \in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Object], true)) {
+            if (Attribute::isSpatialType($type)) {
+                $spatial = new SpatialValidator($type->value);
+                if (! $spatial->isValid($default)) {
+                    throw new DatabaseException('Invalid default value: '.$spatial->getDescription());
+                }
+
+                return;
+            }
+
+            if ($type !== ColumnType::Object) {
                 /** @var array<mixed> $defaultArr */
                 $defaultArr = $default;
                 foreach ($defaultArr as $value) {

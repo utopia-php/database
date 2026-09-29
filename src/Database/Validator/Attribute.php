@@ -519,8 +519,17 @@ class Attribute extends Validator
         }
 
         if ($defaultType === 'array') {
-            // Spatial types require the array itself
-            if (! in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon]) && $type !== ColumnType::Object) {
+            if (AttributeVO::isSpatialType($type)) {
+                $spatial = new Spatial($type->value);
+                if (! $spatial->isValid($default)) {
+                    $this->message = 'Invalid default value: '.$spatial->getDescription();
+                    throw new DatabaseException($this->message);
+                }
+
+                return;
+            }
+
+            if ($type !== ColumnType::Object) {
                 /** @var array<mixed> $default */
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value, $signed);

@@ -1104,4 +1104,61 @@ trait IndexTests
 
         $database->deleteCollection($collection);
     }
+
+    public function testSchemaIndexesListFulltextIndexes(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\SchemaIndexes::class) || ! $adapter->supports(Capability::Fulltext)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'schema_fulltext';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'title', size: 128),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $this->assertTrue($database->createIndex($collection, Index::fullText(key: 'title_search', attributes: ['title'])));
+            $this->assertSame(['title_search' => ['title']], $this->getFulltextSchemaIndexes($database, $collection));
+
+            $this->assertTrue($database->renameIndex($collection, 'title_search', 'title_lookup'));
+            $this->assertSame(['title_lookup' => ['title']], $this->getFulltextSchemaIndexes($database, $collection));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @return array<string, list<string>> The columns of each fulltext index by id, without the tenant column, sorted by id
+     */
+    private function getFulltextSchemaIndexes(Database $database, string $collection): array
+    {
+        $indexes = [];
+        foreach ($database->getSchemaIndexes($collection) as $schemaIndex) {
+            $type = $schemaIndex->getAttribute('indexType');
+            $this->assertIsString($type);
+            if (\strtoupper($type) !== 'FULLTEXT') {
+                continue;
+            }
+
+            $columns = $schemaIndex->getAttribute('columns');
+            $this->assertIsArray($columns);
+            $columns = \array_values(\array_filter(
+                $columns,
+                static fn (mixed $column): bool => \is_string($column) && $column !== '_tenant',
+            ));
+            /** @var list<string> $columns */
+            $indexes[$schemaIndex->getId()] = $columns;
+        }
+        \ksort($indexes);
+
+        return $indexes;
+    }
 }

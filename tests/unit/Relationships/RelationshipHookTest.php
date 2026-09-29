@@ -12,10 +12,12 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Helpers\Permission;
@@ -895,6 +897,48 @@ final class RelationshipHookTest extends TestCase
         foreach ($store->getDocuments('products') as $product) {
             $this->assertSame("sku-{$product->getId()}", $product->getAttribute('sku'), 'A trailing dot selects every attribute of the related documents');
             $this->assertSame("Name {$product->getId()}", $product->getAttribute('name'));
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testRelationshipFilterConversionEdgeCases(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $database->createCollection(new Collection(id: 'project', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'developer', attributes: [Attribute::string(key: 'devName', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::manyToMany(collection: 'project', relatedCollection: 'developer', twoWay: true, key: 'developers', twoWayKey: 'projects', onDelete: ForeignKeyAction::SetNull));
+
+        foreach (['dev1' => 'Alice', 'dev2' => 'Bob', 'dev3' => 'Carol'] as $id => $name) {
+            $database->createDocument('developer', new Document(['$id' => $id, 'devName' => $name]));
+        }
+        $database->createDocument('project', new Document(['$id' => 'project1', 'developers' => ['dev1', 'dev2']]));
+        $database->createDocument('project', new Document(['$id' => 'project2', 'developers' => ['dev1', 'dev3']]));
+
+        $projects = function (Query $query) use ($database): array {
+            $ids = \array_map(fn (Document $project): string => $project->getId(), $database->find('project', [$query]));
+            \sort($ids);
+
+            return $ids;
+        };
+
+        $this->assertSame(['project1'], $projects(Query::containsAll('developers.$id', ['dev2'])));
+        $this->assertSame(['project2'], $projects(Query::containsAll('developers.$id', ['dev1', 'dev3'])));
+        $this->assertSame([], $projects(Query::containsAll('developers.$id', ['dev1', 'nobody'])), 'A value no related document matches leaves no project');
+        $this->assertSame([], $projects(Query::containsAll('developers.$id', ['dev2', 'dev3'])), 'Values no single project holds together leave no project');
+        $this->assertSame([], $projects(Query::equal('developers.devName', ['Nobody'])));
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            return;
+        }
+
+        try {
+            $database->find('project', [Query::equal('developers.unknownAttribute', ['x'])]);
+            $this->fail('A filter on an unknown related attribute must be rejected');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('unknownAttribute', $exception->getMessage());
         }
     }
 }

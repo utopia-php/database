@@ -121,7 +121,7 @@ final class DocumentCacheInvalidationTest extends TestCase
     }
 
     /**
-     * @return array<string, array{Closure(Database): mixed, int}>
+     * @return array<string, array{Closure(Database): mixed, int, int}>
      */
     public static function singleDocumentWrites(): array
     {
@@ -132,22 +132,27 @@ final class DocumentCacheInvalidationTest extends TestCase
                     '$permissions' => [Permission::read(Role::any())],
                     'name' => 'created',
                 ])),
+                8,
                 3,
             ],
             'updateDocument' => [
                 static fn (Database $database): Document => $database->updateDocument('webhooks', 'hook', new Document(['name' => 'renamed'])),
+                14,
                 6,
             ],
             'increaseDocumentAttribute' => [
                 static fn (Database $database): Document => $database->increaseDocumentAttribute('webhooks', 'hook', 'count'),
+                14,
                 4,
             ],
             'decreaseDocumentAttribute' => [
                 static fn (Database $database): Document => $database->decreaseDocumentAttribute('webhooks', 'hook', 'count'),
+                14,
                 4,
             ],
             'deleteDocument' => [
                 static fn (Database $database): bool => $database->deleteDocument('webhooks', 'hook'),
+                14,
                 6,
             ],
         ];
@@ -157,7 +162,7 @@ final class DocumentCacheInvalidationTest extends TestCase
      * @param  Closure(Database): mixed  $write
      */
     #[DataProvider('singleDocumentWrites')]
-    public function testSingleDocumentWritesDoNotBlockTheCollection(Closure $write, int $baseline): void
+    public function testSingleDocumentWritesDoNotBlockTheCollection(Closure $write, int $expected, int $baseline): void
     {
         $cache = new CountingCache(new RedisLeasableCache());
         $database = $this->createDatabase(new CountingMemory(), $cache);
@@ -168,9 +173,9 @@ final class DocumentCacheInvalidationTest extends TestCase
         $write($database);
 
         $this->assertSame(
-            8,
+            $expected,
             $cache->getOperations(),
-            "Cache round trips of the write on a warm cache: the collection lookup (6 until one round trip per lookup) and one purge of the document inside the transaction and one after it (7.3.12: {$baseline})",
+            "Cache round trips of the write on a warm cache: the collection lookup (6 until one round trip per lookup), repeated by the locking read inside the transaction for writes that read the document first, and one purge of the document inside the transaction and one after it (7.3.12: {$baseline})",
         );
     }
 

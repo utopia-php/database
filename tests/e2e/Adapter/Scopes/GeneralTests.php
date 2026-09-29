@@ -32,6 +32,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\PDO;
+use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\Query;
 
 trait GeneralTests
@@ -1561,5 +1562,59 @@ trait GeneralTests
             $database->setPreserveDates(false);
             $database->getAuthorization()->reset();
         }
+    }
+
+    public function testWritesReadTheirCollectionDefinitionFromTheCache(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->markTestSkipped($database->getAdapter()::class.' reports no statements to the profiler.');
+        }
+
+        $collection = 'transactionDocumentCache';
+        $this->createCachedUsers($database, $collection);
+        $database->createDocument($collection, new Document([
+            '$id' => 'sibling',
+            'name' => 'sibling',
+        ]));
+        $this->assertSame('sibling', $database->getDocument($collection, 'sibling')->getAttribute('name'));
+
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
+        $metadata = $database->getNamespace().'_'.Database::METADATA;
+
+        try {
+            $profiler->reset();
+            $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+            $this->assertSame(0, $this->countStatementsAgainst($profiler, $metadata), 'updateDocument() must read its collection definition from the cache (7.3.12: 0 statements)');
+
+            $profiler->reset();
+            $sibling = $database->withTransaction(function () use ($database, $collection): Document {
+                $database->updateDocument($collection, 'user', new Document(['name' => 'renamed']));
+
+                return $database->getDocument($collection, 'sibling');
+            });
+            $this->assertSame('sibling', $sibling->getAttribute('name'));
+            $this->assertSame(0, $this->countStatementsAgainst($profiler, $metadata), 'withTransaction(update + get) must read no collection definition on a warm cache (7.3.12: 0 statements)');
+            $this->assertSame('renamed', $database->getDocument($collection, 'user')->getAttribute('name'));
+        } finally {
+            $database->disableProfiling();
+            $database->deleteCollection($collection);
+        }
+    }
+
+    private function countStatementsAgainst(QueryProfiler $profiler, string $table): int
+    {
+        $statements = 0;
+        foreach ($profiler->getLogs() as $log) {
+            if (\str_contains($log->query, $table)) {
+                $statements++;
+            }
+        }
+
+        return $statements;
     }
 }

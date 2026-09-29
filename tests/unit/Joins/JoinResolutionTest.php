@@ -5,6 +5,7 @@ namespace Tests\Unit\Joins;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\HashAwareMemoryCache;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
@@ -159,6 +160,49 @@ final class JoinResolutionTest extends TestCase
         $this->assertSame(['first', 'third'], $names);
     }
 
+    public function testAJoinReadResolvesEachJoinedCollectionOnce(): void
+    {
+        $cache = new class () extends HashAwareMemoryCache {
+            /**
+             * @var list<string>
+             */
+            public array $loads = [];
+
+            public function load(string $key, int $ttl, string $hash = ''): mixed
+            {
+                $this->loads[] = $key;
+
+                return parent::load($key, $ttl, $hash);
+            }
+        };
+        $this->database = $this->database(new Cache($cache));
+
+        $join = Query::join('themes', 'theme', '$id', '=', 'th');
+        $selfJoin = Query::join('themes', 'th.$id', '$id', '=', 'tx');
+        $reads = [
+            'find()' => fn (): mixed => $this->database->find('tickets', [$join, Query::containsAny('th.tags', ['a'])]),
+            'find() of an aggregate' => fn (): mixed => $this->database->find('tickets', [$join, Query::sum('th.score', 'total')]),
+            'find() of a self-join' => fn (): mixed => $this->database->find('tickets', [$join, $selfJoin]),
+            'count()' => fn (): mixed => $this->database->count('tickets', [$join, $selfJoin]),
+            'sum() of a joined attribute' => fn (): mixed => $this->database->sum('tickets', 'th.score', [$join, $selfJoin]),
+            'getDocument()' => fn (): mixed => $this->database->getDocument('tickets', 'k1', [$join, $selfJoin]),
+        ];
+
+        $lookups = [];
+        foreach ($reads as $name => $read) {
+            $read();
+            $cache->loads = [];
+            $read();
+
+            $lookups[$name] = \count(\array_filter(
+                $cache->loads,
+                static fn (string $key): bool => \str_ends_with($key, ':'.Database::METADATA.':themes'),
+            ));
+        }
+
+        $this->assertSame(\array_fill_keys(\array_keys($reads), 1), $lookups);
+    }
+
     public function testMoreJoinsThanTheCapAreRefusedWithoutValidation(): void
     {
         $joins = static fn (int $count): array => \array_map(
@@ -239,6 +283,7 @@ final class JoinResolutionTest extends TestCase
                 Attribute::string(key: 'name', size: 64),
                 Attribute::string(key: 'tags', size: 32, array: true),
                 Attribute::datetime(key: 'when'),
+                Attribute::integer(key: 'score'),
             ],
             permissions: $permissions,
             documentSecurity: false,
@@ -261,7 +306,7 @@ final class JoinResolutionTest extends TestCase
             ['t2', 'ab theme', ['a', 'b'], '2024-01-01T07:00:00.000+00:00'],
             ['t3', 'c theme', ['b', 'c'], '2024-01-01T11:00:00.000+00:00'],
         ] as [$id, $name, $tags, $when]) {
-            $database->createDocument('themes', new Document(['$id' => $id, 'name' => $name, 'tags' => $tags, 'when' => $when]));
+            $database->createDocument('themes', new Document(['$id' => $id, 'name' => $name, 'tags' => $tags, 'when' => $when, 'score' => 5]));
         }
 
         foreach ([

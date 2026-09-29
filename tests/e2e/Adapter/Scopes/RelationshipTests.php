@@ -5022,4 +5022,59 @@ trait RelationshipTests
 
         return $ids;
     }
+
+    public function testNestedPathFilterThroughAOneToManyHopStaysWithinTheQueryValueLimit(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = 'nestedHopParents';
+        $children = 'nestedHopChildren';
+        $labels = 'nestedHopLabels';
+        $database->createCollection(new Collection(id: $parents, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $children, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $labels, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::oneToMany(collection: $parents, relatedCollection: $children, twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: $children, relatedCollection: $labels, twoWay: true, key: 'labels', twoWayKey: 'child', onDelete: ForeignKeyAction::SetNull));
+
+        foreach (\range(1, 4) as $number) {
+            $database->createDocument($parents, new Document(['$id' => "parent{$number}"]));
+            $database->createDocument($children, new Document(['$id' => "child{$number}", 'parent' => "parent{$number}"]));
+            $database->createDocument($labels, new Document(['$id' => "label{$number}", 'name' => $number === 4 ? 'other' : 'match', 'child' => "child{$number}"]));
+        }
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(2);
+
+        try {
+            $ids = \array_map(fn (Document $parent): string => $parent->getId(), $database->find($parents, [Query::equal('children.labels.name', ['match'])]));
+            \sort($ids);
+
+            $this->assertSame(['parent1', 'parent2', 'parent3'], $ids);
+        } finally {
+            $database->setMaxQueryValues($max);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+            $database->deleteCollection($labels);
+        }
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function relationshipCoveragePermissions(): array
+    {
+        return [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+    }
 }

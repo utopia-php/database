@@ -495,4 +495,50 @@ class IndexTest extends TestCase
         $this->assertFalse($validator->isValid(Index::key(key: 'by_body', attributes: ['body'])));
         $this->assertSame('Index length is longer than the maximum: 768', $validator->getDescription());
     }
+
+    public function testKeyAndUniqueIndexesAreRejectedWithoutAdapterSupport(): void
+    {
+        $validator = new IndexValidator(
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            indexes: [],
+            maxLength: 768,
+            supportForKeyIndexes: false,
+            supportForUniqueIndexes: false,
+        );
+        $key = Index::key(key: 'by_title', attributes: ['title']);
+        $unique = Index::unique(key: 'by_title', attributes: ['title']);
+
+        $this->assertFalse($validator->isValid($key));
+        $this->assertSame('Key index is not supported', $validator->getDescription());
+        $this->assertFalse($validator->checkKeyUniqueFulltextSupport($key));
+        $this->assertSame('Key index is not supported', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid($unique));
+        $this->assertSame('Unique index is not supported', $validator->getDescription());
+        $this->assertFalse($validator->checkKeyUniqueFulltextSupport($unique));
+        $this->assertSame('Unique index is not supported', $validator->getDescription());
+    }
+
+    public function testIndexTypeWithoutValidationRulesIsRejected(): void
+    {
+        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+
+        $this->assertFalse($validator->isValid(Index::index(key: 'by_title', attributes: ['title'])));
+        $this->assertStringStartsWith('Unknown index type: index. Must be one of ', $validator->getDescription());
+    }
+
+    public function testOrderOnAnArrayAttributeIsRejected(): void
+    {
+        $validator = new IndexValidator(
+            attributes: [Attribute::string(key: 'tags', size: 64, array: true)],
+            indexes: [],
+            maxLength: 768,
+            supportForArrayIndexes: true,
+        );
+
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64], orders: [Order::Asc])));
+        $this->assertSame('Invalid index order "'.Order::Asc->value.'" on array attribute "tags"', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64])), $validator->getDescription());
+    }
 }

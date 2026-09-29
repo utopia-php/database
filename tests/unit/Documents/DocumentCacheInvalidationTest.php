@@ -3,6 +3,7 @@
 namespace Tests\Unit\Documents;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Cache\CountingCache;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter as CacheAdapter;
@@ -73,6 +74,26 @@ final class DocumentCacheInvalidationTest extends TestCase
         $this->assertSame('Hook', $database->getDocument('webhooks', 'Hook')->getId(), 'A cached miss for one casing must not answer another');
         $this->assertTrue($database->getDocument('webhooks', 'hook')->isEmpty(), 'A cached document must not answer another casing of its id');
         $this->assertSame('Hook', $database->getDocument('webhooks', 'Hook')->getId());
+    }
+
+    public function testAnUpdateInvalidatesTheCacheOnceLikeADelete(): void
+    {
+        $cache = new CountingCache(new RedisLeasableCache());
+        $database = $this->createDatabase(new CountingMemory(), $cache);
+        $database->createDocument('webhooks', $this->hook('updated'));
+        $database->createDocument('webhooks', $this->hook('deleted'));
+        $database->getDocument('webhooks', 'updated');
+        $database->getDocument('webhooks', 'deleted');
+
+        $cache->resetOperations();
+        $database->updateDocument('webhooks', 'updated', new Document(['name' => 'renamed']));
+        $update = $cache->getOperations();
+
+        $cache->resetOperations();
+        $database->deleteDocument('webhooks', 'deleted');
+        $delete = $cache->getOperations();
+
+        $this->assertSame($delete, $update, 'updateDocument() must invalidate its document once, as deleteDocument() does');
     }
 
     private function hook(string $id): Document

@@ -1247,8 +1247,6 @@ trait Documents
             return $document;
         }
 
-        $this->purgeCachedDocumentInternal($collection->getId(), $id);
-
         $this->triggerDocumentPurge($collection->getId(), $id);
         if ($document->getId() !== $id) {
             $this->triggerDocumentPurge($collection->getId(), $document->getId());

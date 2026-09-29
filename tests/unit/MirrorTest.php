@@ -29,6 +29,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
@@ -877,5 +878,96 @@ class MirrorTest extends TestCase
             [30, 30, 30],
             [$mirror->getCacheWriterTimeout(), $source->getCacheWriterTimeout(), $destination->getCacheWriterTimeout()],
         );
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror): array<Document>}>
+     */
+    public static function writesReturningDocuments(): iterable
+    {
+        yield 'createDocument' => [
+            static fn (Mirror $mirror): array => [$mirror->createDocument(self::COLLECTION, new Document([Document::ID => 'written', 'title' => 'written']))],
+        ];
+        yield 'updateDocument' => [
+            static fn (Mirror $mirror): array => [$mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'written']))],
+        ];
+        yield 'upsertDocument' => [
+            static fn (Mirror $mirror): array => [$mirror->upsertDocument(self::COLLECTION, new Document([Document::ID => 'first', 'title' => 'written']))],
+        ];
+        yield 'createDocuments' => [
+            static function (Mirror $mirror): array {
+                $returned = [];
+                $mirror->createDocuments(
+                    self::COLLECTION,
+                    [new Document([Document::ID => 'written', 'title' => 'written'])],
+                    onNext: static function (Document $document) use (&$returned): void {
+                        $returned[] = $document;
+                    },
+                );
+
+                return $returned;
+            },
+        ];
+        yield 'updateDocuments' => [
+            static function (Mirror $mirror): array {
+                $returned = [];
+                $mirror->updateDocuments(
+                    self::COLLECTION,
+                    new Document(['title' => 'written']),
+                    [Query::equal(Document::ID, ['first'])],
+                    onNext: static function (Document $document) use (&$returned): void {
+                        $returned[] = $document;
+                    },
+                );
+
+                return $returned;
+            },
+        ];
+        yield 'upsertDocuments' => [
+            static function (Mirror $mirror): array {
+                $returned = [];
+                $mirror->upsertDocuments(
+                    self::COLLECTION,
+                    [new Document([Document::ID => 'first', 'title' => 'written'])],
+                    onNext: static function (Document $document) use (&$returned): void {
+                        $returned[] = $document;
+                    },
+                );
+
+                return $returned;
+            },
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): array<Document>  $write
+     */
+    #[DataProvider('writesReturningDocuments')]
+    public function testDecoratorsApplyToDocumentsReturnedByWrites(Closure $write): void
+    {
+        $destination = self::sqlite();
+        $mirror = $this->seed(new Mirror(self::sqlite(), $destination));
+        $mirror->addHook(new class () implements Decorator {
+            public function decorate(Event $event, Document $collection, Document $document): Document
+            {
+                return $document->setAttribute('decoratedFor', $collection->getId());
+            }
+        });
+        $errors = [];
+        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+        $returned = [];
+
+        self::inCoroutine(static function () use ($mirror, $write, &$returned): void {
+            $returned = $write($mirror);
+        });
+
+        $this->assertCount(1, $returned);
+        $this->assertSame(self::COLLECTION, $returned[0]->getAttribute('decoratedFor'));
+        $this->assertSame([], $errors, 'A decorated document must not reach the destination');
+        $replicated = $destination->getDocument(self::COLLECTION, $returned[0]->getId());
+        $this->assertSame('written', $replicated->getAttribute('title'));
+        $this->assertNull($replicated->getAttribute('decoratedFor'));
     }
 }

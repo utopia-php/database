@@ -1068,12 +1068,12 @@ class Mirror extends Database
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            return $document;
+            return $this->decorate(Event::DocumentCreate, $collection, $document);
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            return $document;
+            return $this->decorate(Event::DocumentCreate, $collection, $document);
         }
 
         try {
@@ -1090,7 +1090,7 @@ class Mirror extends Database
 
             $this->awaitReplications($collection, [$document->getId()]);
             $this->destination->setPreserveDates(true);
-            $document = $this->destination->createDocument($collection, $clone);
+            $this->destination->createDocument($collection, $clone);
             $this->destination->setPreserveDates(false);
 
             foreach ($this->writeFilters as $filter) {
@@ -1105,7 +1105,7 @@ class Mirror extends Database
             $this->logError('createDocument', $err);
         }
 
-        return $document;
+        return $this->decorate(Event::DocumentCreate, $collection, $document);
     }
 
     /**
@@ -1118,6 +1118,7 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        $onNext = $this->decorating(Event::DocumentsCreate, $collection, $onNext);
         $modified = $this->skipDuplicates
             ? $this->source->skipDuplicates(
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
@@ -1207,13 +1208,13 @@ class Mirror extends Database
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            return $document;
+            return $this->decorate(Event::DocumentUpdate, $collection, $document);
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
 
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            return $document;
+            return $this->decorate(Event::DocumentUpdate, $collection, $document);
         }
 
         try {
@@ -1245,7 +1246,7 @@ class Mirror extends Database
             $this->logError('updateDocument', $err);
         }
 
-        return $document;
+        return $this->decorate(Event::DocumentUpdate, $collection, $document);
     }
 
     /**
@@ -1259,6 +1260,7 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        $onNext = $this->decorating(Event::DocumentsUpdate, $collection, $onNext);
         $modified = $this->source->updateDocuments(
             $collection,
             $updates,
@@ -1331,6 +1333,7 @@ class Mirror extends Database
         ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE,
     ): int {
+        $onNext = $this->decorating(Event::DocumentsUpsert, $collection, $onNext);
         $modified = $this->source->upsertDocumentsWithIncrease(
             $collection,
             $attribute,
@@ -1671,6 +1674,35 @@ class Mirror extends Database
                 return;
             }
         });
+    }
+
+    /**
+     * Applies the mirror's decorators to a document one of its writes returns. The source has none of them, so what
+     * it wrote, and what replication clones from it, stays undecorated.
+     */
+    private function decorate(Event $event, string $collection, Document $document): Document
+    {
+        if ($this->decorators === []) {
+            return $document;
+        }
+
+        return $this->decorateDocument($event, $this->silent(fn (): Collection => $this->getCollection($collection)), $document);
+    }
+
+    /**
+     * Hands $onNext a decorated copy of each document a bulk write returns: the source may pass the very documents
+     * the caller gave it, which replication clones afterwards.
+     *
+     * @param  (callable(Document, mixed...): mixed)|null  $onNext
+     * @return (callable(Document, mixed...): mixed)|null
+     */
+    private function decorating(Event $event, string $collection, ?callable $onNext): ?callable
+    {
+        if ($onNext === null || $this->decorators === []) {
+            return $onNext;
+        }
+
+        return fn (Document $document, mixed ...$arguments): mixed => $onNext($this->decorate($event, $collection, clone $document), ...$arguments);
     }
 
     /**

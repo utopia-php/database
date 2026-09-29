@@ -501,29 +501,29 @@ trait Attributes
             case ColumnType::MediumText:
             case ColumnType::LongText:
                 if ($defaultType !== 'string') {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Integer:
             case ColumnType::Boolean:
                 if ($type->value !== $defaultType) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::BigInteger:
                 if (! (new BigInt($signed, $this->adapter->supports(Capability::UnsignedBigInt)))->isValid($default)) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Float:
             case ColumnType::Double:
                 if ($defaultType !== 'double') {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Datetime:
                 if ($defaultType !== ColumnType::String->value) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Vector:
@@ -534,7 +534,7 @@ trait Attributes
                 break;
             default:
                 throw \in_array($type, Attribute::TYPES, true)
-                    ? new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value)
+                    ? new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type))
                     : $this->unknownType($type->value);
         }
     }
@@ -548,7 +548,7 @@ trait Attributes
         );
 
         return new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.\implode(', ', \array_map(
-            fn (ColumnType $available): string => $available->value,
+            Attribute::persistedType(...),
             $availableTypes,
         )));
     }

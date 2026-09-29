@@ -34,6 +34,8 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
+use Utopia\Database\Validator\Attribute as AttributeValidator;
+use Utopia\Query\Schema\ColumnType;
 
 final class CoreMinorsTest extends TestCase
 {
@@ -348,6 +350,30 @@ final class CoreMinorsTest extends TestCase
         $this->assertSame(['profile'], $this->attributeKeys($fresh, 'accounts'));
         $this->assertTrue($this->hasSchemaAttribute($fresh, 'profiles', 'account'), 'A column whose definition stays must not be dropped');
         $this->assertTrue($this->hasSchemaAttribute($fresh, 'accounts', 'profile'), 'A column whose definition stays must not be dropped');
+    }
+
+    public function testTypeMismatchMessagesSayBigint(): void
+    {
+        $validator = new AttributeValidator(attributes: []);
+        $error = $this->attempt(fn (): bool => $validator->isValid(new Attribute(key: 'total', type: ColumnType::BigInteger, default: 'many')));
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame('Default value "many" does not match given type bigint', $error->getMessage());
+
+        $database = $this->interceptingMetadataWrites(static function (): void {
+        });
+        $this->configure($database);
+        $database->createCollection(new Collection(id: 'logs', attributes: [Attribute::bigInteger(key: 'total')]));
+
+        $error = $this->attempt(fn (): Document => $database->updateAttributeDefault('logs', 'total', 'many'));
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame('Default value many does not match given type bigint', $error->getMessage());
+
+        $error = $this->attempt(fn (): bool => $validator->isValid(new Attribute(key: 'value', type: ColumnType::Timestamp)));
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertStringContainsString(', bigint, ', $error->getMessage(), 'The listed types must use the stored spelling');
     }
 
     /**

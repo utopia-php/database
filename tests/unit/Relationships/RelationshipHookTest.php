@@ -21,6 +21,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ForeignKeyAction;
@@ -694,5 +695,103 @@ final class RelationshipHookTest extends TestCase
         } catch (AuthorizationException $exception) {
             $this->assertSame("No permissions provided for action 'update'", $exception->getMessage());
         }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testDeleteDocumentsWithASelectCascadesToChildren(Closure $adapter): void
+    {
+        foreach ($this->deletePairs() as $type => [$relationship, $link]) {
+            $database = $this->database($adapter);
+            $this->relate($database, $relationship(ForeignKeyAction::Cascade));
+            $link($database, 'parent1', 'child1');
+            $link($database, 'parent2', 'child2');
+
+            $deleted = $database->deleteDocuments('parent', [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+
+            $this->assertSame(1, $deleted, $type);
+            $this->assertSame(['parent1'], $this->ids($database, 'parent'), $type);
+            $this->assertSame(['child1'], $this->ids($database, 'child'), "{$type}: the deleted parent's child must be deleted with it");
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testDeleteDocumentsWithASelectHonoursRestrict(Closure $adapter): void
+    {
+        foreach ($this->deletePairs() as $type => [$relationship, $link]) {
+            $database = $this->database($adapter);
+            $this->relate($database, $relationship(ForeignKeyAction::Restrict));
+            $link($database, 'parent1', 'child1');
+            $link($database, 'parent2', 'child2');
+
+            try {
+                $database->deleteDocuments('parent', [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+                $this->fail("{$type}: deleting a parent with a related document must be restricted");
+            } catch (RestrictedException) {
+            }
+
+            $this->assertSame(['parent1', 'parent2'], $this->ids($database, 'parent'), $type);
+            $this->assertSame(['child1', 'child2'], $this->ids($database, 'child'), $type);
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testDeleteDocumentsWithASelectCascadesFromTheChildSideOfATwoWayOneToOne(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
+        foreach (['1', '2'] as $suffix) {
+            $database->createDocument('child', new Document(['$id' => "child{$suffix}"]));
+            $database->createDocument('parent', new Document(['$id' => "parent{$suffix}", 'child' => "child{$suffix}"]));
+        }
+
+        $this->assertSame(1, $database->deleteDocuments('child', [Query::equal('$id', ['child2']), Query::select(['$id'])]));
+
+        $this->assertSame(['child1'], $this->ids($database, 'child'));
+        $this->assertSame(['parent1'], $this->ids($database, 'parent'));
+    }
+
+    /**
+     * @return array<string, array{Closure(ForeignKeyAction): Relationship, Closure(Database, string, string): void}>
+     */
+    private function deletePairs(): array
+    {
+        $parentHoldsKey = function (string $key): Closure {
+            return function (Database $database, string $parent, string $child) use ($key): void {
+                $database->createDocument('child', new Document(['$id' => $child]));
+                $database->createDocument('parent', new Document(['$id' => $parent, $key => $key === 'children' ? [$child] : $child]));
+            };
+        };
+        $childHoldsKey = function (Database $database, string $parent, string $child): void {
+            $database->createDocument('parent', new Document(['$id' => $parent]));
+            $database->createDocument('child', new Document(['$id' => $child, 'parent' => $parent]));
+        };
+
+        return [
+            'one-to-one' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'child', twoWayKey: 'parent', onDelete: $onDelete),
+                $parentHoldsKey('child'),
+            ],
+            'one-to-many' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete),
+                $childHoldsKey,
+            ],
+            'many-to-one' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::manyToOne(collection: 'child', relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: $onDelete),
+                $childHoldsKey,
+            ],
+            'many-to-many' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: $onDelete),
+                $parentHoldsKey('children'),
+            ],
+        ];
     }
 }

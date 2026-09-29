@@ -904,7 +904,7 @@ class Relationships implements Hook
 
             switch ($onDelete) {
                 case ForeignKeyAction::Restrict:
-                    $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->deleteRestrict($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
                     $unwritten = true;
                     break;
                 case ForeignKeyAction::SetNull:
@@ -958,7 +958,7 @@ class Relationships implements Hook
                             break 2;
                         }
                     }
-                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWayKey, $side, $relationship);
+                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side, $relationship);
                     break;
             }
 
@@ -1984,22 +1984,19 @@ class Relationships implements Hook
     }
 
     private function deleteRestrict(
+        Document $collection,
         Document $relatedCollection,
         Document $document,
-        mixed $value,
+        string $key,
         RelationType $relationType,
         bool $twoWay,
         string $twoWayKey,
         RelationSide $side
     ): void {
-        if ($value instanceof Document && $value->isEmpty()) {
-            $value = null;
-        }
-
         if (
-            ! empty($value)
-            && $relationType !== RelationType::ManyToOne
+            $relationType !== RelationType::ManyToOne
             && $side === RelationSide::Parent
+            && $this->hasRelatedDocument($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side)
         ) {
             throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
@@ -2042,6 +2039,109 @@ class Relationships implements Hook
                 throw new RestrictedException('Cannot delete document because it has at least one related document.');
             }
         }
+    }
+
+    private function hasRelatedDocument(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): bool
+    {
+        $authorization = $this->db->getAuthorization();
+
+        if ($relationType === RelationType::OneToMany) {
+            return ! $authorization->skip(fn () => $this->db->findOne($relatedCollection->getId(), [
+                Query::select([Document::ID]),
+                Query::equal($twoWayKey, [$document->getId()]),
+            ]))->isEmpty();
+        }
+
+        $relatedIds = $this->findRelatedIds($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
+
+        foreach (\array_chunk($relatedIds, $this->relationQueryChunkSize()) as $chunk) {
+            $related = $authorization->skip(fn () => $this->db->findOne($relatedCollection->getId(), [
+                Query::select([Document::ID]),
+                Query::equal(Document::ID, $chunk),
+            ]));
+
+            if (! $related->isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The IDs of the documents on the other side of the relationship that a delete of $document
+     * reaches, read from storage with permissions and relationships skipped. The relationship
+     * value on $document cannot be used: it holds only what the caller could read, and nothing
+     * at all when deleteDocuments() read the batch with a select.
+     *
+     * One-to-one and many-to-many IDs come from a stored reference, so the document they name
+     * may already be gone.
+     *
+     * @return list<string>
+     */
+    private function findRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): array
+    {
+        return match ($relationType) {
+            RelationType::OneToOne => $side === RelationSide::Parent || $twoWay
+                ? $this->findStoredRelatedIds($collection, $document, $key)
+                : [],
+            RelationType::OneToMany => $side === RelationSide::Parent
+                ? $this->findReferencingIds($relatedCollection, $document, $twoWayKey)
+                : [],
+            RelationType::ManyToOne => $side === RelationSide::Child
+                ? $this->findReferencingIds($relatedCollection, $document, $twoWayKey)
+                : [],
+            RelationType::ManyToMany => $this->findJunctionRelatedIds($collection, $relatedCollection, $document, $key, $twoWayKey, $side),
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findStoredRelatedIds(Document $collection, Document $document, string $key): array
+    {
+        $stored = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(
+            fn () => $this->db->getDocument($collection->getId(), $document->getId(), forUpdate: true)
+        ));
+        $relatedId = $stored->getAttribute($key);
+
+        return \is_string($relatedId) && $relatedId !== '' ? [$relatedId] : [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findReferencingIds(Document $relatedCollection, Document $document, string $twoWayKey): array
+    {
+        return \array_values(\array_map(
+            fn (Document $related) => $related->getId(),
+            $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey),
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findJunctionRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, string $twoWayKey, RelationSide $side): array
+    {
+        $junctions = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->find(
+            $this->getJunctionCollection($collection, $relatedCollection, $side),
+            [
+                Query::select([$key]),
+                Query::equal($twoWayKey, [$document->getId()]),
+                Query::limit(PHP_INT_MAX),
+            ],
+        )));
+
+        $relatedIds = [];
+        foreach ($junctions as $junction) {
+            $relatedId = $junction->getAttribute($key);
+            if (\is_string($relatedId) && $relatedId !== '') {
+                $relatedIds[] = $relatedId;
+            }
+        }
+
+        return \array_values(\array_unique($relatedIds));
     }
 
     /**
@@ -2162,41 +2262,17 @@ class Relationships implements Hook
         return [];
     }
 
-    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, mixed $value, RelationType $relationType, string $twoWayKey, RelationSide $side, Document $relationship): void
+    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side, Document $relationship): void
     {
         switch ($relationType) {
             case RelationType::OneToOne:
-                $deleteId = ($value instanceof Document) ? $value->getId() : (\is_string($value) ? $value : null);
-                if ($deleteId !== null) {
-                    $this->cascade($relationship, fn () => $this->db->deleteDocument(
-                        $relatedCollection->getId(),
-                        $deleteId
-                    ));
-                }
-                break;
             case RelationType::OneToMany:
-                if ($side === RelationSide::Child || empty($value)) {
-                    break;
-                }
-
-                /** @var array<Document> $value */
-                $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relationIds));
-
-                break;
             case RelationType::ManyToOne:
-                if ($side === RelationSide::Parent) {
-                    break;
+                $relatedIds = $this->findRelatedIds($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
+
+                if ($relatedIds !== []) {
+                    $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relatedIds));
                 }
-
-                $value = $this->db->find($relatedCollection->getId(), [
-                    Query::select([Document::ID]),
-                    Query::equal($twoWayKey, [$document->getId()]),
-                    Query::limit(PHP_INT_MAX),
-                ]);
-
-                $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relationIds));
 
                 break;
             case RelationType::ManyToMany:

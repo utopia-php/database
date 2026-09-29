@@ -2685,4 +2685,88 @@ trait OneToManyTests
             $this->assertNull($child->getAttribute('parent'));
         }
     }
+
+    public function testDeleteDocumentsWithASelectCascadesToChildren_OneToMany(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parentCollection = 'o2m_select_cascade_parent';
+        $childCollection = 'o2m_select_cascade_child';
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: $parentCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(new Collection(id: $childCollection, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($parentCollection, Attribute::string(key: 'name', size: 64));
+        $database->createRelationship(Relationship::oneToMany(collection: $parentCollection, relatedCollection: $childCollection, twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
+
+        foreach (['1', '2'] as $suffix) {
+            $database->createDocument($parentCollection, new Document(['$id' => "parent{$suffix}"]));
+            $database->createDocument($childCollection, new Document(['$id' => "child{$suffix}", 'parent' => "parent{$suffix}"]));
+        }
+
+        $deleted = $database->deleteDocuments($parentCollection, [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+
+        $this->assertSame(1, $deleted);
+        $this->assertSame(['parent1'], \array_map(fn (Document $document) => $document->getId(), $database->find($parentCollection, [Query::orderAsc('$id')])));
+        $this->assertSame(['child1'], \array_map(fn (Document $document) => $document->getId(), $database->find($childCollection, [Query::orderAsc('$id')])), "The deleted parent's child must be deleted with it");
+
+        $database->deleteCollection($parentCollection);
+        $database->deleteCollection($childCollection);
+    }
+
+    public function testDeleteDocumentsWithASelectHonoursRestrict_OneToMany(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parentCollection = 'o2m_select_restrict_parent';
+        $childCollection = 'o2m_select_restrict_child';
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: $parentCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(new Collection(id: $childCollection, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($parentCollection, Attribute::string(key: 'name', size: 64));
+        $database->createRelationship(Relationship::oneToMany(collection: $parentCollection, relatedCollection: $childCollection, twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Restrict));
+
+        foreach (['1', '2'] as $suffix) {
+            $database->createDocument($parentCollection, new Document(['$id' => "parent{$suffix}"]));
+            $database->createDocument($childCollection, new Document(['$id' => "child{$suffix}", 'parent' => "parent{$suffix}"]));
+        }
+
+        try {
+            $database->deleteDocuments($parentCollection, [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+            $this->fail('Deleting a parent with a related document must be restricted');
+        } catch (RestrictedException $exception) {
+            $this->assertSame('Cannot delete document because it has at least one related document.', $exception->getMessage());
+        }
+
+        $this->assertSame(['parent1', 'parent2'], \array_map(fn (Document $document) => $document->getId(), $database->find($parentCollection, [Query::orderAsc('$id')])));
+        $this->assertSame(['child1', 'child2'], \array_map(fn (Document $document) => $document->getId(), $database->find($childCollection, [Query::orderAsc('$id')])));
+
+        $database->deleteCollection($parentCollection);
+        $database->deleteCollection($childCollection);
+    }
 }

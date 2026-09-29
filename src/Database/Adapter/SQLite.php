@@ -164,7 +164,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         $remove = [
             Capability::Schemas,
-            Capability::Regex,
             Capability::UpdateLock,
             Capability::Hostname,
             Capability::UpsertOnUniqueIndex,
@@ -174,6 +173,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         if (! $this->emulateMySQL) {
             $remove[] = Capability::AttributeResizing;
+        }
+
+        if (! $this->pcreRegistered) {
+            $remove[] = Capability::Regex;
         }
 
         $extras = [

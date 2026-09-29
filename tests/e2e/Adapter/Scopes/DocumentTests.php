@@ -3,13 +3,14 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PDO;
 use PDOException;
 use PHPUnit\Framework\Attributes\Depends;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
-use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -30,6 +31,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\SetType;
@@ -9799,10 +9801,12 @@ trait DocumentTests
                 $thrown = $exception;
             }
 
-            if ($database->getAdapter() instanceof Postgres) {
-                $this->assertInstanceOf(UniqueException::class, $thrown, 'PostgreSQL skips only a stored id, so a new id colliding on another unique index throws');
-            } elseif ($thrown === null) {
-                $this->assertSame(0, $created, 'An engine that cannot name the index to ignore skips the row');
+            if ($this->skipsOnlyStoredIds($database)) {
+                $this->assertInstanceOf(UniqueException::class, $thrown, 'PostgreSQL and MongoDB skip only a stored id, so a new id colliding on another unique index throws');
+                $this->assertNull($created);
+            } else {
+                $this->assertNull($thrown, 'MariaDB, MySQL, SQLite, Memory and Redis cannot name the index to ignore and skip the row');
+                $this->assertSame(0, $created);
             }
 
             $this->assertTrue($database->getDocument($collection, 'colliding')->isEmpty());
@@ -9811,5 +9815,22 @@ trait DocumentTests
         } finally {
             $database->deleteCollection($collection);
         }
+    }
+
+    /**
+     * Whether the engine behind the database, pooled or not, can skip a stored id without
+     * skipping other unique collisions.
+     */
+    private function skipsOnlyStoredIds(Database $database): bool
+    {
+        $adapter = $database->getAdapter();
+        if ($adapter instanceof Mongo) {
+            return true;
+        }
+
+        $driver = $adapter->getDriver();
+
+        return ($driver instanceof PDO || $driver instanceof DatabasePDO)
+            && $driver->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
     }
 }

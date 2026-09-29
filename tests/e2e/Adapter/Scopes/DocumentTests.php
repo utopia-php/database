@@ -9827,6 +9827,57 @@ trait DocumentTests
         }
     }
 
+    public function testProfiledReadsLogTheirValuesCollectionAndOperation(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'profiled_reads';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'category', size: 16)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'p1',
+                '$permissions' => [Permission::read(Role::any())],
+                'category' => 'profiled_value',
+            ]));
+
+            $profiler = $database->enableProfiling()->getProfiler();
+            $this->assertNotNull($profiler);
+
+            try {
+                $profiler->reset();
+                $database->find($collection, [Query::equal('category', ['profiled_value'])]);
+                $database->count($collection, [Query::equal('category', ['profiled_value'])]);
+            } finally {
+                $database->disableProfiling();
+            }
+
+            $operations = [];
+            foreach ($profiler->getLogs() as $log) {
+                if ($log->collection !== $collection) {
+                    continue;
+                }
+                $this->assertContains('profiled_value', $log->bindings, $log->query);
+                $operations[] = $log->operation;
+            }
+
+            $this->assertSame(['document_find', 'document_count'], $operations);
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     /**
      * Run $read with the profiler on; return its result and the statements it ran on $table.
      *

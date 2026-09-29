@@ -12,7 +12,6 @@ readonly class QueryLog
         public string $query,
         public array $bindings,
         public float $durationMs,
-        public ?string $explainPlan = null,
         public string $collection = '',
         public string $operation = '',
         public ?array $backtrace = null,

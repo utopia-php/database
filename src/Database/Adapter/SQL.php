@@ -133,6 +133,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private ?\WeakMap $statementEvents = null;
 
     /**
+     * @var \WeakMap<object, array<mixed>>|null
+     */
+    private ?\WeakMap $statementBindings = null;
+
+    /**
+     * @var \WeakMap<object, string>|null
+     */
+    private ?\WeakMap $statementCollections = null;
+
+    /**
      * Accepts Utopia\Database\PDO, a PDO-compatible proxy, or a native PDO.
      */
     public function __construct(object $pdo)
@@ -646,6 +656,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentRead);
                 $stmt->bindValue(':'.Storage::UID, $id, PDO::PARAM_STR);
+                $this->describeStatement($stmt, [':'.Storage::UID => $id], $name);
                 $this->execute($stmt);
                 /** @var array<string, mixed>|false $row */
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -766,7 +777,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
-        $rows = $this->executeSelect($builder, Event::DocumentRead);
+        $rows = $this->executeSelect($builder, Event::DocumentRead, $name);
 
         if (empty($rows)) {
             return new Document([]);
@@ -1285,6 +1296,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentFind);
+                $this->describeStatement($stmt, [], $name);
                 $this->execute($stmt);
                 /** @var array<int, array<string, mixed>> $rows */
                 $rows = $stmt->fetchAll();
@@ -1483,7 +1495,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $left->unionAll($right);
             }
             $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
-            $results = $this->executeSelect($left, Event::DocumentFind);
+            $results = $this->executeSelect($left, Event::DocumentFind, $name);
         } else {
             $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
             $hasSelectionProjection = $this->configureFindBuilder(
@@ -1563,7 +1575,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
-            $results = $this->executeSelect($builder, Event::DocumentFind);
+            $results = $this->executeSelect($builder, Event::DocumentFind, $name);
         }
 
         $documents = [];
@@ -1659,7 +1671,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $max,
             );
 
-            return $this->executeWrappedCount($innerBuilder);
+            return $this->executeWrappedCount($innerBuilder, $name);
         }
 
         if (
@@ -1672,6 +1684,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentCount);
+                $this->describeStatement($stmt, [], $name);
                 $this->execute($stmt);
             } catch (PDOException $e) {
                 throw $this->processException($e);
@@ -1694,7 +1707,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($max === null && $this->onlyNarrowsRows($otherQueries)) {
             $builder->count('1', 'sum');
 
-            return $this->countOf($this->fetchAggregateRow($builder, Event::DocumentCount));
+            return $this->countOf($this->fetchAggregateRow($builder, Event::DocumentCount, $name));
         }
 
         $builder->selectRaw('1');
@@ -1702,7 +1715,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $builder->limit($max);
         }
 
-        return $this->executeWrappedCount($builder);
+        return $this->executeWrappedCount($builder, $name);
     }
 
     /**
@@ -1744,7 +1757,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $attribute,
             );
 
-            return $this->executeWrappedSum($innerBuilder, 'sum_attr');
+            return $this->executeWrappedSum($innerBuilder, 'sum_attr', $name);
         }
 
         $attribute = $this->filter($attribute);
@@ -1759,6 +1772,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentSum);
+                $this->describeStatement($stmt, [], $name);
                 $this->execute($stmt);
             } catch (PDOException $e) {
                 throw $this->processException($e);
@@ -1781,7 +1795,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         if ($max === null && $this->onlyNarrowsRows($otherQueries)) {
             $builder->sum($attribute, 'sum');
 
-            return $this->sumOf($this->fetchAggregateRow($builder, Event::DocumentSum));
+            return $this->sumOf($this->fetchAggregateRow($builder, Event::DocumentSum, $name));
         }
 
         $builder->select([$attribute]);
@@ -1789,7 +1803,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $builder->limit($max);
         }
 
-        return $this->executeWrappedSum($builder, $attribute);
+        return $this->executeWrappedSum($builder, $attribute, $name);
     }
 
     /**
@@ -1921,22 +1935,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $quote.$prefix.$quote.'.'.$quote.$name.$quote;
     }
 
-    private function executeWrappedCount(SQLBuilder $innerBuilder): int
+    private function executeWrappedCount(SQLBuilder $innerBuilder, string $collection): int
     {
         $outerBuilder = $this->createBuilder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->count('1', 'sum');
 
-        return $this->countOf($this->fetchAggregateRow($outerBuilder, Event::DocumentCount));
+        return $this->countOf($this->fetchAggregateRow($outerBuilder, Event::DocumentCount, $collection));
     }
 
-    private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute): int|float
+    private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute, string $collection): int|float
     {
         $outerBuilder = $this->createBuilder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->sum($attribute, 'sum');
 
-        return $this->sumOf($this->fetchAggregateRow($outerBuilder, Event::DocumentSum));
+        return $this->sumOf($this->fetchAggregateRow($outerBuilder, Event::DocumentSum, $collection));
     }
 
     /**
@@ -1990,9 +2004,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @return array<string, mixed>
      */
-    private function fetchAggregateRow(SQLBuilder $builder, Event $event): array
+    private function fetchAggregateRow(SQLBuilder $builder, Event $event, string $collection): array
     {
-        return $this->executeSelect($builder, $event)[0] ?? [];
+        return $this->executeSelect($builder, $event, $collection)[0] ?? [];
     }
 
     private const array ROW_CONDITION_GROUPS = [Method::And, Method::Or, Method::ContainsAll, Method::ElemMatch];
@@ -3366,11 +3380,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Does NOT call execute() - the caller is responsible for that.
      *
      * @param  Event|null  $event  Optional event to run through transformation system
+     * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
-    protected function executeResult(Statement $result, ?Event $event = null): PDOStatement|DatabasePDOStatement|PDOStatementProxy
+    protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): PDOStatement|DatabasePDOStatement|PDOStatementProxy
     {
         $stmt = $this->prepareStatement($result->query, $event);
+        $this->describeStatement($stmt, $result->bindings, $collection);
         foreach ($result->bindings as $i => $value) {
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
@@ -3411,11 +3427,32 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $result = $stmt->execute();
         $this->profiler->log(
             $stmt->queryString ?? '',
-            [],
+            $this->statementBindings[$stmt] ?? [],
             (\microtime(true) - $start) * 1000,
+            $this->statementCollections[$stmt] ?? '',
+            $this->getStatementEvent($stmt)?->value ?? '',
         );
 
         return $result;
+    }
+
+    /**
+     * Keep the values bound to a statement and the collection it runs on for the profiler, while
+     * one is recording.
+     *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  array<mixed>  $bindings
+     */
+    protected function describeStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, array $bindings, string $collection): void
+    {
+        if ($this->profiler === null || ! $this->profiler->isEnabled()) {
+            return;
+        }
+
+        $this->statementBindings ??= new \WeakMap();
+        $this->statementBindings[$stmt] = $bindings;
+        $this->statementCollections ??= new \WeakMap();
+        $this->statementCollections[$stmt] = $collection;
     }
 
     /**
@@ -4912,7 +4949,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aggregation->fromSub($left, self::FOJ_ROWS_ALIAS);
         $aggregation->addHook(new AttributeMap($this->fullOuterJoinColumnSpellings($columns, $aggregateAliases, $alias)));
 
-        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind), $columns);
+        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind, $name), $columns);
     }
 
     private function shapesAggregatedRows(Method $method): bool
@@ -5272,7 +5309,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function executeSelect(SQLBuilder $builder, Event $event): array
+    private function executeSelect(SQLBuilder $builder, Event $event, string $collection = ''): array
     {
         try {
             $result = $builder->build();
@@ -5284,7 +5321,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $results = [];
         $exception = null;
         try {
-            $stmt = $this->executeResult($result, $event);
+            $stmt = $this->executeResult($result, $event, $collection);
             $this->execute($stmt);
             /** @var array<int, array<string, mixed>> $results */
             $results = $stmt->fetchAll(PDO::FETCH_ASSOC);

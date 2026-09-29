@@ -2,7 +2,9 @@
 
 namespace Utopia\Database;
 
+use Closure;
 use DateTime;
+use Swoole\Coroutine;
 use Throwable;
 use Utopia\Async\Promise;
 use Utopia\Cache\Cache;
@@ -1129,40 +1131,36 @@ class Mirror extends Database
 
         $skipDuplicates = $this->skipDuplicates;
 
-        Promise::async(function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates) {
-            try {
-                if ($skipDuplicates) {
-                    $destination->skipDuplicates(
-                        fn () => $destination->withPreserveDates(
-                            fn () => $destination->createDocuments(
-                                $collection,
-                                $clones,
-                                $batchSize,
-                            )
-                        )
-                    );
-                } else {
-                    $destination->withPreserveDates(
+        $this->replicate('createDocuments', function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
+            if ($skipDuplicates) {
+                $destination->skipDuplicates(
+                    fn () => $destination->withPreserveDates(
                         fn () => $destination->createDocuments(
                             $collection,
                             $clones,
                             $batchSize,
                         )
+                    )
+                );
+            } else {
+                $destination->withPreserveDates(
+                    fn () => $destination->createDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                );
+            }
+
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
                     );
                 }
-
-                foreach ($clones as $clone) {
-                    foreach ($this->writeFilters as $filter) {
-                        $filter->afterCreateDocument(
-                            source: $this->source,
-                            destination: $destination,
-                            collectionId: $collection,
-                            document: $clone,
-                        );
-                    }
-                }
-            } catch (Throwable $err) {
-                $this->logError('createDocuments', $err);
             }
         });
 
@@ -1265,28 +1263,24 @@ class Mirror extends Database
             );
         }
 
-        Promise::async(function () use ($destination, $collection, $clone, $queries, $batchSize) {
-            try {
-                $destination->withPreserveDates(
-                    fn () => $destination->updateDocuments(
-                        $collection,
-                        $clone,
-                        $queries,
-                        $batchSize,
-                    )
-                );
+        $this->replicate('updateDocuments', function () use ($destination, $collection, $clone, $queries, $batchSize): void {
+            $destination->withPreserveDates(
+                fn () => $destination->updateDocuments(
+                    $collection,
+                    $clone,
+                    $queries,
+                    $batchSize,
+                )
+            );
 
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterUpdateDocuments(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        updates: $clone,
-                        queries: $queries,
-                    );
-                }
-            } catch (Throwable $err) {
-                $this->logError('updateDocuments', $err);
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterUpdateDocuments(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    updates: $clone,
+                    queries: $queries,
+                );
             }
         });
 
@@ -1346,29 +1340,25 @@ class Mirror extends Database
             $clones[] = $clone;
         }
 
-        Promise::async(function () use ($destination, $collection, $attribute, $clones, $batchSize) {
-            try {
-                $destination->withPreserveDates(
-                    fn () => $destination->upsertDocumentsWithIncrease(
-                        $collection,
-                        $attribute,
-                        $clones,
-                        batchSize: $batchSize,
-                    )
-                );
+        $this->replicate($attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease', function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
+            $destination->withPreserveDates(
+                fn () => $destination->upsertDocumentsWithIncrease(
+                    $collection,
+                    $attribute,
+                    $clones,
+                    batchSize: $batchSize,
+                )
+            );
 
-                foreach ($clones as $clone) {
-                    foreach ($this->writeFilters as $filter) {
-                        $filter->afterCreateOrUpdateDocument(
-                            source: $this->source,
-                            destination: $destination,
-                            collectionId: $collection,
-                            document: $clone,
-                        );
-                    }
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
                 }
-            } catch (Throwable $err) {
-                $this->logError($attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease', $err);
             }
         });
 
@@ -1404,20 +1394,16 @@ class Mirror extends Database
         }
 
         $destination = $this->destination;
-        Promise::async(function () use ($destination, $collection, $id) {
-            try {
-                $destination->deleteDocument($collection, $id);
+        $this->replicate('deleteDocument', function () use ($destination, $collection, $id): void {
+            $destination->deleteDocument($collection, $id);
 
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterDeleteDocument(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        documentId: $id,
-                    );
-                }
-            } catch (Throwable $err) {
-                $this->logError('deleteDocument', $err);
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterDeleteDocument(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    documentId: $id,
+                );
             }
         });
 
@@ -1464,24 +1450,20 @@ class Mirror extends Database
         }
 
         $destination = $this->destination;
-        Promise::async(function () use ($destination, $collection, $queries, $batchSize) {
-            try {
-                $destination->deleteDocuments(
-                    $collection,
-                    $queries,
-                    $batchSize,
-                );
+        $this->replicate('deleteDocuments', function () use ($destination, $collection, $queries, $batchSize): void {
+            $destination->deleteDocuments(
+                $collection,
+                $queries,
+                $batchSize,
+            );
 
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterDeleteDocuments(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        queries: $queries,
-                    );
-                }
-            } catch (Throwable $err) {
-                $this->logError('deleteDocuments', $err);
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterDeleteDocuments(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    queries: $queries,
+                );
             }
         });
 
@@ -1655,6 +1637,38 @@ class Mirror extends Database
                 return;
             }
         });
+    }
+
+    /**
+     * Applies a write to the destination under the authorization, relationship and silence state the caller has at
+     * the time of the call, and reports a failure through onError(). Inside a coroutine the write runs in a coroutine
+     * of its own; outside one it runs before this returns, since a task that yields outside a scheduler never resumes.
+     *
+     * @param  Closure(): void  $write
+     */
+    private function replicate(string $action, Closure $write): void
+    {
+        $destination = $this->destination;
+        if ($destination === null) {
+            return;
+        }
+
+        $snapshot = $this->source->snapshot();
+        $apply = function () use ($action, $destination, $snapshot, $write): void {
+            try {
+                $destination->withSnapshot($snapshot, $write);
+            } catch (Throwable $error) {
+                $this->logError($action, $error);
+            }
+        };
+
+        if (! \extension_loaded('swoole') || Coroutine::getCid() <= 0) {
+            $apply();
+
+            return;
+        }
+
+        Promise::async($apply);
     }
 
     protected function logError(string $action, Throwable $err): void

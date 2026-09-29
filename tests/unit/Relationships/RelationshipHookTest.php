@@ -627,4 +627,72 @@ final class RelationshipHookTest extends TestCase
 
         return $ids;
     }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAFailedNestedOneToOneWriteLeavesNoWriteStackEntry(Closure $adapter): void
+    {
+        $database = $this->writeStackDatabase($adapter);
+
+        foreach ([1, 2] as $attempt) {
+            $this->failNestedOneToOneWrite($database, $attempt);
+
+            $this->assertSame(0, $database->getRelationshipHook()?->getWriteStackCount(), "Attempt {$attempt} left an entry on the write stack");
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testANestedCreateAfterAFailedNestedWriteStoresItsRelatedDocuments(Closure $adapter): void
+    {
+        $database = $this->writeStackDatabase($adapter);
+
+        $this->failNestedOneToOneWrite($database, 1);
+        $this->failNestedOneToOneWrite($database, 2);
+
+        $database->createDocument('owner', new Document([
+            '$id' => 'owner2',
+            'items' => [new Document(['$id' => 'item1', 'details' => [new Document(['$id' => 'detail1'])]])],
+        ]));
+
+        $this->assertSame(['item1'], $this->ids($database, 'item'));
+        $this->assertSame(['detail1'], $this->ids($database, 'detail'));
+        $this->assertSame(['item1'], $this->relatedIds($database->getDocument('owner', 'owner2'), 'items'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    private function writeStackDatabase(Closure $adapter): Database
+    {
+        $database = $this->database($adapter);
+        $database->createCollection(new Collection(id: 'owner', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'solo', attributes: [Attribute::string(key: 'name', size: 64)], permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+        $database->createCollection(new Collection(id: 'item', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'detail', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::oneToOne(collection: 'owner', relatedCollection: 'solo', twoWay: true, key: 'solo', twoWayKey: 'owner', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: 'owner', relatedCollection: 'item', twoWay: true, key: 'items', twoWayKey: 'owner', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: 'item', relatedCollection: 'detail', twoWay: true, key: 'details', twoWayKey: 'item', onDelete: ForeignKeyAction::SetNull));
+
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createDocument('owner', new Document(['$id' => 'owner1']));
+            $database->createDocument('solo', new Document(['$id' => 'solo1', 'name' => 'before']));
+        });
+
+        return $database;
+    }
+
+    private function failNestedOneToOneWrite(Database $database, int $attempt): void
+    {
+        try {
+            $database->updateDocument('owner', 'owner1', new Document(['solo' => new Document(['$id' => 'solo1', 'name' => "attempt {$attempt}"])]));
+            $this->fail('Updating a related document the caller may not update must be rejected');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame("No permissions provided for action 'update'", $exception->getMessage());
+        }
+    }
 }

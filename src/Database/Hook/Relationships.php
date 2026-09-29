@@ -552,22 +552,26 @@ class Relationships implements Hook
                             }
 
                             $this->writeStack[] = $relatedCollection->getId();
-                            if ($related->isEmpty()) {
-                                if (! isset($value[Document::PERMISSIONS])) {
-                                    $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+
+                            try {
+                                if ($related->isEmpty()) {
+                                    if (! isset($value[Document::PERMISSIONS])) {
+                                        $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
+                                    }
+                                    $related = $this->db->createDocument(
+                                        $relatedCollection->getId(),
+                                        $value->setAttribute($twoWayKey, $document->getId())
+                                    );
+                                } else {
+                                    $related = $this->db->updateDocument(
+                                        $relatedCollection->getId(),
+                                        $related->getId(),
+                                        $value->setAttribute($twoWayKey, $document->getId())
+                                    );
                                 }
-                                $related = $this->db->createDocument(
-                                    $relatedCollection->getId(),
-                                    $value->setAttribute($twoWayKey, $document->getId())
-                                );
-                            } else {
-                                $related = $this->db->updateDocument(
-                                    $relatedCollection->getId(),
-                                    $related->getId(),
-                                    $value->setAttribute($twoWayKey, $document->getId())
-                                );
+                            } finally {
+                                \array_pop($this->writeStack);
                             }
-                            \array_pop($this->writeStack);
 
                             $document->setAttribute($key, $related->getId());
                         } elseif ($value === null) {

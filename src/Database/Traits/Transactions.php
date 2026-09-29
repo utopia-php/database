@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Traits;
 
+use Closure;
 use Throwable;
 use Utopia\Database\Event;
 
@@ -12,6 +13,9 @@ trait Transactions
 {
     /** @var array<int, array<string, string>> Collection keys of the documents written in the open invalidation scope, by coroutine id and document key. */
     protected array $documentCachePurges = [];
+
+    /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has committed. */
+    protected array $documentPurgeEvents = [];
 
     /**
      * Run a callback inside a transaction.
@@ -25,7 +29,7 @@ trait Transactions
      */
     public function withTransaction(callable $callback): mixed
     {
-        return $this->withInvalidationScope(fn () => $this->adapter->withTransaction($callback));
+        return $this->withInvalidationScope(fn () => $this->withAdapterTransaction($callback));
     }
 
     /**
@@ -43,7 +47,7 @@ trait Transactions
      */
     protected function withMutation(Event $event, mixed $data, callable $callback): mixed
     {
-        return $this->withInvalidationScope(fn () => $this->adapter->withTransaction(function () use ($event, $data, $callback) {
+        return $this->withInvalidationScope(fn () => $this->withAdapterTransaction(function () use ($event, $data, $callback) {
             $tokens = $this->getInvalidationTokens($event, $data);
             $context = $this->getEventContext();
             $pending = [];
@@ -64,8 +68,42 @@ trait Transactions
     }
 
     /**
+     * Run the callback in an adapter transaction that leaves no document purge event of a
+     * rolled-back attempt queued: each attempt starts from the events queued before the
+     * transaction, and a transaction that fails drops the events queued inside it.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     *
+     * @throws Throwable
+     */
+    private function withAdapterTransaction(callable $callback): mixed
+    {
+        $context = $this->getEventContext();
+        $queued = \count($this->documentPurgeEvents[$context]);
+        $discard = function () use ($context, $queued): void {
+            \array_splice($this->documentPurgeEvents[$context], $queued);
+        };
+
+        try {
+            return $this->adapter->withTransaction(function () use ($callback, $discard): mixed {
+                $discard();
+
+                return $callback();
+            });
+        } catch (Throwable $error) {
+            $discard();
+
+            throw $error;
+        }
+    }
+
+    /**
      * Keep all nested mutation tombstones blocked, and purge every written document
-     * again, once the outer transaction has committed or rolled back.
+     * again, once the outer transaction has committed or rolled back. Document purge
+     * events queued in the scope fire after a commit and are dropped with a rollback.
      *
      * @template T
      *
@@ -82,6 +120,7 @@ trait Transactions
             $this->queryCacheMutations[$context] = [];
             $this->documentCacheMutations[$context] = [];
             $this->documentCachePurges[$context] = [];
+            $this->documentPurgeEvents[$context] = [];
         }
 
         try {
@@ -95,6 +134,7 @@ trait Transactions
                     $this->queryCacheMutations[$context],
                     $this->documentCacheMutations[$context],
                     $this->documentCachePurges[$context],
+                    $this->documentPurgeEvents[$context],
                 );
                 try {
                     $this->purgeWrittenDocuments($documents);
@@ -120,10 +160,12 @@ trait Transactions
             $queryTokens = $this->queryCacheMutations[$context];
             $documentTokens = $this->documentCacheMutations[$context];
             $documents = $this->documentCachePurges[$context];
+            $purgeEvents = $this->documentPurgeEvents[$context];
             unset(
                 $this->queryCacheMutations[$context],
                 $this->documentCacheMutations[$context],
                 $this->documentCachePurges[$context],
+                $this->documentPurgeEvents[$context],
             );
 
             $failure = null;
@@ -141,6 +183,18 @@ trait Transactions
                 $this->activateInvalidation($queryTokens);
             } catch (Throwable $error) {
                 $failure ??= $error;
+            }
+
+            if ($failure !== null) {
+                throw $failure;
+            }
+
+            foreach ($purgeEvents as $announce) {
+                try {
+                    $announce();
+                } catch (Throwable $error) {
+                    $failure ??= $error;
+                }
             }
 
             if ($failure !== null) {

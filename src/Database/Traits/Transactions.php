@@ -10,6 +10,9 @@ use Utopia\Database\Event;
  */
 trait Transactions
 {
+    /** @var array<int, array<string, string>> Collection keys of the documents written in the open invalidation scope, by coroutine id and document key. */
+    protected array $documentCachePurges = [];
+
     /**
      * Run a callback inside a transaction.
      *
@@ -61,8 +64,8 @@ trait Transactions
     }
 
     /**
-     * Keep all nested mutation tombstones blocked until the outer transaction
-     * has committed or rolled back.
+     * Keep all nested mutation tombstones blocked, and purge every written document
+     * again, once the outer transaction has committed or rolled back.
      *
      * @template T
      *
@@ -78,6 +81,7 @@ trait Transactions
         if ($outer) {
             $this->queryCacheMutations[$context] = [];
             $this->documentCacheMutations[$context] = [];
+            $this->documentCachePurges[$context] = [];
         }
 
         try {
@@ -86,10 +90,17 @@ trait Transactions
             if ($outer) {
                 $queryTokens = $this->queryCacheMutations[$context];
                 $documentTokens = $this->documentCacheMutations[$context];
+                $documents = $this->documentCachePurges[$context];
                 unset(
                     $this->queryCacheMutations[$context],
                     $this->documentCacheMutations[$context],
+                    $this->documentCachePurges[$context],
                 );
+                try {
+                    $this->purgeWrittenDocuments($documents);
+                } catch (Throwable) {
+                    // Rolled back: the cached entries still hold committed rows.
+                }
                 try {
                     $this->activateDocumentInvalidation($documentTokens);
                 } catch (Throwable) {
@@ -108,16 +119,23 @@ trait Transactions
         if ($outer) {
             $queryTokens = $this->queryCacheMutations[$context];
             $documentTokens = $this->documentCacheMutations[$context];
+            $documents = $this->documentCachePurges[$context];
             unset(
                 $this->queryCacheMutations[$context],
                 $this->documentCacheMutations[$context],
+                $this->documentCachePurges[$context],
             );
 
             $failure = null;
             try {
-                $this->activateDocumentInvalidation($documentTokens);
+                $this->purgeWrittenDocuments($documents);
             } catch (Throwable $error) {
                 $failure = $error;
+            }
+            try {
+                $this->activateDocumentInvalidation($documentTokens);
+            } catch (Throwable $error) {
+                $failure ??= $error;
             }
             try {
                 $this->activateInvalidation($queryTokens);

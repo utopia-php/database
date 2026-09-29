@@ -713,7 +713,7 @@ trait GeneralTests
         $database->deleteCollection('transactionAtomicity');
     }
 
-    public function testDocumentCacheEpochStaysBlockedUntilOuterTransactionCommit(): void
+    public function testReadersSeeTheNewDocumentAfterATransactionCommits(): void
     {
         $database = $this->getDatabase();
         if (! $database->getAdapter()->supports(Capability::Caching)) {
@@ -721,40 +721,21 @@ trait GeneralTests
         }
 
         $collection = 'txDocumentCacheCommit';
-        $database->createCollection(new Collection(id: $collection, attributes: [
-            Attribute::string(key: 'name', required: true),
-        ], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-            Permission::update(Role::any()),
-        ]));
+        $this->createCachedUsers($database, $collection);
 
         try {
-            $database->createDocument($collection, new Document([
-                '$id' => 'user',
-                'name' => 'original',
-            ]));
-            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
-            [$collectionKey] = $database->getCacheKeys($collection, 'user');
-            $epochKey = $collectionKey.'#epoch';
-
-            $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+            $database->withTransaction(function () use ($database, $collection): void {
                 $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
-                $epoch = $database->getCache()->load($epochKey, Database::TTL);
-                $this->assertIsString($epoch);
-                $this->assertStringStartsWith('blocked:', $epoch);
+                $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'), 'A transaction reads its own write');
             });
 
-            $epoch = $database->getCache()->load($epochKey, Database::TTL);
-            $this->assertIsString($epoch);
-            $this->assertStringNotContainsString('blocked:', $epoch);
-            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'), 'The copy cached before the transaction must not outlive its commit');
         } finally {
             $database->deleteCollection($collection);
         }
     }
 
-    public function testDocumentCacheEpochIsReleasedAfterOuterTransactionRollback(): void
+    public function testReadersSeeTheOriginalDocumentAfterATransactionRollsBack(): void
     {
         $database = $this->getDatabase();
         if (! $database->getAdapter()->supports(Capability::Caching)) {
@@ -762,45 +743,27 @@ trait GeneralTests
         }
 
         $collection = 'txDocumentCacheRollback';
-        $database->createCollection(new Collection(id: $collection, attributes: [
-            Attribute::string(key: 'name', required: true),
-        ], permissions: [
-            Permission::read(Role::any()),
-            Permission::create(Role::any()),
-            Permission::update(Role::any()),
-        ]));
+        $this->createCachedUsers($database, $collection);
 
         try {
-            $database->createDocument($collection, new Document([
-                '$id' => 'user',
-                'name' => 'original',
-            ]));
-            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
-            [$collectionKey] = $database->getCacheKeys($collection, 'user');
-            $epochKey = $collectionKey.'#epoch';
-
             try {
-                $database->withTransaction(function () use ($database, $collection, $epochKey): void {
+                $database->withTransaction(function () use ($database, $collection): void {
                     $database->updateDocument($collection, 'user', new Document(['name' => 'rolled-back']));
-                    $epoch = $database->getCache()->load($epochKey, Database::TTL);
-                    $this->assertIsString($epoch);
-                    $this->assertStringStartsWith('blocked:', $epoch);
+                    $this->assertSame('rolled-back', $database->getDocument($collection, 'user')->getAttribute('name'), 'A transaction reads its own write');
 
                     throw new ConflictException('rollback');
                 });
             } catch (ConflictException) {
             }
 
-            $epoch = $database->getCache()->load($epochKey, Database::TTL);
-            $this->assertIsString($epoch);
-            $this->assertStringNotContainsString('blocked:', $epoch);
-            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'), 'A rolled back write must never be served');
+            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'), 'A rolled back write must never be cached');
         } finally {
             $database->deleteCollection($collection);
         }
     }
 
-    public function testNestedTransactionKeepsDocumentCacheEpochBlockedUntilOuterCommit(): void
+    public function testReadersSeeTheNewDocumentAfterANestedTransactionCommits(): void
     {
         $database = $this->getDatabase();
         if (! $database->getAdapter()->supports(Capability::Caching)) {
@@ -813,6 +776,61 @@ trait GeneralTests
         }
 
         $collection = 'txNestedDocumentCache';
+        $this->createCachedUsers($database, $collection);
+
+        try {
+            $database->withTransaction(function () use ($database, $collection): void {
+                $database->withTransaction(function () use ($database, $collection): void {
+                    $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+                });
+
+                $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'), 'The outer transaction reads the nested write');
+            });
+
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'), 'The copy cached before the transaction must not outlive the outer commit');
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testASiblingReadAfterAWriteRunsNoStatement(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->markTestSkipped($database->getAdapter()::class.' reports no statements to the profiler.');
+        }
+
+        $collection = 'siblingDocumentCache';
+        $this->createCachedUsers($database, $collection);
+        $database->createDocument($collection, new Document([
+            '$id' => 'sibling',
+            'name' => 'sibling',
+        ]));
+        $this->assertSame('sibling', $database->getDocument($collection, 'sibling')->getAttribute('name'));
+
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
+
+        try {
+            $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+
+            $profiler->reset();
+            $this->assertSame('sibling', $database->getDocument($collection, 'sibling')->getAttribute('name'));
+            $this->assertSame(0, $profiler->getQueryCount(), 'A write to one document must leave its siblings cached (7.3.12: 0 statements)');
+
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
+            $this->assertGreaterThan(0, $profiler->getQueryCount(), 'The written document itself must be read again');
+        } finally {
+            $database->disableProfiling();
+            $database->deleteCollection($collection);
+        }
+    }
+
+    private function createCachedUsers(Database $database, string $collection): void
+    {
         $database->createCollection(new Collection(id: $collection, attributes: [
             Attribute::string(key: 'name', required: true),
         ], permissions: [
@@ -820,33 +838,11 @@ trait GeneralTests
             Permission::create(Role::any()),
             Permission::update(Role::any()),
         ]));
-
-        try {
-            $database->createDocument($collection, new Document([
-                '$id' => 'user',
-                'name' => 'original',
-            ]));
-            $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
-            [$collectionKey] = $database->getCacheKeys($collection, 'user');
-            $epochKey = $collectionKey.'#epoch';
-
-            $database->withTransaction(function () use ($database, $collection, $epochKey): void {
-                $database->withTransaction(function () use ($database, $collection): void {
-                    $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
-                });
-
-                $epoch = $database->getCache()->load($epochKey, Database::TTL);
-                $this->assertIsString($epoch);
-                $this->assertStringStartsWith('blocked:', $epoch);
-            });
-
-            $epoch = $database->getCache()->load($epochKey, Database::TTL);
-            $this->assertIsString($epoch);
-            $this->assertStringNotContainsString('blocked:', $epoch);
-            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
-        } finally {
-            $database->deleteCollection($collection);
-        }
+        $database->createDocument($collection, new Document([
+            '$id' => 'user',
+            'name' => 'original',
+        ]));
+        $this->assertSame('original', $database->getDocument($collection, 'user')->getAttribute('name'));
     }
 
     public function testCacheInvalidationDoesNotAddRedisKeysPerWrite(): void
@@ -874,21 +870,32 @@ trait GeneralTests
         $destinationCache = $destination?->getCache();
         $database->setCache($cache)->setQueryCache(new QueryCache($cache));
 
+        $documents = 10;
         try {
-            $database->createDocument($collection, new Document(['$id' => 'doc0', 'name' => 'doc 0']));
-            $keys = $this->scanKeys($redis, $collection);
-
-            for ($index = 1; $index <= 10; $index++) {
+            for ($index = 0; $index < $documents; $index++) {
                 $database->createDocument($collection, new Document(['$id' => 'doc'.$index, 'name' => 'doc '.$index]));
             }
-            $database->withTransaction(function () use ($database, $collection): void {
-                $database->updateDocument($collection, 'doc1', new Document(['name' => 'updated']));
-                $database->updateDocument($collection, 'doc2', new Document(['name' => 'updated']));
-            });
 
-            $this->assertNotEmpty($keys);
-            $this->assertSame($keys, $this->scanKeys($redis, $collection), 'Redis keeps a purged key with no expiry, so a write must not leave a key of its own');
-            $this->assertCount(11, $database->find($collection, [Query::limit(100)]));
+            $keysAfterFirstRound = 0;
+            for ($round = 1; $round <= 10; $round++) {
+                $database->withTransaction(function () use ($database, $collection, $documents, $round): void {
+                    for ($index = 0; $index < $documents; $index++) {
+                        $database->updateDocument($collection, 'doc'.$index, new Document(['name' => 'round '.$round]));
+                    }
+                });
+                for ($index = 0; $index < $documents; $index++) {
+                    $this->assertSame('round '.$round, $database->getDocument($collection, 'doc'.$index)->getAttribute('name'));
+                }
+
+                if ($round === 1) {
+                    $keysAfterFirstRound = \count($this->scanKeys($redis, $collection));
+                }
+            }
+
+            $keys = \count($this->scanKeys($redis, $collection));
+            $this->assertSame($keysAfterFirstRound, $keys, 'Redis keeps a purged key with no expiry, so writes and reads of the same documents must not add keys');
+            $this->assertLessThanOrEqual(3 * $documents, $keys, 'The cache holds at most one key per document plus a few per collection');
+            $this->assertCount($documents, $database->find($collection, [Query::limit(100)]));
         } finally {
             $database->setQueryCache($queryCache)->setCache($original);
             if ($destination !== null && $destinationCache !== null) {

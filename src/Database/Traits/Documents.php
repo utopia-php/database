@@ -60,6 +60,12 @@ trait Documents
 {
     private const string DOCUMENT_CACHE_BLOCKED_PREFIX = 'blocked:';
 
+    private const string DOCUMENT_CACHE_EPOCH = 'epoch';
+
+    private const string DOCUMENT_CACHE_FIELD = 'field';
+
+    private const string DOCUMENT_CACHE_VALUE = 'document';
+
     private function getNumericResult(Attribute $attribute, mixed $current, int|float|string $value, bool $increase): int|float|string
     {
         $current ??= 0;
@@ -396,34 +402,28 @@ trait Documents
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
 
-        [$collectionKey, , $hashKey] = $this->getCacheKeys(
+        [$collectionKey, $documentKey, $hashKey] = $this->getCacheKeys(
             $collection->getId(),
             $id,
             $selections
         );
+        // The cache lower-cases keys; the hash key keeps the id's case, so casings an adapter tells apart keep separate fields.
+        $field = \md5($hashKey);
 
         // Collection definitions are cacheable because every schema mutation
         // persists the definition through updateMetadata(), which writes the
         // row via the METADATA collection's own document path and therefore
-        // advances the METADATA cache epoch. Any new schema mutator must keep
-        // writing through that path, or its readers will serve a stale schema.
+        // purges that definition's slot; the METADATA epoch does not rotate.
+        // Any new schema mutator must keep writing through that path, or its
+        // readers will serve a stale schema.
         $cacheable = ! $forUpdate
             && ! $this->adapter->inTransaction()
             && empty($joins);
-        $physicalKey = '';
-        $epoch = null;
-        if ($cacheable) {
-            $epoch = $this->getDocumentCacheEpoch($collectionKey);
-            if ($epoch === null) {
-                $cacheable = false;
-            } else {
-                $physicalKey = $hashKey.'#'.$epoch;
-            }
-        }
+        $epoch = $cacheable ? $this->getDocumentCacheEpoch($collectionKey) : null;
         $cached = null;
-        if ($cacheable) {
+        if ($epoch !== null) {
             try {
-                $cached = $this->cache->load($physicalKey, self::TTL);
+                $cached = $this->loadCachedDocument($documentKey, $field, $epoch);
             } catch (Exception $e) {
                 Console::warning('Warning: Failed to get document from cache: '.$e->getMessage());
             }
@@ -460,9 +460,9 @@ trait Documents
         }
 
         $generation = '0';
-        if ($cacheable) {
+        if ($epoch !== null) {
             try {
-                $generation = $this->cache->getGeneration($physicalKey);
+                $generation = $this->cache->getGeneration($documentKey);
             } catch (Exception $e) {
                 Console::warning('Warning: Failed to get cache generation: '.$e->getMessage());
             }
@@ -487,23 +487,13 @@ trait Documents
             // enabled only proves absence once an unfiltered read agrees: an adapter may have
             // filtered the row out by the caller's permissions.
             $missing = true;
-            if ($cacheable && empty($relationships) && ! $skipAuth) {
+            if ($epoch !== null && empty($relationships) && ! $skipAuth) {
                 $missing = $this->authorization->skip($getDocument)->isEmpty();
             }
 
-            if ($cacheable && empty($relationships) && $missing) {
+            if ($epoch !== null && empty($relationships) && $missing) {
                 try {
-                    // The marker says "absent as of $epoch". A schema mutation
-                    // that landed while this read was in flight rotates the
-                    // epoch, which makes the observation stale and the marker
-                    // a negative cache entry for a collection that now exists.
-                    // saveWithLease only leases the key's own generation, and
-                    // an epoch rotation never touches it, so the lease cannot
-                    // see this; re-read the epoch and drop the marker instead.
-                    if ($this->getDocumentCacheEpoch($collectionKey) === $epoch) {
-                        $marker = [self::CACHE_EMPTY_MARKER => true];
-                        $this->cache->saveWithLease($physicalKey, $marker, '', $generation);
-                    }
+                    $this->saveCachedDocument($documentKey, $field, $epoch, [self::CACHE_EMPTY_MARKER => true], $generation);
                 } catch (Exception $e) {
                     Console::warning('Failed to save empty document to cache: '.$e->getMessage());
                 }
@@ -555,9 +545,9 @@ trait Documents
 
         // Locking reads happen inside a transaction and must never cache the
         // pre-commit row. Register the key only after the leased save succeeds.
-        if ($cacheable && empty($relationships)) {
+        if ($epoch !== null && empty($relationships)) {
             try {
-                $this->cache->saveWithLease($physicalKey, $document->getArrayCopy(), '', $generation);
+                $this->saveCachedDocument($documentKey, $field, $epoch, $document->getArrayCopy(), $generation);
             } catch (Exception $e) {
                 Console::warning('Failed to save document to cache: '.$e->getMessage());
             }
@@ -568,6 +558,43 @@ trait Documents
         $this->trigger(Event::DocumentRead, $document);
 
         return $document;
+    }
+
+    /**
+     * What a read under $epoch may serve from a document's cache slot: its copy, the absence
+     * marker, or null when the slot holds nothing for this read.
+     *
+     * @return array<mixed>|null
+     */
+    private function loadCachedDocument(string $documentKey, string $field, string $epoch): ?array
+    {
+        $entry = $this->cache->load($documentKey, self::TTL, $field);
+        if (! \is_array($entry)) {
+            return null;
+        }
+
+        $document = $entry[self::DOCUMENT_CACHE_VALUE] ?? null;
+        if (
+            ! \is_array($document)
+            || ($entry[self::DOCUMENT_CACHE_EPOCH] ?? null) !== $epoch
+            || ($entry[self::DOCUMENT_CACHE_FIELD] ?? null) !== $field
+        ) {
+            return null;
+        }
+
+        return $document;
+    }
+
+    /**
+     * @param  array<mixed>  $document
+     */
+    private function saveCachedDocument(string $documentKey, string $field, string $epoch, array $document, string $generation): void
+    {
+        $this->cache->saveWithLease($documentKey, [
+            self::DOCUMENT_CACHE_EPOCH => $epoch,
+            self::DOCUMENT_CACHE_FIELD => $field,
+            self::DOCUMENT_CACHE_VALUE => $document,
+        ], $field, $generation);
     }
 
     private function isTtlExpired(Document $collection, Document $document): bool
@@ -895,7 +922,7 @@ trait Documents
                     foreach ($batch as $document) {
                         $this->withDocumentTenant(
                             $document,
-                            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                            fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                         );
                     }
 
@@ -1221,8 +1248,6 @@ trait Documents
             return $document;
         }
 
-        $this->purgeCachedDocumentInternal($collection->getId(), $id);
-
         $this->triggerDocumentPurge($collection->getId(), $id);
         if ($document->getId() !== $id) {
             $this->triggerDocumentPurge($collection->getId(), $document->getId());
@@ -1461,7 +1486,7 @@ trait Documents
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
                         $document,
-                        fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                        fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                     );
                 }
             });
@@ -1857,7 +1882,7 @@ trait Documents
                     foreach ($batch as $document) {
                         $this->withDocumentTenant(
                             $document,
-                            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                            fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                         );
                     }
 
@@ -2491,7 +2516,7 @@ trait Documents
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
                         $document,
-                        fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                        fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                     );
                 }
             });
@@ -2538,8 +2563,7 @@ trait Documents
     }
 
     /**
-     * Cleans a specific document from cache
-     * And related document reference in the collection cache.
+     * Purge a document's cache slot, and once more after the open invalidation scope ends.
      *
      * @throws Exception
      */
@@ -2549,9 +2573,56 @@ trait Documents
             return true;
         }
 
-        [$collectionKey] = $this->getCacheBaseKeys($collectionId, $id);
+        [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $id);
+
+        $context = $this->getEventContext();
+        if (isset($this->documentCachePurges[$context])) {
+            $this->documentCachePurges[$context][$documentKey] = $collectionKey;
+        }
+
+        $this->cache->purge($documentKey);
+
+        return true;
+    }
+
+    private function advanceCollectionCacheEpoch(string $collectionId): bool
+    {
+        [$collectionKey] = $this->getCacheBaseKeys($collectionId);
 
         return $this->advanceDocumentCacheEpoch($collectionKey);
+    }
+
+    /**
+     * Purge the documents a transaction wrote once it has committed or rolled back. A reader
+     * outside the transaction may have cached the pre-commit row after the purge inside it, so
+     * when this purge fails the collection's epoch is retired instead, which no such fill survives.
+     *
+     * @param  array<string, string>  $documents  Collection keys by document key
+     */
+    protected function purgeWrittenDocuments(array $documents): void
+    {
+        $failure = null;
+        $retired = [];
+        foreach ($documents as $documentKey => $collectionKey) {
+            try {
+                $this->cache->purge($documentKey);
+            } catch (Throwable $error) {
+                $failure ??= $error;
+                if (isset($retired[$collectionKey])) {
+                    continue;
+                }
+                $retired[$collectionKey] = true;
+                try {
+                    $this->advanceDocumentCacheEpoch($collectionKey);
+                } catch (Throwable) {
+                    // The purge failure below reaches the caller either way.
+                }
+            }
+        }
+
+        if ($failure !== null) {
+            throw $failure;
+        }
     }
 
     private function getDocumentCacheEpoch(string $collectionKey): ?string

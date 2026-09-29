@@ -885,7 +885,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $this->getClient()->update(
             $collection,
             [],
-            ['$unset' => [$id => '']],
+            ['$unset' => [$this->escapeMongoFieldName($this->getInternalKeyForAttribute($id)) => '']],
             multi: true
         );
 
@@ -902,8 +902,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $collection = $this->getNamespace().'_'.$this->filter($collection);
 
-        $from = $this->filter($this->getInternalKeyForAttribute($id));
-        $to = $this->filter($this->getInternalKeyForAttribute($name));
+        $from = $this->escapeMongoFieldName($this->getInternalKeyForAttribute($id));
+        $to = $this->escapeMongoFieldName($this->getInternalKeyForAttribute($name));
         $options = $this->getTransactionOptions();
 
         $this->getClient()->update(

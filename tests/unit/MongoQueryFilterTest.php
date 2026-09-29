@@ -138,6 +138,23 @@ final class MongoQueryFilterTest extends TestCase
         $this->assertTrue($this->calls['createIndexes'][0]['unique'] ?? false);
     }
 
+    public function testDottedAttributesAreRenamedAndDeletedByTheirStoredName(): void
+    {
+        $adapter = $this->createAdapter();
+
+        $adapter->renameAttribute(self::COLLECTION, 'a.b', 'c.d');
+        $adapter->deleteAttribute(self::COLLECTION, 'a.b');
+
+        $this->assertSame(
+            [
+                ['$rename' => ['a__dot__b' => 'c__dot__d']],
+                ['$unset' => ['a__dot__b' => '']],
+            ],
+            $this->calls['update'] ?? [],
+            'Renames and deletes must address the __dot__ field name that documents are stored under',
+        );
+    }
+
     /**
      * @param  array<Query>  $queries
      * @return array<Document>

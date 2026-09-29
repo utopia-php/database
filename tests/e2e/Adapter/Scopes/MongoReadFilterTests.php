@@ -150,6 +150,32 @@ trait MongoReadFilterTests
         }
     }
 
+    public function testDottedAttributesSurviveRenameAndDelete(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'dotted_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'a.b', size: 16),
+                Attribute::string(key: 'x.y', size: 16),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+        $database->createDocument($collection, new Document(['$id' => 'first', 'a.b' => 'renamed', 'x.y' => 'deleted']));
+
+        $database->updateAttribute($collection, 'a.b', newKey: 'c');
+        $this->assertSame('renamed', $database->getDocument($collection, 'first')->getAttribute('c'));
+
+        $database->deleteAttribute($collection, 'x.y');
+        $database->createAttribute($collection, Attribute::string(key: 'x.y', size: 16));
+        $this->assertNull($database->getDocument($collection, 'first')->getAttribute('x.y'));
+
+        $database->deleteCollection($collection);
+    }
+
     /**
      * @param  list<string>  $names
      */

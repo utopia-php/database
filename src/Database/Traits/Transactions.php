@@ -4,6 +4,7 @@ namespace Utopia\Database\Traits;
 
 use Closure;
 use Throwable;
+use Utopia\Database\Capability;
 use Utopia\Database\Event;
 
 /**
@@ -73,7 +74,11 @@ trait Transactions
     /**
      * Run the callback in an adapter transaction that leaves no document purge event of a
      * rolled-back attempt queued: each attempt starts from the events queued before the
-     * transaction, and a transaction that fails drops the events queued inside it.
+     * transaction, and a transaction that fails drops the events queued inside it when the
+     * adapter rolls a nested transaction back to its savepoint. Without savepoints nothing
+     * rolls a failed nested call back, so its writes stay in the caller's transaction and so
+     * do their events; a failed outermost transaction drops every event in the invalidation
+     * scope instead.
      *
      * @template T
      *
@@ -97,7 +102,9 @@ trait Transactions
                 return $callback();
             });
         } catch (Throwable $error) {
-            $discard();
+            if ($this->adapter->supports(Capability::NestedTransactions)) {
+                $discard();
+            }
 
             throw $error;
         }

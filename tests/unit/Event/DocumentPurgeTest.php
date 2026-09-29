@@ -16,6 +16,7 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -405,6 +406,52 @@ final class DocumentPurgeTest extends TestCase
 
         $this->assertSame(['posts/first'], $this->purged($recorder));
         $this->assertSame('second', $database->getDocument(HookFixture::COLLECTION, 'second')->getAttribute('title'));
+    }
+
+    /**
+     * Without savepoints a nested call runs inside the caller's transaction and nothing
+     * rolls its writes back when it fails: once the caller catches the failure, those
+     * writes commit with it, so their purge events must fire after that commit.
+     */
+    public function testPurgeEventsOfAFailedNestedCallWithoutSavepointsFireAfterTheOuterCommit(): void
+    {
+        $adapter = new class () extends Memory {
+            #[\Override]
+            public function capabilities(): array
+            {
+                return \array_values(\array_filter(
+                    parent::capabilities(),
+                    static fn (Capability $capability): bool => $capability !== Capability::NestedTransactions,
+                ));
+            }
+
+            #[\Override]
+            public function withTransaction(callable $callback): mixed
+            {
+                if ($this->inTransaction()) {
+                    return $callback();
+                }
+
+                return parent::withTransaction($callback);
+            }
+        };
+        [$database, $recorder] = $this->seeded(HookFixture::database($adapter), ['first', 'second']);
+        $abandoned = new RuntimeException('abandoned');
+
+        $database->withTransaction(function () use ($database, $abandoned): void {
+            $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
+
+            $this->assertSame($abandoned, $this->failureOf(static fn (): mixed => $database->withTransaction(
+                static function () use ($database, $abandoned): never {
+                    $database->updateDocument(HookFixture::COLLECTION, 'second', new Document(['title' => 'renamed']));
+
+                    throw $abandoned;
+                },
+            )));
+        });
+
+        $this->assertSame('renamed', $database->getDocument(HookFixture::COLLECTION, 'second')->getAttribute('title'), 'Nothing rolls the nested write back');
+        $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
     }
 
     /**

@@ -1265,13 +1265,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $this->execute($stmt);
 
-            $statment = $this->prepare('SELECT last_insert_rowid() AS id', event: Event::DocumentCreate);
-            $this->execute($statment);
-            $last = $statment->fetch();
+            $document[Document::SEQUENCE] = $this->getPDO()->lastInsertId();
 
-            if (\is_array($last)) {
-                /** @var array<string, mixed> $last */
-                $document[Document::SEQUENCE] = $last['id'] ?? null;
+            if (empty($document[Document::SEQUENCE])) {
+                throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
             }
 
             $ctx = $this->buildWriteContext($name);

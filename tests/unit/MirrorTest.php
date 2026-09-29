@@ -970,4 +970,65 @@ class MirrorTest extends TestCase
         $this->assertSame('written', $replicated->getAttribute('title'));
         $this->assertNull($replicated->getAttribute('decoratedFor'));
     }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror): mixed, mixed}>
+     */
+    public static function destinationlessCalls(): iterable
+    {
+        yield 'setTimeout' => [
+            static function (Mirror $mirror): mixed {
+                $mirror->setTimeout(500);
+
+                return $mirror->getSource()->getAdapter()->getTimeout();
+            },
+            500,
+        ];
+        yield 'disableValidation' => [
+            static function (Mirror $mirror): mixed {
+                $mirror->disableValidation();
+
+                return [$mirror->isValidationEnabled(), $mirror->getSource()->isValidationEnabled()];
+            },
+            [false, false],
+        ];
+        yield 'exists' => [
+            static fn (Mirror $mirror): mixed => $mirror->exists('mirror', self::COLLECTION),
+            true,
+        ];
+        yield 'increaseDocumentAttribute' => [
+            static fn (Mirror $mirror): mixed => [
+                $mirror->increaseDocumentAttribute(self::COLLECTION, 'first', 'views', 2)->getAttribute('views'),
+                $mirror->getSource()->getDocument(self::COLLECTION, 'first')->getAttribute('views'),
+            ],
+            [3, 3],
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $call
+     */
+    #[DataProvider('destinationlessCalls')]
+    public function testMirrorWithoutDestinationDelegatesToTheSource(Closure $call, mixed $expected): void
+    {
+        $mirror = $this->seed(new Mirror(new Database(self::configurableAdapter(), new Cache(new None()))));
+        $errors = [];
+        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+
+        $this->assertSame($expected, $call($mirror));
+        $this->assertSame([], $errors);
+    }
+
+    public function testSkipValidationWithoutDestinationRunsOnTheSource(): void
+    {
+        $source = new Database(new Memory(), new Cache(new None()));
+        $mirror = new Mirror($source);
+
+        $inside = $mirror->skipValidation(static fn (): array => [$mirror->isValidationEnabled(), $source->isValidationEnabled()]);
+
+        $this->assertSame([false, false], $inside);
+        $this->assertSame([true, true], [$mirror->isValidationEnabled(), $source->isValidationEnabled()]);
+    }
 }

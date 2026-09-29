@@ -19,9 +19,11 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Method;
+use Utopia\Query\Schema\IndexType;
 
 /**
  * A cursor over a joined read names the row the read returned: its order values, the main `$sequence` and each
@@ -355,6 +357,36 @@ final class JoinCursorTest extends TestCase
             $id = \sprintf('i%02d', $number);
             $this->createDocument('items', $id, ['name' => $id]);
         }
+    }
+
+    /**
+     * @return iterable<string, array{Method}>
+     */
+    public static function getDocumentJoins(): iterable
+    {
+        yield 'inner join' => [Method::Join];
+        yield 'left join' => [Method::LeftJoin];
+        yield 'right join' => [Method::RightJoin];
+        yield 'full outer join' => [Method::FullOuterJoin];
+    }
+
+    #[DataProvider('getDocumentJoins')]
+    public function testJoinedGetDocumentPairsTheLowestSequenceJoinedRow(Method $join): void
+    {
+        $this->database->createCollection(new Collection(
+            id: 'drafts',
+            attributes: [Attribute::string(key: 'author', size: 16), Attribute::string(key: 'label', size: 16)],
+            indexes: [new Index('author_label', IndexType::Key, ['author', 'label'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach (['d-first' => 'z', 'd-second' => 'm', 'd-third' => 'a'] as $id => $label) {
+            $this->createDocument('drafts', $id, ['author' => 'a1', 'label' => $label]);
+        }
+
+        $document = $this->database->getDocument('authors', 'a1', [new Query($join, 'drafts', ['$id', '=', 'author', 'd'])]);
+
+        $this->assertSame('d-first', $document->getAttribute('d.$id'));
+        $this->assertSame('z', $document->getAttribute('d.label'));
     }
 
     private function useDatabase(SQLite $adapter): void

@@ -715,74 +715,27 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $joinTablePrefixes = $this->remapJoinQueries($queries);
             $queries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
 
-            $hasPreservingOuterJoin = false;
-            foreach ($queries as $query) {
-                $method = $query->getMethod();
-                if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
-                    $hasPreservingOuterJoin = true;
-                    break;
-                }
+            $builder = $this->newBuilder($name, $alias, $this->keepsUnmatchedRows($queries));
+            $this->configureFindBuilder(
+                $builder,
+                $collectionDoc,
+                $queries,
+                $joinTablePrefixes,
+                false,
+                false,
+                [],
+                $name,
+                $alias,
+                $roles,
+                PermissionType::Read,
+            );
+            $builder->filter([BaseQuery::equal($alias.'.'.Storage::UID, [$id])]);
+
+            $joinAliases = \array_column($joinTablePrefixes, 'alias');
+            foreach ($joinAliases as $joinAlias) {
+                $builder->sortAsc($this->qualifyOrderAttribute($joinAlias.'.'.Document::SEQUENCE, $joinAliases));
             }
-
-            if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
-                $uid = $alias.'.'.Storage::UID;
-                $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
-                $leftQueries[] = BaseQuery::equal($uid, [$id]);
-                $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
-                $rightQueries[] = BaseQuery::isNull($uid);
-                $rightQueries[] = BaseQuery::equal($uid, [$id]);
-
-                $left = $this->newBuilder($name, $alias, false);
-                $this->configureFindBuilder(
-                    $left,
-                    $collectionDoc,
-                    $leftQueries,
-                    $joinTablePrefixes,
-                    false,
-                    false,
-                    [],
-                    $name,
-                    $alias,
-                    $roles,
-                    PermissionType::Read,
-                );
-
-                $right = $this->newBuilder($name, $alias, true);
-                $this->configureFindBuilder(
-                    $right,
-                    $collectionDoc,
-                    $rightQueries,
-                    $joinTablePrefixes,
-                    false,
-                    false,
-                    [],
-                    $name,
-                    $alias,
-                    $roles,
-                    PermissionType::Read,
-                );
-
-                $left->unionAll($right);
-                $this->applyFindPage($left, [], [], 1, null, afterUnion: true);
-                $builder = $left;
-            } else {
-                $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
-                $this->configureFindBuilder(
-                    $builder,
-                    $collectionDoc,
-                    $queries,
-                    $joinTablePrefixes,
-                    false,
-                    false,
-                    [],
-                    $name,
-                    $alias,
-                    $roles,
-                    PermissionType::Read,
-                );
-                $builder->filter([BaseQuery::equal($alias.'.'.Storage::UID, [$id])]);
-                $builder->limit(1);
-            }
+            $builder->limit(1);
         } else {
             $builder = $this->newBuilder($name, $alias);
 

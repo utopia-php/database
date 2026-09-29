@@ -257,6 +257,18 @@ class PDOTest extends TestCase
         $this->assertSame($lost, $connection->getValue($pdo), 'A connection missing the configured session must never be used');
     }
 
+    public function testReconnectReplaysAttributes(): void
+    {
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $this->assertTrue($pdo->setAttribute(\PDO::ATTR_CASE, \PDO::CASE_UPPER));
+        $this->assertTrue($pdo->setAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE, \PDO::FETCH_NUM));
+
+        $pdo->reconnect();
+
+        $this->assertSame(\PDO::CASE_UPPER, $pdo->getAttribute(\PDO::ATTR_CASE));
+        $this->assertSame(\PDO::FETCH_NUM, $pdo->getAttribute(\PDO::ATTR_DEFAULT_FETCH_MODE));
+    }
+
     public function testStatementsAfterALostTransactionAreRefusedUntilItIsRolledBack(): void
     {
         $path = $this->createDatabaseFile();

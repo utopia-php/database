@@ -22,7 +22,6 @@ use Utopia\Console;
  * @method bool rollBack()
  * @method bool inTransaction()
  * @method string|false quote(string $string, int $type = PhpPDO::PARAM_STR)
- * @method bool setAttribute(int $attribute, mixed $value)
  * @method mixed getAttribute(int $attribute)
  * @method string|false lastInsertId(?string $name = null)
  * @method \PDOStatement|false query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs)
@@ -53,6 +52,13 @@ class PDO
      * @var array<string, string>
      */
     private array $session = [];
+
+    /**
+     * Attributes set after connecting, replayed on every connection a reconnect opens.
+     *
+     * @var array<int, mixed>
+     */
+    private array $attributes = [];
 
     /**
      * Create a new PDO wrapper instance.
@@ -159,6 +165,20 @@ class PDO
     }
 
     /**
+     * Set an attribute on the connection and on every connection a reconnect opens.
+     */
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        if (! $this->pdo->setAttribute($attribute, $value)) {
+            return false;
+        }
+
+        $this->attributes[$attribute] = $value;
+
+        return true;
+    }
+
+    /**
      * Run a statement that sets session state and replay it on every connection a
      * reconnect opens, before a call that lost the old connection is retried. A later
      * statement for the same setting replaces the earlier one.
@@ -175,17 +195,24 @@ class PDO
     }
 
     /**
-     * Create a new connection to the database with the configured session.
+     * Create a new connection to the database with the attributes set after connecting
+     * and the configured session.
      *
-     * It replaces the current connection only once the session is replayed: after a
-     * failed replay the lost connection stays, so the next call reconnects again
-     * instead of running without the configured session.
+     * It replaces the current connection only once both are replayed: after a failed
+     * replay the lost connection stays, so the next call reconnects again instead of
+     * running without them.
      *
      * @throws Throwable
      */
     public function reconnect(): void
     {
         $pdo = $this->connect();
+
+        foreach ($this->attributes as $attribute => $value) {
+            if (! $pdo->setAttribute($attribute, $value)) {
+                throw new PDOException("Failed to restore attribute {$attribute}");
+            }
+        }
 
         foreach ($this->session as $statement) {
             if ($pdo->exec($statement) === false) {

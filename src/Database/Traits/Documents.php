@@ -3662,9 +3662,15 @@ trait Documents
                 throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->getMaxUIDLength()))->getDescription());
             }
 
-            if ($joins !== []) {
+            if ($distinct) {
+                $this->assertDistinctCursorOrder($selects, $orderAttributes);
+            }
+
+            if ($joins !== [] || $distinct) {
                 $this->assertCursorHasOrderValues($cursor, $orderAttributes);
-            } else {
+            }
+
+            if ($joins === []) {
                 foreach ($orderAttributes as $order) {
                     if ($cursor->getAttribute($order) === null) {
                         throw new OrderException(
@@ -4177,6 +4183,44 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         return $this->find($collection, $queries);
+    }
+
+    /**
+     * A distinct row has no id: only its order values tell it from the next one, so the order has to name every
+     * attribute the read selects.
+     *
+     * @param  array<Query>  $selects
+     * @param  array<string>  $orderAttributes
+     *
+     * @throws QueryException
+     */
+    private function assertDistinctCursorOrder(array $selects, array $orderAttributes): void
+    {
+        $selected = [];
+        foreach ($selects as $select) {
+            foreach ($select->getValues() as $value) {
+                if (\is_string($value)) {
+                    $selected[] = $value;
+                }
+            }
+        }
+
+        foreach ($selected as $attribute) {
+            if (\str_ends_with($attribute, '*')) {
+                $selected = [];
+                break;
+            }
+        }
+
+        if ($selected === [] || $orderAttributes === []) {
+            throw new QueryException('A cursor on a distinct() read pages along its orders, so the read needs a select() of named attributes and an order on each of them');
+        }
+
+        foreach ($selected as $attribute) {
+            if (! \in_array($attribute, $orderAttributes, true)) {
+                throw new QueryException("A cursor on a distinct() read pages along its orders, so the read must order by every selected attribute, and '{$attribute}' is not ordered");
+            }
+        }
     }
 
     /**

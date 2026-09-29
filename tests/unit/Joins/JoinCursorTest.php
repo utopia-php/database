@@ -216,6 +216,83 @@ final class JoinCursorTest extends TestCase
         $this->database->find('authors', [Query::cursorAfter(new Document(['$collection' => 'authors', 'name' => 'a1', 'rank' => 1]))]);
     }
 
+    /**
+     * @return iterable<string, array{string, list<Query>, string, list<mixed>}>
+     */
+    public static function distinctReads(): iterable
+    {
+        yield 'distinct read' => ['notes', [Query::distinct(), Query::select(['label']), Query::orderAsc('label')], 'label', ['x', 'y', 'z']];
+        yield 'distinct read, descending' => ['notes', [Query::distinct(), Query::select(['label']), Query::orderDesc('label')], 'label', ['z', 'y', 'x']];
+        yield 'distinct read over a join' => [
+            'authors',
+            [Query::join('notes', '$id', 'author', '=', 'n'), Query::distinct(), Query::select(['n.label']), Query::orderAsc('n.label')],
+            'n.label',
+            ['x', 'y'],
+        ];
+        yield 'distinct read over a left join, nulls included' => [
+            'authors',
+            [Query::leftJoin('notes', '$id', 'author', '=', 'n'), Query::distinct(), Query::select(['n.rank']), Query::orderAsc('n.rank')],
+            'n.rank',
+            [null, 1, 2],
+        ];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     * @param  list<mixed>  $values
+     */
+    #[DataProvider('distinctReads')]
+    public function testCursorPagingOverADistinctReadReachesTheEnd(string $collection, array $queries, string $attribute, array $values): void
+    {
+        $paged = [];
+        $cursor = null;
+        for ($page = 0; $page <= \count($values); $page++) {
+            $rows = $this->database->find($collection, [...$queries, Query::limit(1), ...($cursor === null ? [] : [Query::cursorAfter($cursor)])]);
+            if ($rows === []) {
+                break;
+            }
+            $paged[] = $rows[0]->getAttribute($attribute);
+            $cursor = $rows[0];
+        }
+
+        $this->assertSame($values, $paged);
+        $this->assertSame(\array_slice($values, 0, -1), \array_map(
+            static fn (Document $row): mixed => $row->getAttribute($attribute),
+            $this->database->find($collection, [...$queries, Query::cursorBefore($cursor)]),
+        ));
+    }
+
+    public function testIterateOverADistinctReadReachesTheEnd(): void
+    {
+        $labels = [];
+        foreach ($this->database->iterate('notes', [Query::distinct(), Query::select(['label']), Query::orderAsc('label'), Query::limit(1)]) as $row) {
+            $labels[] = $row->getAttribute('label');
+            if (\count($labels) > 3) {
+                break;
+            }
+        }
+
+        $this->assertSame(['x', 'y', 'z'], $labels);
+    }
+
+    public function testDistinctCursorNeedsAnOrderOnEverySelectedAttribute(): void
+    {
+        $queries = [Query::distinct(), Query::select(['label', 'rank']), Query::orderAsc('label')];
+        $cursor = $this->database->find('notes', [...$queries, Query::limit(1)])[0];
+
+        try {
+            $this->database->find('notes', [...$queries, Query::cursorAfter($cursor)]);
+            $this->fail('A distinct read whose order does not name every selected attribute cannot be paged');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString("'rank'", $exception->getMessage());
+        }
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('A cursor on a distinct() read pages along its orders');
+
+        $this->database->find('notes', [Query::distinct(), Query::select(['label']), Query::cursorAfter($this->database->getDocument('notes', 'n1'))]);
+    }
+
     private function useDatabase(SQLite $adapter): void
     {
         $this->database = new Database($adapter, new Cache(new NoCache()));

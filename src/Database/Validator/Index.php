@@ -748,6 +748,7 @@ class Index extends Validator
 
     /**
      * Check that identical indexes (same attributes and orders) are not created when unsupported.
+     * The index itself is skipped, so revalidating an existing index does not compare it with itself.
      *
      * @param IndexVO $index The index to validate
      * @return bool
@@ -759,6 +760,10 @@ class Index extends Validator
         }
 
         foreach ($this->indexes as $existingIndex) {
+            if (\strtolower($existingIndex->key) === \strtolower($index->key)) {
+                continue;
+            }
+
             $attributesMatch = false;
             if (empty(\array_diff($existingIndex->attributes, $index->attributes)) &&
                 empty(\array_diff($index->attributes, $existingIndex->attributes))) {

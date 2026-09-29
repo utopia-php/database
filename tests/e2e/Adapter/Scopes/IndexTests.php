@@ -1161,6 +1161,30 @@ trait IndexTests
         }
     }
 
+    public function testUpdateAttributeCoveredByAKeyIndexSucceeds(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'indexedResize';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'name', size: 64)],
+            indexes: [Index::key(key: 'by_name', attributes: ['name'])],
+        ));
+
+        try {
+            $updated = $database->updateAttribute($collection, 'name', size: 128);
+
+            $this->assertSame(128, $updated->getAttribute('size'));
+            $this->assertSame(128, $database->getCollection($collection)->attributes[0]->size);
+            $this->assertSame(['by_name'], \array_map(
+                static fn (Index $index): string => $index->key,
+                \array_values($database->getCollection($collection)->indexes),
+            ));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     /**
      * @return list<string>|null The index's columns without the tenant column, or null when the schema does not list it
      */

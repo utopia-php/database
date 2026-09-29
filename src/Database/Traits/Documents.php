@@ -48,6 +48,7 @@ use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Query\Aggregate;
+use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Database\Validator\Query\JoinedCollection;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
@@ -436,6 +437,8 @@ trait Documents
         if (! empty($joins) && ! $this->adapter->supports(Capability::Joins)) {
             throw new QueryException('Join queries are not supported by this adapter');
         }
+
+        $this->assertJoinCount($joins);
 
         $joinDocumentSecurity = [];
         $joinedByAlias = [];
@@ -3604,6 +3607,8 @@ trait Documents
             throw new QueryException('Join queries are not supported by this adapter');
         }
 
+        $this->assertJoinCount($joins);
+
         $joinDocumentSecurity = [];
         if (! empty($joins)) {
             $joinDocumentSecurity = $this->authorizeJoins($joins, $forPermission);
@@ -4266,6 +4271,8 @@ trait Documents
                 throw new QueryException('Join queries are not supported by this adapter');
             }
 
+            $this->assertJoinCount($joins);
+
             $collection = $this->withJoinAuthorization(
                 $collection,
                 $this->authorizeJoins($joins, PermissionType::Read),
@@ -4288,6 +4295,22 @@ trait Documents
         }
 
         return [$collection, $convertedQueries, $collectionGranted && empty($joins)];
+    }
+
+    /**
+     * The join cap the Join validator enforces holds without validation too: every join is one
+     * more table the engine plans and the permission filters check.
+     *
+     * @param  array<Query>  $joins
+     *
+     * @throws QueryException
+     */
+    private function assertJoinCount(array $joins): void
+    {
+        $validator = new JoinValidator();
+        if (! $validator->isValidCount(\count($joins))) {
+            throw new QueryException($validator->getDescription());
+        }
     }
 
     /**

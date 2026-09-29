@@ -12,11 +12,13 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Method;
 
 /**
@@ -155,6 +157,32 @@ final class JoinResolutionTest extends TestCase
         $names = \array_map(static fn (Document $row): mixed => $row->getAttribute('name'), $rows);
         \sort($names);
         $this->assertSame(['first', 'third'], $names);
+    }
+
+    public function testMoreJoinsThanTheCapAreRefusedWithoutValidation(): void
+    {
+        $joins = static fn (int $count): array => \array_map(
+            static fn (int $index): Query => Query::join('themes', 'theme', '$id', '=', 'th'.$index),
+            \range(1, $count),
+        );
+
+        $reads = [
+            'find()' => fn (array $queries): mixed => $this->database->find('tickets', $queries),
+            'count()' => fn (array $queries): mixed => $this->database->count('tickets', $queries),
+            'sum()' => fn (array $queries): mixed => $this->database->sum('tickets', 'amount', $queries),
+            'getDocument()' => fn (array $queries): mixed => $this->database->getDocument('tickets', 'k1', $queries),
+        ];
+
+        foreach ($reads as $name => $read) {
+            $this->database->skipValidation(fn (): mixed => $read($joins(JoinValidator::MAX_PER_QUERY)));
+
+            try {
+                $this->database->skipValidation(fn (): mixed => $read($joins(JoinValidator::MAX_PER_QUERY + 1)));
+                $this->fail($name.': '.(JoinValidator::MAX_PER_QUERY + 1).' joins ran without validation');
+            } catch (QueryException $error) {
+                $this->assertSame('Too many joins: at most '.JoinValidator::MAX_PER_QUERY.' are allowed', $error->getMessage(), $name);
+            }
+        }
     }
 
     /**

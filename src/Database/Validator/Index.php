@@ -508,7 +508,7 @@ class Index extends Validator
             $attribute = $this->attributes[\strtolower($attributeName)];
 
             $attrType = $attribute->type;
-            $attrSize = $attribute->size;
+            $attrSize = $attribute->resolvedSize();
             [$attributeSize, $indexLength] = match ($attrType) {
                 ColumnType::String,
                 ColumnType::Varchar,

@@ -318,6 +318,24 @@ class Attribute extends Document
     }
 
     /**
+     * A text attribute declared without a size (size 0, the default of text(), mediumText() and
+     * longText()) holds up to the engine's maximum for its type.
+     */
+    public function resolvedSize(): int
+    {
+        if ($this->size > 0) {
+            return $this->size;
+        }
+
+        return match ($this->type) {
+            ColumnType::Text => Database::MAX_TEXT_BYTES,
+            ColumnType::MediumText => Database::MAX_MEDIUMTEXT_BYTES,
+            ColumnType::LongText => Database::MAX_LONGTEXT_BYTES,
+            default => $this->size,
+        };
+    }
+
+    /**
      * @param  array<string, mixed>  $formatOptions
      * @param  array<string>  $filters
      * @param  array<string, mixed>|null  $options

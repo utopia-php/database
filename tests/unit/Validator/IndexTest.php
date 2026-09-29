@@ -485,4 +485,14 @@ class IndexTest extends TestCase
         $this->assertSame(['title'], Index::fromDocument($stored)->attributes);
         $this->assertTrue((new IndexedQueries([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
     }
+
+    public function testTextAttributeWithoutASizeIsJudgedAgainstTheTextMaximum(): void
+    {
+        $validator = new IndexValidator([Attribute::text(key: 'body')], [], 768);
+
+        $this->assertTrue($validator->isValid(Index::key(key: 'by_body', attributes: ['body'], lengths: [100])), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_body', attributes: ['body'])));
+        $this->assertSame('Index length is longer than the maximum: 768', $validator->getDescription());
+    }
 }

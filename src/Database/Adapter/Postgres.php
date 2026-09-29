@@ -449,10 +449,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeCreate);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeCreate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -493,11 +490,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             $result = $this->executeStatement($sql, Event::AttributeUpdate);
 
-            // Rename mutates the schema. Invalidate now so a subsequent
-            // alterColumnType failure can't leave the cache pointing at the
-            // pre-rename column id.
-            $this->invalidateSpatialAttributesCache($collection);
-
             if (! $result) {
                 return false;
             }
@@ -530,13 +522,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 $ok = $this->executeStatement($nullable->query, Event::AttributeUpdate);
             }
 
-            $this->invalidateSpatialAttributesCache($collection);
-
             return $ok;
         } catch (PDOException $e) {
-            // alterColumnType can partially modify the column; drop the cache
-            // so the next read rescans live schema.
-            $this->invalidateSpatialAttributesCache($collection);
             throw $this->processException($e);
         }
     }
@@ -573,14 +560,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeDelete);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeDelete);
         } catch (PDOException $e) {
             if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-                $this->invalidateSpatialAttributesCache($collection);
-
                 return true;
             }
 
@@ -603,10 +585,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $sql = $result->query;
 
-        $ok = $this->executeStatement($sql, Event::AttributeUpdate);
-        $this->invalidateSpatialAttributesCache($collection);
-
-        return $ok;
+        return $this->executeStatement($sql, Event::AttributeUpdate);
     }
 
     /**

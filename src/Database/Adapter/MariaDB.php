@@ -408,10 +408,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeUpdate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }

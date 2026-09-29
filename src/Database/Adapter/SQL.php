@@ -108,19 +108,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected int $floatPrecision = 17;
 
     /**
-     * Memoized spatial column ids, keyed by database/namespace/collection so
-     * that Pool sibling adapters reusing the same instance across tenants
-     * never cross-contaminate. The cached entry also stores an attribute
-     * fingerprint so a long-lived process (Appwrite API workers) that added
-     * spatial columns after the first write still rescans instead of serving
-     * a stale empty list. Explicitly invalidated on schema mutations via
-     * invalidateSpatialAttributesCache().
-     *
-     * @var array<string, array{fingerprint: string, attributes: list<string>}>
-     */
-    private array $spatialAttributesCache = [];
-
-    /**
      * Lazily constructed AttributeMap shared by every newBuilder() call.
      * AttributeMap is a readonly stateless config object, so it can safely
      * be reused across queries on the same adapter.
@@ -541,10 +528,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         try {
-            $ok = $this->executeStatement($sql, $event);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, $event);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -581,10 +565,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributesCreate);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributesCreate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -606,10 +587,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeDelete);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeDelete);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -631,10 +609,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeUpdate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -927,11 +902,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
 
-        // Hoist per-row guards out of the document loop so a 1k-doc batch
-        // doesn't reallocate the spatial map and re-resolve the capability
-        // 1k times. Also pick up WKT / geometry-array values the collection
-        // metadata scan missed (stale process-local cache, typed Attribute
-        // objects, or encode() already converting defaults to WKT).
         $spatialAttributes = $this->expandSpatialAttributes($spatialAttributes, $documents);
         $spatialMap = \array_fill_keys($spatialAttributes, true);
 
@@ -2894,12 +2864,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $sql = $mainResult->query . '; ' . $permsResult->query;
 
-        $ok = $this->executeStatement($sql, Event::CollectionDelete);
-        // Schema is gone; drop any memoized spatial column list so a later
-        // recreate-with-different-schema doesn't see the stale entry.
-        $this->invalidateSpatialAttributesCache($id);
-
-        return $ok;
+        return $this->executeStatement($sql, Event::CollectionDelete);
     }
 
     /**
@@ -5635,58 +5600,23 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Helper method to extract spatial type attributes from collection attributes.
-     *
-     * The result is memoized by collection id and an attribute-set fingerprint
-     * so a process that created documents before spatial columns existed does
-     * not keep serving an empty list. Invalidate via
-     * invalidateSpatialAttributesCache() when adding or removing attributes.
-     *
      * @return list<string>
      */
     protected function getSpatialAttributes(Document $collection): array
     {
-        $key = $this->spatialCacheKey($collection->getId());
         /** @var array<mixed> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
-        $fingerprint = $this->spatialAttributeFingerprint($collectionAttributes);
-        $cached = $this->spatialAttributesCache[$key] ?? null;
-        if ($cached !== null && $cached['fingerprint'] === $fingerprint) {
-            return $cached['attributes'];
-        }
+        $spatialTypes = [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value];
 
         $spatialAttributes = [];
-        $spatialTypes = [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value];
-        foreach ($collectionAttributes as $attr) {
-            [$attributeKey, $attributeType] = $this->attributeKeyAndType($attr);
+        foreach ($collectionAttributes as $attribute) {
+            [$attributeKey, $attributeType] = $this->attributeKeyAndType($attribute);
             if (\is_string($attributeKey) && \in_array($attributeType, $spatialTypes, true)) {
                 $spatialAttributes[] = $attributeKey;
             }
         }
 
-        $this->spatialAttributesCache[$key] = [
-            'fingerprint' => $fingerprint,
-            'attributes' => $spatialAttributes,
-        ];
-
         return $spatialAttributes;
-    }
-
-    /**
-     * @param  array<mixed>  $collectionAttributes
-     */
-    private function spatialAttributeFingerprint(array $collectionAttributes): string
-    {
-        $parts = [];
-        foreach ($collectionAttributes as $attr) {
-            [$key, $type] = $this->attributeKeyAndType($attr);
-            if (\is_string($key)) {
-                $parts[] = $key.':'.($type ?? '');
-            }
-        }
-        \sort($parts);
-
-        return \implode(',', $parts);
     }
 
     /**
@@ -5764,28 +5694,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $value;
-    }
-
-    /**
-     * Invalidate the spatial attributes cache for a collection. Called from
-     * createAttribute / deleteAttribute / updateAttribute / renameAttribute /
-     * deleteCollection paths so the next write rescans the column list.
-     */
-    protected function invalidateSpatialAttributesCache(string $collectionId): void
-    {
-        unset($this->spatialAttributesCache[$this->spatialCacheKey($collectionId)]);
-    }
-
-    /**
-     * Compose a cache key scoped to the current database and namespace so
-     * that Pool sibling adapters reused across schemas never collide on a
-     * shared collection id. Tenant is intentionally excluded: collection
-     * schema (and therefore the spatial-attribute set) is shared across
-     * tenants under shared tables.
-     */
-    private function spatialCacheKey(string $collectionId): string
-    {
-        return $this->database.'/'.$this->namespace.'/'.$collectionId;
     }
 
     /**

@@ -86,7 +86,9 @@ final readonly class Storage
      */
     public static function columnMap(): array
     {
-        return \array_flip(self::ATTRIBUTE_MAP);
+        static $columnMap = \array_flip(self::ATTRIBUTE_MAP);
+
+        return $columnMap;
     }
 
     public static function permissionsTable(string $collection): string

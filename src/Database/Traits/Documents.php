@@ -488,9 +488,10 @@ trait Documents
         if ($document->isEmpty()) {
             // The marker is shared by every reader, so a miss observed with authorization
             // enabled only proves absence once an unfiltered read agrees: an adapter may have
-            // filtered the row out by the caller's permissions.
+            // filtered the row out by the caller's permissions. Collection definitions are
+            // never filtered that way, as every write resolves its collection through them.
             $missing = true;
-            if ($fillEpoch !== null && empty($relationships) && ! $skipAuth) {
+            if ($fillEpoch !== null && empty($relationships) && ! $skipAuth && $collection->getId() !== self::METADATA) {
                 $missing = $this->authorization->skip($getDocument)->isEmpty();
             }
 

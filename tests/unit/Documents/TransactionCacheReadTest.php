@@ -219,6 +219,45 @@ final class TransactionCacheReadTest extends TestCase
         $this->assertCount(3, $database->getDocument('libraries', 'library')->getAttribute('books'));
     }
 
+    public function testAMissingCollectionCostsOneMetadataRead(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->createDatabase($adapter, new RedisLeasableCache());
+
+        $adapter->reset();
+        $this->assertTrue($database->getCollection('missing')->isEmpty());
+        $this->assertSame(1, $adapter->metadataReads, 'A missing collection must cost one read of its definition (7.3.12: 1 read)');
+
+        $this->assertTrue($database->getCollection('missing')->isEmpty());
+        $this->assertSame(1, $adapter->metadataReads, 'A missing collection must be served from the cache once read');
+    }
+
+    public function testCreateCollectionChecksItsIdWithOneMetadataRead(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->createDatabase($adapter, new RedisLeasableCache());
+
+        $adapter->reset();
+        $database->createCollection(new Collection(id: 'logs', attributes: [
+            Attribute::string(key: 'message'),
+        ], permissions: [Permission::read(Role::any())]));
+
+        $this->assertSame(1, $adapter->metadataReads, 'createCollection() must check that its id is free with one read of the definition (7.3.12: 1 read)');
+    }
+
+    public function testCreateCollectionAfterAProbeReadsNoDefinition(): void
+    {
+        $adapter = new CountingMemory();
+        $database = $this->createDatabase($adapter, new RedisLeasableCache());
+        $this->assertTrue($database->getCollection('logs')->isEmpty());
+        $database->createCollection(new Collection(id: 'audits', permissions: [Permission::read(Role::any())]));
+
+        $adapter->reset();
+        $database->createCollection(new Collection(id: 'logs', permissions: [Permission::read(Role::any())]));
+
+        $this->assertSame(0, $adapter->metadataReads, 'A cached miss for the new id must survive other definitions being written (7.3.12: 0 reads)');
+    }
+
     private function hook(string $id): Document
     {
         return new Document([

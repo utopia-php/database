@@ -52,6 +52,7 @@ use Utopia\Database\Validator\Query\JoinedCollection;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use WeakMap;
@@ -3606,6 +3607,8 @@ trait Documents
             $joinDocumentSecurity = $this->authorizeJoins($joins, $forPermission);
         }
 
+        $joinedCollections = $isAggregation ? [] : $this->joinedCollectionsByAlias($joins);
+
         if (! $isAggregation && ! $distinct) {
             $uniqueOrderBy = false;
             foreach ($orderAttributes as $order) {
@@ -3630,12 +3633,22 @@ trait Documents
             // a batch that shares one timestamp newest-inserted first.
             if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
                 $leadingAttribute = $orderAttributes[0] ?? null;
-                $leadingOrderType = $orderTypes[0] ?? \Utopia\Query\OrderDirection::Asc;
+                $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
 
                 $orderAttributes[] = Document::SEQUENCE;
                 $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
                     ? $leadingOrderType
-                    : \Utopia\Query\OrderDirection::Asc;
+                    : OrderDirection::Asc;
+            }
+
+            if (! $vectorSearch || ! empty($cursor)) {
+                foreach (\array_keys($joinedCollections) as $alias) {
+                    $joinedId = $alias.'.'.Document::ID;
+                    if (! \in_array($joinedId, $orderAttributes, true) && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)) {
+                        $orderAttributes[] = $joinedId;
+                        $orderTypes[] = OrderDirection::Asc;
+                    }
+                }
             }
         }
 
@@ -3646,14 +3659,14 @@ trait Documents
 
             if ($joins !== []) {
                 $this->assertCursorHasOrderValues($cursor, $orderAttributes);
-            }
-
-            foreach ($orderAttributes as $order) {
-                if ($cursor->getAttribute($order) === null) {
-                    throw new OrderException(
-                        message: "Order attribute '{$order}' is empty",
-                        attribute: $order
-                    );
+            } else {
+                foreach ($orderAttributes as $order) {
+                    if ($cursor->getAttribute($order) === null) {
+                        throw new OrderException(
+                            message: "Order attribute '{$order}' is empty",
+                            attribute: $order
+                        );
+                    }
                 }
             }
         }
@@ -3661,8 +3674,6 @@ trait Documents
         if (! empty($cursor) && $cursor->getCollection() !== $collection->getId()) {
             throw new DatabaseException('cursor Document must be from the same Collection.');
         }
-
-        $joinedCollections = $isAggregation ? [] : $this->joinedCollectionsByAlias($joins);
 
         if (! empty($cursor)) {
             $cursor = $this->encode($collection, $cursor);

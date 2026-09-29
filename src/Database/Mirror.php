@@ -1729,9 +1729,6 @@ class Mirror extends Database
     /**
      * Hands $onNext a decorated copy of each document a bulk write returns: the source may pass the very documents
      * the caller gave it, which replication clones afterwards.
-     *
-     * @param  (callable(Document, mixed...): mixed)|null  $onNext
-     * @return (callable(Document, mixed...): mixed)|null
      */
     private function decorating(Event $event, string $collection, ?callable $onNext): ?callable
     {
@@ -1739,7 +1736,9 @@ class Mirror extends Database
             return $onNext;
         }
 
-        return fn (Document $document, mixed ...$arguments): mixed => $onNext($this->decorate($event, $collection, clone $document), ...$arguments);
+        return function (Document $document, mixed ...$arguments) use ($event, $collection, $onNext): void {
+            $onNext($this->decorate($event, $collection, clone $document), ...$arguments);
+        };
     }
 
     /**

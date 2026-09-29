@@ -791,6 +791,42 @@ trait GeneralTests
         }
     }
 
+    public function testASiblingReadAfterAWriteRunsNoStatement(): void
+    {
+        $database = $this->getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Caching)) {
+            $this->markTestSkipped('Adapter does not use the document cache.');
+        }
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->markTestSkipped($database->getAdapter()::class.' reports no statements to the profiler.');
+        }
+
+        $collection = 'siblingDocumentCache';
+        $this->createCachedUsers($database, $collection);
+        $database->createDocument($collection, new Document([
+            '$id' => 'sibling',
+            'name' => 'sibling',
+        ]));
+        $this->assertSame('sibling', $database->getDocument($collection, 'sibling')->getAttribute('name'));
+
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
+
+        try {
+            $database->updateDocument($collection, 'user', new Document(['name' => 'updated']));
+
+            $profiler->reset();
+            $this->assertSame('sibling', $database->getDocument($collection, 'sibling')->getAttribute('name'));
+            $this->assertSame(0, $profiler->getQueryCount(), 'A write to one document must leave its siblings cached (7.3.12: 0 statements)');
+
+            $this->assertSame('updated', $database->getDocument($collection, 'user')->getAttribute('name'));
+            $this->assertGreaterThan(0, $profiler->getQueryCount(), 'The written document itself must be read again');
+        } finally {
+            $database->disableProfiling();
+            $database->deleteCollection($collection);
+        }
+    }
+
     private function createCachedUsers(Database $database, string $collection): void
     {
         $database->createCollection(new Collection(id: $collection, attributes: [

@@ -413,8 +413,9 @@ trait Documents
         // Collection definitions are cacheable because every schema mutation
         // persists the definition through updateMetadata(), which writes the
         // row via the METADATA collection's own document path and therefore
-        // advances the METADATA cache epoch. Any new schema mutator must keep
-        // writing through that path, or its readers will serve a stale schema.
+        // purges that definition's slot; the METADATA epoch does not rotate.
+        // Any new schema mutator must keep writing through that path, or its
+        // readers will serve a stale schema.
         $cacheable = ! $forUpdate
             && ! $this->adapter->inTransaction()
             && empty($joins);
@@ -921,7 +922,7 @@ trait Documents
                     foreach ($batch as $document) {
                         $this->withDocumentTenant(
                             $document,
-                            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                            fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                         );
                     }
 
@@ -1485,7 +1486,7 @@ trait Documents
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
                         $document,
-                        fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                        fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                     );
                 }
             });
@@ -1881,7 +1882,7 @@ trait Documents
                     foreach ($batch as $document) {
                         $this->withDocumentTenant(
                             $document,
-                            fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                            fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                         );
                     }
 
@@ -2477,7 +2478,7 @@ trait Documents
                 foreach ($batch as $document) {
                     $this->withDocumentTenant(
                         $document,
-                        fn () => $this->purgeCachedDocumentInternal($collection->getId(), $document->getId())
+                        fn () => $this->advanceCollectionCacheEpoch($collection->getId())
                     );
                 }
             });
@@ -2524,8 +2525,7 @@ trait Documents
     }
 
     /**
-     * Cleans a specific document from cache
-     * And related document reference in the collection cache.
+     * Purge a document's cache slot, and once more after the open invalidation scope ends.
      *
      * @throws Exception
      */
@@ -2535,9 +2535,56 @@ trait Documents
             return true;
         }
 
-        [$collectionKey] = $this->getCacheBaseKeys($collectionId, $id);
+        [$collectionKey, $documentKey] = $this->getCacheBaseKeys($collectionId, $id);
+
+        $context = $this->getEventContext();
+        if (isset($this->documentCachePurges[$context])) {
+            $this->documentCachePurges[$context][$documentKey] = $collectionKey;
+        }
+
+        $this->cache->purge($documentKey);
+
+        return true;
+    }
+
+    private function advanceCollectionCacheEpoch(string $collectionId): bool
+    {
+        [$collectionKey] = $this->getCacheBaseKeys($collectionId);
 
         return $this->advanceDocumentCacheEpoch($collectionKey);
+    }
+
+    /**
+     * Purge the documents a transaction wrote once it has committed or rolled back. A reader
+     * outside the transaction may have cached the pre-commit row after the purge inside it, so
+     * when this purge fails the collection's epoch is retired instead, which no such fill survives.
+     *
+     * @param  array<string, string>  $documents  Collection keys by document key
+     */
+    protected function purgeWrittenDocuments(array $documents): void
+    {
+        $failure = null;
+        $retired = [];
+        foreach ($documents as $documentKey => $collectionKey) {
+            try {
+                $this->cache->purge($documentKey);
+            } catch (Throwable $error) {
+                $failure ??= $error;
+                if (isset($retired[$collectionKey])) {
+                    continue;
+                }
+                $retired[$collectionKey] = true;
+                try {
+                    $this->advanceDocumentCacheEpoch($collectionKey);
+                } catch (Throwable) {
+                    // The purge failure below reaches the caller either way.
+                }
+            }
+        }
+
+        if ($failure !== null) {
+            throw $failure;
+        }
     }
 
     private function getDocumentCacheEpoch(string $collectionKey): ?string

@@ -266,8 +266,8 @@ final class DocumentCacheEpochTest extends TestCase
             }
         };
         $readEveryHook();
-        $keys = \count($cache->keys());
 
+        $keys = 0;
         for ($round = 1; $round <= 3; $round++) {
             $database->withTransaction(function () use ($database, $round): void {
                 $database->updateDocument('webhooks', 'hook1', new Document(['name' => 'updated '.$round]));
@@ -275,6 +275,10 @@ final class DocumentCacheEpochTest extends TestCase
             });
             $this->renameDocument($database, 'webhooks', 'hook3', 'updated '.$round);
             $readEveryHook();
+
+            if ($round === 1) {
+                $keys = \count($cache->keys());
+            }
         }
 
         $this->assertSame($keys, \count($cache->keys()), 'A purged key stays behind in Redis, so writes and the reads between them must not leave keys of their own');

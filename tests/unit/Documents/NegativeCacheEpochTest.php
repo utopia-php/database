@@ -5,10 +5,10 @@ namespace Tests\Unit\Documents;
 use Closure;
 use Override;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Cache\Feature\Leasable;
-use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -18,63 +18,67 @@ use Utopia\Database\Helpers\Role;
 
 final class NegativeCacheEpochTest extends TestCase
 {
-    public function testAMissObservedBeforeAConcurrentWriteIsNotNegativeCached(): void
+    public function testAMissObservedBeforeAConcurrentCreateIsNotServedAfterIt(): void
     {
-        $cache = new LeasedMemoryCache();
         $adapter = new InterceptingMemory();
-        $database = $this->createDatabase($adapter, $cache);
+        $database = $this->createDatabase($adapter);
 
-        // The read observes the row's absence, then a concurrent writer commits
-        // it and rotates the collection's cache epoch before the reader gets to
-        // write its marker. saveWithLease leases the document key's generation,
-        // which a rotation never touches, so nothing else stops the write.
         $adapter->interceptNextGetDocument('webhooks', 'hook', function () use ($database): void {
-            $database->createDocument('webhooks', new Document([
-                '$id' => 'hook',
-                'name' => 'created',
-                '$permissions' => [
-                    Permission::read(Role::any()),
-                    Permission::update(Role::any()),
-                ],
-            ]));
+            $database->createDocument('webhooks', $this->hook());
         });
 
-        $cache->recordLeasedWrites();
-        $this->assertTrue($database->getDocument('webhooks', 'hook')->isEmpty());
-
-        $this->assertSame(
-            0,
-            $cache->leasedEmptyMarkers(),
-            'A miss observed before the epoch rotated must not be negative cached',
-        );
-
+        $this->assertTrue($database->getDocument('webhooks', 'hook')->isEmpty(), 'The read observed the row before it was created');
         $this->assertSame(
             'created',
             $database->getDocument('webhooks', 'hook')->getAttribute('name'),
-            'The document written during the read must be served afterwards',
+            'A miss observed before a concurrent create must not be served after it',
         );
     }
 
-    public function testAMissWithNoConcurrentWriteIsStillNegativeCached(): void
+    public function testAMissObservedBeforeAConcurrentBatchCreateIsNotServedAfterIt(): void
     {
-        $cache = new LeasedMemoryCache();
-        $database = $this->createDatabase(new InterceptingMemory(), $cache);
+        $adapter = new InterceptingMemory();
+        $database = $this->createDatabase($adapter);
 
-        $cache->recordLeasedWrites();
-        $this->assertTrue($database->getDocument('webhooks', 'absent')->isEmpty());
+        $adapter->interceptNextGetDocument('webhooks', 'hook', function () use ($database): void {
+            $database->createDocuments('webhooks', [$this->hook()]);
+        });
 
+        $this->assertTrue($database->getDocument('webhooks', 'hook')->isEmpty(), 'The read observed the row before it was created');
         $this->assertSame(
-            1,
-            $cache->leasedEmptyMarkers(),
-            'Without a rotation the negative cache must still be written',
+            'created',
+            $database->getDocument('webhooks', 'hook')->getAttribute('name'),
+            'A miss observed before a concurrent batch create must not be served after it',
         );
-
-        $this->assertTrue($database->getDocument('webhooks', 'absent')->isEmpty());
     }
 
-    private function createDatabase(DatabaseMemory $adapter, MemoryCache $cache): Database
+    public function testAMissWithNoConcurrentWriteIsServedFromTheCache(): void
     {
-        $database = new Database($adapter, new Cache($cache));
+        $adapter = new InterceptingMemory();
+        $database = $this->createDatabase($adapter);
+
+        $this->assertTrue($database->getDocument('webhooks', 'absent')->isEmpty());
+        $adapter->reset();
+
+        $this->assertTrue($database->getDocument('webhooks', 'absent')->isEmpty());
+        $this->assertSame(0, $adapter->documentReads, 'Without a concurrent write the miss must be served from the negative cache');
+    }
+
+    private function hook(): Document
+    {
+        return new Document([
+            '$id' => 'hook',
+            'name' => 'created',
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ]);
+    }
+
+    private function createDatabase(InterceptingMemory $adapter): Database
+    {
+        $database = new Database($adapter, new Cache(new LeasedMemoryCache()));
         $database
             ->setDatabase('utopiaTests')
             ->setNamespace('negative_cache_'.\uniqid());
@@ -90,7 +94,6 @@ final class NegativeCacheEpochTest extends TestCase
 
         return $database;
     }
-
 }
 
 /**
@@ -98,7 +101,7 @@ final class NegativeCacheEpochTest extends TestCase
  * adapter has decided what the row looks like, so a test can land a concurrent
  * write between the observation and whatever the caller does with it.
  */
-final class InterceptingMemory extends DatabaseMemory
+final class InterceptingMemory extends CountingMemory
 {
     private ?Closure $callback = null;
 
@@ -133,28 +136,13 @@ final class InterceptingMemory extends DatabaseMemory
 }
 
 /**
- * Counts the empty-document markers the database asks the cache to store,
- * through the Leasable contract the database actually calls, so a test can
- * assert what was written without reading the adapter's storage.
+ * A memory cache with the generations of the Leasable contract, so a save that
+ * raced a purge is refused as it is on Redis.
  */
 final class LeasedMemoryCache extends MemoryCache implements Leasable
 {
-    private const EMPTY_MARKER = '$empty';
-
     /** @var array<string, int> */
     private array $generations = [];
-
-    private ?int $emptyMarkers = null;
-
-    public function recordLeasedWrites(): void
-    {
-        $this->emptyMarkers = 0;
-    }
-
-    public function leasedEmptyMarkers(): int
-    {
-        return $this->emptyMarkers ?? 0;
-    }
 
     public function getGeneration(string $key): string
     {
@@ -168,10 +156,6 @@ final class LeasedMemoryCache extends MemoryCache implements Leasable
     #[Override]
     public function saveWithLease(string $key, array|string $data, string $hash, string $generation): bool|string|array
     {
-        if ($this->emptyMarkers !== null && \is_array($data) && isset($data[self::EMPTY_MARKER])) {
-            $this->emptyMarkers++;
-        }
-
         if ($this->getGeneration($key) !== $generation) {
             return false;
         }

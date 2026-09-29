@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Closure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter;
 use Utopia\Cache\Cache;
@@ -60,7 +61,7 @@ class WithCacheLeaseTest extends TestCase
         $this->adapter->updateDocument($collection, 'project', $document, true);
     }
 
-    public function testDocumentPurgeRemovesAllVariantsAndRejectsStaleWrites(): void
+    public function testDocumentPurgeRemovesAllVariants(): void
     {
         $plain = fn (): mixed => $this->database->getDocument('projects', 'project')->getAttribute('name');
         $projected = fn (): mixed => $this->database
@@ -70,16 +71,6 @@ class WithCacheLeaseTest extends TestCase
         $this->assertSame('fresh', $plain());
         $this->assertSame('fresh', $projected());
 
-        [$collectionKey, , $plainHash] = $this->database->getCacheKeys('projects', 'project');
-        $epoch = $this->cache->load($collectionKey . '#epoch', Database::TTL);
-        $this->assertIsString($epoch);
-
-        // The key, payload and lease a reader that started before the purge writes back under.
-        $staleKey = $plainHash . '#' . $epoch;
-        $lease = $this->cache->getGeneration($staleKey);
-        $stalePayload = $this->cache->load($staleKey, Database::TTL);
-        $this->assertIsArray($stalePayload);
-
         $this->staleCache('name', 'changed');
 
         // Both variants still answer 'fresh' from cache, so the purge has something to invalidate.
@@ -88,10 +79,53 @@ class WithCacheLeaseTest extends TestCase
 
         $this->assertTrue($this->database->purgeCachedDocument('projects', 'project'));
 
-        $this->cache->saveWithLease($staleKey, $stalePayload, $staleKey, $lease);
-
         $this->assertSame('changed', $plain());
         $this->assertSame('changed', $projected());
+    }
+
+    public function testAReadInFlightDuringAPurgeCannotCacheWhatItRead(): void
+    {
+        $adapter = new class () extends DatabaseMemory {
+            public ?Closure $afterNextDocumentRead = null;
+
+            #[\Override]
+            public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+            {
+                $document = parent::getDocument($collection, $id, $queries, $forUpdate);
+
+                $callback = $collection->getId() === Database::METADATA ? null : $this->afterNextDocumentRead;
+                if ($callback !== null) {
+                    $this->afterNextDocumentRead = null;
+                    $callback();
+                }
+
+                return $document;
+            }
+        };
+        $database = new Database($adapter, new Cache(new LeasableMemoryCache()));
+        $database
+            ->setDatabase('utopiaTests')
+            ->setNamespace('with_cache_in_flight_' . \uniqid());
+        $database->create();
+        $database->createCollection(new Collection(id: 'projects'));
+        $database->createAttribute('projects', Attribute::string(key: 'name'));
+        $database->createDocument('projects', new Document([
+            '$id' => 'project',
+            '$permissions' => [
+                Permission::read(Role::any()),
+            ],
+            'name' => 'fresh',
+        ]));
+
+        $adapter->afterNextDocumentRead = function () use ($adapter, $database): void {
+            $collection = $database->getCollection('projects');
+            $row = $adapter->getDocument($collection, 'project')->setAttribute('name', 'changed');
+            $adapter->updateDocument($collection, 'project', $row, true);
+            $database->purgeCachedDocument('projects', 'project');
+        };
+
+        $this->assertSame('fresh', $database->getDocument('projects', 'project')->getAttribute('name'), 'The read returns the row it read before the purge');
+        $this->assertSame('changed', $database->getDocument('projects', 'project')->getAttribute('name'), 'The read that started before the purge must not have cached its row');
     }
 
     public function testStaleListWriteAfterConcurrentPurgeIsRejected(): void

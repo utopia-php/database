@@ -3644,8 +3644,12 @@ trait Documents
                 throw new QueryException('Cursor pagination is not supported with aggregation queries');
             }
 
+            if ($joins !== []) {
+                $this->assertCursorHasOrderValues($cursor, $orderAttributes);
+            }
+
             foreach ($orderAttributes as $order) {
-                if ($this->cursorOrderValue($cursor, $order) === null) {
+                if ($cursor->getAttribute($order) === null) {
                     throw new OrderException(
                         message: "Order attribute '{$order}' is empty",
                         attribute: $order
@@ -3665,15 +3669,6 @@ trait Documents
             $cursor = $this->castingBefore($collection, $cursor);
             $cursor = $this->encodeJoins($cursor, $joinedCollections);
             $cursor = $cursor->getArrayCopy();
-            foreach ($orderAttributes as $order) {
-                if (\array_key_exists($order, $cursor) && $cursor[$order] !== null) {
-                    continue;
-                }
-                $bare = $this->bareOrderAttribute($order);
-                if ($bare !== $order && \array_key_exists($bare, $cursor) && $cursor[$bare] !== null) {
-                    $cursor[$order] = $cursor[$bare];
-                }
-            }
         } else {
             $cursor = [];
         }
@@ -4168,29 +4163,25 @@ trait Documents
         return $this->find($collection, $queries);
     }
 
-    private function cursorOrderValue(Document $cursor, string $order): mixed
+    /**
+     * A cursor names the row it was read from by the values of the read's order, each under the name the read orders
+     * by. A value it lacks is never taken from an attribute of the same name elsewhere in the document.
+     *
+     * @param  array<string>  $orderAttributes
+     *
+     * @throws OrderException
+     */
+    private function assertCursorHasOrderValues(Document $cursor, array $orderAttributes): void
     {
-        $value = $cursor->getAttribute($order);
-        if ($value !== null) {
-            return $value;
+        $values = $cursor->getArrayCopy();
+        foreach ($orderAttributes as $order) {
+            if (! \array_key_exists($order, $values)) {
+                throw new OrderException(
+                    message: "Cursor has no value for order attribute '{$order}'. Use a row this read returned as the cursor, and select '{$order}' when the read selects attributes.",
+                    attribute: $order,
+                );
+            }
         }
-
-        $bare = $this->bareOrderAttribute($order);
-        if ($bare === $order) {
-            return null;
-        }
-
-        return $cursor->getAttribute($bare);
-    }
-
-    private function bareOrderAttribute(string $order): string
-    {
-        $dot = \strrpos($order, '.');
-        if ($dot === false) {
-            return $order;
-        }
-
-        return \substr($order, $dot + 1);
     }
 
     /**

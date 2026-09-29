@@ -6,6 +6,7 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -2760,5 +2761,64 @@ trait AttributeTests
             }
             $database->setTenant($originalTenant);
         }
+    }
+
+    public function testRenameAttributeCompletesAnOrphanedRename(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        $schemaAttributes = $adapter->hasFeature(Feature\SchemaAttributes::class);
+
+        if (! $schemaAttributes && ! $adapter instanceof SQL) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'orphanedRename';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'before', size: 64),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+        $database->createDocument($collection, new Document([Document::ID => 'one', 'before' => 'kept']));
+
+        try {
+            $adapter->renameAttribute($collection, 'before', 'after');
+
+            if (! $schemaAttributes) {
+                try {
+                    $database->renameAttribute($collection, 'before', 'after');
+                    $this->fail('Without schema introspection a failed rename must be reported');
+                } catch (DatabaseException $error) {
+                    $this->assertStringStartsWith("Failed to rename attribute 'before' to 'after': ", $error->getMessage());
+                }
+
+                $this->assertSame(['before'], $this->getAttributeKeys($database, $collection));
+
+                return;
+            }
+
+            $this->assertTrue($database->renameAttribute($collection, 'before', 'after'));
+            $this->assertSame(['after'], $this->getAttributeKeys($database, $collection));
+
+            $document = $database->getDocument($collection, 'one');
+            $this->assertSame('kept', $document->getAttribute('after'));
+            $this->assertFalse($document->offsetExists('before'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getAttributeKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection($collection)->attributes),
+        );
     }
 }

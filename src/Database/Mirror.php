@@ -929,18 +929,20 @@ class Mirror extends Database
         }
 
         try {
+            $filtered = $document;
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeUpdateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     attributeId: $id,
-                    attribute: $document,
+                    attribute: $filtered,
                 );
-                if ($filtered !== null) {
-                    $document = $filtered;
+                if ($filtered === null) {
+                    return $document;
                 }
             }
+            $document = $filtered;
 
             $typedAttr = Attribute::fromDocument($document);
 
@@ -1011,20 +1013,22 @@ class Mirror extends Database
             $document = $index->toDocument();
 
             foreach ($this->writeFilters as $filter) {
-                $filtered = $filter->beforeCreateIndex(
+                $document = $filter->beforeCreateIndex(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     indexId: $index->key,
                     index: $document,
                 );
-                if ($filtered !== null) {
-                    $document = $filtered;
+                if ($document === null) {
+                    break;
                 }
             }
 
-            $filteredIndex = Index::fromDocument($document);
-            $result = $this->destination->createIndex($collection, $filteredIndex);
+            if ($document !== null) {
+                $filteredIndex = Index::fromDocument($document);
+                $result = $this->destination->createIndex($collection, $filteredIndex);
+            }
         } catch (Throwable $err) {
             $this->logError('createIndex', $err);
         }
@@ -1093,9 +1097,8 @@ class Mirror extends Database
             }
 
             $this->awaitReplications($collection, [$document->getId()]);
-            $this->destination->setPreserveDates(true);
-            $this->destination->createDocument($collection, $clone);
-            $this->destination->setPreserveDates(false);
+            $destination = $this->destination;
+            $destination->withPreserveDates(fn (): Document => $destination->createDocument($collection, $clone));
 
             foreach ($this->writeFilters as $filter) {
                 $filter->afterCreateDocument(
@@ -1148,19 +1151,25 @@ class Mirror extends Database
         $clones = [];
         $destination = $this->destination;
 
-        foreach ($documents as $document) {
-            $clone = clone $document;
+        try {
+            foreach ($documents as $document) {
+                $clone = clone $document;
 
-            foreach ($this->writeFilters as $filter) {
-                $clone = $filter->beforeCreateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
             }
+        } catch (Throwable $err) {
+            $this->logError('createDocuments', $err);
 
-            $clones[] = $clone;
+            return $modified;
         }
 
         $skipDuplicates = $this->skipDuplicates;
@@ -1234,9 +1243,8 @@ class Mirror extends Database
             }
 
             $this->awaitReplications($collection, [$id]);
-            $this->destination->setPreserveDates(true);
-            $this->destination->updateDocument($collection, $id, $clone);
-            $this->destination->setPreserveDates(false);
+            $destination = $this->destination;
+            $destination->withPreserveDates(fn (): Document => $destination->updateDocument($collection, $id, $clone));
 
             foreach ($this->writeFilters as $filter) {
                 $filter->afterUpdateDocument(
@@ -1289,14 +1297,20 @@ class Mirror extends Database
         $clone = clone $updates;
         $destination = $this->destination;
 
-        foreach ($this->writeFilters as $filter) {
-            $clone = $filter->beforeUpdateDocuments(
-                source: $this->source,
-                destination: $destination,
-                collectionId: $collection,
-                updates: $clone,
-                queries: $queries,
-            );
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $clone = $filter->beforeUpdateDocuments(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    updates: $clone,
+                    queries: $queries,
+                );
+            }
+        } catch (Throwable $err) {
+            $this->logError('updateDocuments', $err);
+
+            return $modified;
         }
 
         $this->replicate('updateDocuments', $collection, null, function () use ($destination, $collection, $clone, $queries, $batchSize): void {
@@ -1361,23 +1375,30 @@ class Mirror extends Database
 
         $clones = [];
         $destination = $this->destination;
+        $action = $attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease';
 
-        foreach ($documents as $document) {
-            $clone = clone $document;
+        try {
+            foreach ($documents as $document) {
+                $clone = clone $document;
 
-            foreach ($this->writeFilters as $filter) {
-                $clone = $filter->beforeCreateOrUpdateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
             }
+        } catch (Throwable $err) {
+            $this->logError($action, $err);
 
-            $clones[] = $clone;
+            return $modified;
         }
 
-        $this->replicate($attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease', $collection, self::documentIds($documents), function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
+        $this->replicate($action, $collection, self::documentIds($documents), function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
             $destination->withPreserveDates(
                 fn () => $destination->upsertDocumentsWithIncrease(
                     $collection,
@@ -1421,13 +1442,19 @@ class Mirror extends Database
             return $result;
         }
 
-        foreach ($this->writeFilters as $filter) {
-            $filter->beforeDeleteDocument(
-                source: $this->source,
-                destination: $this->destination,
-                collectionId: $collection,
-                documentId: $id,
-            );
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $filter->beforeDeleteDocument(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    documentId: $id,
+                );
+            }
+        } catch (Throwable $err) {
+            $this->logError('deleteDocument', $err);
+
+            return $result;
         }
 
         $destination = $this->destination;
@@ -1477,13 +1504,19 @@ class Mirror extends Database
             return $modified;
         }
 
-        foreach ($this->writeFilters as $filter) {
-            $filter->beforeDeleteDocuments(
-                source: $this->source,
-                destination: $this->destination,
-                collectionId: $collection,
-                queries: $queries,
-            );
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $filter->beforeDeleteDocuments(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    queries: $queries,
+                );
+            }
+        } catch (Throwable $err) {
+            $this->logError('deleteDocuments', $err);
+
+            return $modified;
         }
 
         $destination = $this->destination;

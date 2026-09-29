@@ -5065,6 +5065,56 @@ trait RelationshipTests
         }
     }
 
+    public function testSelectingNestedAttributesThroughTheChildSideOfAManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $stores = 'nestedSelectStores';
+        $products = 'nestedSelectProducts';
+        $database->createCollection(new Collection(id: $stores, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $products, attributes: [Attribute::string(key: 'name', size: 64), Attribute::string(key: 'sku', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::manyToOne(collection: $products, relatedCollection: $stores, twoWay: true, key: 'store', twoWayKey: 'products', onDelete: ForeignKeyAction::SetNull));
+
+        try {
+            $database->createDocument($stores, new Document(['$id' => 'store1', 'name' => 'Store 1']));
+            foreach (['product1', 'product2'] as $id) {
+                $database->createDocument($products, new Document(['$id' => $id, 'name' => "Name {$id}", 'sku' => "sku-{$id}", 'store' => 'store1']));
+            }
+
+            $reads = [
+                'getDocument' => $database->getDocument($stores, 'store1', [Query::select(['*', 'products.name'])]),
+                'findOne' => $database->findOne($stores, [Query::select(['*', 'products.name'])]),
+            ];
+            foreach ($reads as $read => $store) {
+                $this->assertSame('Store 1', $store->getAttribute('name'), $read);
+                $ids = \array_map(fn (Document $product): string => $product->getId(), $store->getDocuments('products'));
+                \sort($ids);
+                $this->assertSame(['product1', 'product2'], $ids, $read);
+                foreach ($store->getDocuments('products') as $product) {
+                    $this->assertSame("Name {$product->getId()}", $product->getAttribute('name'), $read);
+                    $this->assertFalse($product->offsetExists('sku'), "{$read} must return only the selected attribute of {$product->getId()}");
+                    $this->assertFalse($product->offsetExists('store'), "{$read} must not return the back-reference of {$product->getId()}");
+                }
+            }
+
+            $store = $database->getDocument($stores, 'store1', [Query::select(['*', 'products.'])]);
+            $this->assertCount(2, $store->getDocuments('products'));
+            foreach ($store->getDocuments('products') as $product) {
+                $this->assertSame("sku-{$product->getId()}", $product->getAttribute('sku'), 'A trailing dot selects every attribute of the related documents');
+            }
+        } finally {
+            $database->deleteCollection($stores);
+            $database->deleteCollection($products);
+        }
+    }
+
     /**
      * @return array<string>
      */

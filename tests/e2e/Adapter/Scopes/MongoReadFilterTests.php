@@ -123,6 +123,17 @@ trait MongoReadFilterTests
         $database->deleteCollection($collection);
     }
 
+    public function testContainsAllWorksOnFind(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar', 'barfoo', 'foobaz']);
+
+        $this->assertSame(['barfoo', 'foobar'], $this->namesOf($database->find($collection, [Query::containsAll('tags', ['foo', 'bar'])])));
+        $this->assertSame(2, $database->count($collection, [Query::containsAll('tags', ['foo', 'bar'])]));
+
+        $database->deleteCollection($collection);
+    }
+
     /**
      * @param  list<string>  $names
      */

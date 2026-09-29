@@ -77,7 +77,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         '$nor',
         '$exists',
         '$elemMatch',
-        '$exists',
+        '$all',
     ];
 
     protected Client $client;

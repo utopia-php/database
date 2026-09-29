@@ -50,6 +50,20 @@ final class MongoQueryFilterTest extends TestCase
         );
     }
 
+    public function testContainsAllKeepsTheAllOperatorOnFind(): void
+    {
+        $query = Query::containsAll('tags', ['a', 'b']);
+        $query->setOnArray(true);
+
+        $this->find([$query]);
+
+        $this->assertSame(
+            [['tags' => ['$all' => ['a', 'b']]]],
+            $this->calls['find'][0]['$and'] ?? null,
+            'find() must send $all as count() does, not the rewritten _all',
+        );
+    }
+
     /**
      * @param  array<Query>  $queries
      * @return array<Document>

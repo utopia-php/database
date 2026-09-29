@@ -3343,9 +3343,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $array[Document::ID] = $this->stringifyIdentifier($array[Storage::UID]);
                 unset($array[Storage::UID]);
             }
-            if (isset($array[Storage::TENANT])) {
+            if (\array_key_exists(Storage::TENANT, $array)) {
                 $tenant = $array[Storage::TENANT];
-                $array[Document::TENANT] = \is_int($tenant) ? $tenant : $this->stringifyIdentifier($tenant);
+                $array[Document::TENANT] = \is_int($tenant) || $tenant === null ? $tenant : $this->stringifyIdentifier($tenant);
                 unset($array[Storage::TENANT]);
             }
         } elseif ($from === '$') {
@@ -3357,7 +3357,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $array[Storage::SEQUENCE] = $array[Document::SEQUENCE];
                 unset($array[Document::SEQUENCE]);
             }
-            if (isset($array[Document::TENANT])) {
+            if (\array_key_exists(Document::TENANT, $array)) {
                 $array[Storage::TENANT] = $array[Document::TENANT];
                 unset($array[Document::TENANT]);
             }

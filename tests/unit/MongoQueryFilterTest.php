@@ -74,6 +74,19 @@ final class MongoQueryFilterTest extends TestCase
         $this->createAdapter()->count(new Document(['$id' => self::COLLECTION]));
     }
 
+    public function testNullTenantIsReadAsTheTenantAttribute(): void
+    {
+        $this->rows = [(object) ['_uid' => 'first', '_tenant' => null]];
+
+        $documents = $this->find([]);
+
+        $this->assertCount(1, $documents);
+        $stored = $documents[0]->getArrayCopy();
+        $this->assertArrayNotHasKey('_tenant', $stored, 'A null _tenant must not leak as a storage key');
+        $this->assertArrayHasKey('$tenant', $stored);
+        $this->assertNull($stored['$tenant']);
+    }
+
     /**
      * @param  array<Query>  $queries
      * @return array<Document>

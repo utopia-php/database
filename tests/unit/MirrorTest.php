@@ -960,10 +960,11 @@ class MirrorTest extends TestCase
         $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
             $errors[] = [$action, $error->getMessage()];
         });
-        $returned = [];
+        /** @var ArrayObject<int, Document> $returned */
+        $returned = new ArrayObject();
 
-        self::inCoroutine(static function () use ($mirror, $write, &$returned): void {
-            $returned = $write($mirror);
+        self::inCoroutine(static function () use ($mirror, $write, $returned): void {
+            $returned->exchangeArray($write($mirror));
         });
 
         $this->assertCount(1, $returned);

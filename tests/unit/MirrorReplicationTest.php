@@ -255,7 +255,12 @@ final class MirrorReplicationTest extends TestCase
         $mirror = new class ($this->mirror->getSource(), $this->destination) extends Mirror {
             public function countPendingReplications(): int
             {
-                return \count($this->collectionReplications) + \array_sum(\array_map(\count(...), $this->documentReplications));
+                $pending = \count($this->collectionReplications);
+                foreach ($this->documentReplications as $documents) {
+                    $pending += \count($documents);
+                }
+
+                return $pending;
             }
         };
         $this->delays = ['v0' => 0.01, 'v1' => 0.01];

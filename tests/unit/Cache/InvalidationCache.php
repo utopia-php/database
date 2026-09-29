@@ -31,7 +31,7 @@ final class InvalidationCache extends Cache
     }
 
     #[\Override]
-    public function save(string $key, mixed $data, string $hash = ''): bool|string|array
+    public function save(string $key, mixed $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if (isset($this->failures[$key])) {
             return false;

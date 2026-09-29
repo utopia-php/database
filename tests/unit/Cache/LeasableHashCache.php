@@ -29,7 +29,7 @@ final class LeasableHashCache implements CacheAdapter, Leasable
         return $saved !== null && $saved['time'] + $ttl > \time() ? $saved['data'] : false;
     }
 
-    public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if ($key === '') {
             return false;

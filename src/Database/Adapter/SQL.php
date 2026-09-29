@@ -6249,7 +6249,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     protected function escapeWildcards(string $value): string
     {
-        $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
+        $wildcards = ['\\', '%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];
 
         foreach ($wildcards as $wildcard) {
             $value = \str_replace($wildcard, "\\$wildcard", $value);

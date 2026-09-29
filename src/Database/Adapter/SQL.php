@@ -1668,8 +1668,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
-        // count() forwards queries to filter() without mutating individual
-        // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
         $hasJoins = false;
         foreach ($queries as $query) {
@@ -1695,10 +1693,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $this->executeWrappedCount($innerBuilder);
         }
 
-        // Fast path: no filters, no permission subquery, no shared-tenant
-        // filter, no max. The Builder produces ~30 lines of SQL; bypassing
-        // it for the common "count all rows" case dodges thousands of PHP
-        // ops per call.
         if (
             empty($otherQueries)
             && $max === null
@@ -1721,12 +1715,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return is_array($row) && is_numeric($row['sum'] ?? null) ? (int) $row['sum'] : 0;
         }
 
-        // Build inner query: SELECT 1 FROM table WHERE ... LIMIT
         $innerBuilder = $this->newBuilder($name, $alias);
         $innerBuilder->selectRaw('1');
         $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
 
-        // Permission subquery
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
             $innerBuilder->addHook($this->newPermissionHook($name, $roles));
         }
@@ -1754,8 +1746,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
-        // sum() forwards queries to filter() without mutating individual
-        // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
         $hasJoins = false;
         foreach ($queries as $query) {
@@ -1784,8 +1774,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $attribute = $this->filter($attribute);
 
-        // Fast path: trivial SUM(column) over the entire collection. Bypass
-        // the Builder's full SELECT/FROM/WHERE pipeline.
         if (
             empty($otherQueries)
             && $max === null
@@ -1813,12 +1801,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return 0;
         }
 
-        // Build inner query: SELECT attribute FROM table WHERE ... LIMIT
         $innerBuilder = $this->newBuilder($name, $alias);
         $innerBuilder->select([$attribute]);
         $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
 
-        // Permission subquery
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
             $innerBuilder->addHook($this->newPermissionHook($name, $roles));
         }

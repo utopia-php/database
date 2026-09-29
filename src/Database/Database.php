@@ -15,9 +15,16 @@ use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Character as CharacterException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
@@ -90,6 +97,25 @@ class Database
     public const TTL = 60 * 60 * 24; // 24 hours
 
     private const CACHE_EMPTY_MARKER = '$empty';
+
+    /**
+     * Failures that fail the same way on every attempt, so withRetries() rethrows them at once.
+     *
+     * @var list<class-string<Throwable>>
+     */
+    private const array DETERMINISTIC_FAILURES = [
+        AuthorizationException::class,
+        CharacterException::class,
+        DuplicateException::class,
+        LimitException::class,
+        NotFoundException::class,
+        OrderException::class,
+        QueryException::class,
+        RelationshipException::class,
+        RestrictedException::class,
+        StructureException::class,
+        TypeException::class,
+    ];
 
     public const INSERT_BATCH_SIZE = 1_000;
 
@@ -3200,6 +3226,10 @@ class Database
 
                 return;
             } catch (Throwable $e) {
+                if (! $this->isRetryable($e)) {
+                    throw $e;
+                }
+
                 $lastException = $e;
                 $attempt++;
 
@@ -3218,6 +3248,17 @@ class Database
         }
 
         throw $lastException;
+    }
+
+    private function isRetryable(Throwable $error): bool
+    {
+        foreach (self::DETERMINISTIC_FAILURES as $deterministic) {
+            if ($error instanceof $deterministic) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**

@@ -871,6 +871,51 @@ class QueryCacheTest extends TestCase
         $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
     }
 
+    public function testGetPurgesAnEntryOfAnotherVersionAndMisses(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+
+        $cache->method('load')->willReturn(['version' => 1, 'epoch' => 'epoch', 'field' => 'field', 'documents' => []]);
+        $cache->expects($this->once())
+            ->method('purge')
+            ->with('entry-key', 'field')
+            ->willReturn(true);
+
+        $this->assertNull($queryCache->get(new Entry('entry-key', 'users', 'field', 'epoch')));
+    }
+
+    public function testInvalidationPropagatesAnOwnerRegistrationFailure(): void
+    {
+        $cache = new InvalidationCache();
+        $queryCache = new QueryCache($cache);
+        $key = $queryCache->getCollectionKey(new Scope(), 'users');
+        $cache->fail($key.'#owners');
+
+        try {
+            $queryCache->invalidateCollection(new Scope(), 'users');
+            $this->fail('An owner registration failure was not propagated');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('Failed to register query cache owner', $error->getMessage());
+        }
+
+        $this->assertArrayNotHasKey($key.'#epoch', $cache->values, 'A write whose owner was not registered must not block the epoch');
+    }
+
+    public function testFlushFailureIsReported(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+
+        $cache->expects($this->once())
+            ->method('flush')
+            ->willReturn(false);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Failed to flush query cache');
+        $queryCache->flush();
+    }
+
     /**
      * @param  array<string>  $collections
      */

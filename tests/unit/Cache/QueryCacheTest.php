@@ -823,6 +823,54 @@ class QueryCacheTest extends TestCase
         $queryCache->invalidateCollection(new Scope(), 'users');
     }
 
+    public function testAFlushedWriterLeavesAnotherWritersTombstoneInPlace(): void
+    {
+        $adapter = new OwnershipCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+
+        $queryCache->blockCollection($key, 'first');
+        $this->assertTrue($adapter->flush());
+        $queryCache->blockCollection($key, 'second');
+
+        $queryCache->activateCollection($key, 'first');
+
+        $this->assertNull($queryCache->getEntry($scope, 'users', []), 'A writer whose registration was flushed away must not enable the cache while another writer is in flight');
+        $this->assertStringStartsWith('blocked:second@', $this->epochOf($adapter, $key));
+
+        $queryCache->activateCollection($key, 'second');
+
+        $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
+    }
+
+    public function testAnOwnerReleasedByAConcurrentFlushIsNotReported(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $cache = new class ($adapter) extends Cache {
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                if ($hash !== '' && \str_ends_with($key, '#owners')) {
+                    $this->flush();
+                }
+
+                return parent::purge($key, $hash);
+            }
+        };
+        $queryCache = new QueryCache($cache);
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+        $queryCache->blockCollection($key, 'owner');
+
+        $queryCache->activateCollection($key, 'owner');
+
+        $epoch = $adapter->load($key.'#epoch', \PHP_INT_MAX);
+        $this->assertIsString($epoch);
+        $this->assertStringStartsWith('active:', $epoch, 'An owner that a flush removed before its release must still publish a fresh epoch');
+        $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
+    }
+
     /**
      * @param  array<string>  $collections
      */

@@ -733,12 +733,35 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
+     * Apply the onDelete of each relationship on $collection before $document is deleted.
+     *
+     * With $report set, returns the documents on the other side of a two-way relationship that
+     * the delete leaves changed: the ones it wrote, and the ones it left holding a reference to
+     * the deleted document without writing them. One-way peers are left out, and so is every
+     * peer a cascade removed, anywhere down its chain.
+     *
+     * A peer is the copy the delete itself worked with: read and written with permissions
+     * skipped, like the rest of the delete, and returned without a read check on the principal
+     * running it. Whoever can read the peer is who needs to hear that it changed, and that is
+     * rarely whoever deleted the other side, so the report carries the trust the bulk callbacks
+     * already carry: deleteDocuments() hands $onNext each whole document it deleted, and
+     * upsertDocuments() hands it a pre-image read with permissions skipped.
+     *
+     * How the delete reached a peer decides its shape. One the delete wrote is the copy that
+     * write returned, carrying the key it cleared. One it did not write is the copy read off the
+     * deleted document, where relationship population has already stripped the back-reference,
+     * so that key is absent rather than null. Read a peer back to use more than its identity.
+     *
+     * @return list<Document>
      *
      * @throws RestrictedException If a restricted relationship prevents deletion
      */
-    public function beforeDocumentDelete(Document $collection, Document $document): Document
+    public function beforeDocumentDelete(Document $collection, Document $document, bool $report = false): array
     {
+        /** @var array<string, array<string, Document>> $changed */
+        $changed = [];
+        $cascaded = false;
+
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
 
@@ -762,14 +785,29 @@ class Relationships implements Hook
             $relationship->setAttribute('collection', $collection->getId());
             $relationship->setAttribute('document', $document->getId());
 
+            $holdsKey = ($relationType === RelationType::OneToMany && $side === RelationSide::Child)
+                || ($relationType === RelationType::ManyToOne && $side === RelationSide::Parent);
+            $unwritten = false;
+
             switch ($onDelete) {
                 case ForeignKeyAction::Restrict:
                     $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    $unwritten = true;
                     break;
                 case ForeignKeyAction::SetNull:
-                    $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side);
+                    $written = $this->deleteSetNull($collection, $relatedCollection, $document, $relationType, $twoWay, $twoWayKey, $side);
+
+                    if ($twoWay) {
+                        foreach ($written as $related) {
+                            $changed[$relatedCollection->getId()][$related->getId()] = $related;
+                        }
+                    }
+
+                    $unwritten = $holdsKey || $relationType === RelationType::ManyToMany;
                     break;
                 case ForeignKeyAction::Cascade:
+                    $unwritten = $holdsKey || ($relationType === RelationType::ManyToMany && $side === RelationSide::Child);
+
                     foreach ($this->deleteStack as $processedRelationship) {
                         /** @var string $existingKey */
                         $existingKey = $processedRelationship['key'];
@@ -810,9 +848,65 @@ class Relationships implements Hook
                     $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWayKey, $side, $relationship);
                     break;
             }
+
+            foreach (\is_array($value) ? $value : [$value] as $related) {
+                if (! $related instanceof Document || $related->isEmpty()) {
+                    continue;
+                }
+
+                if ($onDelete === ForeignKeyAction::Cascade && ! $unwritten) {
+                    $cascaded = true;
+                } elseif ($twoWay && $unwritten) {
+                    $changed[$relatedCollection->getId()][$related->getId()] = $related;
+                }
+            }
         }
 
-        return $document;
+        if (! $report) {
+            return [];
+        }
+
+        unset($changed[$collection->getId()][$document->getId()]);
+
+        if ($cascaded) {
+            $changed = $this->withoutRemoved($changed);
+        }
+
+        $reported = [];
+        foreach ($changed as $documents) {
+            \array_push($reported, ...\array_values($documents));
+        }
+
+        return $reported;
+    }
+
+    /**
+     * Keep the documents that still exist: a cascade can remove one anywhere down its chain.
+     *
+     * @param  array<string, array<string, Document>>  $documents  Keyed by collection, then by id
+     * @return array<string, array<string, Document>>
+     */
+    private function withoutRemoved(array $documents): array
+    {
+        $remaining = [];
+
+        foreach ($documents as $collectionId => $byId) {
+            $ids = \array_values(\array_map(fn (Document $document): string => $document->getId(), $byId));
+
+            foreach (\array_chunk($ids, $this->relationQueryChunkSize()) as $chunk) {
+                $found = $this->db->getAuthorization()->skip(fn () => $this->db->find($collectionId, [
+                    Query::equal(Document::ID, $chunk),
+                    Query::select([Document::ID]),
+                    Query::limit(\count($chunk)),
+                ]));
+
+                foreach ($found as $existing) {
+                    $remaining[$collectionId][$existing->getId()] = $byId[$existing->getId()];
+                }
+            }
+        }
+
+        return $remaining;
     }
 
     /**
@@ -1960,45 +2054,58 @@ class Relationships implements Hook
 
     /**
      * Clear the foreign key on every document referencing $document.
+     *
+     * @return list<Document> The documents as the write left them
      */
-    private function clearReferences(Document $relatedCollection, Document $document, string $twoWayKey): void
+    private function clearReferences(Document $relatedCollection, Document $document, string $twoWayKey): array
     {
         $relations = $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey);
 
         if (empty($relations)) {
-            return;
+            return [];
         }
 
         $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $relations);
+
+        $cleared = [];
+        $collect = function (Document $updated) use (&$cleared): void {
+            $cleared[] = $updated;
+        };
 
         foreach (\array_chunk($relationIds, $this->relationQueryChunkSize()) as $chunk) {
             $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->updateDocuments(
                 $relatedCollection->getId(),
                 new Document([$twoWayKey => null]),
                 [Query::equal(Document::ID, $chunk)],
+                onNext: $collect,
             )));
         }
+
+        return $cleared;
     }
 
-    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): void
+    /**
+     * @return list<Document> The documents the delete wrote, as the write left them
+     */
+    private function deleteSetNull(Document $collection, Document $relatedCollection, Document $document, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): array
     {
         switch ($relationType) {
             case RelationType::OneToOne:
                 if (! $twoWay && $side === RelationSide::Parent) {
-                    break;
+                    return [];
                 }
 
-                $this->db->getAuthorization()->skip(function () use ($document, $relatedCollection, $twoWayKey) {
+                $written = $this->db->getAuthorization()->skip(function () use ($document, $relatedCollection, $twoWayKey): ?Document {
                     $related = $this->db->findOne($relatedCollection->getId(), [
                         Query::select([Document::ID]),
                         Query::equal($twoWayKey, [$document->getId()]),
                     ]);
 
                     if ($related->isEmpty()) {
-                        return;
+                        return null;
                     }
 
-                    $this->db->skipRelationships(fn () => $this->db->updateDocument(
+                    return $this->db->skipRelationships(fn () => $this->db->updateDocument(
                         $relatedCollection->getId(),
                         $related->getId(),
                         new Document([
@@ -2006,23 +2113,22 @@ class Relationships implements Hook
                         ])
                     ));
                 });
-                break;
+
+                return $written === null || $written->isEmpty() ? [] : [$written];
 
             case RelationType::OneToMany:
                 if ($side === RelationSide::Child) {
-                    break;
+                    return [];
                 }
 
-                $this->clearReferences($relatedCollection, $document, $twoWayKey);
-                break;
+                return $this->clearReferences($relatedCollection, $document, $twoWayKey);
 
             case RelationType::ManyToOne:
                 if ($side === RelationSide::Parent) {
-                    break;
+                    return [];
                 }
 
-                $this->clearReferences($relatedCollection, $document, $twoWayKey);
-                break;
+                return $this->clearReferences($relatedCollection, $document, $twoWayKey);
 
             case RelationType::ManyToMany:
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
@@ -2037,6 +2143,8 @@ class Relationships implements Hook
                 $this->db->skipRelationships(fn () => $this->deleteRelatedDocuments($junction, $junctionIds));
                 break;
         }
+
+        return [];
     }
 
     private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, mixed $value, RelationType $relationType, string $twoWayKey, RelationSide $side, Document $relationship): void

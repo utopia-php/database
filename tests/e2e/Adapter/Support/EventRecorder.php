@@ -16,6 +16,9 @@ final class EventRecorder implements Lifecycle, Named
     /** @var list<Event> */
     private array $events = [];
 
+    /** @var list<mixed> */
+    private array $payloads = [];
+
     private bool $recording = true;
 
     public function __construct(
@@ -32,6 +35,7 @@ final class EventRecorder implements Lifecycle, Named
     {
         if ($this->recording) {
             $this->events[] = $event;
+            $this->payloads[] = $data;
         }
     }
 
@@ -45,5 +49,22 @@ final class EventRecorder implements Lifecycle, Named
         $this->recording = false;
 
         return $this->events;
+    }
+
+    /**
+     * The payloads recorded for $event so far, in the order they fired.
+     *
+     * @return list<mixed>
+     */
+    public function getPayloads(Event $event): array
+    {
+        $payloads = [];
+        foreach ($this->events as $index => $recorded) {
+            if ($recorded === $event) {
+                $payloads[] = $this->payloads[$index];
+            }
+        }
+
+        return $payloads;
     }
 }

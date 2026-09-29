@@ -331,6 +331,25 @@ It fires once per written document from `updateDocument()` (for both the old and
 `Document(['$id' => $id, '$collection' => $collectionId])`. As in 7.x, `createDocument()` and `createDocuments()` do
 not fire it. Attribute schema changes fire it for the collection's metadata document (`$collection` = `_metadata`).
 
+### `document_update` for related documents a delete changed
+
+As in 7.4.0, `deleteDocument()` fires `document_update` (`Event::DocumentUpdate`) for each document on the other side
+of a two-way relationship that the delete changed, after its own `document_delete`. A lifecycle hook that handles
+`document_update` receives them with no change. The payload is the related `Document`:
+
+- A document the delete wrote (set-null clearing its key) arrives as that write returned it, with the cleared key set
+  to `null`. A document it did not write (the parent of a deleted one-to-many child, a many-to-many peer, a peer under
+  `Restrict`) arrives as read off the deleted document, without the back-reference key. Read it back to use more
+  than `$id` and `$collection`.
+- One-way peers, documents a cascade removed anywhere down its chain, and the deleted document itself are not
+  reported. `deleteDocuments()`, a cascade's own deletes and a delete inside `silent()` report nothing.
+- They are read and written with permissions skipped and are not checked against the caller's read permission:
+  treat them as privileged, like the documents `deleteDocuments()` and `upsertDocuments()` pass to `$onNext`.
+- They fire when the delete's own transaction returns, like `document_delete`, not when an outer transaction
+  commits. A delete whose commit fails and is retried reports only what the committed attempt changed.
+- Difference from 7.4.0: when a hook throws, `document_delete` and every related `document_update` still fire, and
+  the first exception reaches the caller afterwards. 7.4.0 stopped at the first failure.
+
 ### `attribute_create` from `createAttributes()`
 
 `createAttributes()` fires `attribute_create` once per attribute, with that attribute's `Document` as payload (the

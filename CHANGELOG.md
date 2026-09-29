@@ -202,6 +202,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   `Transform` hooks. Arrays, `null` and objects are rendered as JSON. Keys and values are normalised: comment
   delimiters are split, control characters become spaces and invalid UTF-8 is replaced.
 - `purgeCachedQueries()` also purges the `find()` query cache, and returns `false` when either purge fails.
+- `deleteDocument()` fires `document_update` for each document on the other side of a two-way relationship that the
+  delete changed, as 7.4.0 does. When a hook throws, `document_delete` and every related `document_update` still
+  fire, and the first exception reaches the caller afterwards. See
+  [`document_update` for related documents a delete changed](UPGRADE.md#document_update-for-related-documents-a-delete-changed).
 
 ### Deprecated
 

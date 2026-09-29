@@ -2245,6 +2245,11 @@ trait Documents
     /**
      * Delete Document
      *
+     * Also fires Event::DocumentUpdate for each document on the other side of a two-way
+     * relationship that the delete changed, after Event::DocumentDelete. See
+     * Hook\Relationships::beforeDocumentDelete() for which documents those are, their shape
+     * and their trust level.
+     *
      * @param  string  $collection  The collection identifier
      * @param  string  $id  The document identifier
      * @return bool True if the document was deleted successfully
@@ -2261,7 +2266,10 @@ trait Documents
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, &$document) {
+        $report = $this->getActiveLifecycleHooks() !== [];
+        $changed = [];
+        $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$document, &$changed) {
+            $changed = [];
             $document = $this->authorization->skip(fn () => $this->silent(
                 fn () => $this->getDocument($collection->getId(), $id, forUpdate: true)
             ));
@@ -2293,7 +2301,7 @@ trait Documents
             }
 
             if ($this->relationshipHook?->isEnabled()) {
-                $document = $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete($collection, $document));
+                $changed = $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete($collection, $document, $report));
             }
 
             $result = $this->authorization->skip(fn () => $this->adapter->deleteDocument($collection->getId(), $id));
@@ -2305,10 +2313,39 @@ trait Documents
 
         if ($deleted) {
             $this->triggerDocumentPurge($collection->getId(), $id);
-            $this->triggerHooks(Event::DocumentDelete, $document);
+            $this->triggerDeleteHooks($document, $changed);
         }
 
         return $deleted;
+    }
+
+    /**
+     * The delete's transaction has returned, so a failing hook cannot undo it: every event still
+     * fires, and the first failure reaches the caller once they have.
+     *
+     * @param  list<Document>  $changed
+     */
+    private function triggerDeleteHooks(Document $document, array $changed): void
+    {
+        $failure = null;
+
+        try {
+            $this->triggerHooks(Event::DocumentDelete, $document);
+        } catch (Throwable $error) {
+            $failure = $error;
+        }
+
+        foreach ($changed as $related) {
+            try {
+                $this->triggerHooks(Event::DocumentUpdate, $related);
+            } catch (Throwable $error) {
+                $failure ??= $error;
+            }
+        }
+
+        if ($failure !== null) {
+            throw $failure;
+        }
     }
 
     /**
@@ -2426,7 +2463,7 @@ trait Documents
                     }
 
                     if ($this->relationshipHook?->isEnabled()) {
-                        $document = $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete(
+                        $this->silent(fn () => $this->relationshipHook->beforeDocumentDelete(
                             $collection,
                             $document
                         ));

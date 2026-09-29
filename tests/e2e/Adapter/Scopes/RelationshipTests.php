@@ -8,12 +8,14 @@ use Tests\E2E\Adapter\Scopes\Relationships\ManyToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
+use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
@@ -4669,5 +4671,261 @@ trait RelationshipTests
 
         $database->deleteCollection($parents);
         $database->deleteCollection($children);
+    }
+
+    /**
+     * deleteDocument() fires Event::DocumentUpdate for every document on the other side of a two-way
+     * relationship whose relationship the delete changed, including the ones it never writes to.
+     */
+    public function testDeleteDocumentRelatedUpdateEvent(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionPermissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $documentPermissions = [
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: 'related_parent', permissions: $collectionPermissions, documentSecurity: true));
+        $database->createCollection(new Collection(id: 'related_child', permissions: $collectionPermissions, documentSecurity: true));
+
+        $database->createRelationship(Relationship::oneToMany(
+            collection: 'related_parent',
+            relatedCollection: 'related_child',
+            twoWay: true,
+            key: 'children',
+            twoWayKey: 'parent',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        foreach (['child1', 'child2'] as $childId) {
+            $database->createDocument('related_child', new Document([
+                '$id' => $childId,
+                '$permissions' => $documentPermissions,
+            ]));
+        }
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent1',
+            '$permissions' => $documentPermissions,
+            'children' => ['child1', 'child2'],
+        ]));
+
+        $reported = static function (EventRecorder $recorder): array {
+            $recorder->stop();
+
+            return $recorder->getPayloads(Event::DocumentUpdate);
+        };
+        $ids = static fn (array $documents): array => \array_map(fn (Document $document): string => $document->getId(), $documents);
+
+        $recorder = new EventRecorder('related-update-test');
+        $database->addHook($recorder);
+        $database->deleteDocument('related_parent', 'parent1');
+        $related = $reported($recorder);
+
+        $this->assertEqualsCanonicalizing(['child1', 'child2'], $ids($related));
+        $this->assertCount(2, $related);
+        foreach ($related as $document) {
+            $this->assertSame('related_child', $document->getCollection());
+            $this->assertSame($database->getDocument('related_child', $document->getId())->getUpdatedAt(), $document->getUpdatedAt());
+        }
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent2',
+            '$permissions' => $documentPermissions,
+            'children' => ['child1'],
+        ]));
+
+        $recorder = new EventRecorder('related-update-test');
+        $database->addHook($recorder);
+        $database->deleteDocument('related_child', 'child1');
+        $related = $reported($recorder);
+
+        $this->assertSame(['parent2'], $ids($related));
+        $this->assertSame('related_parent', $related[0]->getCollection());
+
+        $database->updateRelationship(
+            collection: 'related_parent',
+            id: 'children',
+            onDelete: ForeignKeyAction::Cascade,
+        );
+
+        $database->createDocument('related_child', new Document([
+            '$id' => 'child3',
+            '$permissions' => $documentPermissions,
+            'parent' => 'parent2',
+        ]));
+
+        $recorder = new EventRecorder('related-update-test');
+        $database->addHook($recorder);
+        $database->deleteDocument('related_parent', 'parent2');
+
+        $this->assertSame([], $ids($reported($recorder)));
+        $this->assertTrue($database->getDocument('related_child', 'child3')->isEmpty());
+
+        $database->updateRelationship(
+            collection: 'related_parent',
+            id: 'children',
+            onDelete: ForeignKeyAction::Restrict,
+        );
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent4',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->createDocument('related_child', new Document([
+            '$id' => 'child4',
+            '$permissions' => $documentPermissions,
+            'parent' => 'parent4',
+        ]));
+
+        $recorder = new EventRecorder('related-update-test');
+        $database->addHook($recorder);
+        $database->deleteDocument('related_child', 'child4');
+
+        $this->assertSame(['parent4'], $ids($reported($recorder)));
+
+        $database->createCollection(new Collection(id: 'related_oneway', permissions: $collectionPermissions, documentSecurity: true));
+
+        $database->createRelationship(Relationship::oneToMany(
+            collection: 'related_parent',
+            relatedCollection: 'related_oneway',
+            key: 'strays',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createRelationship(Relationship::manyToOne(
+            collection: 'related_parent',
+            relatedCollection: 'related_oneway',
+            key: 'stray',
+            twoWayKey: 'strayOf',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent3',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->createDocument('related_oneway', new Document([
+            '$id' => 'stray1',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->updateDocument('related_parent', 'parent3', new Document([
+            'strays' => ['stray1'],
+            'stray' => 'stray1',
+        ]));
+
+        $recorder = new EventRecorder('related-update-test');
+        $database->addHook($recorder);
+        $database->deleteDocument('related_parent', 'parent3');
+
+        $this->assertSame([], $ids($reported($recorder)));
+        $this->assertFalse($database->getDocument('related_oneway', 'stray1')->isEmpty());
+
+        $database->createCollection(new Collection(id: 'related_pair', permissions: $collectionPermissions, documentSecurity: true));
+
+        $database->createRelationship(Relationship::manyToOne(
+            collection: 'related_parent',
+            relatedCollection: 'related_pair',
+            twoWay: true,
+            key: 'owner',
+            twoWayKey: 'owned',
+            onDelete: ForeignKeyAction::SetNull,
+        ));
+
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'related_parent',
+            relatedCollection: 'related_pair',
+            twoWay: true,
+            key: 'buddy',
+            twoWayKey: 'buddyOf',
+            onDelete: ForeignKeyAction::Cascade,
+        ));
+
+        $database->createDocument('related_pair', new Document([
+            '$id' => 'pair1',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent5',
+            '$permissions' => $documentPermissions,
+            'owner' => 'pair1',
+            'buddy' => 'pair1',
+        ]));
+
+        $recorder = new EventRecorder('related-update-test');
+        $database->addHook($recorder);
+        $database->deleteDocument('related_parent', 'parent5');
+
+        $this->assertSame([], $ids($reported($recorder)));
+        $this->assertTrue($database->getDocument('related_pair', 'pair1')->isEmpty());
+
+        $database->updateRelationship(
+            collection: 'related_parent',
+            id: 'children',
+            onDelete: ForeignKeyAction::SetNull,
+        );
+
+        $database->createRelationship(Relationship::oneToOne(
+            collection: 'related_pair',
+            relatedCollection: 'related_child',
+            twoWay: true,
+            key: 'tail',
+            twoWayKey: 'tailOf',
+            onDelete: ForeignKeyAction::Cascade,
+        ));
+
+        $database->createDocument('related_child', new Document([
+            '$id' => 'child5',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->createDocument('related_child', new Document([
+            '$id' => 'child6',
+            '$permissions' => $documentPermissions,
+        ]));
+
+        $database->createDocument('related_pair', new Document([
+            '$id' => 'pair2',
+            '$permissions' => $documentPermissions,
+            'tail' => 'child5',
+        ]));
+
+        $database->createDocument('related_parent', new Document([
+            '$id' => 'parent6',
+            '$permissions' => $documentPermissions,
+            'children' => ['child5', 'child6'],
+            'buddy' => 'pair2',
+        ]));
+
+        $recorder = new EventRecorder('related-update-test');
+        $database->addHook($recorder);
+        $database->deleteDocument('related_parent', 'parent6');
+
+        $this->assertSame(['child6'], $ids($reported($recorder)));
+        $this->assertTrue($database->getDocument('related_child', 'child5')->isEmpty());
+
+        $database->deleteCollection('related_parent');
+        $database->deleteCollection('related_child');
+        $database->deleteCollection('related_oneway');
+        $database->deleteCollection('related_pair');
     }
 }

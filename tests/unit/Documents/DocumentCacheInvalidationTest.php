@@ -9,6 +9,7 @@ use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter as DatabaseAdapter;
+use Utopia\Database\Adapter\Memory as DatabaseMemory;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -63,6 +64,17 @@ final class DocumentCacheInvalidationTest extends TestCase
         }
     }
 
+    public function testACachedMissUnderOneCasingDoesNotHideAnotherCasing(): void
+    {
+        $database = $this->createDatabase($this->caseSensitiveAdapter(), new MemoryCache());
+        $database->createDocument('webhooks', $this->hook('Hook'));
+
+        $this->assertTrue($database->getDocument('webhooks', 'hook')->isEmpty(), 'The adapter stores ids case-sensitively');
+        $this->assertSame('Hook', $database->getDocument('webhooks', 'Hook')->getId(), 'A cached miss for one casing must not answer another');
+        $this->assertTrue($database->getDocument('webhooks', 'hook')->isEmpty(), 'A cached document must not answer another casing of its id');
+        $this->assertSame('Hook', $database->getDocument('webhooks', 'Hook')->getId());
+    }
+
     private function hook(string $id): Document
     {
         return new Document([
@@ -75,6 +87,17 @@ final class DocumentCacheInvalidationTest extends TestCase
             'name' => 'hook',
             'description' => 'description',
         ]);
+    }
+
+    private function caseSensitiveAdapter(): DatabaseMemory
+    {
+        return new class () extends DatabaseMemory {
+            #[\Override]
+            protected function documentKey(string $id, int|string|null $tenant = null): string
+            {
+                return $this->sharedTables ? ($tenant ?? $this->getTenant()).'|'.$id : $id;
+            }
+        };
     }
 
     private function createDatabase(DatabaseAdapter $adapter, CacheAdapter $cache): Database

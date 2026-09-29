@@ -407,6 +407,7 @@ trait Documents
             $id,
             $selections
         );
+        // The cache lower-cases keys; the hash key keeps the id's case, so casings an adapter tells apart keep separate fields.
         $field = \md5($hashKey);
 
         // Collection definitions are cacheable because every schema mutation

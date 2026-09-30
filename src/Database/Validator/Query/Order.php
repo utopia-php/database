@@ -83,6 +83,10 @@ class Order extends Base
 
         // Search for attribute in schema
         if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
+            if ($dot === false && $this->joins !== []) {
+                return $this->isJoinedAttribute($attribute);
+            }
+
             $this->message = 'Attribute not found in schema: '.$attribute;
 
             return false;

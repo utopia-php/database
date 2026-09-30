@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "07ca586306b759766ed77cdbf4622912",
+    "content-hash": "507c072a64ea79f197f1d89f7bd8f462",
     "packages": [
         {
             "name": "brick/math",
@@ -2091,16 +2091,16 @@
         },
         {
             "name": "utopia-php/async",
-            "version": "0.1.1",
+            "version": "0.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/utopia-php/async.git",
-                "reference": "3ee4fc3d505113d0d6050f35f5bf85e706866a22"
+                "reference": "c7925a2ad7cf0fceebb3f93200c95a269126f692"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/utopia-php/async/zipball/3ee4fc3d505113d0d6050f35f5bf85e706866a22",
-                "reference": "3ee4fc3d505113d0d6050f35f5bf85e706866a22",
+                "url": "https://api.github.com/repos/utopia-php/async/zipball/c7925a2ad7cf0fceebb3f93200c95a269126f692",
+                "reference": "c7925a2ad7cf0fceebb3f93200c95a269126f692",
                 "shasum": ""
             },
             "require": {
@@ -2147,9 +2147,9 @@
             "description": "High-performance concurrent + parallel library with Promise and Parallel execution support for PHP.",
             "support": {
                 "issues": "https://github.com/utopia-php/async/issues",
-                "source": "https://github.com/utopia-php/async/tree/0.1.1"
+                "source": "https://github.com/utopia-php/async/tree/0.2.0"
             },
-            "time": "2026-06-08T05:10:34+00:00"
+            "time": "2026-09-29T14:07:22+00:00"
         },
         {
             "name": "utopia-php/cache",

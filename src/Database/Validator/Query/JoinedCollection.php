@@ -70,6 +70,15 @@ final readonly class JoinedCollection
     }
 
     /**
+     * Whether the collection's table holds a column for the attribute: every attribute but a
+     * relationship does, and a relationship does on the side that stores the related document's id.
+     */
+    public function holdsColumn(string $attribute): bool
+    {
+        return $this->columns[$attribute] ?? false;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function definition(Document $attribute): array

@@ -142,7 +142,8 @@ class Select extends Base
                 $column = \substr($attribute, $dot + 1);
 
                 if ($this->isJoinColumnReference($alias, $column)) {
-                    if ($this->supportForAttributes && ! $this->isJoinedColumn($alias, $column)) {
+                    $join = $this->joinsByAlias[$alias] ?? null;
+                    if ($this->supportForAttributes && $join?->holdsColumn($column) !== true && ! $this->isJoinedColumn($alias, $column)) {
                         return false;
                     }
 
@@ -151,6 +152,12 @@ class Select extends Base
 
                 if ($this->isAggregation() && isset($this->joinAliases[$alias])) {
                     return $this->rejectUngrouped($attribute);
+                }
+
+                if ($column === '*' && isset($this->joinAliases[$alias])) {
+                    $this->message = 'Cannot select "'.$attribute.'": select a joined collection\'s attributes by name (alias.attribute); a read without a select, or with "*", returns them all';
+
+                    return false;
                 }
 
                 // For relationships, just validate the top level.

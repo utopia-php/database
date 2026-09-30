@@ -151,12 +151,6 @@ class Filter extends Base
             }
         }
 
-        // exists and notExists queries don't require values, just attribute validation
-        if (in_array($method, [Method::Exists, Method::NotExists])) {
-            // Validate attribute (handles encrypted attributes, schemaless mode, etc.)
-            return $this->isValidAttribute($attribute);
-        }
-
         if ($attributeSchema === null) {
             if (! $this->supportForAttributes && ! isset($this->schema[$attribute])) {
                 // First check maxValuesCount guard for any IN-style value arrays
@@ -527,6 +521,14 @@ class Filter extends Base
             case Method::ContainsAny:
             case Method::NotContains:
             case Method::ContainsAll:
+                if ($this->isEmpty($value->getValues())) {
+                    $this->message = \ucfirst($method->value).' queries require at least one value.';
+
+                    return false;
+                }
+
+                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+
             case Method::Exists:
             case Method::NotExists:
                 if ($this->isEmpty($value->getValues())) {
@@ -535,7 +537,7 @@ class Filter extends Base
                     return false;
                 }
 
-                return $this->isValidAttributeAndValues($attribute, $value->getValues(), $method);
+                return $this->isValidExists($value);
 
             case Method::DistanceEqual:
             case Method::DistanceNotEqual:
@@ -726,6 +728,60 @@ class Filter extends Base
 
                 return false;
         }
+    }
+
+    /**
+     * exists() and notExists() test the attributes their values name, so each value has to name
+     * what a filter could name, and on a collection with defined attributes a column: an attribute
+     * of this collection or an `alias.column` of a join. The query's own attribute is empty in the
+     * documented form, and is checked like a filter's when it is given.
+     */
+    private function isValidExists(Query $query): bool
+    {
+        $method = $query->getMethod();
+        $attribute = $query->getAttribute();
+
+        if ($attribute !== '' && ! $this->isValidAttribute($attribute)) {
+            return false;
+        }
+
+        foreach ($query->getValues() as $value) {
+            if (! \is_string($value) || $value === '') {
+                $this->message = \ucfirst($method->value).' queries take attribute names';
+
+                return false;
+            }
+
+            if (! $this->isValidAttribute($value) || ($this->supportForAttributes && ! $this->isExistsColumn($value, $method))) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function isExistsColumn(string $attribute, Method $method): bool
+    {
+        $dot = \strpos($attribute, '.');
+        if ($dot !== false && ! isset($this->schema[$attribute])) {
+            if ($this->isJoinColumnReference(\substr($attribute, 0, $dot), \substr($attribute, $dot + 1))) {
+                return true;
+            }
+
+            $this->message = \ucfirst($method->value).' queries take attributes of the collection or of a join alias: '.$attribute;
+
+            return false;
+        }
+
+        /** @var array<string, mixed>|null $definition */
+        $definition = $this->schema[$attribute] ?? null;
+        if ($definition !== null && (JoinedCollection::columns([new Document($definition)])[$attribute] ?? true) === false) {
+            $this->message = 'Cannot query on virtual relationship attribute';
+
+            return false;
+        }
+
+        return true;
     }
 
     protected function acceptsMainAttribute(string $attribute): bool

@@ -203,7 +203,7 @@ class JoinedAttributesTest extends TestCase
         ]), $validator->getDescription());
     }
 
-    public function testSearchInAJoinConditionRequiresAFulltextIndexOnTheJoinedAttribute(): void
+    public function testSearchInAJoinConditionIsRefusedWithOrWithoutAFulltextIndex(): void
     {
         $validator = $this->validator([$this->orders, $this->notes]);
 
@@ -213,14 +213,15 @@ class JoinedAttributesTest extends TestCase
                 Query::search('purchase.memo', 'gift'),
             ]),
         ]));
-        $this->assertSame('Searching by attribute "purchase.memo" requires a fulltext index.', $validator->getDescription());
+        $this->assertSame('Invalid query: Unsupported join ON condition: search', $validator->getDescription());
 
-        $this->assertTrue($validator->isValid([
+        $this->assertFalse($validator->isValid([
             Query::leftJoin('notes', 'note', [
                 Query::on('$id', 'customerId'),
                 Query::search('note.body', 'needle'),
             ]),
-        ]), $validator->getDescription());
+        ]), 'the builder compiles no search into an ON list, fulltext index or not');
+        $this->assertSame('Invalid query: Unsupported join ON condition: search', $validator->getDescription());
     }
 
     public function testSearchOnAJoinAliasIsInvalidWhenTheJoinedIndexesAreUnknown(): void

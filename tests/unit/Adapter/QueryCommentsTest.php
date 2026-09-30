@@ -123,7 +123,7 @@ final class QueryCommentsTest extends TestCase
         $this->database->setMetadata('user', 'user-1');
 
         $this->assertTrue($this->database->ping());
-        $rows = $this->database->rawQuery('SELECT ? AS answer', [42]);
+        $rows = $this->database->getAuthorization()->skip(fn (): array => $this->database->rawQuery('SELECT ? AS answer', [42]));
 
         $this->assertSame(42, $rows[0]->getAttribute('answer'));
         $this->assertSame([

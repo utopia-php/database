@@ -217,6 +217,28 @@ final class QueryValidatorCoverageTest extends TestCase
         $this->assertSame('Value must be a Query', $instance->getDescription());
     }
 
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function missingTableNames(): array
+    {
+        return [
+            'empty' => [''],
+            'zero' => ['0'],
+        ];
+    }
+
+    #[DataProvider('missingTableNames')]
+    public function testAJoinWithoutATableNameIsRefused(string $table): void
+    {
+        $validator = new Join();
+
+        $this->assertFalse($validator->isValid(Query::join($table, 'authorId', 'id', alias: 'author')));
+        $this->assertSame('Join requires a table name', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid(Query::join('authors', 'authorId', 'id', alias: 'author')), $validator->getDescription());
+    }
+
     private function filter(bool $supportForAttributes = true): Filter
     {
         return new Filter(

@@ -85,7 +85,9 @@ final class RelationshipHookCoverageTest extends TestCase
         ])));
 
         $this->assertEqualsCanonicalizing(['essays', 'notes'], $this->ids($database->getDocument('authors', 'ada')->getAttribute('books')));
-        $this->assertSame('ada', $database->getDocument('books', 'essays')->getAttribute('author')->getId());
+        $author = $database->getDocument('books', 'essays')->getAttribute('author');
+        $this->assertInstanceOf(Document::class, $author);
+        $this->assertSame('ada', $author->getId());
     }
 
     /**
@@ -143,12 +145,18 @@ final class RelationshipHookCoverageTest extends TestCase
     }
 
     /**
-     * @param  array<mixed>  $documents
      * @return list<string>
      */
-    private function ids(array $documents): array
+    private function ids(mixed $documents): array
     {
-        return \array_values(\array_map(static fn (mixed $document): string => $document instanceof Document ? $document->getId() : (string) $document, $documents));
+        $this->assertIsArray($documents);
+        $ids = [];
+        foreach ($documents as $document) {
+            $this->assertInstanceOf(Document::class, $document);
+            $ids[] = $document->getId();
+        }
+
+        return $ids;
     }
 
     private function library(Adapter $adapter): Database

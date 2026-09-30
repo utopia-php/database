@@ -30,8 +30,7 @@ final class DocumentWriteMinorsTest extends TestCase
     public function testCaseOnlyRenameStoresTheNewCasing(): void
     {
         $pdo = new PDO('sqlite::memory:');
-        $adapter = new class ($pdo) extends SQLite
-        {
+        $adapter = new class ($pdo) extends SQLite {
             /**
              * @param  Query[]  $queries
              */
@@ -133,8 +132,7 @@ final class DocumentWriteMinorsTest extends TestCase
 
     public function testRetriedBulkUpdateHandsOnNextDecodedValues(): void
     {
-        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite
-        {
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
             public int $commitFailures = 0;
 
             public function commitTransaction(): bool

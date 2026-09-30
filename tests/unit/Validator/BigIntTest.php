@@ -3,6 +3,7 @@
 namespace Tests\Unit\Validator;
 
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Schema\ColumnType;
@@ -45,5 +46,66 @@ final class BigIntTest extends TestCase
         $this->expectExceptionMessage('Modulo by zero is not allowed.');
 
         BigInt::modulo(5, 0);
+    }
+
+    public function testNormalizingAcceptsWholeFloatsAndIntegerStrings(): void
+    {
+        $this->assertSame('5', BigInt::normalizeInteger(5.0));
+        $this->assertSame('-5', BigInt::normalizeInteger(-5.0));
+        $this->assertSame('7', BigInt::normalizeInteger('007'));
+        $this->assertSame('0', BigInt::normalizeInteger('-0'));
+        $this->assertSame(BigInt::UNSIGNED_MAX, BigInt::normalizeInteger(BigInt::UNSIGNED_MAX));
+    }
+
+    #[DataProvider('valuesThatAreNotIntegers')]
+    public function testNormalizingRejectsAValueThatIsNotAnInteger(mixed $value): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Value must be an integer.');
+
+        BigInt::normalizeInteger($value);
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function valuesThatAreNotIntegers(): iterable
+    {
+        yield 'a fractional float' => [1.5];
+        yield 'infinity' => [\INF];
+        yield 'not a number' => [\NAN];
+        yield 'a float above the integer range' => [1e20];
+        yield 'a float below the integer range' => [-1e20];
+        yield 'a boolean' => [true];
+        yield 'null' => [null];
+        yield 'a word' => ['abc'];
+        yield 'a decimal string' => ['1.5'];
+    }
+
+    public function testPowerRefusesANegativeExponent(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Integer power exponent must not be negative.');
+
+        BigInt::power(5, -1);
+    }
+
+    public function testPowerOfZeroExponentAndUnitBases(): void
+    {
+        $this->assertSame(1, BigInt::power(2, 0));
+        $this->assertSame(1, BigInt::power(0, 0));
+        $this->assertSame(0, BigInt::power(0, 99));
+        $this->assertSame(1, BigInt::power(1, 99));
+        $this->assertSame(-1, BigInt::power(-1, 3));
+        $this->assertSame(1, BigInt::power(-1, 4));
+        $this->assertSame(-1, BigInt::power(-1, '99999999999999999999999'));
+    }
+
+    public function testPowerAboveSixtyFourIsAnOverflowSentinel(): void
+    {
+        $this->assertSame(BigInt::UNSIGNED_MAX.'0', BigInt::power(2, 65));
+        $this->assertSame('-'.BigInt::UNSIGNED_MAX.'0', BigInt::power(-2, 65));
+        $this->assertSame(BigInt::UNSIGNED_MAX.'0', BigInt::power(-2, 66));
+        $this->assertSame(BigInt::UNSIGNED_MAX.'0', BigInt::power(2, '99999999999999999999'));
     }
 }

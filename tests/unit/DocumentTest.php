@@ -759,4 +759,20 @@ class DocumentTest extends TestCase
         $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
         $this->assertSame(['any'], $document->getRead());
     }
+
+    public function testFindAndReplaceInPlainArrayChildren(): void
+    {
+        $document = new Document([
+            'children' => [
+                ['name' => 'x'],
+                ['name' => 'y'],
+            ],
+        ]);
+
+        $this->assertTrue($document->findAndReplace('name', 'x', ['name' => '1'], 'children'));
+        $this->assertSame([['name' => '1'], ['name' => 'y']], $document->getAttribute('children'));
+
+        $this->assertFalse($document->findAndReplace('name', 'missing', ['name' => '2'], 'children'));
+        $this->assertSame([['name' => '1'], ['name' => 'y']], $document->getAttribute('children'));
+    }
 }

@@ -4558,6 +4558,92 @@ trait RelationshipTests
         }
     }
 
+    public function testTwoWayOneToOneLinkByDocumentStoresTheBackReference(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $toys = ID::unique();
+        $parts = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        foreach ([$parents, $children, $toys, $parts] as $collection) {
+            $database->createCollection(new Collection(id: $collection, permissions: $permissions));
+        }
+        $database->createRelationship(Relationship::oneToOne(collection: $parents, relatedCollection: $children, twoWay: true, key: 'partner', twoWayKey: 'parent'));
+        $database->createRelationship(Relationship::oneToOne(collection: $children, relatedCollection: $toys, twoWay: true, key: 'toy', twoWayKey: 'owner'));
+        $database->createRelationship(Relationship::oneToOne(collection: $toys, relatedCollection: $parts, twoWay: true, key: 'part', twoWayKey: 'toy'));
+        $link = function (string $collection, string $id, string $key) use ($database): ?string {
+            $value = $database->skipRelationships(fn () => $database->getDocument($collection, $id))->getAttribute($key);
+
+            return $value instanceof Document ? $value->getId() : $value;
+        };
+
+        try {
+            foreach (['c1', 'c2', 'c3', 'c4', 'c5'] as $id) {
+                $database->createDocument($children, new Document(['$id' => $id]));
+            }
+            $database->createDocument($parents, new Document(['$id' => 'p1', 'partner' => 'c3']));
+            foreach (['p2', 'p3', 'p4', 'p5', 'p6'] as $id) {
+                $database->createDocument($parents, new Document(['$id' => $id]));
+            }
+
+            $database->updateDocument($parents, 'p2', new Document(['partner' => new Document(['$id' => 'c1'])]));
+            $this->assertSame('c1', $link($parents, 'p2', 'partner'));
+            $this->assertSame('p2', $link($children, 'c1', 'parent'));
+
+            $database->updateDocument($children, 'c2', new Document(['parent' => new Document(['$id' => 'p3'])]));
+            $this->assertSame('p3', $link($children, 'c2', 'parent'));
+            $this->assertSame('c2', $link($parents, 'p3', 'partner'));
+
+            $database->updateDocument($parents, 'p4', new Document(['partner' => 'c4']));
+            $this->assertSame('c4', $link($parents, 'p4', 'partner'));
+            $this->assertSame('p4', $link($children, 'c4', 'parent'));
+
+            try {
+                $database->updateDocument($parents, 'p5', new Document(['partner' => new Document(['$id' => 'c3'])]));
+                $this->fail('Linking a document that is already linked elsewhere was accepted');
+            } catch (DuplicateException $exception) {
+                $this->assertInstanceOf(DuplicateException::class, $exception);
+            }
+            $this->assertNull($link($parents, 'p5', 'partner'));
+            $this->assertSame('p1', $link($children, 'c3', 'parent'));
+            $this->assertSame('c3', $link($parents, 'p1', 'partner'));
+
+            $database->createDocument($parents, new Document([
+                '$id' => 'p8',
+                'partner' => ['$id' => 'c8', 'toy' => ['$id' => 't8', 'part' => ['$id' => 'x8']]],
+            ]));
+            $database->updateDocument($parents, 'p6', new Document([
+                'partner' => new Document(['$id' => 'c5', 'toy' => ['$id' => 't5', 'part' => ['$id' => 'x5']]]),
+            ]));
+            foreach (['created' => ['p8', 'c8', 't8', 'x8'], 'linked' => ['p6', 'c5', 't5', 'x5']] as $case => [$parent, $child, $toy, $part]) {
+                $this->assertSame($child, $link($parents, $parent, 'partner'), $case);
+                $this->assertSame($parent, $link($children, $child, 'parent'), $case);
+                $this->assertSame($toy, $link($children, $child, 'toy'), $case);
+                $this->assertSame($child, $link($toys, $toy, 'owner'), $case);
+                $this->assertNull($link($toys, $toy, 'part'), $case);
+                $this->assertTrue($database->getDocument($parts, $part)->isEmpty(), $case.': the level past the relation depth limit was written');
+            }
+        } finally {
+            foreach ([$parents, $children, $toys, $parts] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
     public function testLinkingARelatedDocumentThroughANestedUpdateWithoutUpdatePermissionIsRejected(): void
     {
         /** @var Database $database */

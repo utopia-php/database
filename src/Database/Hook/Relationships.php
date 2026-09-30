@@ -560,26 +560,20 @@ class Relationships implements Hook
                                 throw new DuplicateException('Document already has a related document');
                             }
 
-                            $this->writeStack[] = $relatedCollection->getId();
-
-                            try {
-                                if ($related->isEmpty()) {
-                                    if (! isset($value[Document::PERMISSIONS])) {
-                                        $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
-                                    }
-                                    $related = $this->db->createDocument(
-                                        $relatedCollection->getId(),
-                                        $value->setAttribute($twoWayKey, $document->getId())
-                                    );
-                                } else {
-                                    $related = $this->db->updateDocument(
-                                        $relatedCollection->getId(),
-                                        $related->getId(),
-                                        $value->setAttribute($twoWayKey, $document->getId())
-                                    );
+                            if ($related->isEmpty()) {
+                                if (! isset($value[Document::PERMISSIONS])) {
+                                    $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                 }
-                            } finally {
-                                \array_pop($this->writeStack);
+                                $related = $this->db->createDocument(
+                                    $relatedCollection->getId(),
+                                    $value->setAttribute($twoWayKey, $document->getId())
+                                );
+                            } else {
+                                $related = $this->db->updateDocument(
+                                    $relatedCollection->getId(),
+                                    $related->getId(),
+                                    $value->setAttribute($twoWayKey, $document->getId())
+                                );
                             }
 
                             $document->setAttribute($key, $related->getId());

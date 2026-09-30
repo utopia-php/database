@@ -101,6 +101,11 @@ trait Documents
     /** The metadata collection's definition, built once per process; every read gets a deep clone. */
     private static ?Document $metadataDefinition = null;
 
+    /** @var array<string, array{source: array<string, mixed>, model: Document}> The model built from each definition's cached copy, by its cache key. */
+    private static array $definitionModels = [];
+
+    private const int DEFINITION_MODELS_LIMIT = 256;
+
     /** @var WeakMap<Document, string>|null The document-cache epoch each collection definition was read with, until the definition is let go. */
     private static ?WeakMap $collectionCacheEpochs = null;
 
@@ -547,7 +552,9 @@ trait Documents
 
         if ($cached) {
             /** @var array<string, mixed> $cached */
-            $document = $this->createDocumentInstance($collection->getId(), $cached);
+            $document = $definition
+                ? $this->createDefinitionInstance($documentKey, $cached)
+                : $this->createDocumentInstance($collection->getId(), $cached);
             $document = $this->casting($collection, $document);
 
             if ($collection->getId() !== self::METADATA) {
@@ -755,6 +762,35 @@ trait Documents
             self::DOCUMENT_CACHE_FIELD => $field,
             self::DOCUMENT_CACHE_VALUE => $document,
         ], $field, $generation);
+    }
+
+    /**
+     * The Collection model of a collection definition's cached copy, as a deep clone of the one built
+     * the last time this copy was read: it is built again whenever the copy read differs in any value.
+     * A custom document type for the metadata collection is built on every read, as its constructor
+     * may do more than copy the data.
+     *
+     * @param  array<string, mixed>  $cached
+     */
+    private function createDefinitionInstance(string $documentKey, array $cached): Document
+    {
+        if (($this->documentTypes[self::METADATA] ?? null) !== Collection::class) {
+            return $this->createDocumentInstance(self::METADATA, $cached);
+        }
+
+        $entry = self::$definitionModels[$documentKey] ?? null;
+        if ($entry !== null && $entry['source'] === $cached) {
+            return clone $entry['model'];
+        }
+
+        $model = $this->createDocumentInstance(self::METADATA, $cached);
+
+        if (\count(self::$definitionModels) >= self::DEFINITION_MODELS_LIMIT) {
+            self::$definitionModels = [];
+        }
+        self::$definitionModels[$documentKey] = ['source' => $cached, 'model' => clone $model];
+
+        return $model;
     }
 
     /**

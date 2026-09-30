@@ -4,7 +4,6 @@ namespace Tests\Unit\PermissionScope;
 
 use PDO;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MySQL;
@@ -14,7 +13,6 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
-use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
@@ -71,29 +69,46 @@ final class MetadataVisibilityTest extends TestCase
 
     public function testMetadataPermissionSubqueryMatchesTenantlessRows(): void
     {
-        $adapter = new MySQL($this->createStub(PDO::class));
+        $this->assertStringContainsString(
+            Storage::TENANT.' IS NULL',
+            $this->permissionSubquery(new Document(['$id' => Database::METADATA])),
+            'The metadata permissions table holds tenantless rows for pooled definitions',
+        );
+
+        $this->assertStringNotContainsString(
+            Storage::TENANT.' IS NULL',
+            $this->permissionSubquery(new Document(['$id' => 'orders', 'documentSecurity' => true])),
+            'A project collection\'s permission rows must stay strictly tenanted',
+        );
+    }
+
+    private function permissionSubquery(Document $collection): string
+    {
+        $statement = self::createStub(\PDOStatement::class);
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+
+        $sql = '';
+        $pdo = self::createStub(PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+            $sql = $query;
+
+            return $statement;
+        });
+
+        $adapter = new MySQL($pdo);
         $adapter->setDatabase('database');
         $adapter->setNamespace('namespace');
         $adapter->setSharedTables(true);
         $adapter->setTenant(990);
+        $adapter->setAuthorization(new Authorization());
 
-        $hook = new ReflectionMethod(MySQL::class, 'newPermissionHook');
+        $adapter->find($collection);
 
-        $metadata = $hook->invoke($adapter, Database::METADATA, ['any']);
-        $this->assertInstanceOf(PermissionFilter::class, $metadata);
-        $this->assertStringContainsString(
-            Storage::TENANT.' IS NULL',
-            $metadata->filter('table_main')->expression,
-            'The metadata permissions table holds tenantless rows for pooled definitions',
-        );
+        $subquery = \strpos($sql, '_perms`');
+        $this->assertNotFalse($subquery, $sql);
 
-        $collection = $hook->invoke($adapter, 'orders', ['any']);
-        $this->assertInstanceOf(PermissionFilter::class, $collection);
-        $this->assertStringNotContainsString(
-            Storage::TENANT.' IS NULL',
-            $collection->filter('table_main')->expression,
-            'A project collection\'s permission rows must stay strictly tenanted',
-        );
+        return \substr($sql, $subquery);
     }
 
     private function database(): Database

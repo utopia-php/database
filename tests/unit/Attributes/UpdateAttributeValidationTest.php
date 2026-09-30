@@ -523,7 +523,9 @@ final class UpdateAttributeValidationTest extends TestCase
     private function definitions(Database $database, string $collection = self::COLLECTION): array
     {
         $definitions = [];
-        foreach ($database->getCollection($collection)->getAttribute('attributes', []) as $attribute) {
+        /** @var array<Attribute|Document> $attributes */
+        $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
             $document = $attribute instanceof Attribute ? $attribute->toDocument() : $attribute;
             $definitions[$document->getId()] = $document->getArrayCopy();
         }

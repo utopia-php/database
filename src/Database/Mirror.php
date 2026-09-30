@@ -2,7 +2,10 @@
 
 namespace Utopia\Database;
 
+use Closure;
 use DateTime;
+use Swoole\Coroutine;
+use Swoole\Coroutine\Channel;
 use Throwable;
 use Utopia\Async\Promise;
 use Utopia\Cache\Cache;
@@ -50,6 +53,20 @@ class Mirror extends Database
     protected const SOURCE_ONLY_COLLECTIONS = [
         'upgrades',
     ];
+
+    /**
+     * The last queued replication of each document, by collection and document id, until it finishes
+     *
+     * @var array<array-key, array<array-key, Channel>>
+     */
+    protected array $documentReplications = [];
+
+    /**
+     * The last queued replication that can reach every document of a collection, by collection, until it finishes
+     *
+     * @var array<array-key, Channel>
+     */
+    protected array $collectionReplications = [];
 
     /**
      * @param  array<Filter>  $filters
@@ -247,6 +264,18 @@ class Mirror extends Database
     /**
      * {@inheritdoc}
      */
+    public function setCacheWriterTimeout(int $seconds): static
+    {
+        parent::setCacheWriterTimeout($seconds);
+        $this->source->setCacheWriterTimeout($seconds);
+        $this->destination?->setCacheWriterTimeout($seconds);
+
+        return $this;
+    }
+
+    /**
+     * {@inheritdoc}
+     */
     public function setTenantPerDocument(bool $enabled): static
     {
         parent::setTenantPerDocument($enabled);
@@ -346,13 +375,14 @@ class Mirror extends Database
     }
 
     /**
+     * A destination that cannot apply the setting is reported through onError(), like setTimeout().
+     *
      * {@inheritdoc}
      */
     public function enableLocks(bool $enabled): static
     {
         parent::enableLocks($enabled);
-        $this->source->enableLocks($enabled);
-        $this->destination?->enableLocks($enabled);
+        $this->delegate(__FUNCTION__, \func_get_args());
 
         return $this;
     }
@@ -691,17 +721,19 @@ class Mirror extends Database
         }
 
         try {
+            $filtered = $result;
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeCreateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collectionId,
-                    collection: $result,
+                    collection: $filtered,
                 );
-                if ($filtered !== null) {
-                    $result = $filtered;
+                if ($filtered === null) {
+                    return $result;
                 }
             }
+            $result = $filtered;
 
             $this->destination->createCollection($collection);
 
@@ -733,17 +765,19 @@ class Mirror extends Database
         }
 
         try {
+            $filtered = $result;
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeUpdateCollection(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $id,
-                    collection: $result,
+                    collection: $filtered,
                 );
-                if ($filtered !== null) {
-                    $result = $filtered;
+                if ($filtered === null) {
+                    return $result;
                 }
             }
+            $result = $filtered;
 
             $this->destination->updateCollection($id, $permissions, $documentSecurity);
         } catch (Throwable $err) {
@@ -895,18 +929,20 @@ class Mirror extends Database
         }
 
         try {
+            $filtered = $document;
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeUpdateAttribute(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     attributeId: $id,
-                    attribute: $document,
+                    attribute: $filtered,
                 );
-                if ($filtered !== null) {
-                    $document = $filtered;
+                if ($filtered === null) {
+                    return $document;
                 }
             }
+            $document = $filtered;
 
             $typedAttr = Attribute::fromDocument($document);
 
@@ -977,20 +1013,22 @@ class Mirror extends Database
             $document = $index->toDocument();
 
             foreach ($this->writeFilters as $filter) {
-                $filtered = $filter->beforeCreateIndex(
+                $document = $filter->beforeCreateIndex(
                     source: $this->source,
                     destination: $this->destination,
                     collectionId: $collection,
                     indexId: $index->key,
                     index: $document,
                 );
-                if ($filtered !== null) {
-                    $document = $filtered;
+                if ($document === null) {
+                    break;
                 }
             }
 
-            $filteredIndex = Index::fromDocument($document);
-            $result = $this->destination->createIndex($collection, $filteredIndex);
+            if ($document !== null) {
+                $filteredIndex = Index::fromDocument($document);
+                $result = $this->destination->createIndex($collection, $filteredIndex);
+            }
         } catch (Throwable $err) {
             $this->logError('createIndex', $err);
         }
@@ -1038,12 +1076,12 @@ class Mirror extends Database
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            return $document;
+            return $this->decorate(Event::DocumentCreate, $collection, $document);
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            return $document;
+            return $this->decorate(Event::DocumentCreate, $collection, $document);
         }
 
         try {
@@ -1058,9 +1096,9 @@ class Mirror extends Database
                 );
             }
 
-            $this->destination->setPreserveDates(true);
-            $document = $this->destination->createDocument($collection, $clone);
-            $this->destination->setPreserveDates(false);
+            $this->awaitReplications($collection, [$document->getId()]);
+            $destination = $this->destination;
+            $destination->withPreserveDates(fn (): Document => $destination->createDocument($collection, $clone));
 
             foreach ($this->writeFilters as $filter) {
                 $filter->afterCreateDocument(
@@ -1074,7 +1112,7 @@ class Mirror extends Database
             $this->logError('createDocument', $err);
         }
 
-        return $document;
+        return $this->decorate(Event::DocumentCreate, $collection, $document);
     }
 
     /**
@@ -1087,6 +1125,7 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        $onNext = $this->decorating(Event::DocumentsCreate, $collection, $onNext);
         $modified = $this->skipDuplicates
             ? $this->source->skipDuplicates(
                 fn () => $this->source->createDocuments($collection, $documents, $batchSize, $onNext, $onError)
@@ -1112,57 +1151,59 @@ class Mirror extends Database
         $clones = [];
         $destination = $this->destination;
 
-        foreach ($documents as $document) {
-            $clone = clone $document;
+        try {
+            foreach ($documents as $document) {
+                $clone = clone $document;
 
-            foreach ($this->writeFilters as $filter) {
-                $clone = $filter->beforeCreateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
             }
+        } catch (Throwable $err) {
+            $this->logError('createDocuments', $err);
 
-            $clones[] = $clone;
+            return $modified;
         }
 
         $skipDuplicates = $this->skipDuplicates;
 
-        Promise::async(function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates) {
-            try {
-                if ($skipDuplicates) {
-                    $destination->skipDuplicates(
-                        fn () => $destination->withPreserveDates(
-                            fn () => $destination->createDocuments(
-                                $collection,
-                                $clones,
-                                $batchSize,
-                            )
-                        )
-                    );
-                } else {
-                    $destination->withPreserveDates(
+        $this->replicate('createDocuments', $collection, self::documentIds($documents), function () use ($destination, $collection, $clones, $batchSize, $skipDuplicates): void {
+            if ($skipDuplicates) {
+                $destination->skipDuplicates(
+                    fn () => $destination->withPreserveDates(
                         fn () => $destination->createDocuments(
                             $collection,
                             $clones,
                             $batchSize,
                         )
+                    )
+                );
+            } else {
+                $destination->withPreserveDates(
+                    fn () => $destination->createDocuments(
+                        $collection,
+                        $clones,
+                        $batchSize,
+                    )
+                );
+            }
+
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
                     );
                 }
-
-                foreach ($clones as $clone) {
-                    foreach ($this->writeFilters as $filter) {
-                        $filter->afterCreateDocument(
-                            source: $this->source,
-                            destination: $destination,
-                            collectionId: $collection,
-                            document: $clone,
-                        );
-                    }
-                }
-            } catch (Throwable $err) {
-                $this->logError('createDocuments', $err);
             }
         });
 
@@ -1180,13 +1221,13 @@ class Mirror extends Database
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
             || $this->destination === null
         ) {
-            return $document;
+            return $this->decorate(Event::DocumentUpdate, $collection, $document);
         }
 
         $upgrade = $this->silent(fn () => $this->getUpgradeStatus($collection));
 
         if ($upgrade === null || $upgrade->getAttribute('status', '') !== 'upgraded') {
-            return $document;
+            return $this->decorate(Event::DocumentUpdate, $collection, $document);
         }
 
         try {
@@ -1201,9 +1242,9 @@ class Mirror extends Database
                 );
             }
 
-            $this->destination->setPreserveDates(true);
-            $this->destination->updateDocument($collection, $id, $clone);
-            $this->destination->setPreserveDates(false);
+            $this->awaitReplications($collection, [$id]);
+            $destination = $this->destination;
+            $destination->withPreserveDates(fn (): Document => $destination->updateDocument($collection, $id, $clone));
 
             foreach ($this->writeFilters as $filter) {
                 $filter->afterUpdateDocument(
@@ -1217,7 +1258,7 @@ class Mirror extends Database
             $this->logError('updateDocument', $err);
         }
 
-        return $document;
+        return $this->decorate(Event::DocumentUpdate, $collection, $document);
     }
 
     /**
@@ -1231,6 +1272,7 @@ class Mirror extends Database
         ?callable $onNext = null,
         ?callable $onError = null,
     ): int {
+        $onNext = $this->decorating(Event::DocumentsUpdate, $collection, $onNext);
         $modified = $this->source->updateDocuments(
             $collection,
             $updates,
@@ -1255,38 +1297,40 @@ class Mirror extends Database
         $clone = clone $updates;
         $destination = $this->destination;
 
-        foreach ($this->writeFilters as $filter) {
-            $clone = $filter->beforeUpdateDocuments(
-                source: $this->source,
-                destination: $destination,
-                collectionId: $collection,
-                updates: $clone,
-                queries: $queries,
-            );
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $clone = $filter->beforeUpdateDocuments(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    updates: $clone,
+                    queries: $queries,
+                );
+            }
+        } catch (Throwable $err) {
+            $this->logError('updateDocuments', $err);
+
+            return $modified;
         }
 
-        Promise::async(function () use ($destination, $collection, $clone, $queries, $batchSize) {
-            try {
-                $destination->withPreserveDates(
-                    fn () => $destination->updateDocuments(
-                        $collection,
-                        $clone,
-                        $queries,
-                        $batchSize,
-                    )
-                );
+        $this->replicate('updateDocuments', $collection, null, function () use ($destination, $collection, $clone, $queries, $batchSize): void {
+            $destination->withPreserveDates(
+                fn () => $destination->updateDocuments(
+                    $collection,
+                    $clone,
+                    $queries,
+                    $batchSize,
+                )
+            );
 
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterUpdateDocuments(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        updates: $clone,
-                        queries: $queries,
-                    );
-                }
-            } catch (Throwable $err) {
-                $this->logError('updateDocuments', $err);
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterUpdateDocuments(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    updates: $clone,
+                    queries: $queries,
+                );
             }
         });
 
@@ -1307,6 +1351,7 @@ class Mirror extends Database
         ?callable $onError = null,
         int $batchSize = self::INSERT_BATCH_SIZE,
     ): int {
+        $onNext = $this->decorating(Event::DocumentsUpsert, $collection, $onNext);
         $modified = $this->source->upsertDocumentsWithIncrease(
             $collection,
             $attribute,
@@ -1330,45 +1375,48 @@ class Mirror extends Database
 
         $clones = [];
         $destination = $this->destination;
+        $action = $attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease';
 
-        foreach ($documents as $document) {
-            $clone = clone $document;
+        try {
+            foreach ($documents as $document) {
+                $clone = clone $document;
 
-            foreach ($this->writeFilters as $filter) {
-                $clone = $filter->beforeCreateOrUpdateDocument(
-                    source: $this->source,
-                    destination: $destination,
-                    collectionId: $collection,
-                    document: $clone,
-                );
+                foreach ($this->writeFilters as $filter) {
+                    $clone = $filter->beforeCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
+                }
+
+                $clones[] = $clone;
             }
+        } catch (Throwable $err) {
+            $this->logError($action, $err);
 
-            $clones[] = $clone;
+            return $modified;
         }
 
-        Promise::async(function () use ($destination, $collection, $attribute, $clones, $batchSize) {
-            try {
-                $destination->withPreserveDates(
-                    fn () => $destination->upsertDocumentsWithIncrease(
-                        $collection,
-                        $attribute,
-                        $clones,
-                        batchSize: $batchSize,
-                    )
-                );
+        $this->replicate($action, $collection, self::documentIds($documents), function () use ($destination, $collection, $attribute, $clones, $batchSize): void {
+            $destination->withPreserveDates(
+                fn () => $destination->upsertDocumentsWithIncrease(
+                    $collection,
+                    $attribute,
+                    $clones,
+                    batchSize: $batchSize,
+                )
+            );
 
-                foreach ($clones as $clone) {
-                    foreach ($this->writeFilters as $filter) {
-                        $filter->afterCreateOrUpdateDocument(
-                            source: $this->source,
-                            destination: $destination,
-                            collectionId: $collection,
-                            document: $clone,
-                        );
-                    }
+            foreach ($clones as $clone) {
+                foreach ($this->writeFilters as $filter) {
+                    $filter->afterCreateOrUpdateDocument(
+                        source: $this->source,
+                        destination: $destination,
+                        collectionId: $collection,
+                        document: $clone,
+                    );
                 }
-            } catch (Throwable $err) {
-                $this->logError($attribute === '' ? 'upsertDocuments' : 'upsertDocumentsWithIncrease', $err);
             }
         });
 
@@ -1394,30 +1442,32 @@ class Mirror extends Database
             return $result;
         }
 
-        foreach ($this->writeFilters as $filter) {
-            $filter->beforeDeleteDocument(
-                source: $this->source,
-                destination: $this->destination,
-                collectionId: $collection,
-                documentId: $id,
-            );
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $filter->beforeDeleteDocument(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    documentId: $id,
+                );
+            }
+        } catch (Throwable $err) {
+            $this->logError('deleteDocument', $err);
+
+            return $result;
         }
 
         $destination = $this->destination;
-        Promise::async(function () use ($destination, $collection, $id) {
-            try {
-                $destination->deleteDocument($collection, $id);
+        $this->replicate('deleteDocument', $collection, [$id], function () use ($destination, $collection, $id): void {
+            $destination->deleteDocument($collection, $id);
 
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterDeleteDocument(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        documentId: $id,
-                    );
-                }
-            } catch (Throwable $err) {
-                $this->logError('deleteDocument', $err);
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterDeleteDocument(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    documentId: $id,
+                );
             }
         });
 
@@ -1454,34 +1504,36 @@ class Mirror extends Database
             return $modified;
         }
 
-        foreach ($this->writeFilters as $filter) {
-            $filter->beforeDeleteDocuments(
-                source: $this->source,
-                destination: $this->destination,
-                collectionId: $collection,
-                queries: $queries,
-            );
+        try {
+            foreach ($this->writeFilters as $filter) {
+                $filter->beforeDeleteDocuments(
+                    source: $this->source,
+                    destination: $this->destination,
+                    collectionId: $collection,
+                    queries: $queries,
+                );
+            }
+        } catch (Throwable $err) {
+            $this->logError('deleteDocuments', $err);
+
+            return $modified;
         }
 
         $destination = $this->destination;
-        Promise::async(function () use ($destination, $collection, $queries, $batchSize) {
-            try {
-                $destination->deleteDocuments(
-                    $collection,
-                    $queries,
-                    $batchSize,
-                );
+        $this->replicate('deleteDocuments', $collection, null, function () use ($destination, $collection, $queries, $batchSize): void {
+            $destination->deleteDocuments(
+                $collection,
+                $queries,
+                $batchSize,
+            );
 
-                foreach ($this->writeFilters as $filter) {
-                    $filter->afterDeleteDocuments(
-                        source: $this->source,
-                        destination: $destination,
-                        collectionId: $collection,
-                        queries: $queries,
-                    );
-                }
-            } catch (Throwable $err) {
-                $this->logError('deleteDocuments', $err);
+            foreach ($this->writeFilters as $filter) {
+                $filter->afterDeleteDocuments(
+                    source: $this->source,
+                    destination: $destination,
+                    collectionId: $collection,
+                    queries: $queries,
+                );
             }
         });
 
@@ -1599,6 +1651,8 @@ class Mirror extends Database
      */
     public function increaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $max = null): Document
     {
+        $this->awaitReplications($collection, [$id]);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1609,6 +1663,8 @@ class Mirror extends Database
      */
     public function decreaseDocumentAttribute(string $collection, string $id, string $attribute, int|float|string $value = 1, int|float|string|null $min = null): Document
     {
+        $this->awaitReplications($collection, [$id]);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1655,6 +1711,170 @@ class Mirror extends Database
                 return;
             }
         });
+    }
+
+    /**
+     * Applies the mirror's decorators to a document one of its writes returns. The source has none of them, so what
+     * it wrote, and what replication clones from it, stays undecorated.
+     */
+    private function decorate(Event $event, string $collection, Document $document): Document
+    {
+        if ($this->decorators === []) {
+            return $document;
+        }
+
+        return $this->decorateDocument($event, $this->silent(fn (): Collection => $this->getCollection($collection)), $document);
+    }
+
+    /**
+     * Hands $onNext a decorated copy of each document a bulk write returns: the source may pass the very documents
+     * the caller gave it, which replication clones afterwards.
+     */
+    private function decorating(Event $event, string $collection, ?callable $onNext): ?callable
+    {
+        if ($onNext === null || $this->decorators === []) {
+            return $onNext;
+        }
+
+        return function (Document $document, mixed ...$arguments) use ($event, $collection, $onNext): void {
+            $onNext($this->decorate($event, $collection, clone $document), ...$arguments);
+        };
+    }
+
+    /**
+     * Applies a write to the destination under the authorization, relationship and silence state the caller has at
+     * the time of the call, and reports a failure through onError(). Inside a coroutine the write runs in a coroutine
+     * of its own, once every earlier replication that can reach the same documents has finished; outside one it runs
+     * before this returns, since a task that yields outside a scheduler never resumes.
+     *
+     * @param  array<string>|null  $documentIds  The documents the write can reach, or null for every document of the collection
+     * @param  Closure(): void  $write
+     */
+    private function replicate(string $action, string $collection, ?array $documentIds, Closure $write): void
+    {
+        $destination = $this->destination;
+        if ($destination === null) {
+            return;
+        }
+
+        $snapshot = $this->source->snapshot();
+        $apply = function () use ($action, $destination, $snapshot, $write): void {
+            try {
+                $destination->withSnapshot($snapshot, $write);
+            } catch (Throwable $error) {
+                $this->logError($action, $error);
+            }
+        };
+
+        if (! \extension_loaded('swoole') || Coroutine::getCid() <= 0) {
+            $apply();
+
+            return;
+        }
+
+        $earlier = $this->replicationsBefore($collection, $documentIds);
+        $finished = new Channel(1);
+        $this->queueReplication($collection, $documentIds, $finished);
+
+        Promise::async(function () use ($apply, $earlier, $collection, $documentIds, $finished): void {
+            try {
+                foreach ($earlier as $replication) {
+                    $replication->pop();
+                }
+
+                $apply();
+            } finally {
+                $this->releaseReplication($collection, $documentIds, $finished);
+            }
+        });
+    }
+
+    /**
+     * Waits until every queued replication that can reach these documents has finished, so a write the caller
+     * replicates itself reaches the destination after them.
+     *
+     * @param  array<string>  $documentIds
+     */
+    private function awaitReplications(string $collection, array $documentIds): void
+    {
+        foreach ($this->replicationsBefore($collection, $documentIds) as $replication) {
+            $replication->pop();
+        }
+    }
+
+    /**
+     * @param  array<string>|null  $documentIds
+     * @return array<int, Channel>
+     */
+    private function replicationsBefore(string $collection, ?array $documentIds): array
+    {
+        $pending = $this->documentReplications[$collection] ?? [];
+        $earlier = $documentIds === null
+            ? \array_values($pending)
+            : \array_values(\array_intersect_key($pending, \array_flip($documentIds)));
+
+        if (isset($this->collectionReplications[$collection])) {
+            $earlier[] = $this->collectionReplications[$collection];
+        }
+
+        $unique = [];
+        foreach ($earlier as $replication) {
+            $unique[\spl_object_id($replication)] = $replication;
+        }
+
+        return $unique;
+    }
+
+    /**
+     * @param  array<string>|null  $documentIds
+     */
+    private function queueReplication(string $collection, ?array $documentIds, Channel $finished): void
+    {
+        if ($documentIds === null) {
+            unset($this->documentReplications[$collection]);
+            $this->collectionReplications[$collection] = $finished;
+
+            return;
+        }
+
+        foreach ($documentIds as $id) {
+            $this->documentReplications[$collection][$id] = $finished;
+        }
+    }
+
+    /**
+     * @param  array<string>|null  $documentIds
+     */
+    private function releaseReplication(string $collection, ?array $documentIds, Channel $finished): void
+    {
+        $finished->close();
+
+        if ($documentIds === null) {
+            if (($this->collectionReplications[$collection] ?? null) === $finished) {
+                unset($this->collectionReplications[$collection]);
+            }
+
+            return;
+        }
+
+        foreach ($documentIds as $id) {
+            if (($this->documentReplications[$collection][$id] ?? null) === $finished) {
+                unset($this->documentReplications[$collection][$id]);
+            }
+        }
+
+        if (($this->documentReplications[$collection] ?? null) === []) {
+            unset($this->documentReplications[$collection]);
+        }
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return array<string>
+     */
+    private static function documentIds(array $documents): array
+    {
+        return \array_map(static fn (Document $document): string => $document->getId(), $documents);
     }
 
     protected function logError(string $action, Throwable $err): void

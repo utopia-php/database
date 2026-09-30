@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use ArrayObject;
 use Closure;
 use DateTime;
 use PDO;
@@ -29,8 +30,11 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Decorator;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Index;
 use Utopia\Database\Mirror;
+use Utopia\Database\Mirroring\Filter;
 use Utopia\Database\Query;
 use Utopia\Database\Type\TypeRegistry;
 
@@ -836,5 +840,907 @@ class MirrorTest extends TestCase
         $destination = new Database(new Memory(), new Cache(new None()));
 
         return [new Mirror($source, $destination), $source, $destination];
+    }
+
+    public function testEnableLocksFailureOnTheDestinationReachesOnError(): void
+    {
+        $source = new Database(self::configurableAdapter(), new Cache(new None()));
+        $destination = new Database(new class () extends Memory {
+            /**
+             * @return array<Capability>
+             */
+            public function capabilities(): array
+            {
+                return [...parent::capabilities(), Capability::AlterLock];
+            }
+
+            public function enableAlterLocks(bool $enable): self
+            {
+                throw new RuntimeException('destination unreachable');
+            }
+        }, new Cache(new None()));
+        $mirror = new Mirror($source, $destination);
+        $errors = [];
+        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+
+        $mirror->enableLocks(true);
+
+        $this->assertTrue($source->getAdapter()->getAlterLocks());
+        $this->assertSame([['enableLocks', 'destination unreachable']], $errors);
+    }
+
+    public function testCacheWriterTimeoutReachesSourceAndDestination(): void
+    {
+        [$mirror, $source, $destination] = $this->pair();
+
+        $mirror->setCacheWriterTimeout(30);
+
+        $this->assertSame(
+            [30, 30, 30],
+            [$mirror->getCacheWriterTimeout(), $source->getCacheWriterTimeout(), $destination->getCacheWriterTimeout()],
+        );
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror): array<Document>}>
+     */
+    public static function writesReturningDocuments(): iterable
+    {
+        yield 'createDocument' => [
+            static fn (Mirror $mirror): array => [$mirror->createDocument(self::COLLECTION, new Document([Document::ID => 'written', 'title' => 'written']))],
+        ];
+        yield 'updateDocument' => [
+            static fn (Mirror $mirror): array => [$mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'written']))],
+        ];
+        yield 'upsertDocument' => [
+            static fn (Mirror $mirror): array => [$mirror->upsertDocument(self::COLLECTION, new Document([Document::ID => 'first', 'title' => 'written']))],
+        ];
+        yield 'createDocuments' => [
+            static function (Mirror $mirror): array {
+                $returned = [];
+                $mirror->createDocuments(
+                    self::COLLECTION,
+                    [new Document([Document::ID => 'written', 'title' => 'written'])],
+                    onNext: static function (Document $document) use (&$returned): void {
+                        $returned[] = $document;
+                    },
+                );
+
+                return $returned;
+            },
+        ];
+        yield 'updateDocuments' => [
+            static function (Mirror $mirror): array {
+                $returned = [];
+                $mirror->updateDocuments(
+                    self::COLLECTION,
+                    new Document(['title' => 'written']),
+                    [Query::equal(Document::ID, ['first'])],
+                    onNext: static function (Document $document) use (&$returned): void {
+                        $returned[] = $document;
+                    },
+                );
+
+                return $returned;
+            },
+        ];
+        yield 'upsertDocuments' => [
+            static function (Mirror $mirror): array {
+                $returned = [];
+                $mirror->upsertDocuments(
+                    self::COLLECTION,
+                    [new Document([Document::ID => 'first', 'title' => 'written'])],
+                    onNext: static function (Document $document) use (&$returned): void {
+                        $returned[] = $document;
+                    },
+                );
+
+                return $returned;
+            },
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): array<Document>  $write
+     */
+    #[DataProvider('writesReturningDocuments')]
+    public function testDecoratorsApplyToDocumentsReturnedByWrites(Closure $write): void
+    {
+        $destination = self::sqlite();
+        $mirror = $this->seed(new Mirror(self::sqlite(), $destination));
+        $mirror->addHook(new class () implements Decorator {
+            public function decorate(Event $event, Document $collection, Document $document): Document
+            {
+                return $document->setAttribute('decoratedFor', $collection->getId());
+            }
+        });
+        $errors = [];
+        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+        /** @var ArrayObject<int, Document> $returned */
+        $returned = new ArrayObject();
+
+        self::inCoroutine(static function () use ($mirror, $write, $returned): void {
+            $returned->exchangeArray($write($mirror));
+        });
+
+        $this->assertCount(1, $returned);
+        $this->assertSame(self::COLLECTION, $returned[0]->getAttribute('decoratedFor'));
+        $this->assertSame([], $errors, 'A decorated document must not reach the destination');
+        $replicated = $destination->getDocument(self::COLLECTION, $returned[0]->getId());
+        $this->assertSame('written', $replicated->getAttribute('title'));
+        $this->assertNull($replicated->getAttribute('decoratedFor'));
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror): mixed, mixed}>
+     */
+    public static function destinationlessCalls(): iterable
+    {
+        yield 'setTimeout' => [
+            static function (Mirror $mirror): mixed {
+                $mirror->setTimeout(500);
+
+                return $mirror->getSource()->getAdapter()->getTimeout();
+            },
+            500,
+        ];
+        yield 'disableValidation' => [
+            static function (Mirror $mirror): mixed {
+                $mirror->disableValidation();
+
+                return [$mirror->isValidationEnabled(), $mirror->getSource()->isValidationEnabled()];
+            },
+            [false, false],
+        ];
+        yield 'exists' => [
+            static fn (Mirror $mirror): mixed => $mirror->exists('mirror', self::COLLECTION),
+            true,
+        ];
+        yield 'increaseDocumentAttribute' => [
+            static fn (Mirror $mirror): mixed => [
+                $mirror->increaseDocumentAttribute(self::COLLECTION, 'first', 'views', 2)->getAttribute('views'),
+                $mirror->getSource()->getDocument(self::COLLECTION, 'first')->getAttribute('views'),
+            ],
+            [3, 3],
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $call
+     */
+    #[DataProvider('destinationlessCalls')]
+    public function testMirrorWithoutDestinationDelegatesToTheSource(Closure $call, mixed $expected): void
+    {
+        $mirror = $this->seed(new Mirror(new Database(self::configurableAdapter(), new Cache(new None()))));
+        $errors = [];
+        $mirror->onError(static function (string $action, Throwable $error) use (&$errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+
+        $this->assertSame($expected, $call($mirror));
+        $this->assertSame([], $errors);
+    }
+
+    public function testSkipValidationWithoutDestinationRunsOnTheSource(): void
+    {
+        $source = new Database(new Memory(), new Cache(new None()));
+        $mirror = new Mirror($source);
+
+        $inside = $mirror->skipValidation(static fn (): array => [$mirror->isValidationEnabled(), $source->isValidationEnabled()]);
+
+        $this->assertSame([false, false], $inside);
+        $this->assertSame([true, true], [$mirror->isValidationEnabled(), $source->isValidationEnabled()]);
+    }
+
+    public function testCreateCollectionRunsWriteFilters(): void
+    {
+        $calls = new ArrayObject();
+        $destination = self::sqlite();
+        $mirror = $this->filtered(
+            [self::recordingFilter($calls, static fn (string $hook, ?Document $collection): ?Document => $collection === null ? null : (clone $collection)->setAttribute('filtered', true))],
+            self::sqlite(),
+            $destination,
+        );
+
+        $created = $mirror->createCollection(new Collection(id: 'filtered', attributes: [Attribute::string(key: 'title', size: 64)]));
+
+        $this->assertSame([['beforeCreateCollection', 'filtered', 'filtered']], $calls->getArrayCopy());
+        $this->assertTrue($created->getAttribute('filtered'), 'The filtered collection is what the caller receives');
+        $this->assertFalse($destination->getCollection('filtered')->isEmpty());
+        $this->assertSame('upgraded', self::upgradeStatus($mirror, 'filtered'));
+    }
+
+    public function testCreateCollectionFilterReturningNullSkipsTheDestination(): void
+    {
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter($calls, static fn (): ?Document => null)], $source, $destination);
+        $errors = self::errors($mirror);
+
+        $created = $mirror->createCollection(new Collection(id: 'skipped', attributes: [Attribute::string(key: 'title', size: 64)]));
+
+        $this->assertSame([['beforeCreateCollection', 'skipped', 'skipped']], $calls->getArrayCopy());
+        $this->assertSame('skipped', $created->getId());
+        $this->assertFalse($source->getCollection('skipped')->isEmpty());
+        $this->assertTrue($destination->getCollection('skipped')->isEmpty());
+        $this->assertNull(self::upgradeStatus($mirror, 'skipped'), 'Documents of a collection the destination lacks must not be replicated');
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    public function testUpdateCollectionRunsWriteFilters(): void
+    {
+        $calls = new ArrayObject();
+        $destination = self::sqlite();
+        $mirror = $this->filtered(
+            [self::recordingFilter($calls, static fn (string $hook, ?Document $collection): ?Document => $collection === null ? null : (clone $collection)->setAttribute('filtered', true))],
+            self::sqlite(),
+            $destination,
+        );
+
+        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+
+        $this->assertSame([['beforeUpdateCollection', self::COLLECTION, self::COLLECTION]], $calls->getArrayCopy());
+        $this->assertTrue($updated->getAttribute('filtered'), 'The filtered collection is what the caller receives');
+        $this->assertSame([Permission::read(Role::users())], $destination->getCollection(self::COLLECTION)->getPermissions());
+        $this->assertFalse($destination->getCollection(self::COLLECTION)->getAttribute('documentSecurity'));
+    }
+
+    public function testUpdateCollectionFilterReturningNullSkipsTheDestination(): void
+    {
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter(new ArrayObject(), static fn (): ?Document => null)], $source, $destination);
+        $permissions = $destination->getCollection(self::COLLECTION)->getPermissions();
+
+        $updated = $mirror->updateCollection(self::COLLECTION, [Permission::read(Role::users())], false);
+
+        $this->assertFalse($updated->getAttribute('documentSecurity'));
+        $this->assertSame([Permission::read(Role::users())], $source->getCollection(self::COLLECTION)->getPermissions());
+        $this->assertSame($permissions, $destination->getCollection(self::COLLECTION)->getPermissions());
+        $this->assertTrue($destination->getCollection(self::COLLECTION)->getAttribute('documentSecurity'));
+    }
+
+    public function testUpdateCollectionReplicationFailureIsReportedNotThrown(): void
+    {
+        $source = self::sqlite();
+        $mirror = $this->filtered([], $source, self::sqlite());
+        $errors = self::errors($mirror);
+        $source->createCollection(new Collection(id: 'sourceOnly', attributes: [Attribute::string(key: 'title', size: 64)]));
+
+        $updated = $mirror->updateCollection('sourceOnly', [Permission::read(Role::any())], false);
+
+        $this->assertFalse($updated->getAttribute('documentSecurity'));
+        $this->assertSame([Permission::read(Role::any())], $source->getCollection('sourceOnly')->getPermissions());
+        $this->assertSame([['updateCollection', 'Collection not found']], $errors->getArrayCopy());
+    }
+
+    /**
+     * The mirror seeded over $source and $destination, as a mirror with $filters over the same two databases.
+     *
+     * @param  array<Filter>  $filters
+     */
+    private function filtered(array $filters, Database $source, Database $destination): Mirror
+    {
+        $seeded = $this->seed(new Mirror($source, $destination));
+
+        return (new Mirror($source, $destination, $filters))
+            ->setDatabase($seeded->getDatabase())
+            ->setNamespace($seeded->getNamespace());
+    }
+
+    private static function upgradeStatus(Mirror $mirror, string $collection): mixed
+    {
+        $source = $mirror->getSource();
+        if ($source->getCollection('upgrades')->isEmpty()) {
+            return null;
+        }
+
+        return $source->getAuthorization()->skip(
+            static fn (): mixed => $source->getDocument('upgrades', $collection)->getAttribute('status'),
+        );
+    }
+
+    /**
+     * @return ArrayObject<int, array{string, string}>
+     */
+    private static function errors(Mirror $mirror): ArrayObject
+    {
+        /** @var ArrayObject<int, array{string, string}> $errors */
+        $errors = new ArrayObject();
+        $mirror->onError(static function (string $action, Throwable $error) use ($errors): void {
+            $errors[] = [$action, $error->getMessage()];
+        });
+
+        return $errors;
+    }
+
+    /**
+     * A write filter that records every hook it runs as [hook, collection id, subject] and returns what $transform
+     * makes of the document the hook receives; hooks without a document pass null and ignore the result.
+     *
+     * @param  ArrayObject<int, array{string, string, mixed}>  $calls
+     * @param  Closure(string, ?Document): ?Document  $transform
+     */
+    private static function recordingFilter(ArrayObject $calls, Closure $transform): Filter
+    {
+        return new class ($calls, $transform) extends Filter {
+            /**
+             * @param  ArrayObject<int, array{string, string, mixed}>  $calls
+             * @param  Closure(string, ?Document): ?Document  $transform
+             */
+            public function __construct(
+                private readonly ArrayObject $calls,
+                private readonly Closure $transform,
+            ) {
+            }
+
+            public function beforeCreateCollection(Database $source, Database $destination, string $collectionId, ?Document $collection = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $collection?->getId(), $collection);
+            }
+
+            public function beforeUpdateCollection(Database $source, Database $destination, string $collectionId, ?Document $collection = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $collection?->getId(), $collection);
+            }
+
+            public function beforeDeleteCollection(Database $source, Database $destination, string $collectionId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $collectionId);
+            }
+
+            public function beforeCreateAttribute(Database $source, Database $destination, string $collectionId, string $attributeId, ?Document $attribute = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $attributeId, $attribute);
+            }
+
+            public function beforeUpdateAttribute(Database $source, Database $destination, string $collectionId, string $attributeId, ?Document $attribute = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $attributeId, $attribute);
+            }
+
+            public function beforeDeleteAttribute(Database $source, Database $destination, string $collectionId, string $attributeId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $attributeId);
+            }
+
+            public function beforeCreateIndex(Database $source, Database $destination, string $collectionId, string $indexId, ?Document $index = null): ?Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $indexId, $index);
+            }
+
+            public function beforeDeleteIndex(Database $source, Database $destination, string $collectionId, string $indexId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $indexId);
+            }
+
+            public function beforeCreateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function afterCreateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function beforeUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function afterUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function beforeUpdateDocuments(Database $source, Database $destination, string $collectionId, Document $updates, array $queries): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $updates->getAttribute('title'), $updates) ?? $updates;
+            }
+
+            public function afterUpdateDocuments(Database $source, Database $destination, string $collectionId, Document $updates, array $queries): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $updates->getAttribute('title'));
+            }
+
+            public function beforeDeleteDocument(Database $source, Database $destination, string $collectionId, string $documentId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $documentId);
+            }
+
+            public function afterDeleteDocument(Database $source, Database $destination, string $collectionId, string $documentId): void
+            {
+                $this->run(__FUNCTION__, $collectionId, $documentId);
+            }
+
+            public function beforeDeleteDocuments(Database $source, Database $destination, string $collectionId, array $queries): void
+            {
+                $this->run(__FUNCTION__, $collectionId, \count($queries));
+            }
+
+            public function afterDeleteDocuments(Database $source, Database $destination, string $collectionId, array $queries): void
+            {
+                $this->run(__FUNCTION__, $collectionId, \count($queries));
+            }
+
+            public function beforeCreateOrUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            public function afterCreateOrUpdateDocument(Database $source, Database $destination, string $collectionId, Document $document): Document
+            {
+                return $this->run(__FUNCTION__, $collectionId, $document->getId(), $document) ?? $document;
+            }
+
+            private function run(string $hook, string $collectionId, mixed $subject, ?Document $document = null): ?Document
+            {
+                $this->calls[] = [$hook, $collectionId, $subject];
+
+                return ($this->transform)($hook, $document);
+            }
+        };
+    }
+
+    /**
+     * @return iterable<string, array{Closure(string, ?Document): ?Document, int|null}>
+     */
+    public static function attributeFilters(): iterable
+    {
+        yield 'resized' => [
+            static fn (string $hook, ?Document $attribute): ?Document => $attribute === null ? null : (clone $attribute)->setAttribute('size', 128),
+            128,
+        ];
+        yield 'skipped' => [static fn (): ?Document => null, null];
+    }
+
+    /**
+     * @param  Closure(string, ?Document): ?Document  $transform
+     */
+    #[DataProvider('attributeFilters')]
+    public function testCreateAttributeRunsWriteFilters(Closure $transform, ?int $size): void
+    {
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter($calls, $transform)], $source, $destination);
+        $errors = self::errors($mirror);
+
+        $this->assertTrue($mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64)));
+
+        $this->assertSame([['beforeCreateAttribute', self::COLLECTION, 'summary']], $calls->getArrayCopy());
+        $this->assertSame(64, self::attribute($source, 'summary')?->size);
+        $this->assertSame($size, self::attribute($destination, 'summary')?->size);
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    public function testCreateAttributesRunsWriteFiltersPerAttribute(): void
+    {
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter(
+            $calls,
+            static fn (string $hook, ?Document $attribute): ?Document => $attribute === null || $attribute->getAttribute('key') === 'dropped'
+                ? null
+                : (clone $attribute)->setAttribute('size', 128),
+        )], $source, $destination);
+        $errors = self::errors($mirror);
+
+        $this->assertTrue($mirror->createAttributes(self::COLLECTION, [
+            Attribute::string(key: 'dropped', size: 64),
+            Attribute::string(key: 'resized', size: 64),
+        ]));
+
+        $this->assertSame([
+            ['beforeCreateAttribute', self::COLLECTION, 'dropped'],
+            ['beforeCreateAttribute', self::COLLECTION, 'resized'],
+        ], $calls->getArrayCopy());
+        $this->assertSame([64, 64], [self::attribute($source, 'dropped')?->size, self::attribute($source, 'resized')?->size]);
+        $this->assertSame([null, 128], [self::attribute($destination, 'dropped')?->size, self::attribute($destination, 'resized')?->size]);
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    /**
+     * @param  Closure(string, ?Document): ?Document  $transform
+     */
+    #[DataProvider('attributeFilters')]
+    public function testUpdateAttributeRunsWriteFilters(Closure $transform, ?int $size): void
+    {
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter($calls, $transform)], $source, $destination);
+        $errors = self::errors($mirror);
+
+        $updated = $mirror->updateAttribute(self::COLLECTION, 'title', size: 100);
+
+        $this->assertSame([['beforeUpdateAttribute', self::COLLECTION, 'title']], $calls->getArrayCopy());
+        $this->assertSame($size ?? 100, $updated->getAttribute('size'), 'The caller receives the filtered definition, or the source one when the filter skips');
+        $this->assertSame(100, self::attribute($source, 'title')?->size);
+        $this->assertSame($size ?? 64, self::attribute($destination, 'title')?->size);
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    /**
+     * @return iterable<string, array{Closure(string, ?Document): ?Document, array<string>|null}>
+     */
+    public static function indexFilters(): iterable
+    {
+        yield 'retargeted' => [
+            static fn (string $hook, ?Document $index): ?Document => $index === null ? null : (clone $index)->setAttribute('attributes', ['views']),
+            ['views'],
+        ];
+        yield 'skipped' => [static fn (): ?Document => null, null];
+    }
+
+    /**
+     * @param  Closure(string, ?Document): ?Document  $transform
+     * @param  array<string>|null  $attributes
+     */
+    #[DataProvider('indexFilters')]
+    public function testCreateIndexRunsWriteFilters(Closure $transform, ?array $attributes): void
+    {
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter($calls, $transform)], $source, $destination);
+        $errors = self::errors($mirror);
+
+        $this->assertTrue($mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title'])));
+
+        $this->assertSame([['beforeCreateIndex', self::COLLECTION, 'titles']], $calls->getArrayCopy());
+        $this->assertSame(['title'], self::index($source, 'titles')?->attributes);
+        $this->assertSame($attributes, self::index($destination, 'titles')?->attributes);
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    /**
+     * @return iterable<string, array{string, Closure(Mirror, Database, Database): mixed}>
+     */
+    public static function schemaReplicationFailures(): iterable
+    {
+        yield 'createAttribute' => [
+            'createAttribute',
+            static fn (Mirror $mirror): mixed => $mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64)),
+        ];
+        yield 'createAttributes' => [
+            'createAttributes',
+            static fn (Mirror $mirror): mixed => $mirror->createAttributes(self::COLLECTION, [Attribute::string(key: 'summary', size: 64)]),
+        ];
+        yield 'deleteAttribute' => [
+            'deleteAttribute',
+            static function (Mirror $mirror, Database $source): mixed {
+                $source->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64));
+
+                return $mirror->deleteAttribute(self::COLLECTION, 'summary');
+            },
+        ];
+        yield 'createIndex' => [
+            'createIndex',
+            static function (Mirror $mirror, Database $source, Database $destination): mixed {
+                $destination->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
+
+                return $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
+            },
+        ];
+        yield 'deleteIndex' => [
+            'deleteIndex',
+            static function (Mirror $mirror, Database $source): mixed {
+                $source->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
+
+                return $mirror->deleteIndex(self::COLLECTION, 'titles');
+            },
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror, Database, Database): mixed  $change
+     */
+    #[DataProvider('schemaReplicationFailures')]
+    public function testSchemaReplicationFailureIsReportedNotThrown(string $action, Closure $change): void
+    {
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([], $source, $destination);
+        $errors = self::errors($mirror);
+        if ($action !== 'createIndex') {
+            $destination->deleteCollection(self::COLLECTION);
+        }
+
+        $this->assertTrue($change($mirror, $source, $destination));
+
+        $this->assertCount(1, $errors);
+        $this->assertSame($action, $errors[0][0]);
+    }
+
+    /**
+     * Each case: the write, its onError action, the document it touches, the filter hooks it runs, then the title the
+     * source and the destination hold afterwards, and the one the destination keeps when a filter fails.
+     *
+     * @return iterable<string, array{Closure(Mirror): mixed, string, string, list<array{string, string, mixed}>, ?string, ?string, ?string}>
+     */
+    public static function documentWrites(): iterable
+    {
+        yield 'createDocument' => [
+            static fn (Mirror $mirror): mixed => $mirror->createDocument(self::COLLECTION, new Document([Document::ID => 'second', 'title' => 'second'])),
+            'createDocument',
+            'second',
+            [['beforeCreateDocument', self::COLLECTION, 'second'], ['afterCreateDocument', self::COLLECTION, 'second']],
+            'second',
+            'filtered',
+            null,
+        ];
+        yield 'createDocuments' => [
+            static fn (Mirror $mirror): mixed => $mirror->createDocuments(self::COLLECTION, [new Document([Document::ID => 'second', 'title' => 'second'])]),
+            'createDocuments',
+            'second',
+            [['beforeCreateDocument', self::COLLECTION, 'second'], ['afterCreateDocument', self::COLLECTION, 'second']],
+            'second',
+            'filtered',
+            null,
+        ];
+        yield 'updateDocument' => [
+            static fn (Mirror $mirror): mixed => $mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated'])),
+            'updateDocument',
+            'first',
+            [['beforeUpdateDocument', self::COLLECTION, 'first'], ['afterUpdateDocument', self::COLLECTION, 'first']],
+            'updated',
+            'filtered',
+            'first',
+        ];
+        yield 'updateDocuments' => [
+            static fn (Mirror $mirror): mixed => $mirror->updateDocuments(self::COLLECTION, new Document(['title' => 'updated']), [Query::equal(Document::ID, ['first'])]),
+            'updateDocuments',
+            'first',
+            [['beforeUpdateDocuments', self::COLLECTION, 'updated'], ['afterUpdateDocuments', self::COLLECTION, 'filtered']],
+            'updated',
+            'filtered',
+            'first',
+        ];
+        yield 'upsertDocuments' => [
+            static fn (Mirror $mirror): mixed => $mirror->upsertDocuments(self::COLLECTION, [new Document([Document::ID => 'first', 'title' => 'upserted'])]),
+            'upsertDocuments',
+            'first',
+            [['beforeCreateOrUpdateDocument', self::COLLECTION, 'first'], ['afterCreateOrUpdateDocument', self::COLLECTION, 'first']],
+            'upserted',
+            'filtered',
+            'first',
+        ];
+        yield 'upsertDocumentsWithIncrease' => [
+            static fn (Mirror $mirror): mixed => $mirror->upsertDocumentsWithIncrease(self::COLLECTION, 'views', [new Document([Document::ID => 'second', 'title' => 'upserted', 'views' => 1])]),
+            'upsertDocumentsWithIncrease',
+            'second',
+            [['beforeCreateOrUpdateDocument', self::COLLECTION, 'second'], ['afterCreateOrUpdateDocument', self::COLLECTION, 'second']],
+            'upserted',
+            'filtered',
+            null,
+        ];
+        yield 'deleteDocument' => [
+            static fn (Mirror $mirror): mixed => $mirror->deleteDocument(self::COLLECTION, 'first'),
+            'deleteDocument',
+            'first',
+            [['beforeDeleteDocument', self::COLLECTION, 'first'], ['afterDeleteDocument', self::COLLECTION, 'first']],
+            null,
+            null,
+            'first',
+        ];
+        yield 'deleteDocuments' => [
+            static fn (Mirror $mirror): mixed => $mirror->deleteDocuments(self::COLLECTION, [Query::equal(Document::ID, ['first'])]),
+            'deleteDocuments',
+            'first',
+            [['beforeDeleteDocuments', self::COLLECTION, 1], ['afterDeleteDocuments', self::COLLECTION, 1]],
+            null,
+            null,
+            'first',
+        ];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $write
+     * @param  list<array{string, string, mixed}>  $hooks
+     */
+    #[DataProvider('documentWrites')]
+    public function testDocumentWritesRunWriteFilters(Closure $write, string $action, string $id, array $hooks, ?string $sourceTitle, ?string $destinationTitle, ?string $unchangedTitle): void
+    {
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter(
+            $calls,
+            static fn (string $hook, ?Document $document): ?Document => $document !== null && \str_starts_with($hook, 'before')
+                ? (clone $document)->setAttribute('title', 'filtered')
+                : $document,
+        )], $source, $destination);
+        $errors = self::errors($mirror);
+
+        self::inCoroutine(static fn (): mixed => $write($mirror));
+
+        $this->assertSame([], $errors->getArrayCopy());
+        $this->assertSame($hooks, $calls->getArrayCopy());
+        $this->assertSame([$sourceTitle, $destinationTitle], [self::storedTitle($source, $id), self::storedTitle($destination, $id)]);
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $write
+     * @param  list<array{string, string, mixed}>  $hooks
+     */
+    #[DataProvider('documentWrites')]
+    public function testDocumentWriteFilterFailureIsReportedNotThrown(Closure $write, string $action, string $id, array $hooks, ?string $sourceTitle, ?string $destinationTitle, ?string $unchangedTitle): void
+    {
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter(
+            new ArrayObject(),
+            static fn (string $hook): ?Document => throw new RuntimeException('filter failed in '.$hook),
+        )], $source, $destination);
+        $errors = self::errors($mirror);
+
+        self::inCoroutine(static fn (): mixed => $write($mirror));
+
+        $this->assertSame([[$action, 'filter failed in '.$hooks[0][0]]], $errors->getArrayCopy());
+        $this->assertSame([$sourceTitle, $unchangedTitle], [self::storedTitle($source, $id), self::storedTitle($destination, $id)]);
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $write
+     * @param  list<array{string, string, mixed}>  $hooks
+     */
+    #[DataProvider('documentWrites')]
+    public function testDocumentReplicationFailureIsReportedNotThrown(Closure $write, string $action, string $id, array $hooks, ?string $sourceTitle, ?string $destinationTitle, ?string $unchangedTitle): void
+    {
+        $source = self::sqlite();
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            public bool $unreachable = false;
+
+            public function createDocument(Document $collection, Document $document): Document
+            {
+                $this->reach();
+
+                return parent::createDocument($collection, $document);
+            }
+
+            public function createDocuments(Document $collection, array $documents): array
+            {
+                $this->reach();
+
+                return parent::createDocuments($collection, $documents);
+            }
+
+            public function updateDocument(Document $collection, string $id, Document $document, bool $skipPermissions): Document
+            {
+                $this->reach();
+
+                return parent::updateDocument($collection, $id, $document, $skipPermissions);
+            }
+
+            public function updateDocuments(Document $collection, Document $updates, array $documents): int
+            {
+                $this->reach();
+
+                return parent::updateDocuments($collection, $updates, $documents);
+            }
+
+            /**
+             * @param  array<Change>  $changes
+             * @return array<Document>
+             */
+            public function upsertDocuments(Document $collection, string $attribute, array $changes): array
+            {
+                $this->reach();
+
+                return parent::upsertDocuments($collection, $attribute, $changes);
+            }
+
+            public function deleteDocument(string $collection, string $id): bool
+            {
+                $this->reach();
+
+                return parent::deleteDocument($collection, $id);
+            }
+
+            public function deleteDocuments(string $collection, array $sequences, array $permissionIds): int
+            {
+                $this->reach();
+
+                return parent::deleteDocuments($collection, $sequences, $permissionIds);
+            }
+
+            private function reach(): void
+            {
+                if ($this->unreachable) {
+                    throw new RuntimeException('destination unreachable');
+                }
+            }
+        };
+        $destination = new Database($adapter, new Cache(new None()));
+        $mirror = $this->filtered([], $source, $destination);
+        $errors = self::errors($mirror);
+        $adapter->unreachable = true;
+
+        self::inCoroutine(static fn (): mixed => $write($mirror));
+
+        $this->assertSame([[$action, 'destination unreachable']], $errors->getArrayCopy());
+        $this->assertSame($sourceTitle, self::storedTitle($source, $id));
+        $this->assertSame($unchangedTitle, self::storedTitle($destination, $id));
+        $this->assertFalse($destination->getPreserveDates(), 'A failed replication must not leave the destination preserving dates');
+    }
+
+    public function testReplicationKeepsTheDestinationsPreserveDatesSetting(): void
+    {
+        $destination = self::sqlite();
+        $mirror = $this->filtered([], self::sqlite(), $destination);
+        $mirror->setPreserveDates(true);
+
+        $mirror->createDocument(self::COLLECTION, new Document([Document::ID => 'second', 'title' => 'second']));
+        $mirror->updateDocument(self::COLLECTION, 'second', new Document(['title' => 'updated']));
+
+        $this->assertTrue($destination->getPreserveDates());
+    }
+
+    public function testWritesThroughAMirrorWhoseSourceHasNoUpgradesCollectionAreNotReplicated(): void
+    {
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $namespace = 'mirror_'.\uniqid();
+        foreach ([$source, $destination] as $database) {
+            $database->setDatabase('mirror')->setNamespace($namespace)->create();
+            $database->createCollection(new Collection(
+                id: self::COLLECTION,
+                attributes: [Attribute::string(key: 'title', size: 64), Attribute::integer(key: 'views')],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any()), Permission::delete(Role::any())],
+            ));
+            $database->createDocument(self::COLLECTION, new Document([Document::ID => 'first', 'title' => 'first']));
+            $database->createDocument(self::COLLECTION, new Document([Document::ID => 'third', 'title' => 'third']));
+        }
+        $mirror = (new Mirror($source, $destination))->setDatabase('mirror')->setNamespace($namespace);
+        $errors = self::errors($mirror);
+
+        self::inCoroutine(static function () use ($mirror): void {
+            $mirror->createDocument(self::COLLECTION, new Document([Document::ID => 'second', 'title' => 'second']));
+            $mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']));
+            $mirror->deleteDocument(self::COLLECTION, 'third');
+            $mirror->createDocuments(self::COLLECTION, [new Document([Document::ID => 'fourth', 'title' => 'fourth'])]);
+        });
+
+        $this->assertTrue($source->getCollection('upgrades')->isEmpty());
+        $this->assertSame(['updated', 'second', null, 'fourth'], \array_map(static fn (string $id): ?string => self::storedTitle($source, $id), ['first', 'second', 'third', 'fourth']));
+        $this->assertSame(['first', null, 'third', null], \array_map(static fn (string $id): ?string => self::storedTitle($destination, $id), ['first', 'second', 'third', 'fourth']));
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    private static function storedTitle(Database $database, string $id): ?string
+    {
+        $title = $database->getDocument(self::COLLECTION, $id)->getAttribute('title');
+
+        return \is_string($title) ? $title : null;
+    }
+
+    private static function attribute(Database $database, string $key): ?Attribute
+    {
+        foreach ($database->getCollection(self::COLLECTION)->attributes as $attribute) {
+            if ($attribute->key === $key) {
+                return $attribute;
+            }
+        }
+
+        return null;
+    }
+
+    private static function index(Database $database, string $key): ?Index
+    {
+        foreach ($database->getCollection(self::COLLECTION)->indexes as $index) {
+            if ($index->key === $key) {
+                return $index;
+            }
+        }
+
+        return null;
     }
 }

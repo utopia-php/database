@@ -441,7 +441,7 @@ trait Documents
 
         $joinedCollections = null;
 
-        if ($this->validate) {
+        if ($this->validate && $queries !== []) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
             $supportForJoins = $this->adapter->supports(Capability::Joins);

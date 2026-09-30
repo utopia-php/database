@@ -1,0 +1,98 @@
+<?php
+
+namespace Tests\Unit;
+
+use InvalidArgumentException;
+use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\None;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Validator\Authorization;
+
+final class SQLiteDigitLeadingNamespaceTest extends TestCase
+{
+    private const string COLLECTION = 'posts';
+
+    public function testDocumentSecurityReadsWorkUnderALetterLeadingNamespace(): void
+    {
+        $database = $this->database('ns1');
+
+        $this->assertSame(['public'], \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $database->find(self::COLLECTION),
+        ));
+        $this->assertSame(1, $database->count(self::COLLECTION));
+    }
+
+    #[DataProvider('refusedNamespaces')]
+    public function testDocumentSecurityFindIsRefusedUnderTheNamespace(string $namespace): void
+    {
+        $database = $this->database($namespace);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid permissions table name: '.$namespace.'_'.self::COLLECTION.'_perms');
+
+        $database->find(self::COLLECTION);
+    }
+
+    #[DataProvider('refusedNamespaces')]
+    public function testDocumentSecurityCountIsRefusedUnderTheNamespace(string $namespace): void
+    {
+        $database = $this->database($namespace);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid permissions table name: '.$namespace.'_'.self::COLLECTION.'_perms');
+
+        $database->count(self::COLLECTION);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function refusedNamespaces(): iterable
+    {
+        yield 'a leading digit' => ['1ns'];
+        yield 'a leading hyphen' => ['-ns'];
+    }
+
+    private function database(string $namespace): Database
+    {
+        $authorization = new Authorization();
+        $authorization->addRole(Role::any()->toString());
+
+        $database = (new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None())))
+            ->setAuthorization($authorization)
+            ->setDatabase('digit_leading')
+            ->setNamespace($namespace)
+            ->addHook(new Permissions());
+        $database->create();
+
+        $database->createCollection(new Collection(
+            id: self::COLLECTION,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [Permission::create(Role::any())],
+            documentSecurity: true,
+        ));
+        $database->createDocument(self::COLLECTION, new Document([
+            '$id' => 'public',
+            '$permissions' => [Permission::read(Role::any())],
+            'title' => 'Readable',
+        ]));
+        $database->createDocument(self::COLLECTION, new Document([
+            '$id' => 'private',
+            '$permissions' => [Permission::read(Role::user('owner'))],
+            'title' => 'Hidden',
+        ]));
+
+        return $database;
+    }
+}

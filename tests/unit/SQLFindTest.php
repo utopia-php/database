@@ -4,9 +4,9 @@ namespace Tests\Unit;
 
 use Exception;
 use PDOException;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 use ReflectionProperty;
@@ -20,14 +20,13 @@ use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
 
-#[AllowMockObjectsWithoutExpectations]
 final class SQLFindTest extends TestCase
 {
     #[DataProvider('paths')]
     public function testFetchFailureIsTranslatedAndWinsOverCloseFailure(bool $fast): void
     {
         $timeout = $this->createTimeoutException();
-        $statement = $this->statement();
+        $statement = $this->statementMock();
         $statement->expects($this->once())->method('execute')->willReturn(true);
         $statement->expects($this->once())->method('fetchAll')->willThrowException($timeout);
         $statement->expects($this->once())
@@ -49,7 +48,7 @@ final class SQLFindTest extends TestCase
     public function testCloseFailureIsTranslated(bool $fast): void
     {
         $close = new PDOException('Lost connection while closing cursor');
-        $statement = $this->statement();
+        $statement = $this->statementMock();
         $statement->expects($this->once())->method('execute')->willReturn(true);
         $statement->expects($this->once())->method('fetchAll')->willReturn([]);
         $statement->expects($this->once())->method('closeCursor')->willThrowException($close);
@@ -76,7 +75,7 @@ final class SQLFindTest extends TestCase
 
     public function testJoinDocumentSecurityLookupMatchesRemappedPhysicalIds(): void
     {
-        $adapter = new MySQL($this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock());
+        $adapter = new MySQL(self::createStub(\PDO::class));
         $adapter->setDatabase('appwrite');
         $adapter->setNamespace('_5');
 
@@ -450,7 +449,7 @@ final class SQLFindTest extends TestCase
 
     public function testQualifyDottedAttributeKeepsNestedObjectPaths(): void
     {
-        $adapter = new MySQL($this->getMockBuilder(\PDO::class)->disableOriginalConstructor()->getMock());
+        $adapter = new MySQL(self::createStub(\PDO::class));
         $method = new ReflectionMethod(MySQL::class, 'qualifyDottedAttribute');
 
         $aliasSet = [
@@ -629,11 +628,17 @@ final class SQLFindTest extends TestCase
         return $adapter;
     }
 
-    private function statement(): \PDOStatement&MockObject
+    private function statement(): \PDOStatement&Stub
     {
-        $statement = $this->getMockBuilder(\PDOStatement::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $statement = self::createStub(\PDOStatement::class);
+        $statement->method('bindValue')->willReturn(true);
+
+        return $statement;
+    }
+
+    private function statementMock(): \PDOStatement&MockObject
+    {
+        $statement = $this->createMock(\PDOStatement::class);
         $statement->method('bindValue')->willReturn(true);
 
         return $statement;

@@ -2,7 +2,6 @@
 
 namespace Tests\Unit;
 
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -16,7 +15,6 @@ use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Query\Schema\ColumnType;
 
-#[AllowMockObjectsWithoutExpectations]
 class CacheKeyTest extends TestCase
 {
     /**
@@ -24,7 +22,7 @@ class CacheKeyTest extends TestCase
      */
     private function createDatabase(array $instanceFilters = [], string $database = 'test'): Database
     {
-        $adapter = $this->createMock(Adapter::class);
+        $adapter = self::createStub(Adapter::class);
         $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
             return match ($capability) {
                 Capability::Hostname => false,
@@ -46,7 +44,7 @@ class CacheKeyTest extends TestCase
 
     public function testBaseKeysMatchScopedVariantKeys(): void
     {
-        $adapter = $this->createMock(Adapter::class);
+        $adapter = self::createStub(Adapter::class);
         $adapter->method('supports')->willReturnCallback(
             fn (Capability $capability): bool => $capability === Capability::Hostname
         );
@@ -186,7 +184,7 @@ class CacheKeyTest extends TestCase
 
     public function testQueryCacheKeyUsesQueryCacheShape(): void
     {
-        $adapter = $this->createMock(Adapter::class);
+        $adapter = self::createStub(Adapter::class);
         $adapter->method('supports')->willReturnCallback(
             fn (Capability $capability): bool => $capability === Capability::Hostname
         );
@@ -205,7 +203,7 @@ class CacheKeyTest extends TestCase
 
     public function testQueryCacheKeyCanOverrideNamespaceSegment(): void
     {
-        $adapter = $this->createMock(Adapter::class);
+        $adapter = self::createStub(Adapter::class);
         $adapter->method('supports')->willReturnCallback(
             fn (Capability $capability): bool => $capability === Capability::Hostname
         );
@@ -365,7 +363,7 @@ class CacheKeyTest extends TestCase
     {
         $hostname = 'database_db_nyc3_self_hosted_0_0';
 
-        $adapter = $this->createMock(Adapter::class);
+        $adapter = self::createStub(Adapter::class);
         $adapter->method('supports')->willReturnCallback(function (Capability $capability) {
             return match ($capability) {
                 Capability::Hostname => true,

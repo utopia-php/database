@@ -4,7 +4,6 @@ namespace Tests\Unit;
 
 use Exception;
 use PDOException;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
@@ -16,7 +15,6 @@ use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
-#[AllowMockObjectsWithoutExpectations]
 final class SQLGetDocumentTest extends TestCase
 {
     public function testTranslatesExecuteTimeoutClosesCursorAndPreservesOriginalWhenCleanupFails(): void
@@ -159,9 +157,7 @@ final class SQLGetDocumentTest extends TestCase
 
     public function testAppliesTypedReadTransformOnFastAndBuilderPaths(): void
     {
-        $statement = $this->getMockBuilder(\PDOStatement::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $statement = self::createStub(\PDOStatement::class);
         $statement->method('bindValue')->willReturn(true);
         $statement->method('execute')->willReturn(true);
         $statement->method('fetch')->willReturn(false);
@@ -209,9 +205,7 @@ final class SQLGetDocumentTest extends TestCase
 
     public function testJoinSkipsFastPath(): void
     {
-        $statement = $this->getMockBuilder(\PDOStatement::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $statement = self::createStub(\PDOStatement::class);
         $statement->method('bindValue')->willReturn(true);
         $statement->method('execute')->willReturn(true);
         $statement->method('fetch')->willReturn(false);
@@ -289,9 +283,7 @@ final class SQLGetDocumentTest extends TestCase
      */
     private function captureGetDocumentSql(array $queries, bool $postgres = false): string
     {
-        $statement = $this->getMockBuilder(\PDOStatement::class)
-            ->disableOriginalConstructor()
-            ->getMock();
+        $statement = self::createStub(\PDOStatement::class);
         $statement->method('bindValue')->willReturn(true);
         $statement->method('execute')->willReturn(true);
         $statement->method('fetch')->willReturn(false);

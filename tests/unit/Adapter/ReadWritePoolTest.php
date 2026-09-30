@@ -2,7 +2,6 @@
 
 namespace Tests\Unit\Adapter;
 
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
@@ -31,7 +30,6 @@ use Utopia\Pools\Pool as UtopiaPool;
 
 use function Swoole\Coroutine\run;
 
-#[AllowMockObjectsWithoutExpectations]
 class ReadWritePoolTest extends TestCase
 {
     /** @var UtopiaPool<Adapter>&Stub */
@@ -42,16 +40,16 @@ class ReadWritePoolTest extends TestCase
 
     private ReadWritePool $pool;
 
-    /** @var FeatureAdapterStub&MockObject */
+    /** @var FeatureAdapterStub&Stub */
     private Adapter $writeAdapter;
 
-    /** @var FeatureAdapterStub&MockObject */
+    /** @var FeatureAdapterStub&Stub */
     private Adapter $readAdapter;
 
     protected function setUp(): void
     {
-        $this->writeAdapter = $this->createMock(FeatureAdapterStub::class);
-        $this->readAdapter = $this->createMock(FeatureAdapterStub::class);
+        $this->writeAdapter = self::createStub(FeatureAdapterStub::class);
+        $this->readAdapter = self::createStub(FeatureAdapterStub::class);
 
         $this->writePool = self::createStub(UtopiaPool::class);
         $this->readPool = self::createStub(UtopiaPool::class);
@@ -68,8 +66,25 @@ class ReadWritePoolTest extends TestCase
         $this->pool->setAuthorization(new Authorization());
     }
 
+    private function mockWriteAdapter(): FeatureAdapterStub&MockObject
+    {
+        $adapter = $this->createMock(FeatureAdapterStub::class);
+        $this->writeAdapter = $adapter;
+
+        return $adapter;
+    }
+
+    private function mockReadAdapter(): FeatureAdapterStub&MockObject
+    {
+        $adapter = $this->createMock(FeatureAdapterStub::class);
+        $this->readAdapter = $adapter;
+
+        return $adapter;
+    }
+
     public function testReadMethodsRouteToReadPool(): void
     {
+        $readAdapter = $this->mockReadAdapter();
         $readMethods = [
             'find',
             'getDocument',
@@ -113,7 +128,7 @@ class ReadWritePoolTest extends TestCase
         ];
 
         foreach ($readMethods as $method) {
-            $this->readAdapter->expects($this->atLeastOnce())
+            $readAdapter->expects($this->atLeastOnce())
                 ->method($method)
                 ->willReturn($this->getDefaultReturnForMethod($method));
         }
@@ -126,7 +141,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testWriteMethodRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('createDocument')
             ->willReturn(new Document());
 
@@ -135,7 +151,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testDeleteDocumentRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('deleteDocument')
             ->willReturn(true);
 
@@ -144,7 +161,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testUpdateDocumentRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('updateDocument')
             ->willReturn(new Document());
 
@@ -153,7 +171,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testCreateCollectionRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('createCollection')
             ->willReturn(true);
 
@@ -162,16 +181,17 @@ class ReadWritePoolTest extends TestCase
 
     public function testStickyModeRoutesReadsToWritePoolAfterWrite(): void
     {
+        $writeAdapter = $this->mockWriteAdapter();
         $this->pool->setSticky(true);
         $this->pool->setStickyDuration(5000);
 
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter->expects($this->once())
             ->method('createDocument')
             ->willReturn(new Document());
 
         $this->pool->delegate('createDocument', [new Document(), new Document()]);
 
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter->expects($this->once())
             ->method('find')
             ->willReturn([]);
 
@@ -181,10 +201,12 @@ class ReadWritePoolTest extends TestCase
 
     public function testStickyDurationExpiry(): void
     {
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
         $this->pool->setSticky(true);
         $this->pool->setStickyDuration(1);
 
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter->expects($this->once())
             ->method('createDocument')
             ->willReturn(new Document());
 
@@ -192,7 +214,7 @@ class ReadWritePoolTest extends TestCase
 
         usleep(2000);
 
-        $this->readAdapter->expects($this->once())
+        $readAdapter->expects($this->once())
             ->method('ping')
             ->willReturn(true);
 
@@ -226,15 +248,17 @@ class ReadWritePoolTest extends TestCase
 
     public function testStickyDisabledRoutesReadNormally(): void
     {
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
         $this->pool->setSticky(false);
 
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter->expects($this->once())
             ->method('createDocument')
             ->willReturn(new Document());
 
         $this->pool->delegate('createDocument', [new Document(), new Document()]);
 
-        $this->readAdapter->expects($this->once())
+        $readAdapter->expects($this->once())
             ->method('ping')
             ->willReturn(true);
 
@@ -256,6 +280,7 @@ class ReadWritePoolTest extends TestCase
 
     public function testReadAfterMultipleWritesStaysSticky(): void
     {
+        $writeAdapter = $this->mockWriteAdapter();
         $this->pool->setSticky(true);
         $this->pool->setStickyDuration(5000);
 
@@ -267,7 +292,7 @@ class ReadWritePoolTest extends TestCase
         $this->pool->delegate('createDocument', [new Document(), new Document()]);
         $this->pool->delegate('deleteDocument', ['collection', 'id']);
 
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter->expects($this->once())
             ->method('ping')
             ->willReturn(true);
 
@@ -277,10 +302,11 @@ class ReadWritePoolTest extends TestCase
 
     public function testReadBeforeAnyWriteGoesToReadPool(): void
     {
+        $readAdapter = $this->mockReadAdapter();
         $this->pool->setSticky(true);
         $this->pool->setStickyDuration(5000);
 
-        $this->readAdapter->expects($this->once())
+        $readAdapter->expects($this->once())
             ->method('ping')
             ->willReturn(true);
 
@@ -348,7 +374,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testNonReadNonStandardMethodGoesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('createAttribute')
             ->willReturn(true);
 
@@ -358,7 +385,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testCreateIndexRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('createIndex')
             ->willReturn(true);
 
@@ -368,7 +396,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testDeleteCollectionRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('deleteCollection')
             ->willReturn(true);
 
@@ -377,7 +406,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testRawMutationRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())
+        $writeAdapter = $this->mockWriteAdapter();
+        $writeAdapter->expects($this->once())
             ->method('rawMutation')
             ->willReturn(1);
 
@@ -386,12 +416,14 @@ class ReadWritePoolTest extends TestCase
 
     public function testReadAfterTransactionalWriteRoutesToWritePool(): void
     {
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
         $this->writeAdapter->method('withTransaction')->willReturnCallback(
             static fn (callable $callback): mixed => $callback(),
         );
         $this->writeAdapter->method('createDocument')->willReturn(new Document());
-        $this->writeAdapter->expects($this->once())->method('find')->willReturn([]);
-        $this->readAdapter->expects($this->never())->method('find');
+        $writeAdapter->expects($this->once())->method('find')->willReturn([]);
+        $readAdapter->expects($this->never())->method('find');
 
         $this->pool->withTransaction(fn (): Document => $this->pool->createDocument(new Document(), new Document()));
 
@@ -400,14 +432,16 @@ class ReadWritePoolTest extends TestCase
 
     public function testStickinessRunsFromTheCommitRatherThanTheWrite(): void
     {
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
         $this->pool->setStickyDuration(200);
 
         $this->writeAdapter->method('withTransaction')->willReturnCallback(
             static fn (callable $callback): mixed => $callback(),
         );
         $this->writeAdapter->method('createDocument')->willReturn(new Document());
-        $this->writeAdapter->expects($this->once())->method('find')->willReturn([]);
-        $this->readAdapter->expects($this->never())->method('find');
+        $writeAdapter->expects($this->once())->method('find')->willReturn([]);
+        $readAdapter->expects($this->never())->method('find');
 
         $this->pool->withTransaction(function (): void {
             $this->pool->createDocument(new Document(), new Document());
@@ -419,6 +453,8 @@ class ReadWritePoolTest extends TestCase
 
     public function testStickinessRunsFromTheEndOfAWrite(): void
     {
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
         $this->pool->setStickyDuration(200);
 
         $this->writeAdapter->method('createDocument')->willReturnCallback(static function (): Document {
@@ -426,8 +462,8 @@ class ReadWritePoolTest extends TestCase
 
             return new Document();
         });
-        $this->writeAdapter->expects($this->once())->method('find')->willReturn([]);
-        $this->readAdapter->expects($this->never())->method('find');
+        $writeAdapter->expects($this->once())->method('find')->willReturn([]);
+        $readAdapter->expects($this->never())->method('find');
 
         $this->pool->createDocument(new Document(), new Document());
 
@@ -436,8 +472,10 @@ class ReadWritePoolTest extends TestCase
 
     public function testGetDocumentForUpdateRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->exactly(3))->method('getDocument')->willReturn(new Document());
-        $this->readAdapter->expects($this->never())->method('getDocument');
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
+        $writeAdapter->expects($this->exactly(3))->method('getDocument')->willReturn(new Document());
+        $readAdapter->expects($this->never())->method('getDocument');
 
         $this->pool->setSticky(false);
         $this->pool->getDocument(new Document(), 'id', [], true);
@@ -447,16 +485,20 @@ class ReadWritePoolTest extends TestCase
 
     public function testGetDocumentWithoutLockRoutesToReadPool(): void
     {
-        $this->readAdapter->expects($this->once())->method('getDocument')->willReturn(new Document());
-        $this->writeAdapter->expects($this->never())->method('getDocument');
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
+        $readAdapter->expects($this->once())->method('getDocument')->willReturn(new Document());
+        $writeAdapter->expects($this->never())->method('getDocument');
 
         $this->pool->getDocument(new Document(), 'id', [], false);
     }
 
     public function testRawQueryRoutesToWritePool(): void
     {
-        $this->writeAdapter->expects($this->once())->method('rawQuery')->willReturn([]);
-        $this->readAdapter->expects($this->never())->method('rawQuery');
+        $writeAdapter = $this->mockWriteAdapter();
+        $readAdapter = $this->mockReadAdapter();
+        $writeAdapter->expects($this->once())->method('rawQuery')->willReturn([]);
+        $readAdapter->expects($this->never())->method('rawQuery');
 
         $this->pool->setSticky(false);
         $this->pool->rawQuery('UPDATE posts SET title = ?', ['draft']);

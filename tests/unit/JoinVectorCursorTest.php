@@ -4,7 +4,6 @@ namespace Tests\Unit;
 
 use PDO;
 use PDOStatement;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\Postgres;
@@ -14,7 +13,6 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\OrderDirection;
 
-#[AllowMockObjectsWithoutExpectations]
 final class JoinVectorCursorTest extends TestCase
 {
     #[DataProvider('directions')]
@@ -72,14 +70,14 @@ final class JoinVectorCursorTest extends TestCase
      */
     private function captureFindSql(array $orderAttributes, array $cursor, CursorDirection $direction): string
     {
-        $statement = $this->createMock(PDOStatement::class);
+        $statement = self::createStub(PDOStatement::class);
         $statement->method('bindValue')->willReturn(true);
         $statement->method('execute')->willReturn(true);
         $statement->method('fetchAll')->willReturn([]);
         $statement->method('closeCursor')->willReturn(true);
 
         $sql = '';
-        $pdo = $this->createMock(PDO::class);
+        $pdo = self::createStub(PDO::class);
         $pdo->method('prepare')->willReturnCallback(function (string $query) use (&$sql, $statement): PDOStatement {
             $sql = $query;
 

@@ -3,8 +3,8 @@
 namespace Tests\Unit\Documents;
 
 use DateTime;
-use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
 use PHPUnit\Framework\MockObject\MockObject;
+use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
@@ -23,16 +23,28 @@ use Utopia\Query\CursorDirection;
 use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 
-#[AllowMockObjectsWithoutExpectations]
 class FindLogicTest extends TestCase
 {
-    private Adapter&MockObject $adapter;
+    private Adapter&Stub $adapter;
 
     private Database $database;
 
     protected function setUp(): void
     {
-        $this->adapter = $this->createMock(Adapter::class);
+        $this->useAdapter(self::createStub(Adapter::class));
+    }
+
+    private function mockAdapter(): Adapter&MockObject
+    {
+        $adapter = $this->createMock(Adapter::class);
+        $this->useAdapter($adapter);
+
+        return $adapter;
+    }
+
+    private function useAdapter(Adapter&Stub $adapter): void
+    {
+        $this->adapter = $adapter;
         $this->adapter->method('getSharedTables')->willReturn(false);
         $this->adapter->method('getTenant')->willReturn(null);
         $this->adapter->method('getTenantPerDocument')->willReturn(false);
@@ -150,8 +162,9 @@ class FindLogicTest extends TestCase
 
     public function testFindRespectsDefaultLimit(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -171,8 +184,9 @@ class FindLogicTest extends TestCase
 
     public function testFindRespectsCustomLimit(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -192,8 +206,9 @@ class FindLogicTest extends TestCase
 
     public function testFindRespectsOffset(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -213,8 +228,9 @@ class FindLogicTest extends TestCase
 
     public function testFindAddsSequenceToOrderByForUniqueness(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -236,8 +252,9 @@ class FindLogicTest extends TestCase
 
     public function testFindSkipsSequenceWhenIdAlreadyInOrder(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -260,8 +277,9 @@ class FindLogicTest extends TestCase
 
     public function testFindSkipsSequenceWhenSequenceAlreadyInOrder(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -289,11 +307,12 @@ class FindLogicTest extends TestCase
 
     public function testVectorFindOrdersByDistanceAloneWithoutCursor(): void
     {
+        $adapter = $this->mockAdapter();
         $attributes = [
             new Document(['$id' => 'embedding', 'key' => 'embedding', 'type' => ColumnType::Vector->value, 'size' => 2, 'required' => false, 'array' => false]),
         ];
         $this->setupCollectionLookup('testCol', $attributes);
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -313,11 +332,12 @@ class FindLogicTest extends TestCase
 
     public function testVectorFindWithCursorKeepsSequenceTieBreaker(): void
     {
+        $adapter = $this->mockAdapter();
         $attributes = [
             new Document(['$id' => 'embedding', 'key' => 'embedding', 'type' => ColumnType::Vector->value, 'size' => 2, 'required' => false, 'array' => false]),
         ];
         $this->setupCollectionLookup('testCol', $attributes);
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -347,8 +367,9 @@ class FindLogicTest extends TestCase
 
     public function testDateOrderAppendsMatchingSequenceTieBreakLast(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -409,6 +430,7 @@ class FindLogicTest extends TestCase
 
     public function testFindPassesQueriesToAdapter(): void
     {
+        $adapter = $this->mockAdapter();
         $attributes = [
             new Document(['$id' => 'status', 'key' => 'status', 'type' => 'string', 'size' => 64, 'required' => false, 'array' => false]),
         ];
@@ -417,7 +439,7 @@ class FindLogicTest extends TestCase
         ];
         $this->setupCollectionLookup('testCol', $attributes, $indexes);
 
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -464,6 +486,7 @@ class FindLogicTest extends TestCase
 
     public function testFindEncodesCursorBeforePassingToAdapter(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
         $cursorDoc = new Document([
             '$id' => 'c1',
@@ -471,7 +494,7 @@ class FindLogicTest extends TestCase
             '$sequence' => '100',
         ]);
 
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -515,7 +538,7 @@ class FindLogicTest extends TestCase
 
     public function testFindAggregationWithCursorThrows(): void
     {
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
             Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
             Capability::DefinedAttributes, Capability::Aggregations,
         ]);
@@ -536,7 +559,7 @@ class FindLogicTest extends TestCase
 
     public function testFindWithGroupBy(): void
     {
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
             Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
@@ -576,7 +599,7 @@ class FindLogicTest extends TestCase
 
     public function testFindWithDistinct(): void
     {
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
             Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
@@ -612,7 +635,7 @@ class FindLogicTest extends TestCase
 
     public function testFindDistinctDoesNotAppendSequenceOrder(): void
     {
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
             Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
@@ -671,13 +694,13 @@ class FindLogicTest extends TestCase
     {
         $authOnFind = null;
         $db = null;
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
             Capability::Index,
             Capability::IndexArray,
             Capability::UniqueIndex,
             Capability::DefinedAttributes,
             Capability::Joins,
-        ], function (Adapter&MockObject $adapter) use (&$authOnFind, &$db): void {
+        ], function (Adapter&Stub $adapter) use (&$authOnFind, &$db): void {
             $adapter->method('find')->willReturnCallback(function () use (&$authOnFind, &$db) {
                 $authOnFind = $db?->getAuthorization()->getStatus();
 
@@ -697,13 +720,13 @@ class FindLogicTest extends TestCase
         $authOnCount = null;
         $captured = null;
         $db = null;
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
             Capability::Index,
             Capability::IndexArray,
             Capability::UniqueIndex,
             Capability::DefinedAttributes,
             Capability::Joins,
-        ], function (Adapter&MockObject $adapter) use (&$authOnCount, &$captured, &$db): void {
+        ], function (Adapter&Stub $adapter) use (&$authOnCount, &$captured, &$db): void {
             $adapter->method('count')->willReturnCallback(function (Document $collection, array $queries) use (&$authOnCount, &$captured, &$db) {
                 $authOnCount = $db?->getAuthorization()->getStatus();
                 $captured = $queries;
@@ -733,13 +756,13 @@ class FindLogicTest extends TestCase
     {
         $authOnSum = null;
         $db = null;
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities(self::createStub(Adapter::class), [
             Capability::Index,
             Capability::IndexArray,
             Capability::UniqueIndex,
             Capability::DefinedAttributes,
             Capability::Joins,
-        ], function (Adapter&MockObject $adapter) use (&$authOnSum, &$db): void {
+        ], function (Adapter&Stub $adapter) use (&$authOnSum, &$db): void {
             $adapter->method('sum')->willReturnCallback(function () use (&$authOnSum, &$db) {
                 $authOnSum = $db?->getAuthorization()->getStatus();
 
@@ -759,6 +782,7 @@ class FindLogicTest extends TestCase
         $captured = null;
         $join = $this->collectionDoc('jp_public', documentSecurity: false);
         $db = $this->buildDbWithCapabilities(
+            self::createStub(Adapter::class),
             [
                 Capability::Index,
                 Capability::IndexArray,
@@ -766,7 +790,7 @@ class FindLogicTest extends TestCase
                 Capability::DefinedAttributes,
                 Capability::Joins,
             ],
-            function (Adapter&MockObject $adapter) use (&$captured): void {
+            function (Adapter&Stub $adapter) use (&$captured): void {
                 $adapter->method('find')->willReturnCallback(function (Document $collection) use (&$captured) {
                     $captured = $collection->getAttribute('joinDocumentSecurity');
 
@@ -793,6 +817,7 @@ class FindLogicTest extends TestCase
         $authOnGet = null;
         $db = null;
         $db = $this->buildDbWithCapabilities(
+            self::createStub(Adapter::class),
             [
                 Capability::Index,
                 Capability::IndexArray,
@@ -846,8 +871,9 @@ class FindLogicTest extends TestCase
 
     public function testCountDelegatesToAdapter(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('count')
             ->willReturn(42);
 
@@ -857,11 +883,12 @@ class FindLogicTest extends TestCase
 
     public function testSumDelegatesToAdapter(): void
     {
+        $adapter = $this->mockAdapter();
         $attributes = [
             new Document(['$id' => 'amount', 'key' => 'amount', 'type' => 'double', 'size' => 0, 'required' => false, 'array' => false]),
         ];
         $this->setupCollectionLookup('testCol', $attributes);
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('sum')
             ->willReturn(150.5);
 
@@ -927,7 +954,7 @@ class FindLogicTest extends TestCase
 
     public function testAggregateDelegatesToFind(): void
     {
-        $db = $this->buildDbWithCapabilities([
+        $db = $this->buildDbWithCapabilities($this->createMock(Adapter::class), [
             Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
             Capability::DefinedAttributes, Capability::Aggregations,
         ], function (Adapter&MockObject $adapter): void {
@@ -1020,6 +1047,7 @@ class FindLogicTest extends TestCase
 
     public function testFindCursorBeforePassesDirection(): void
     {
+        $adapter = $this->mockAdapter();
         $this->setupCollectionLookup('testCol');
         $cursorDoc = new Document([
             '$id' => 'c1',
@@ -1027,7 +1055,7 @@ class FindLogicTest extends TestCase
             '$sequence' => '100',
         ]);
 
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -1047,13 +1075,14 @@ class FindLogicTest extends TestCase
 
     public function testFindMultipleOrderAttributes(): void
     {
+        $adapter = $this->mockAdapter();
         $attributes = [
             new Document(['$id' => 'name', 'key' => 'name', 'type' => 'string', 'size' => 128, 'required' => false, 'array' => false]),
             new Document(['$id' => 'age', 'key' => 'age', 'type' => 'integer', 'size' => 0, 'required' => false, 'array' => false]),
         ];
         $this->setupCollectionLookup('testCol', $attributes);
 
-        $this->adapter->expects($this->once())
+        $adapter->expects($this->once())
             ->method('find')
             ->with(
                 $this->anything(),
@@ -1104,18 +1133,21 @@ class FindLogicTest extends TestCase
     }
 
     /**
+     * @template TAdapter of Adapter&Stub
+     *
+     * @param  TAdapter  $adapter
      * @param  list<Capability>  $capabilities
-     * @param  (callable(Adapter&MockObject): void)|null  $adapterSetup
+     * @param  (callable(TAdapter): void)|null  $adapterSetup
      * @param  array<string, Document>  $extraCollections
      * @param  (callable(Document, string): ?Document)|null  $getDocumentOverride
      */
     private function buildDbWithCapabilities(
+        Adapter&Stub $adapter,
         array $capabilities,
         ?callable $adapterSetup = null,
         array $extraCollections = [],
         ?callable $getDocumentOverride = null,
     ): Database {
-        $adapter = $this->createMock(Adapter::class);
         $adapter->method('getSharedTables')->willReturn(false);
         $adapter->method('getTenant')->willReturn(null);
         $adapter->method('getTenantPerDocument')->willReturn(false);

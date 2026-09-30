@@ -41,7 +41,7 @@ final class GetDocumentFallbackTest extends TestCase
         $database = $this->database(new Memory(), new Cache(new MemoryCache()));
 
         $this->expectException(QueryException::class);
-        $this->expectExceptionMessage('Join queries are not supported by this adapter');
+        $this->expectExceptionMessage('Invalid query method: join');
 
         $database->getDocument(self::COLLECTION, 'session', [Query::join(self::COLLECTION, 'owner', 'owner', alias: 'twin')]);
     }

@@ -34,7 +34,9 @@ final class OrphanIndexTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->path = \sys_get_temp_dir().'/orphan_index_'.\uniqid().'.sqlite';
+        $path = \tempnam(\sys_get_temp_dir(), 'orphan_index_');
+        $this->assertIsString($path);
+        $this->path = $path;
         $this->namespace = 'orphan_index_'.\uniqid();
     }
 

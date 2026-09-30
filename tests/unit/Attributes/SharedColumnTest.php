@@ -35,7 +35,9 @@ final class SharedColumnTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->path = \sys_get_temp_dir().'/shared_column_'.\uniqid().'.sqlite';
+        $path = \tempnam(\sys_get_temp_dir(), 'shared_column_');
+        $this->assertIsString($path);
+        $this->path = $path;
         $this->namespace = 'shared_column_'.\uniqid();
     }
 

@@ -2,13 +2,11 @@
 
 namespace Tests\Unit;
 
-use Exception;
-use LogicException;
+use PDO;
 use PDOException;
+use PDOStatement;
 use PHPUnit\Framework\TestCase;
 use Redis;
-use ReflectionClass;
-use ReflectionProperty;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -17,6 +15,7 @@ use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -29,6 +28,8 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 use Utopia\Query\Schema\IndexType;
 
 final class UniqueViolationTest extends TestCase
@@ -41,42 +42,42 @@ final class UniqueViolationTest extends TestCase
 
     public function testMySQLDocumentIdConflictIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(MySQL::class, $this->mysqlException(
+        $this->assertDuplicate($this->createFailure(MySQL::class, $this->mysqlException(
             "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'movie-1' for key 'movies._uid'"
         )));
     }
 
     public function testMySQLPrimaryKeyConflictIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(MySQL::class, $this->mysqlException(
+        $this->assertDuplicate($this->createFailure(MySQL::class, $this->mysqlException(
             "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '5' for key 'PRIMARY'"
         )));
     }
 
     public function testMySQLUniqueIndexConflictWithUidInValueIsUnique(): void
     {
-        $this->assertUnique($this->process(MySQL::class, $this->mysqlException(
+        $this->assertUnique($this->createFailure(MySQL::class, $this->mysqlException(
             "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'prefix_uid_suffix' for key 'slug'"
         )));
     }
 
     public function testMySQLUniqueIndexConflictWithUidInIndexNameIsUnique(): void
     {
-        $this->assertUnique($this->process(MySQL::class, $this->mysqlException(
+        $this->assertUnique($this->createFailure(MySQL::class, $this->mysqlException(
             "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry 'a' for key 'movies.slug_uid_index'"
         )));
     }
 
     public function testMySQLUnparsableMessageIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(MySQL::class, $this->mysqlException(
+        $this->assertDuplicate($this->createFailure(MySQL::class, $this->mysqlException(
             'SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry'
         )));
     }
 
     public function testPostgresDocumentIdConflictIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(Postgres::class, $this->postgresException(
+        $this->assertDuplicate($this->createFailure(Postgres::class, $this->postgresException(
             'SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint "ns_1_movies_uid"'
             . "\nDETAIL:  Key (_uid, _tenant)=(movie-1, 1) already exists."
         )));
@@ -84,7 +85,7 @@ final class UniqueViolationTest extends TestCase
 
     public function testPostgresUniqueIndexConflictWithUidInValueIsUnique(): void
     {
-        $this->assertUnique($this->process(Postgres::class, $this->postgresException(
+        $this->assertUnique($this->createFailure(Postgres::class, $this->postgresException(
             'SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint "ns_1_movies_slug"'
             . "\nDETAIL:  Key (slug)=(prefix_uid_suffix) already exists."
         )));
@@ -92,7 +93,7 @@ final class UniqueViolationTest extends TestCase
 
     public function testPostgresCompositeIndexOnDocumentIdIsUnique(): void
     {
-        $this->assertUnique($this->process(Postgres::class, $this->postgresException(
+        $this->assertUnique($this->createFailure(Postgres::class, $this->postgresException(
             'SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint "ns_1_movies_pair"'
             . "\nDETAIL:  Key (_uid, email)=(movie-1, a@b.co) already exists."
         )));
@@ -100,35 +101,35 @@ final class UniqueViolationTest extends TestCase
 
     public function testPostgresMissingDetailIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(Postgres::class, $this->postgresException(
+        $this->assertDuplicate($this->createFailure(Postgres::class, $this->postgresException(
             'SQLSTATE[23505]: Unique violation: 7 ERROR:  duplicate key value violates unique constraint "ns_1_movies_uid"'
         )));
     }
 
     public function testSQLiteDocumentIdConflictIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(SQLite::class, $this->sqliteException(
+        $this->assertDuplicate($this->createFailure(SQLite::class, $this->sqliteException(
             'SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: ns_movies._tenant, ns_movies._uid'
         )));
     }
 
     public function testSQLiteCompositeIndexOnDocumentIdIsUnique(): void
     {
-        $this->assertUnique($this->process(SQLite::class, $this->sqliteException(
+        $this->assertUnique($this->createFailure(SQLite::class, $this->sqliteException(
             'SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: ns_movies._uid, ns_movies.email'
         )));
     }
 
     public function testSQLiteUniqueIndexConflictIsUnique(): void
     {
-        $this->assertUnique($this->process(SQLite::class, $this->sqliteException(
+        $this->assertUnique($this->createFailure(SQLite::class, $this->sqliteException(
             'SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: ns_movies.slug'
         )));
     }
 
     public function testMongoDocumentIdConflictIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(Mongo::class, new Exception(
+        $this->assertDuplicate($this->mongoCreateFailure(new MongoException(
             'E11000 duplicate key error collection: db.ns_movies index: _uid dup key: { _uid: "movie-1" }',
             11000
         )));
@@ -136,7 +137,7 @@ final class UniqueViolationTest extends TestCase
 
     public function testMongoUniqueIndexConflictWithUidInValueIsUnique(): void
     {
-        $this->assertUnique($this->process(Mongo::class, new Exception(
+        $this->assertUnique($this->mongoCreateFailure(new MongoException(
             'E11000 duplicate key error collection: db.ns_movies index: slug dup key: { slug: "prefix_uid_suffix" }',
             11000
         )));
@@ -144,7 +145,7 @@ final class UniqueViolationTest extends TestCase
 
     public function testMongoUnparsableMessageIsDuplicate(): void
     {
-        $this->assertDuplicate($this->process(Mongo::class, new Exception('E11000 duplicate key error', 11000)));
+        $this->assertDuplicate($this->mongoCreateFailure(new MongoException('E11000 duplicate key error', 11000)));
     }
 
     public function testMemoryDocumentIdConflictIsDuplicate(): void
@@ -244,8 +245,13 @@ final class UniqueViolationTest extends TestCase
 
     private function mysqlException(string $message): PDOException
     {
-        $exception = new PDOException($message);
-        (new ReflectionProperty(Exception::class, 'code'))->setValue($exception, '23000');
+        $exception = new class ($message, '23000') extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $exception->errorInfo = ['23000', 1062, $message];
 
         return $exception;
@@ -253,8 +259,13 @@ final class UniqueViolationTest extends TestCase
 
     private function postgresException(string $message): PDOException
     {
-        $exception = new PDOException($message);
-        (new ReflectionProperty(Exception::class, 'code'))->setValue($exception, '23505');
+        $exception = new class ($message, '23505') extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $exception->errorInfo = ['23505', 7, $message];
 
         return $exception;
@@ -262,8 +273,13 @@ final class UniqueViolationTest extends TestCase
 
     private function sqliteException(string $message): PDOException
     {
-        $exception = new PDOException($message);
-        (new ReflectionProperty(Exception::class, 'code'))->setValue($exception, 'HY000');
+        $exception = new class ($message, 'HY000') extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $exception->errorInfo = ['HY000', 19, $message];
 
         return $exception;
@@ -346,19 +362,56 @@ final class UniqueViolationTest extends TestCase
     }
 
     /**
-     * @param class-string $adapter
+     * @param  class-string<SQL>  $adapter
      */
-    private function process(string $adapter, Throwable $exception): Throwable
+    private function createFailure(string $adapter, PDOException $exception): Throwable
     {
-        $class = new ReflectionClass($adapter);
-        $method = $class->getMethod('processException');
+        $statement = self::createStub(PDOStatement::class);
+        $statement->method('execute')->willThrowException($exception);
+        $pdo = self::createStub(PDO::class);
+        $pdo->method('prepare')->willReturn($statement);
 
-        $processed = $method->invoke($class->newInstanceWithoutConstructor(), $exception);
-        if (! $processed instanceof Throwable) {
-            throw new LogicException('Adapter exception processor did not return a throwable');
-        }
+        $sql = new $adapter($pdo);
+        $sql->setDatabase('unique_violation');
+        $sql->setNamespace('unique_violation');
 
-        return $processed;
+        return $this->thrown(fn () => $sql->createDocument($this->collection(), $this->movie('movie-1', self::TAKEN_SLUG)));
+    }
+
+    private function mongoCreateFailure(MongoException $exception): Throwable
+    {
+        $client = new class ($exception) extends Client {
+            public function __construct(private readonly MongoException $failure)
+            {
+            }
+
+            #[\Override]
+            public function connect(): self
+            {
+                return $this;
+            }
+
+            #[\Override]
+            public function close(): void
+            {
+            }
+
+            /**
+             * @param  array<mixed>  $document
+             * @param  array<mixed>  $options
+             * @return array<mixed>
+             */
+            #[\Override]
+            public function insert(string $collection, array $document, array $options = []): array
+            {
+                throw $this->failure;
+            }
+        };
+
+        $mongo = new Mongo($client);
+        $mongo->setNamespace('unique_violation');
+
+        return $this->thrown(fn () => $mongo->createDocument($this->collection(), $this->movie('movie-1', self::TAKEN_SLUG)));
     }
 
     private function thrown(callable $action): Throwable

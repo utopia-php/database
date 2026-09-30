@@ -476,4 +476,92 @@ class RelationshipModelTest extends TestCase
 
         return $document;
     }
+
+    public function testMagicReadsKeepStoredEnumsAndFallBackToAttributes(): void
+    {
+        $relationship = Relationship::oneToOne(collection: 'posts', relatedCollection: 'authors', key: 'author');
+        $relationship->setAttribute('relationType', RelationType::ManyToMany);
+        $relationship->setAttribute('onDelete', ForeignKeyAction::Cascade);
+        $relationship->setAttribute('side', RelationSide::Child);
+        $relationship->setAttribute('status', 'available');
+
+        $this->assertSame(RelationType::ManyToMany, $relationship->type);
+        $this->assertSame(ForeignKeyAction::Cascade, $relationship->onDelete);
+        $this->assertSame(RelationSide::Child, $relationship->side);
+        $this->assertSame('available', $relationship->status);
+        $this->assertNull($relationship->missing);
+    }
+
+    public function testPropertyWritesStoreTheirAttributes(): void
+    {
+        $relationship = Relationship::oneToOne(collection: 'posts', relatedCollection: 'authors', key: 'author');
+
+        $relationship->collection = 'articles';
+        $relationship->relatedCollection = 'writers';
+        $relationship->type = RelationType::ManyToOne;
+        $relationship->twoWay = true;
+        $relationship->key = 'writer';
+        $relationship->twoWayKey = 'articles';
+        $relationship->onDelete = ForeignKeyAction::SetNull;
+        $relationship->side = RelationSide::Child;
+        $relationship->status = 'available';
+
+        $this->assertSame('articles', $relationship->getAttribute('collection'));
+        $this->assertSame('writers', $relationship->getAttribute('relatedCollection'));
+        $this->assertSame(RelationType::ManyToOne->value, $relationship->getAttribute('relationType'));
+        $this->assertTrue($relationship->getAttribute('twoWay'));
+        $this->assertSame('writer', $relationship->getAttribute('key'));
+        $this->assertSame('writer', $relationship->getId());
+        $this->assertSame('articles', $relationship->getAttribute('twoWayKey'));
+        $this->assertSame(ForeignKeyAction::SetNull->value, $relationship->getAttribute('onDelete'));
+        $this->assertSame(RelationSide::Child->value, $relationship->getAttribute('side'));
+        $this->assertSame('available', $relationship->getAttribute('status'));
+
+        $this->assertSame('articles', $relationship->collection);
+        $this->assertSame('writers', $relationship->relatedCollection);
+        $this->assertSame(RelationType::ManyToOne, $relationship->type);
+        $this->assertTrue($relationship->twoWay);
+        $this->assertSame('writer', $relationship->key);
+        $this->assertSame('articles', $relationship->twoWayKey);
+        $this->assertSame(ForeignKeyAction::SetNull, $relationship->onDelete);
+        $this->assertSame(RelationSide::Child, $relationship->side);
+    }
+
+    public function testFromArrayReadsOptionsHeldInADocument(): void
+    {
+        $relationship = Relationship::fromArray([
+            Document::ID => 'comments',
+            'collection' => 'posts',
+            'options' => new Document([
+                'relatedCollection' => 'comments',
+                'relationType' => RelationType::OneToMany->value,
+                'twoWay' => true,
+                'twoWayKey' => 'post',
+                'onDelete' => ForeignKeyAction::Cascade->value,
+                'side' => RelationSide::Child->value,
+            ]),
+        ]);
+
+        $this->assertSame('comments', $relationship->relatedCollection);
+        $this->assertSame(RelationType::OneToMany, $relationship->type);
+        $this->assertTrue($relationship->twoWay);
+        $this->assertSame('post', $relationship->twoWayKey);
+        $this->assertSame(ForeignKeyAction::Cascade, $relationship->onDelete);
+        $this->assertSame(RelationSide::Child, $relationship->side);
+    }
+
+    public function testFromArrayIgnoresScalarOptions(): void
+    {
+        $relationship = Relationship::fromArray([
+            Document::ID => 'comments',
+            'collection' => 'posts',
+            'options' => 'oneToMany',
+        ]);
+
+        $this->assertSame('', $relationship->relatedCollection);
+        $this->assertSame(RelationType::OneToOne, $relationship->type);
+        $this->assertFalse($relationship->twoWay);
+        $this->assertSame(ForeignKeyAction::Restrict, $relationship->onDelete);
+        $this->assertSame(RelationSide::Parent, $relationship->side);
+    }
 }

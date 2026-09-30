@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Documents;
 
+use Closure;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Tests\Unit\Support\StderrCapture;
@@ -48,10 +49,10 @@ final class GetDocumentFallbackTest extends TestCase
 
     public function testACacheThatCannotBeReadOrWrittenFallsBackToTheDatabase(): void
     {
-        $cache = $this->failingCache();
+        [$cache, $fail] = $this->failingCache();
         $database = $this->database(new Memory(), new Cache($cache));
         $database->createDocument(self::COLLECTION, new Document([Document::ID => 'session', 'owner' => 'ada']));
-        $cache->failing = true;
+        $fail();
 
         $document = null;
         $missing = null;
@@ -92,9 +93,12 @@ final class GetDocumentFallbackTest extends TestCase
         };
     }
 
-    private function failingCache(): MemoryCache
+    /**
+     * @return array{MemoryCache, Closure(): void}
+     */
+    private function failingCache(): array
     {
-        return new class (self::COLLECTION) extends MemoryCache implements Leasable {
+        $cache = new class (self::COLLECTION) extends MemoryCache implements Leasable {
             public bool $failing = false;
 
             public function __construct(private readonly string $collection)
@@ -142,6 +146,10 @@ final class GetDocumentFallbackTest extends TestCase
                 }
             }
         };
+
+        return [$cache, static function () use ($cache): void {
+            $cache->failing = true;
+        }];
     }
 
     private function database(Memory $adapter, Cache $cache): Database

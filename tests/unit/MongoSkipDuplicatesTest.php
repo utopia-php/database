@@ -21,6 +21,7 @@ final class MongoSkipDuplicatesTest extends TestCase
 
     public function testOnlyDocumentsWithANewIdAreWrittenAndReturned(): void
     {
+        /** @var ArrayObject<int, list<string>> $upserted */
         $upserted = new ArrayObject();
         $adapter = $this->createAdapter([$this->row('stored', 'sequence-stored', tenant: null)], $upserted, sharedTables: false);
 
@@ -37,6 +38,7 @@ final class MongoSkipDuplicatesTest extends TestCase
 
     public function testAnIdStoredUnderAnotherTenantIsNew(): void
     {
+        /** @var ArrayObject<int, list<string>> $upserted */
         $upserted = new ArrayObject();
         $adapter = $this->createAdapter([$this->row('shared', 'sequence-one', tenant: 1)], $upserted, sharedTables: true);
 
@@ -51,6 +53,7 @@ final class MongoSkipDuplicatesTest extends TestCase
 
     public function testAnIdDifferingOnlyInCaseIsStored(): void
     {
+        /** @var ArrayObject<int, list<string>> $upserted */
         $upserted = new ArrayObject();
         $adapter = $this->createAdapter([$this->row('Stored', 'sequence-stored', tenant: null)], $upserted, sharedTables: false);
 
@@ -66,6 +69,7 @@ final class MongoSkipDuplicatesTest extends TestCase
 
     public function testABatchOfStoredIdsWritesNothing(): void
     {
+        /** @var ArrayObject<int, list<string>> $upserted */
         $upserted = new ArrayObject();
         $adapter = $this->createAdapter([$this->row('stored', 'sequence-stored', tenant: null)], $upserted, sharedTables: false);
 
@@ -122,7 +126,8 @@ final class MongoSkipDuplicatesTest extends TestCase
             #[\Override]
             public function find(string $collection, array $filters = [], array $options = []): stdClass
             {
-                $caseInsensitive = ($options['collation']['strength'] ?? null) === 1;
+                $collation = $options['collation'] ?? null;
+                $caseInsensitive = \is_array($collation) && ($collation['strength'] ?? null) === 1;
                 $batch = [];
                 foreach ($this->rows as $row) {
                     if ($this->matches($row, $filters, $caseInsensitive)) {
@@ -137,14 +142,28 @@ final class MongoSkipDuplicatesTest extends TestCase
              * @param  array<string, mixed>  $command
              */
             #[\Override]
-            public function query(array $command, ?string $db = null): stdClass|array|int
+            public function query(array $command, ?string $db = null): int
             {
+                $updates = $command['updates'] ?? null;
+                if (! \is_array($updates)) {
+                    throw new LogicException('An upsert command must list its updates');
+                }
+
                 $ids = [];
-                foreach ($command['updates'] as $update) {
-                    if (($update['collation']['strength'] ?? null) !== 1) {
+                foreach ($updates as $update) {
+                    if (! \is_array($update)) {
+                        throw new LogicException('An upsert command must hold update documents');
+                    }
+                    $collation = $update['collation'] ?? null;
+                    if (! \is_array($collation) || ($collation['strength'] ?? null) !== 1) {
                         throw new LogicException('An upsert by id must use the _uid index collation');
                     }
-                    $ids[] = (string) $update['q'][Storage::UID];
+                    $filter = $update['q'] ?? null;
+                    $id = \is_array($filter) ? ($filter[Storage::UID] ?? null) : null;
+                    if (! \is_string($id)) {
+                        throw new LogicException('An upsert by id must filter on _uid');
+                    }
+                    $ids[] = $id;
                 }
                 $this->upserted->append($ids);
 

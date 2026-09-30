@@ -269,6 +269,7 @@ final class RelationshipSchemaTest extends TestCase
             'createIndex' => static fn (string $collection, Index $index): ?bool => $index->key === '_index_owner' ? throw new RuntimeException('cannot index the owner') : null,
             'deleteIndex' => static fn (string $collection, string $id): never => throw new RuntimeException("cannot drop {$id}"),
         ]);
+        /** @var bool $armed */
         $armed = false;
         $database = $this->intercepting($adapter, update: static function (string $collection, string $id, Document $document) use (&$armed): void {
             if ($armed && $collection === Database::METADATA && $id === 'books' && ! \in_array('library', self::keysOf($document), true)) {
@@ -469,6 +470,7 @@ final class RelationshipSchemaTest extends TestCase
     public function testAFailedDefinitionWriteOnDeleteKeepsItsErrorWhenTheRollbackFails(): void
     {
         $failure = new RuntimeException('the definitions could not be written');
+        /** @var bool $armed */
         $armed = false;
         $adapter = $this->memory([
             'createRelationship' => static function () use (&$armed): ?bool {
@@ -499,6 +501,7 @@ final class RelationshipSchemaTest extends TestCase
             $this->assertSame($failure, $error->getPrevious());
         }
 
+        /** @var bool $armed */
         $armed = false;
         $this->assertContains('writers', $this->attributeKeys($database, 'books'));
     }
@@ -506,6 +509,7 @@ final class RelationshipSchemaTest extends TestCase
     public function testAFailedDefinitionWriteOnDeleteKeepsItsErrorWhenTheIndexesCannotBeRestored(): void
     {
         $failure = new RuntimeException('the definitions could not be written');
+        /** @var bool $armed */
         $armed = false;
         $adapter = $this->memory([
             'createIndex' => static function (string $collection, Index $index) use (&$armed): ?bool {
@@ -532,6 +536,7 @@ final class RelationshipSchemaTest extends TestCase
             $this->assertSame($failure, $error->getPrevious());
         }
 
+        /** @var bool $armed */
         $armed = false;
         $this->assertContains('author', $this->attributeKeys($database, 'books'));
     }
@@ -727,7 +732,7 @@ final class RelationshipSchemaTest extends TestCase
     }
 
     /**
-     * @return list<string>
+     * @return array<string>
      */
     private function indexAttributes(Database $database, string $collection, string $key): array
     {

@@ -214,6 +214,7 @@ final class ScopedToggleCoroutineTest extends TestCase
             'nested' => $scope($database, fn (): mixed => self::guarded($probe, $database)),
             'afterNested' => self::guarded($probe, $database),
         ]);
+        $this->assertIsArray($seen);
         $seen['after'] = self::guarded($probe, $database);
 
         $thrown = null;

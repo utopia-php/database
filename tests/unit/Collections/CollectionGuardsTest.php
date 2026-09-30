@@ -184,7 +184,7 @@ final class CollectionGuardsTest extends TestCase
     public function testATenantCannotReadTheSizeOfATenantlessCollection(): void
     {
         $database = $this->sharedDatabase();
-        $this->assertIsInt($database->getSizeOfCollection(self::COLLECTION));
+        $this->assertGreaterThanOrEqual(0, $database->getSizeOfCollection(self::COLLECTION));
 
         $database->setTenant(self::TENANT);
         foreach ([

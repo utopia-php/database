@@ -261,6 +261,7 @@ final class JoinCursorTest extends TestCase
         }
 
         $this->assertSame($values, $paged);
+        $this->assertNotNull($cursor);
         $this->assertSame(\array_slice($values, 0, -1), \array_map(
             static fn (Document $row): mixed => $row->getAttribute($attribute),
             $this->database->find($collection, [...$queries, Query::cursorBefore($cursor)]),

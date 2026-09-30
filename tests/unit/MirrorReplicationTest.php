@@ -536,7 +536,9 @@ final class MirrorReplicationTest extends TestCase
     {
         $delay = fn (string $title): float => $this->delays[$title] ?? 0.0;
         $record = function (string $id, string $title): void {
-            $this->writes[] = [$id, $title, Coroutine::getCid()];
+            $coroutine = Coroutine::getCid();
+            $this->assertIsInt($coroutine);
+            $this->writes[] = [$id, $title, $coroutine];
         };
 
         return new class (new PDO('sqlite::memory:'), $delay, $record) extends SQLite {

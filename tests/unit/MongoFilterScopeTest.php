@@ -268,10 +268,9 @@ final class MongoFilterScopeTest extends TestCase
 
             /**
              * @param  array<mixed>  $command
-             * @return stdClass|array<mixed>|int
              */
             #[\Override]
-            public function query(array $command, ?string $db = null): stdClass|array|int
+            public function query(array $command, ?string $db = null): int
             {
                 $updates = $command['updates'] ?? [];
                 foreach (\is_array($updates) ? $updates : [] as $update) {

@@ -67,7 +67,7 @@ final class MongoContainsFilterTest extends TestCase
             $this->filters = [];
             $this->createAdapter()->find(new Document(['$id' => self::COLLECTION]), [$query]);
 
-            $alternatives = $this->filters[0]['$and'][0]['$or'] ?? null;
+            $alternatives = $this->recordedCondition()['$or'] ?? null;
             $this->assertIsArray($alternatives);
             $this->assertSame(['.*Captain.*/i', '.*Work.*/i'], \array_map(
                 static function (mixed $alternative): string {
@@ -99,10 +99,22 @@ final class MongoContainsFilterTest extends TestCase
         $this->filters = [];
         ($adapter ?? $this->createAdapter())->find(new Document(['$id' => self::COLLECTION]), [$query]);
 
-        $filter = $this->filters[0]['$and'][0] ?? null;
+        $filter = $this->recordedCondition();
         $this->assertIsArray($filter);
 
         return $filter;
+    }
+
+    /**
+     * @return array<mixed>|null
+     */
+    private function recordedCondition(): ?array
+    {
+        $filter = $this->filters[0] ?? null;
+        $conditions = \is_array($filter) ? ($filter['$and'] ?? null) : null;
+        $condition = \is_array($conditions) ? ($conditions[0] ?? null) : null;
+
+        return \is_array($condition) ? $condition : null;
     }
 
     private function createAdapter(): Mongo

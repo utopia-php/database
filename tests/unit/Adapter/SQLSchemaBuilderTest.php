@@ -9,7 +9,6 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Query as BaseQuery;
@@ -39,7 +38,6 @@ final class SQLSchemaBuilderTest extends TestCase
 
         $this->assertIsArray($rows);
         $this->assertCount(1, $rows);
-        $this->assertInstanceOf(Document::class, $rows[0]);
         $this->assertSame(['value' => 7, 'label' => 'seven'], $rows[0]->getArrayCopy());
 
         $database->getAuthorization()->skip(fn (): mixed => $database->schema()->table(self::NAMESPACE . '_raw_items')->drop()->execute());

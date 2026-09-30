@@ -44,7 +44,10 @@ final class MongoDollarWordRegexTest extends TestCase
     {
         $this->createAdapter()->find(new Document(['$id' => self::COLLECTION]), [$query]);
 
-        $filter = $this->filters[0]['$and'][0]['label'] ?? null;
+        $recorded = $this->filters[0] ?? null;
+        $conditions = \is_array($recorded) ? ($recorded['$and'] ?? null) : null;
+        $condition = \is_array($conditions) ? ($conditions[0] ?? null) : null;
+        $filter = \is_array($condition) ? ($condition['label'] ?? null) : null;
         $this->assertIsArray($filter);
         $regex = $filter[$operator] ?? null;
         $this->assertInstanceOf(Regex::class, $regex);

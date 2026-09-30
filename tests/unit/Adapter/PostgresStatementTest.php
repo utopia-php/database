@@ -7,6 +7,7 @@ use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Throwable;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
@@ -58,12 +59,13 @@ final class PostgresStatementTest extends TestCase
         $adapter = $this->adapter(resetFailure: $reset);
         $adapter->setTimeout(250);
 
+        $error = null;
         try {
             $adapter->rawQuery('SELECT 1');
-            $this->fail('A timeout left on the session must not be hidden');
-        } catch (PDOException $error) {
-            $this->assertSame($reset, $error);
+        } catch (Throwable $caught) {
+            $error = $caught;
         }
+        $this->assertSame($reset, $error, 'A timeout left on the session must not be hidden');
 
         $this->assertSame(["SET statement_timeout = '250ms'", 'RESET statement_timeout'], $this->sessionStatements);
     }

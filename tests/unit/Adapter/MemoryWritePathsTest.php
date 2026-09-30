@@ -102,15 +102,16 @@ final class MemoryWritePathsTest extends TestCase
         $database = $this->database();
         $database->createDocument(self::COLLECTION, new Document(['$id' => 'a', 'addr' => 'x', 'label' => 'original']));
 
+        $rethrown = false;
         try {
             $database->withTransaction(function () use ($database): void {
                 $database->updateDocument(self::COLLECTION, 'a', new Document(['$id' => 'b', 'label' => 'renamed']));
                 throw new \RuntimeException('roll back');
             });
-            $this->fail('The transaction must rethrow');
         } catch (\RuntimeException $exception) {
-            $this->assertSame('roll back', $exception->getMessage());
+            $rethrown = $exception->getMessage() === 'roll back';
         }
+        $this->assertTrue($rethrown, 'The transaction must rethrow');
 
         $this->assertSame('original', $database->getDocument(self::COLLECTION, 'a')->getAttribute('label'));
         $this->assertTrue($database->getDocument(self::COLLECTION, 'b')->isEmpty());
@@ -173,7 +174,10 @@ final class MemoryWritePathsTest extends TestCase
         $database->createDocument(self::COLLECTION, new Document(['$id' => 'filled', 'addr' => 'x', 'meta' => ['colour' => 'red']]));
         $database->createDocument(self::COLLECTION, new Document(['$id' => 'empty', 'addr' => 'y', 'meta' => null]));
 
-        $idsOf = static fn (array $documents): array => \array_map(static fn (Document $document): string => $document->getId(), $documents);
+        $idsOf = static function (array $documents): array {
+            /** @var array<Document> $documents */
+            return \array_map(static fn (Document $document): string => $document->getId(), $documents);
+        };
 
         $this->assertSame(['empty'], $idsOf($database->find(self::COLLECTION, [Query::isNull('meta')])));
         $this->assertSame(['filled'], $idsOf($database->find(self::COLLECTION, [Query::isNotNull('meta')])));

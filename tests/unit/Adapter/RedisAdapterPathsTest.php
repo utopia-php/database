@@ -164,15 +164,16 @@ final class RedisAdapterPathsTest extends TestCase
         ));
         $database->createDocument(self::NOTES, new Document(['$id' => 'a', 'title' => 'original']));
 
+        $rethrown = false;
         try {
             $database->withTransaction(function () use ($database): void {
                 $database->updateDocument(self::NOTES, 'a', new Document(['$id' => 'b', 'title' => 'renamed']));
                 throw new \RuntimeException('roll back');
             });
-            $this->fail('The transaction must rethrow');
         } catch (\RuntimeException $exception) {
-            $this->assertSame('roll back', $exception->getMessage());
+            $rethrown = $exception->getMessage() === 'roll back';
         }
+        $this->assertTrue($rethrown, 'The transaction must rethrow');
 
         $this->assertSame('original', $database->getDocument(self::NOTES, 'a')->getAttribute('title'));
         $this->assertTrue($database->getDocument(self::NOTES, 'b')->isEmpty());
@@ -219,6 +220,7 @@ final class RedisAdapterPathsTest extends TestCase
         $junction = '_'.$database->getCollection('books')->getSequence().'_'.$database->getCollection('authors')->getSequence();
 
         $adapter = $database->getAdapter();
+        $this->assertInstanceOf(RedisAdapter::class, $adapter);
         $adapter->setTenant(self::TENANT);
         $adapter->createDocument(new Document(['$id' => $junction]), new Document([
             '$id' => 'link',
@@ -283,7 +285,7 @@ final class RedisAdapterPathsTest extends TestCase
         $this->assertSame([], $this->hashWrites);
 
         $this->assertTrue($adapter->renameIndex(self::NOTES, 'by_title', 'by_name'));
-        $this->assertCount(1, $this->hashWrites);
+        $this->assertCount(1, $this->recordedHashWrites());
     }
 
     public function testGetSequencesBackFillsOnlyTheDocumentsThatLackOne(): void
@@ -654,5 +656,13 @@ final class RedisAdapterPathsTest extends TestCase
     private function forget(string $key): void
     {
         unset($this->strings[$key], $this->sets[$key], $this->hashes[$key]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function recordedHashWrites(): array
+    {
+        return $this->hashWrites;
     }
 }

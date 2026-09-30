@@ -134,9 +134,10 @@ final class FeatureContractTest extends TestCase
     {
         $disagreements = [];
         foreach ($this->adapters() as $name => $adapter) {
+            $hasFeature = $adapter->hasFeature(...);
             foreach (Capability::cases() as $capability) {
                 $feature = 'Utopia\\Database\\Adapter\\Feature\\'.$capability->name;
-                if (\interface_exists($feature) && $adapter->supports($capability) !== $adapter->hasFeature($feature)) {
+                if (\interface_exists($feature) && $adapter->supports($capability) !== $hasFeature($feature)) {
                     $disagreements[] = "{$name}: Capability::{$capability->name}";
                 }
             }

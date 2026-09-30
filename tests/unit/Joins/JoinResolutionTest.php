@@ -174,6 +174,11 @@ final class JoinResolutionTest extends TestCase
 
                 return parent::load($key, $ttl, $hash);
             }
+
+            public function forgetLoads(): void
+            {
+                $this->loads = [];
+            }
         };
         $this->database = $this->database(new Cache($cache));
 
@@ -191,7 +196,7 @@ final class JoinResolutionTest extends TestCase
         $lookups = [];
         foreach ($reads as $name => $read) {
             $read();
-            $cache->loads = [];
+            $cache->forgetLoads();
             $read();
 
             $lookups[$name] = \count(\array_filter(
@@ -211,17 +216,17 @@ final class JoinResolutionTest extends TestCase
         );
 
         $reads = [
-            'find()' => fn (array $queries): mixed => $this->database->find('tickets', $queries),
-            'count()' => fn (array $queries): mixed => $this->database->count('tickets', $queries),
-            'sum()' => fn (array $queries): mixed => $this->database->sum('tickets', 'amount', $queries),
-            'getDocument()' => fn (array $queries): mixed => $this->database->getDocument('tickets', 'k1', $queries),
+            'find()' => fn (Query ...$queries): mixed => $this->database->find('tickets', $queries),
+            'count()' => fn (Query ...$queries): mixed => $this->database->count('tickets', $queries),
+            'sum()' => fn (Query ...$queries): mixed => $this->database->sum('tickets', 'amount', $queries),
+            'getDocument()' => fn (Query ...$queries): mixed => $this->database->getDocument('tickets', 'k1', $queries),
         ];
 
         foreach ($reads as $name => $read) {
-            $this->database->skipValidation(fn (): mixed => $read($joins(JoinValidator::MAX_PER_QUERY)));
+            $this->database->skipValidation(fn (): mixed => $read(...$joins(JoinValidator::MAX_PER_QUERY)));
 
             try {
-                $this->database->skipValidation(fn (): mixed => $read($joins(JoinValidator::MAX_PER_QUERY + 1)));
+                $this->database->skipValidation(fn (): mixed => $read(...$joins(JoinValidator::MAX_PER_QUERY + 1)));
                 $this->fail($name.': '.(JoinValidator::MAX_PER_QUERY + 1).' joins ran without validation');
             } catch (QueryException $error) {
                 $this->assertSame('Too many joins: at most '.JoinValidator::MAX_PER_QUERY.' are allowed', $error->getMessage(), $name);

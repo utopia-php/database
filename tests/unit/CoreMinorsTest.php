@@ -93,6 +93,7 @@ final class CoreMinorsTest extends TestCase
     public function testMetadataFailureKeepsThePersistenceErrorFirst(): void
     {
         $failure = new StructureException('metadata rejected');
+        /** @var bool $failing */
         $failing = false;
         $adapter = $this->interceptingAdapter(beforeDeleteIndex: function () use (&$failing): void {
             if ($failing) {
@@ -121,6 +122,7 @@ final class CoreMinorsTest extends TestCase
     public function testSilentRollbackKeepsThePersistenceError(): void
     {
         $failure = new StructureException('metadata rejected');
+        /** @var bool $failing */
         $failing = false;
         $adapter = $this->interceptingAdapter(beforeCreateIndex: function () use (&$failing): void {
             if ($failing) {
@@ -152,7 +154,9 @@ final class CoreMinorsTest extends TestCase
 
     public function testRollbackWhoseCleanupKeepsFailingRethrows(): void
     {
+        /** @var bool $failing */
         $failing = false;
+        /** @var int $deletes */
         $deletes = 0;
         $adapter = $this->interceptingAdapter(beforeDeleteIndex: function () use (&$failing, &$deletes): void {
             if ($failing) {
@@ -188,6 +192,7 @@ final class CoreMinorsTest extends TestCase
      */
     public function testCreateIndexKeepsItsIndexWhenTheInvalidationAfterTheCommitFails(): void
     {
+        /** @var bool $failing */
         $failing = false;
         /** @var list<RuntimeException> $failures */
         $failures = [];
@@ -198,8 +203,11 @@ final class CoreMinorsTest extends TestCase
                 throw $failure;
             }
         });
+        /** @var bool $armed */
         $armed = false;
+        /** @var int $writes */
         $writes = 0;
+        /** @var int $deletes */
         $deletes = 0;
         $adapter = $this->interceptingAdapter(
             beforeDeleteIndex: function () use (&$deletes): void {
@@ -234,7 +242,9 @@ final class CoreMinorsTest extends TestCase
      */
     public function testCreateIndexRollsItsIndexBackWhenTheDefinitionIsNotStored(): void
     {
+        /** @var bool $failing */
         $failing = false;
+        /** @var int $deletes */
         $deletes = 0;
         $adapter = $this->interceptingAdapter(beforeDeleteIndex: function () use (&$deletes): void {
             $deletes++;
@@ -263,6 +273,7 @@ final class CoreMinorsTest extends TestCase
      */
     public function testCreateRelationshipKeepsItsWorkWhenTheInvalidationAfterTheCommitFails(): void
     {
+        /** @var bool $failing */
         $failing = false;
         /** @var list<RuntimeException> $failures */
         $failures = [];
@@ -273,6 +284,7 @@ final class CoreMinorsTest extends TestCase
                 throw $failure;
             }
         });
+        /** @var bool $armed */
         $armed = false;
         $adapter = $this->interceptingAdapter(
             beforeTransaction: function () use (&$failing): void {
@@ -318,12 +330,14 @@ final class CoreMinorsTest extends TestCase
      */
     public function testCreateRelationshipKeepsItsColumnsWhenItsDefinitionsCannotBeRemoved(): void
     {
+        /** @var bool $failing */
         $failing = false;
         $cache = $this->interceptingCache(function () use (&$failing): void {
             if ($failing) {
                 throw new RuntimeException('cache unavailable');
             }
         });
+        /** @var bool $armed */
         $armed = false;
         $adapter = $this->interceptingAdapter(afterCommit: function () use (&$armed, &$failing): void {
             if ($armed) {
@@ -430,10 +444,8 @@ final class CoreMinorsTest extends TestCase
             $error = $this->attempt($violation);
 
             $this->assertInstanceOf(UniqueException::class, $error, $name);
-            $this->assertSame(UniqueException::MESSAGE, $error->getMessage(), $name);
+            $this->assertSame('Document with the requested unique attributes already exists', $error->getMessage(), $name);
         }
-
-        $this->assertSame('Document with the requested unique attributes already exists', UniqueException::MESSAGE);
     }
 
     /**
@@ -569,6 +581,7 @@ final class CoreMinorsTest extends TestCase
      */
     private function metadataFailing(Throwable $failure, int &$writes): Database
     {
+        /** @var bool $failing */
         $failing = false;
         $database = $this->interceptingMetadataWrites(function () use (&$failing, &$writes, $failure): void {
             if (! $failing) {

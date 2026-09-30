@@ -450,8 +450,8 @@ class AttributeModelTest extends TestCase
         $attribute = Attribute::string(key: 'title');
         $attribute->setAttribute('twoWayKey', 'x');
 
-        $this->assertSame('x', $attribute->twoWayKey);
-        $this->assertNull($attribute->missing);
+        $this->assertSame('x', $attribute->__get('twoWayKey'));
+        $this->assertNull($attribute->__get('missing'));
     }
 
     public function testNonArrayFormatOptionsAndFiltersReadAsEmptyArrays(): void

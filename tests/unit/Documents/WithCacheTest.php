@@ -73,7 +73,8 @@ final class WithCacheTest extends TestCase
         $this->cached($database, fn (): array => $database->find(self::COLLECTION));
         $database->deleteCollection(self::COLLECTION);
 
-        $this->assertSame('recomputed', $this->cached($database, fn (): string => 'recomputed'));
+        $recomputed = \uniqid('recomputed', true);
+        $this->assertSame($recomputed, $this->cached($database, fn (): string => $recomputed));
         $this->assertSame(2, $this->calls);
     }
 

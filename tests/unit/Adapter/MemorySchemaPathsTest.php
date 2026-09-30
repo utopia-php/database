@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Adapter;
 
+use Closure;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
@@ -35,13 +36,13 @@ final class MemorySchemaPathsTest extends TestCase
 
     public function testDeleteAttributeKeepsTheOrdersOfTheRemainingIndexAttributes(): void
     {
-        $adapter = $this->inspectableAdapter();
+        [$adapter, $indexOf] = $this->inspectableAdapter();
         $this->createPairs($adapter);
         $adapter->createIndex(self::COLLECTION, Index::key(key: 'by_all', attributes: ['a', 'b', 'c'], orders: [Order::Asc, Order::Desc, Order::Asc]));
 
         $this->assertTrue($adapter->deleteAttribute(self::COLLECTION, 'a'));
 
-        $index = $adapter->indexOf(self::COLLECTION, 'by_all');
+        $index = $indexOf(self::COLLECTION, 'by_all');
         $this->assertSame(['b', 'c'], $index['attributes'] ?? null);
         $this->assertSame([Order::Desc->value, Order::Asc->value], \array_map(
             static fn (mixed $order): mixed => $order instanceof Order ? $order->value : $order,
@@ -51,7 +52,7 @@ final class MemorySchemaPathsTest extends TestCase
 
     public function testRollbackOfDeleteAttributeRestoresValuesAndIndexes(): void
     {
-        $adapter = $this->inspectableAdapter();
+        [$adapter, $indexOf] = $this->inspectableAdapter();
         $this->createPairs($adapter);
         $adapter->createIndex(self::COLLECTION, Index::unique(key: 'unique_pair', attributes: ['a', 'b']));
         $adapter->createDocument($this->collection(), $this->pair('first', 'x', 'y'));
@@ -62,7 +63,7 @@ final class MemorySchemaPathsTest extends TestCase
         $adapter->rollbackTransaction();
 
         $this->assertSame('x', $adapter->getDocument($this->collection(), 'first')->getAttribute('a'));
-        $this->assertSame(['a', 'b'], $adapter->indexOf(self::COLLECTION, 'unique_pair')['attributes'] ?? null);
+        $this->assertSame(['a', 'b'], $indexOf(self::COLLECTION, 'unique_pair')['attributes'] ?? null);
 
         $this->expectException(DuplicateException::class);
         $adapter->createDocument($this->collection(), $this->pair('second', 'x', 'y'));
@@ -70,20 +71,20 @@ final class MemorySchemaPathsTest extends TestCase
 
     public function testRollbackOfRenameAttributeRestoresTheOldName(): void
     {
-        $adapter = $this->inspectableAdapter();
+        [$adapter, $indexOf] = $this->inspectableAdapter();
         $this->createPairs($adapter);
         $adapter->createIndex(self::COLLECTION, Index::key(key: 'by_a', attributes: ['a']));
         $adapter->createDocument($this->collection(), $this->pair('first', 'x', 'y'));
 
         $adapter->startTransaction();
         $this->assertTrue($adapter->renameAttribute(self::COLLECTION, 'a', 'renamed'));
-        $this->assertSame(['renamed'], $adapter->indexOf(self::COLLECTION, 'by_a')['attributes'] ?? null);
+        $this->assertSame(['renamed'], $indexOf(self::COLLECTION, 'by_a')['attributes'] ?? null);
         $adapter->rollbackTransaction();
 
         $stored = $adapter->getDocument($this->collection(), 'first');
         $this->assertSame('x', $stored->getAttribute('a'));
         $this->assertNull($stored->getAttribute('renamed'));
-        $this->assertSame(['a'], $adapter->indexOf(self::COLLECTION, 'by_a')['attributes'] ?? null);
+        $this->assertSame(['a'], $indexOf(self::COLLECTION, 'by_a')['attributes'] ?? null);
         $this->assertSame(['first'], $this->idsOf($adapter->find($this->collection(), [Query::equal('a', ['x'])])));
     }
 
@@ -120,7 +121,10 @@ final class MemorySchemaPathsTest extends TestCase
         return $this->prepare(new Memory());
     }
 
-    private function inspectableAdapter(): Memory
+    /**
+     * @return array{Memory, Closure(string, string): array<string, mixed>}
+     */
+    private function inspectableAdapter(): array
     {
         $adapter = new class () extends Memory {
             /**
@@ -128,13 +132,11 @@ final class MemorySchemaPathsTest extends TestCase
              */
             public function indexOf(string $collection, string $index): array
             {
-                $definition = $this->data[$this->key($collection)]['indexes'][$index] ?? [];
-
-                return \is_array($definition) ? $definition : [];
+                return $this->data[$this->key($collection)]['indexes'][$index] ?? [];
             }
         };
 
-        return $this->prepare($adapter);
+        return [$this->prepare($adapter), $adapter->indexOf(...)];
     }
 
     private function prepare(Memory $adapter): Memory

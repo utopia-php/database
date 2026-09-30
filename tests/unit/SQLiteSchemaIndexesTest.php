@@ -88,8 +88,10 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $this->assertSame([1, [...$tenant, 'title']], $indexes['by_title'] ?? null);
         $this->assertSame([0, [...$tenant, 'body']], $indexes['by_body'] ?? null);
         $this->assertArrayHasKey('_index1', $indexes);
+        $namespace = $database->getNamespace();
+        $this->assertNotSame('', $namespace);
         foreach (\array_keys($indexes) as $id) {
-            $this->assertStringStartsNotWith($database->getNamespace(), $id);
+            $this->assertStringStartsNotWith($namespace, $id);
         }
     }
 
@@ -111,7 +113,6 @@ final class SQLiteSchemaIndexesTest extends TestCase
 
         $first = $this->indexes($database);
         $second = $database->withTenant(2, fn (): array => $this->indexes($database));
-        $this->assertIsArray($second);
 
         $this->assertSame(\array_keys($first), \array_keys($second));
         $this->assertSame([1, ['_tenant', 'title']], $first['by_title'] ?? null);
@@ -156,7 +157,7 @@ final class SQLiteSchemaIndexesTest extends TestCase
     }
 
     /**
-     * @return list<string>
+     * @return array<string>
      */
     private function search(Database $database, string $attribute, string $term): array
     {

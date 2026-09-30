@@ -38,6 +38,9 @@ final class PermissionsBatchSkipTest extends TestCase
                 parent::__construct($dsn);
             }
 
+            /**
+             * @param  array<mixed>  $options
+             */
             public function prepare(string $query, array $options = []): \PDOStatement|false
             {
                 ($this->record)($query);

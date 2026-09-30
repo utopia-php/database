@@ -74,7 +74,8 @@ final class BaseAdapterStateTest extends TestCase
         $database->createDocument('own', new Document(['$id' => 'first', 'body' => 'one']));
 
         $this->assertFalse($adapter->hasTenantHook());
-        $this->assertNull($adapter->getTenantHook());
+        $hook = $adapter->getTenantHook();
+        $this->assertNull($hook);
 
         $database->setSharedTables(true)->setTenant(7);
         $database->setNamespace(self::NAMESPACE . '_shared');
@@ -83,7 +84,9 @@ final class BaseAdapterStateTest extends TestCase
         $database->createDocument('shared', new Document(['$id' => 'second', 'body' => 'two']));
 
         $this->assertTrue($adapter->hasTenantHook());
-        $this->assertSame(7, $adapter->getTenantHook()?->getTenant());
+        $hook = $adapter->getTenantHook();
+        $this->assertNotNull($hook);
+        $this->assertSame(7, $hook->getTenant());
 
         $database->setSharedTables(false)->setTenant(null);
         $database->setNamespace(self::NAMESPACE);

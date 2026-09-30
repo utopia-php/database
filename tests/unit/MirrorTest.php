@@ -973,9 +973,11 @@ class MirrorTest extends TestCase
         });
 
         $this->assertCount(1, $returned);
-        $this->assertSame(self::COLLECTION, $returned[0]->getAttribute('decoratedFor'));
+        $first = $returned[0] ?? null;
+        $this->assertInstanceOf(Document::class, $first);
+        $this->assertSame(self::COLLECTION, $first->getAttribute('decoratedFor'));
         $this->assertSame([], $errors, 'A decorated document must not reach the destination');
-        $replicated = $destination->getDocument(self::COLLECTION, $returned[0]->getId());
+        $replicated = $destination->getDocument(self::COLLECTION, $first->getId());
         $this->assertSame('written', $replicated->getAttribute('title'));
         $this->assertNull($replicated->getAttribute('decoratedFor'));
     }
@@ -1043,6 +1045,7 @@ class MirrorTest extends TestCase
 
     public function testCreateCollectionRunsWriteFilters(): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $destination = self::sqlite();
         $mirror = $this->filtered(
@@ -1061,6 +1064,7 @@ class MirrorTest extends TestCase
 
     public function testCreateCollectionFilterReturningNullSkipsTheDestination(): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $source = self::sqlite();
         $destination = self::sqlite();
@@ -1079,6 +1083,7 @@ class MirrorTest extends TestCase
 
     public function testUpdateCollectionRunsWriteFilters(): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $destination = self::sqlite();
         $mirror = $this->filtered(
@@ -1311,6 +1316,7 @@ class MirrorTest extends TestCase
     #[DataProvider('attributeFilters')]
     public function testCreateAttributeRunsWriteFilters(Closure $transform, ?int $size): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $source = self::sqlite();
         $destination = self::sqlite();
@@ -1327,6 +1333,7 @@ class MirrorTest extends TestCase
 
     public function testCreateAttributesRunsWriteFiltersPerAttribute(): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $source = self::sqlite();
         $destination = self::sqlite();
@@ -1358,6 +1365,7 @@ class MirrorTest extends TestCase
     #[DataProvider('attributeFilters')]
     public function testUpdateAttributeRunsWriteFilters(Closure $transform, ?int $size): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $source = self::sqlite();
         $destination = self::sqlite();
@@ -1392,6 +1400,7 @@ class MirrorTest extends TestCase
     #[DataProvider('indexFilters')]
     public function testCreateIndexRunsWriteFilters(Closure $transform, ?array $attributes): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $source = self::sqlite();
         $destination = self::sqlite();
@@ -1462,7 +1471,7 @@ class MirrorTest extends TestCase
         $this->assertTrue($change($mirror, $source, $destination));
 
         $this->assertCount(1, $errors);
-        $this->assertSame($action, $errors[0][0]);
+        $this->assertSame([$action], \array_column($errors->getArrayCopy(), 0));
     }
 
     /**
@@ -1554,6 +1563,7 @@ class MirrorTest extends TestCase
     #[DataProvider('documentWrites')]
     public function testDocumentWritesRunWriteFilters(Closure $write, string $action, string $id, array $hooks, ?string $sourceTitle, ?string $destinationTitle, ?string $unchangedTitle): void
     {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
         $calls = new ArrayObject();
         $source = self::sqlite();
         $destination = self::sqlite();

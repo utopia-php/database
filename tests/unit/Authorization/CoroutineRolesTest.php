@@ -59,10 +59,10 @@ final class CoroutineRolesTest extends TestCase
         try {
             $this->authorization->withRoles([self::ALICE], static fn (): never => throw new RuntimeException('failed'));
         } catch (RuntimeException $error) {
-            $thrown = $error;
+            $thrown = $error->getMessage();
         }
 
-        $this->assertInstanceOf(RuntimeException::class, $thrown);
+        $this->assertSame('failed', $thrown);
         $this->assertSame(['any'], $this->authorization->getRoles());
     }
 

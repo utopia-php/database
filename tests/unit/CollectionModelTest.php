@@ -330,7 +330,7 @@ class CollectionModelTest extends TestCase
         $collection->indexes = $indexes;
         $collection->permissions = $permissions;
         $collection->documentSecurity = false;
-        $collection->search = 'title';
+        $collection->__set('search', 'title');
 
         $this->assertSame('after', $collection->getId());
         $this->assertSame('Renamed', $collection->getAttribute('name'));
@@ -375,8 +375,8 @@ class CollectionModelTest extends TestCase
     {
         $collection = new Collection(id: 'posts', metadata: ['search' => 'title']);
 
-        $this->assertSame('title', $collection->search);
-        $this->assertNull($collection->missing);
+        $this->assertSame('title', $collection->__get('search'));
+        $this->assertNull($collection->__get('missing'));
     }
 
     public function testConstructorRejectsAnAttributeThatIsNotAModel(): void

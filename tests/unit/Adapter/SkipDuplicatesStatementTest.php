@@ -25,46 +25,50 @@ final class SkipDuplicatesStatementTest extends TestCase
 
     public function testMariaDBLearnsTheInsertedRowsFromReturning(): void
     {
+        /** @var ArrayObject<int, string> $statements */
         $statements = new ArrayObject();
         $adapter = new MariaDB($this->pdo($statements, [[[[self::FRESH]], 1]]));
 
         $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH]));
         $this->assertCount(1, $statements);
-        $this->assertStringStartsWith('INSERT IGNORE INTO', $statements[0]);
-        $this->assertStringEndsWith(' RETURNING `_uid`', $statements[0]);
+        $this->assertStringStartsWith('INSERT IGNORE INTO', self::sent($statements, 0));
+        $this->assertStringEndsWith(' RETURNING `_uid`', self::sent($statements, 0));
     }
 
     public function testARepeatedIdIsSentOnlyOnce(): void
     {
+        /** @var ArrayObject<int, string> $statements */
         $statements = new ArrayObject();
         $adapter = new MariaDB($this->pdo($statements, [[[[self::FRESH]], 1]]));
 
         $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::FRESH, self::FRESH]));
-        $this->assertStringNotContainsString('), (', $statements[0], 'Only the first copy of an id is inserted');
+        $this->assertStringNotContainsString('), (', self::sent($statements, 0), 'Only the first copy of an id is inserted');
     }
 
     public function testMySQLInsertsOnlyTheIdsItFoundUnstoredWithoutLocking(): void
     {
+        /** @var ArrayObject<int, string> $statements */
         $statements = new ArrayObject();
         $adapter = new MySQL($this->pdo($statements, [[[[self::STORED]], 0], [[], 1]]));
 
         $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH]));
         $this->assertCount(2, $statements);
-        $this->assertStringStartsWith('SELECT `_uid` FROM', $statements[0]);
-        $this->assertStringNotContainsString('FOR UPDATE', $statements[0]);
-        $this->assertStringStartsWith('INSERT IGNORE INTO', $statements[1]);
-        $this->assertStringNotContainsString('), (', $statements[1], 'The stored id is left out of the insert');
-        $this->assertStringNotContainsString('RETURNING', $statements[1]);
+        $this->assertStringStartsWith('SELECT `_uid` FROM', self::sent($statements, 0));
+        $this->assertStringNotContainsString('FOR UPDATE', self::sent($statements, 0));
+        $this->assertStringStartsWith('INSERT IGNORE INTO', self::sent($statements, 1));
+        $this->assertStringNotContainsString('), (', self::sent($statements, 1), 'The stored id is left out of the insert');
+        $this->assertStringNotContainsString('RETURNING', self::sent($statements, 1));
     }
 
     public function testMySQLDoesNotReportADocumentTheInsertSkipped(): void
     {
+        /** @var ArrayObject<int, string> $statements */
         $statements = new ArrayObject();
         $adapter = new MySQL($this->pdo($statements, [[[], 0], [[], 0], [[], 0]]));
 
         $this->assertSame([], $this->createDocuments($adapter, [self::FRESH]));
         $this->assertCount(3, $statements);
-        $this->assertStringStartsWith('SELECT `_uid`, `_permissions` FROM', $statements[2]);
+        $this->assertStringStartsWith('SELECT `_uid`, `_permissions` FROM', self::sent($statements, 2));
     }
 
     public function testMySQLReportsARowReadBackOnlyWhenItCarriesTheDocumentsPermissions(): void
@@ -81,24 +85,26 @@ final class SkipDuplicatesStatementTest extends TestCase
 
     public function testPostgresSkipsOnlyAStoredIdSoAnotherUniqueCollisionFails(): void
     {
+        /** @var ArrayObject<int, string> $statements */
         $statements = new ArrayObject();
         $adapter = new Postgres($this->pdo($statements, [[[[self::FRESH]], 1]]));
 
         $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH]));
         $this->assertCount(1, $statements);
-        $this->assertStringStartsWith('INSERT INTO', $statements[0]);
-        $this->assertStringEndsWith(' ON CONFLICT ("_uid") DO NOTHING RETURNING "_uid"', $statements[0]);
+        $this->assertStringStartsWith('INSERT INTO', self::sent($statements, 0));
+        $this->assertStringEndsWith(' ON CONFLICT ("_uid") DO NOTHING RETURNING "_uid"', self::sent($statements, 0));
     }
 
     public function testPostgresNamesTheTenantInTheConflictTargetUnderSharedTables(): void
     {
+        /** @var ArrayObject<int, string> $statements */
         $statements = new ArrayObject();
         $adapter = new Postgres($this->pdo($statements, [[[[self::FRESH, 7]], 1]]));
         $adapter->setSharedTables(true);
         $adapter->setTenant(7);
 
         $this->assertSame([self::FRESH], $this->createDocuments($adapter, [self::STORED, self::FRESH], tenant: 7));
-        $this->assertStringEndsWith(' ON CONFLICT ("_uid", "_tenant") DO NOTHING RETURNING "_uid", "_tenant"', $statements[0]);
+        $this->assertStringEndsWith(' ON CONFLICT ("_uid", "_tenant") DO NOTHING RETURNING "_uid", "_tenant"', self::sent($statements, 0));
     }
 
     public function testADocumentWithoutATenantIsMatchedUnderTheAdaptersTenant(): void
@@ -131,6 +137,17 @@ final class SkipDuplicatesStatementTest extends TestCase
         $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => 'notes', 'attributes' => []]), $documents));
 
         return \array_values(\array_map(static fn (Document $document): string => $document->getId(), $created));
+    }
+
+    /**
+     * @param  ArrayObject<int, string>  $statements
+     */
+    private static function sent(ArrayObject $statements, int $index): string
+    {
+        $sent = $statements->getArrayCopy();
+        self::assertArrayHasKey($index, $sent);
+
+        return $sent[$index];
     }
 
     /**

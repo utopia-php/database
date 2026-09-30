@@ -11,13 +11,13 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Builder\SQLite as SQLiteBuilder;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
-use Utopia\Query\Builder;
 
 final class PoolDelegationTest extends TestCase
 {
@@ -84,7 +84,7 @@ final class PoolDelegationTest extends TestCase
 
     public function testQueryBuilderIsServedByTheBorrowedAdapter(): void
     {
-        $this->assertInstanceOf(Builder::class, $this->pool(new SQLite(new PDO('sqlite::memory:')))->getBuilder('books'));
+        $this->assertInstanceOf(SQLiteBuilder::class, $this->pool(new SQLite(new PDO('sqlite::memory:')))->getBuilder('books'));
     }
 
     private function pool(Adapter $adapter): Pool

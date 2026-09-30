@@ -104,7 +104,11 @@ final class SQLiteSharedFulltextTest extends TestCase
         $this->assertInstanceOf(\PDOStatement::class, $statement);
         $statement->execute([$tenant]);
 
-        return \array_values(\array_map(intval(...), $statement->fetchAll(PDO::FETCH_COLUMN)));
+        return \array_values(\array_map(static function (mixed $value): int {
+            self::assertIsNumeric($value);
+
+            return (int) $value;
+        }, $statement->fetchAll(PDO::FETCH_COLUMN)));
     }
 
     /**
@@ -123,6 +127,10 @@ final class SQLiteSharedFulltextTest extends TestCase
         $statement = $this->pdo->query('SELECT rowid FROM `' . $name . '` WHERE `' . $name . "` MATCH 'word OR rewritten' ORDER BY rowid");
         $this->assertInstanceOf(\PDOStatement::class, $statement);
 
-        return \array_values(\array_map(intval(...), $statement->fetchAll(PDO::FETCH_COLUMN)));
+        return \array_values(\array_map(static function (mixed $value): int {
+            self::assertIsNumeric($value);
+
+            return (int) $value;
+        }, $statement->fetchAll(PDO::FETCH_COLUMN)));
     }
 }

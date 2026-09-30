@@ -102,10 +102,12 @@ final class SQLDeleteFailureTest extends TestCase
     public function testABulkDeleteTheEngineRefusesInSilentModeIsAnError(): void
     {
         $this->blockDeletes();
-        $sequences = \array_map(
-            static fn (Document $document): string => $document->getSequence(),
-            $this->database->find('notes'),
-        );
+        $sequences = [];
+        foreach ($this->database->find('notes') as $document) {
+            $sequence = $document->getSequence();
+            $this->assertNotNull($sequence);
+            $sequences[] = $sequence;
+        }
 
         try {
             $this->adapter->deleteDocuments('notes', $sequences, ['first', 'second']);

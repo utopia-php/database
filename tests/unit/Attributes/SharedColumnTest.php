@@ -267,7 +267,7 @@ final class SharedColumnTest extends TestCase
     }
 
     /**
-     * @return list<string>
+     * @return array<string>
      */
     private function columns(Database $database): array
     {

@@ -38,7 +38,7 @@ final class PostgresCollectionIndexTest extends TestCase
             [Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [Order::Desc, null])],
         );
 
-        $this->assertSame($statement, $this->statements[\array_key_last($this->statements)]);
+        $this->assertSame($statement, $this->statements[\count($this->statements) - 1] ?? null);
     }
 
     private function createAdapter(bool $sharedTables): Postgres

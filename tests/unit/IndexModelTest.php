@@ -295,8 +295,8 @@ class IndexModelTest extends TestCase
         $index = Index::key(key: 'titleIndex', attributes: ['title']);
         $index->setAttribute('status', 'available');
 
-        $this->assertSame('available', $index->status);
-        $this->assertNull($index->missing);
+        $this->assertSame('available', $index->__get('status'));
+        $this->assertNull($index->__get('missing'));
     }
 
     public function testNonArrayAttributesAndLengthsReadAsEmptyArrays(): void
@@ -317,7 +317,7 @@ class IndexModelTest extends TestCase
         $index->type = IndexType::Unique;
         $index->attributes = ['title', 'author'];
         $index->ttl = 3600;
-        $index->status = 'available';
+        $index->__set('status', 'available');
 
         $this->assertSame('renamed', $index->getId());
         $this->assertSame('renamed', $index->getAttribute('key'));

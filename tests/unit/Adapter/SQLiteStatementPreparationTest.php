@@ -145,6 +145,10 @@ final class SQLiteStatementPreparationTest extends TestCase
         $statement = $pdo->query('SELECT value FROM stray ORDER BY value');
         $this->assertInstanceOf(\PDOStatement::class, $statement);
 
-        return \array_values(\array_map(intval(...), $statement->fetchAll(PDO::FETCH_COLUMN)));
+        return \array_values(\array_map(static function (mixed $value): int {
+            self::assertIsNumeric($value);
+
+            return (int) $value;
+        }, $statement->fetchAll(PDO::FETCH_COLUMN)));
     }
 }

@@ -488,8 +488,8 @@ class RelationshipModelTest extends TestCase
         $this->assertSame(RelationType::ManyToMany, $relationship->type);
         $this->assertSame(ForeignKeyAction::Cascade, $relationship->onDelete);
         $this->assertSame(RelationSide::Child, $relationship->side);
-        $this->assertSame('available', $relationship->status);
-        $this->assertNull($relationship->missing);
+        $this->assertSame('available', $relationship->__get('status'));
+        $this->assertNull($relationship->__get('missing'));
     }
 
     public function testPropertyWritesStoreTheirAttributes(): void
@@ -504,7 +504,7 @@ class RelationshipModelTest extends TestCase
         $relationship->twoWayKey = 'articles';
         $relationship->onDelete = ForeignKeyAction::SetNull;
         $relationship->side = RelationSide::Child;
-        $relationship->status = 'available';
+        $relationship->__set('status', 'available');
 
         $this->assertSame('articles', $relationship->getAttribute('collection'));
         $this->assertSame('writers', $relationship->getAttribute('relatedCollection'));

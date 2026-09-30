@@ -1011,6 +1011,11 @@ final class RelationshipHookTest extends TestCase
                 return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
             }
 
+            public function forgetValueCounts(): void
+            {
+                $this->largestValueCounts = [];
+            }
+
             /**
              * @param  array<mixed>  $queries
              */
@@ -1059,7 +1064,7 @@ final class RelationshipHookTest extends TestCase
             'children.$id' => [['child1', 'child2'], ['parent1', 'parent2'], ['child']],
         ];
         foreach ($filters as $path => [$values, $expected, $collections]) {
-            $adapter->largestValueCounts = [];
+            $adapter->forgetValueCounts();
 
             $ids = \array_map(fn (Document $parent): string => $parent->getId(), $database->find('parent', [Query::equal($path, $values), Query::select(['$id'])]));
             \sort($ids);

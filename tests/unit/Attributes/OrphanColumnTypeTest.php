@@ -272,7 +272,7 @@ final class OrphanColumnTypeTest extends TestCase
     }
 
     /**
-     * @return list<string>
+     * @return array<string>
      */
     private function columns(Database $database, string $collection): array
     {

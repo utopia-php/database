@@ -152,8 +152,12 @@ final class TwoWayOneToOneLinkTest extends TestCase
         $document = $database->getAuthorization()->skip(fn () => $database->skipRelationships(fn () => $database->getDocument($collection, $id)));
         $this->assertFalse($document->isEmpty(), $collection.' '.$id.' is missing');
         $value = $document->getAttribute($key);
+        if ($value instanceof Document) {
+            return $value->getId();
+        }
+        $this->assertTrue($value === null || \is_string($value));
 
-        return $value instanceof Document ? $value->getId() : $value;
+        return $value;
     }
 
     /**

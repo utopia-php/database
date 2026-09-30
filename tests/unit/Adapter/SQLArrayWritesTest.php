@@ -131,7 +131,7 @@ final class SQLArrayWritesTest extends TestCase
 
     /**
      * @param array<Document> $documents
-     * @return list<string>
+     * @return array<string>
      */
     private function ids(array $documents): array
     {

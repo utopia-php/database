@@ -329,7 +329,7 @@ final class MongoAdapterPathsTest extends TestCase
     }
 
     /**
-     * @param  list<mixed>  $arguments
+     * @param  array<mixed>  $arguments
      * @return array<mixed>
      */
     private static function filterOf(array $arguments): array

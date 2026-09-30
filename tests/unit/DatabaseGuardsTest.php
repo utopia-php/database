@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -132,7 +133,8 @@ final class DatabaseGuardsTest extends TestCase
         $database = $this->database(new Memory());
 
         $this->assertNull($database->getRelationshipHook());
-        $this->assertSame(42, $database->skipRelationships(static fn (): int => 42));
+        $result = new stdClass();
+        $this->assertSame($result, $database->skipRelationships(static fn (): stdClass => $result));
         $this->assertNull($database->getRelationshipHook(), 'skipping relationships does not install the hook');
     }
 
@@ -140,7 +142,8 @@ final class DatabaseGuardsTest extends TestCase
     {
         $database = $this->database(new Memory());
 
-        $this->assertSame('ran', $database->skipRelationshipsExistCheck(static fn (): string => 'ran'));
+        $result = new stdClass();
+        $this->assertSame($result, $database->skipRelationshipsExistCheck(static fn (): stdClass => $result));
         $this->assertNull($database->getRelationshipHook());
     }
 

@@ -91,6 +91,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
         $this->database->createDocument(self::COLLECTION, $this->note(self::EXISTING, Role::user(self::ALICE), 5));
 
         $recorder = $this->recordCreatedDocuments();
+        /** @var ArrayObject<int, string> $emitted */
         $emitted = new ArrayObject();
         $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
@@ -223,6 +224,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
         ));
         $this->database->createDocument(self::COLLECTION, $this->note(self::EXISTING, Role::user(self::ALICE), 5));
 
+        /** @var ArrayObject<int, string> $emitted */
         $emitted = new ArrayObject();
         $created = $this->database->skipDuplicates(fn (): int => $this->database->createDocuments(
             self::COLLECTION,
@@ -311,7 +313,7 @@ final class SkipDuplicatesPermissionTest extends TestCase
     }
 
     /**
-     * @return list<string>
+     * @return array<string>
      */
     private function readableIds(int $tenant = self::TENANT): array
     {
@@ -347,7 +349,11 @@ final class SkipDuplicatesPermissionTest extends TestCase
 
         $grants = [];
         foreach ($statement->fetchAll(PDO::FETCH_NUM) as $row) {
-            $grants[] = [(string) $row[0], (string) $row[1]];
+            $this->assertIsArray($row);
+            [$type, $permission] = $row;
+            $this->assertIsString($type);
+            $this->assertIsString($permission);
+            $grants[] = [$type, $permission];
         }
 
         return $grants;

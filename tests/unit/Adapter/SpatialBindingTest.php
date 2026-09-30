@@ -3,6 +3,7 @@
 namespace Tests\Unit\Adapter;
 
 use ArrayObject;
+use LogicException;
 use PDO;
 use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -122,6 +123,7 @@ final class SpatialBindingTest extends TestCase
                 '',
                 \array_map(static fn (Document $document): Change => new Change(new Document(), $document), $documents),
             ),
+            default => throw new LogicException('Unknown write operation: '.$operation),
         };
 
         return $bindings->getArrayCopy();

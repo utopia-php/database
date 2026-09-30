@@ -176,6 +176,7 @@ final class BulkWriteGuardsTest extends TestCase
 
     public function testIteratingWithoutALimitPagesTwentyFiveDocumentsAtATime(): void
     {
+        /** @var list<int|null> $limits */
         $limits = [];
         $record = static function (?int $limit) use (&$limits): void {
             $limits[] = $limit;
@@ -204,6 +205,7 @@ final class BulkWriteGuardsTest extends TestCase
         };
         $this->prepare($database);
         $database->createDocuments(self::COLLECTION, \array_map(fn (int $rank): Document => $this->task("t{$rank}", $rank), \range(1, 60)));
+        /** @var list<int|null> $limits */
         $limits = [];
 
         $seen = [];

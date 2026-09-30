@@ -374,7 +374,7 @@ final class MongoQueryFilterTest extends TestCase
              * @param  array<mixed>  $command
              */
             #[\Override]
-            public function query(array $command, ?string $db = null): stdClass|array|int
+            public function query(array $command, ?string $db = null): stdClass
             {
                 return (object) ['cursor' => (object) ['firstBatch' => $this->created]];
             }

@@ -236,7 +236,9 @@ class ReadWritePool extends Pool
             return null;
         }
 
-        return Coroutine::getContext();
+        $context = Coroutine::getContext();
+
+        return $context instanceof Context ? $context : null;
     }
 
     private function getReplicaReadKey(): string

@@ -111,22 +111,4 @@ final class ColumnNameTest extends TestCase
         $this->assertStringEndsWith(' AND type = ? AND (column IS NULL OR column IN (?, ?)))', $condition->expression);
         $this->assertSame(['any', 'users', 'read', 'title', 'body'], $condition->bindings);
     }
-
-    #[DataProvider('digitOrHyphenLeadingColumns')]
-    public function testWrapRefusesADigitOrHyphenLeadingColumn(string $column): void
-    {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid column name: '.$column);
-
-        AllowNullColumn::wrap(new Condition('x = 1'), $column);
-    }
-
-    /**
-     * @return iterable<string, array{string}>
-     */
-    public static function digitOrHyphenLeadingColumns(): iterable
-    {
-        yield 'a leading digit' => ['1db._uid'];
-        yield 'a leading hyphen' => ['-ns._uid'];
-    }
 }

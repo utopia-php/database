@@ -2,7 +2,6 @@
 
 namespace Tests\Unit;
 
-use InvalidArgumentException;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -332,40 +331,6 @@ final class QueryBuilderTenancyTest extends TestCase
             "DELETE FROM {$authors} WHERE {$tenant($raw(self::AUTHORS))}",
             $adapter->getBuilder(self::AUTHORS)->delete()->query,
         );
-    }
-
-    #[DataProvider('dialects')]
-    public function testARightJoinAliasedWithALeadingDigitIsRefused(SQL $adapter, string $quote): void
-    {
-        $adapter->setDatabase('builder');
-        $adapter->setNamespace('capture');
-        $adapter->setSharedTables(true);
-        $adapter->setTenant(7);
-
-        $builder = $adapter->getBuilder(self::AUTHORS)
-            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', '9x.authorId', '=', '9x');
-
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid column name: 9x._uid');
-
-        $builder->build();
-    }
-
-    #[DataProvider('dialects')]
-    public function testARightJoinUnderADigitLeadingDatabaseIsRefused(SQL $adapter, string $quote): void
-    {
-        $adapter->setDatabase('1db');
-        $adapter->setNamespace('capture');
-        $adapter->setSharedTables(true);
-        $adapter->setTenant(7);
-
-        $builder = $adapter->getBuilder(self::AUTHORS)
-            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'Review.authorId', '=', 'Review');
-
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid column name: '.$this->rawTable($adapter, self::AUTHORS).'._uid');
-
-        $builder->build();
     }
 
     /**

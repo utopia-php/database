@@ -1240,7 +1240,7 @@ trait GeneralTests
             $connection = $adapter->getConnectionId();
             $this->assertMatchesRegularExpression('/^\d+$/', $connection);
             $driver->exec('SET SESSION wait_timeout = 1');
-            \sleep(2);
+            \sleep(3);
 
             $interrupted = ['statement that reconnects' => $interruptedByTimeout()];
             $this->assertNotSame($connection, $adapter->getConnectionId(), 'The server closing the idle session must have forced a reconnect');
@@ -1257,6 +1257,7 @@ trait GeneralTests
                 'explicit reconnect' => true,
             ], $interrupted, 'The 1s timeout must cut SELECT SLEEP(3) short after every reconnect');
         } finally {
+            $driver->exec('SET SESSION wait_timeout = DEFAULT');
             $database->clearTimeout();
         }
     }

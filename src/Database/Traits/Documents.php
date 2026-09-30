@@ -4071,6 +4071,8 @@ trait Documents
             $this->validateSumAttribute($collection, $attribute, $queries);
         }
 
+        $attribute = $this->resolveSumAttribute($collection, $attribute, $queries);
+
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
 
@@ -4100,6 +4102,64 @@ trait Documents
     }
 
     /**
+     * A bare attribute name reads the main collection's attribute when the main collection declares
+     * it, else the attribute of the one join whose collection declares it, as an aggregate in find()
+     * does. Any other name is returned as given, for the validator to accept or refuse.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException
+     */
+    private function resolveSumAttribute(Document $collection, string $attribute, array $queries): string
+    {
+        if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
+            return $attribute;
+        }
+
+        $aliases = [];
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin() || $query->getJoinAlias() === '') {
+                continue;
+            }
+
+            $joined = $this->silent(fn () => $this->getCollection($query->getAttribute()));
+            /** @var array<Attribute|Document> $joinedAttributes */
+            $joinedAttributes = $joined->getAttribute('attributes', []);
+            foreach ($joinedAttributes as $declared) {
+                if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
+                    $aliases[] = $query->getJoinAlias();
+                    break;
+                }
+            }
+        }
+
+        if (\count($aliases) > 1) {
+            throw new QueryException('Invalid query: Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+        }
+
+        return $aliases === [] ? $attribute : $aliases[0].'.'.$attribute;
+    }
+
+    private function declaresSumAttribute(Document $collection, string $attribute): bool
+    {
+        foreach (self::internalAttributes() as $internal) {
+            if ($internal->key === $attribute) {
+                return true;
+            }
+        }
+
+        /** @var array<Attribute|Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $declared) {
+            if ($declared->getId() === $attribute) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
      * sum() adds up what a sum aggregate adds up: a numeric attribute that is not an array, of the
      * main collection or, under a join alias, of the collection that join reads.
      *
@@ -4113,7 +4173,7 @@ trait Documents
         $attributes = $collection->getAttribute('attributes', []);
         $validator = new Aggregate($attributes, $this->adapter->supports(Capability::DefinedAttributes), $this->adapter->getSharedTables());
 
-        if (\str_contains($attribute, '.')) {
+        if (\str_contains($attribute, '.') || ! $this->declaresSumAttribute($collection, $attribute)) {
             $joins = [];
             foreach ($queries as $query) {
                 if ($query->getMethod()->isJoin() && $query->getJoinAlias() !== '') {

@@ -133,35 +133,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private ?\WeakMap $statementEvents = null;
 
     /**
-     * Bind builder-produced positional parameters onto a prepared statement.
-     *
-     * Centralises the find / count / sum binding loops so the
-     * IntegerBooleans capability check is resolved once per call rather
-     * than once per binding. Mirrors the find() superset (handles arrays
-     * via json_encode, floats via float-precision string binding, and
-     * booleans via int coercion when the adapter expects integers).
-     *
-     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
-     * @param  array<int, mixed>  $bindings
+     * @var \WeakMap<object, array<mixed>>|null
      */
-    protected function bindStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, array $bindings): void
-    {
-        $intBools = $this->supports(Capability::IntegerBooleans);
+    private ?\WeakMap $statementBindings = null;
 
-        foreach ($bindings as $i => $value) {
-            if ($intBools && \is_bool($value)) {
-                $value = (int) $value;
-            }
-            if (\is_array($value)) {
-                $value = \json_encode($value);
-            }
-            if (\is_float($value)) {
-                $stmt->bindValue($i + 1, $this->getFloatPrecision($value), PDO::PARAM_STR);
-            } else {
-                $stmt->bindValue($i + 1, $value, $this->getPDOType($value));
-            }
-        }
-    }
+    /**
+     * @var \WeakMap<object, string>|null
+     */
+    private ?\WeakMap $statementCollections = null;
 
     /**
      * Accepts Utopia\Database\PDO, a PDO-compatible proxy, or a native PDO.
@@ -677,6 +656,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentRead);
                 $stmt->bindValue(':'.Storage::UID, $id, PDO::PARAM_STR);
+                $this->describeStatement($stmt, [':'.Storage::UID => $id], $name);
                 $this->execute($stmt);
                 /** @var array<string, mixed>|false $row */
                 $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -797,7 +777,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
         }
 
-        $rows = $this->executeSelect($builder, Event::DocumentRead);
+        $rows = $this->executeSelect($builder, Event::DocumentRead, $name);
 
         if (empty($rows)) {
             return new Document([]);
@@ -1316,6 +1296,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentFind);
+                $this->describeStatement($stmt, [], $name);
                 $this->execute($stmt);
                 /** @var array<int, array<string, mixed>> $rows */
                 $rows = $stmt->fetchAll();
@@ -1406,6 +1387,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     break;
                 }
             }
+        }
+
+        if ($joinTablePrefixes !== []) {
+            [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($orderAttributes, $cursor, $collectionDoc, $joinTablePrefixes);
         }
 
         $joinAliases = \array_column($joinTablePrefixes, 'alias');
@@ -1514,7 +1499,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $left->unionAll($right);
             }
             $this->applyFindPage($left, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, afterUnion: true);
-            $results = $this->executeSelect($left, Event::DocumentFind);
+            $results = $this->executeSelect($left, Event::DocumentFind, $name);
         } else {
             $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
             $hasSelectionProjection = $this->configureFindBuilder(
@@ -1594,7 +1579,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
 
             $this->applyFindPage($builder, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
-            $results = $this->executeSelect($builder, Event::DocumentFind);
+            $results = $this->executeSelect($builder, Event::DocumentFind, $name);
         }
 
         $documents = [];
@@ -1668,8 +1653,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
-        // count() forwards queries to filter() without mutating individual
-        // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
         $hasJoins = false;
         foreach ($queries as $query) {
@@ -1692,13 +1675,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $max,
             );
 
-            return $this->executeWrappedCount($innerBuilder);
+            return $this->executeWrappedCount($innerBuilder, $name);
         }
 
-        // Fast path: no filters, no permission subquery, no shared-tenant
-        // filter, no max. The Builder produces ~30 lines of SQL; bypassing
-        // it for the common "count all rows" case dodges thousands of PHP
-        // ops per call.
         if (
             empty($otherQueries)
             && $max === null
@@ -1709,6 +1688,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentCount);
+                $this->describeStatement($stmt, [], $name);
                 $this->execute($stmt);
             } catch (PDOException $e) {
                 throw $this->processException($e);
@@ -1718,24 +1698,28 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $row = $stmt->fetch();
             $stmt->closeCursor();
 
-            return is_array($row) && is_numeric($row['sum'] ?? null) ? (int) $row['sum'] : 0;
+            return $this->countOf(\is_array($row) ? $row : []);
         }
 
-        // Build inner query: SELECT 1 FROM table WHERE ... LIMIT
-        $innerBuilder = $this->newBuilder($name, $alias);
-        $innerBuilder->selectRaw('1');
-        $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
+        $builder = $this->newBuilder($name, $alias);
+        $this->applyFilters($builder, $otherQueries, $name, $alias);
 
-        // Permission subquery
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
-            $innerBuilder->addHook($this->newPermissionHook($name, $roles));
+            $builder->addHook($this->newPermissionHook($name, $roles));
         }
 
+        if ($max === null && $this->onlyNarrowsRows($otherQueries)) {
+            $builder->count('1', 'sum');
+
+            return $this->countOf($this->fetchAggregateRow($builder, Event::DocumentCount, $name));
+        }
+
+        $builder->selectRaw('1');
         if (! \is_null($max)) {
-            $innerBuilder->limit($max);
+            $builder->limit($max);
         }
 
-        return $this->executeWrappedCount($innerBuilder);
+        return $this->executeWrappedCount($builder, $name);
     }
 
     /**
@@ -1754,8 +1738,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $roles = $this->authorization->getRoles();
         $alias = Query::DEFAULT_ALIAS;
 
-        // sum() forwards queries to filter() without mutating individual
-        // Query objects, so cloning is gratuitous on the hot path.
         $otherQueries = [];
         $hasJoins = false;
         foreach ($queries as $query) {
@@ -1779,13 +1761,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $attribute,
             );
 
-            return $this->executeWrappedSum($innerBuilder, 'sum_attr');
+            return $this->executeWrappedSum($innerBuilder, 'sum_attr', $name);
         }
 
         $attribute = $this->filter($attribute);
 
-        // Fast path: trivial SUM(column) over the entire collection. Bypass
-        // the Builder's full SELECT/FROM/WHERE pipeline.
         if (
             empty($otherQueries)
             && $max === null
@@ -1796,6 +1776,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             try {
                 $stmt = $this->prepareStatement($sql, Event::DocumentSum);
+                $this->describeStatement($stmt, [], $name);
                 $this->execute($stmt);
             } catch (PDOException $e) {
                 throw $this->processException($e);
@@ -1804,30 +1785,29 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             /** @var array<string, mixed>|false $row */
             $row = $stmt->fetch();
             $stmt->closeCursor();
-            $sumVal = is_array($row) ? ($row['sum'] ?? 0) : 0;
 
-            if (is_numeric($sumVal)) {
-                return str_contains((string) $sumVal, '.') ? (float) $sumVal : (int) $sumVal;
-            }
-
-            return 0;
+            return $this->sumOf(\is_array($row) ? $row : []);
         }
 
-        // Build inner query: SELECT attribute FROM table WHERE ... LIMIT
-        $innerBuilder = $this->newBuilder($name, $alias);
-        $innerBuilder->select([$attribute]);
-        $this->applyFilters($innerBuilder, $otherQueries, $name, $alias);
+        $builder = $this->newBuilder($name, $alias);
+        $this->applyFilters($builder, $otherQueries, $name, $alias);
 
-        // Permission subquery
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
-            $innerBuilder->addHook($this->newPermissionHook($name, $roles));
+            $builder->addHook($this->newPermissionHook($name, $roles));
         }
 
+        if ($max === null && $this->onlyNarrowsRows($otherQueries)) {
+            $builder->sum($attribute, 'sum');
+
+            return $this->sumOf($this->fetchAggregateRow($builder, Event::DocumentSum, $name));
+        }
+
+        $builder->select([$attribute]);
         if (! \is_null($max)) {
-            $innerBuilder->limit($max);
+            $builder->limit($max);
         }
 
-        return $this->executeWrappedSum($innerBuilder, $attribute);
+        return $this->executeWrappedSum($builder, $attribute, $name);
     }
 
     /**
@@ -1959,60 +1939,81 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $quote.$prefix.$quote.'.'.$quote.$name.$quote;
     }
 
-    private function executeWrappedCount(SQLBuilder $innerBuilder): int
+    private function executeWrappedCount(SQLBuilder $innerBuilder, string $collection): int
     {
         $outerBuilder = $this->createBuilder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->count('1', 'sum');
 
-        $row = $this->fetchAggregateRow($outerBuilder, Event::DocumentCount);
-        $sumInt = $row['sum'] ?? 0;
-
-        return \is_numeric($sumInt) ? (int) $sumInt : 0;
+        return $this->countOf($this->fetchAggregateRow($outerBuilder, Event::DocumentCount, $collection));
     }
 
-    private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute): int|float
+    private function executeWrappedSum(SQLBuilder $innerBuilder, string $attribute, string $collection): int|float
     {
         $outerBuilder = $this->createBuilder();
         $outerBuilder->fromSub($innerBuilder, 'table_count');
         $outerBuilder->sum($attribute, 'sum');
 
-        $row = $this->fetchAggregateRow($outerBuilder, Event::DocumentSum);
-        $sumVal = $row['sum'] ?? 0;
+        return $this->sumOf($this->fetchAggregateRow($outerBuilder, Event::DocumentSum, $collection));
+    }
 
-        if (\is_numeric($sumVal)) {
-            return \str_contains((string) $sumVal, '.') ? (float) $sumVal : (int) $sumVal;
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function countOf(array $row): int
+    {
+        $count = $row['sum'] ?? 0;
+
+        return \is_numeric($count) ? (int) $count : 0;
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    private function sumOf(array $row): int|float
+    {
+        $sum = $row['sum'] ?? 0;
+
+        if (\is_numeric($sum)) {
+            return \str_contains((string) $sum, '.') ? (float) $sum : (int) $sum;
         }
 
         return 0;
     }
 
     /**
+     * Whether every query only narrows the rows an aggregate reads, so the aggregate can read the
+     * table itself: anything that shapes, orders, groups or bounds the rows needs a derived table.
+     *
+     * @param  array<Query>  $queries
+     */
+    private function onlyNarrowsRows(array $queries): bool
+    {
+        foreach ($queries as $query) {
+            $method = $query->getMethod();
+            if (
+                ! $method->isFilter()
+                && ! $method->isSpatial()
+                && ! $method->isJson()
+                && ! \in_array($method, self::ROW_CONDITION_GROUPS, true)
+                && ! $this->isAdapterFilterQuery($query)
+            ) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * @return array<string, mixed>
      */
-    private function fetchAggregateRow(SQLBuilder $builder, Event $event): array
+    private function fetchAggregateRow(SQLBuilder $builder, Event $event, string $collection): array
     {
-        $result = $builder->build();
-        $stmt = $this->prepareStatement($result->query, $event);
-        $this->bindStatement($stmt, $result->bindings);
-
-        try {
-            $this->execute($stmt);
-        } catch (PDOException $e) {
-            throw $this->processException($e);
-        }
-
-        $rows = $stmt->fetchAll();
-        $stmt->closeCursor();
-        if (! empty($rows) && \is_array($rows[0])) {
-            /** @var array<string, mixed> $row */
-            $row = $rows[0];
-
-            return $row;
-        }
-
-        return [];
+        return $this->executeSelect($builder, $event, $collection)[0] ?? [];
     }
+
+    private const array ROW_CONDITION_GROUPS = [Method::And, Method::Or, Method::ContainsAll, Method::ElemMatch];
 
     private const array BITWISE_AGGREGATES = [Method::BitAnd, Method::BitOr, Method::BitXor];
 
@@ -2023,7 +2024,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * drop the input counts populationStatistics() added.
      *
      * @param  array<string, mixed>  $row
-     * @param  array<string, BaseQuery>  $inputs  Each aliased bitwise aggregate, keyed by its input count, as bitwiseInputs() gives them
+     * @param  array<string, BaseQuery>  $inputs  Each bitwise aggregate, keyed by its input count, as bitwiseInputs() gives them
      * @return array<string, mixed>
      */
     private function bitwiseResults(array $row, array $inputs): array
@@ -2036,13 +2037,58 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $value = $row[$count];
             unset($row[$count]);
 
-            $alias = $aggregate->getValue('');
-            if (\is_string($alias) && \array_key_exists($alias, $row) && \is_numeric($value) && (int) $value === 0) {
-                $row[$alias] = null;
+            $name = $this->bitwiseResultName($row, $aggregate);
+            if ($name !== null && \is_numeric($value) && (int) $value === 0) {
+                $row[$name] = null;
             }
         }
 
         return $row;
+    }
+
+    /**
+     * The column a bitwise aggregate is returned in: its alias, or for an unaliased one the name
+     * MariaDB and MySQL give it, the aggregate's own text (`BIT_AND(`flags`)`, qualified under a
+     * join). PostgreSQL names every unaliased BIT_AND `bit_and`, which does not tell two apart; it
+     * answers an empty set with NULL itself, so such a column is left as it is.
+     *
+     * @param  array<string, mixed>  $row
+     */
+    private function bitwiseResultName(array $row, BaseQuery $aggregate): ?string
+    {
+        $alias = $aggregate->getValue('');
+        if (\is_string($alias) && $alias !== '') {
+            return \array_key_exists($alias, $row) ? $alias : null;
+        }
+
+        $function = ($aggregate->getMethod()->sqlFunction() ?? '').'(';
+        $quote = $this->getIdentifierQuoteChar();
+        $expressions = [];
+        foreach (\array_keys($row) as $name) {
+            if (\str_starts_with(\strtoupper($name), $function) && \str_ends_with($name, ')')) {
+                $expressions[\str_replace($quote, '', \substr($name, \strlen($function), -1))] = $name;
+            }
+        }
+
+        $attribute = $aggregate->getAttribute();
+        $dot = \strrpos($attribute, '.');
+        $column = $this->filter($this->getInternalKeyForAttribute($dot === false ? $attribute : \substr($attribute, $dot + 1)));
+        $exact = $dot === false
+            ? [$column, Query::DEFAULT_ALIAS.'.'.$column]
+            : [$this->filter(\substr($attribute, 0, $dot)).'.'.$column];
+        foreach ($exact as $expression) {
+            if (isset($expressions[$expression])) {
+                return $expressions[$expression];
+            }
+        }
+
+        foreach ($expressions as $expression => $name) {
+            if (\str_ends_with((string) $expression, '.'.$column)) {
+                return $name;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -3338,11 +3384,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Does NOT call execute() - the caller is responsible for that.
      *
      * @param  Event|null  $event  Optional event to run through transformation system
+     * @param  string  $collection  The collection the statement reads or writes, for the profiler
      * @return PDOStatement|DatabasePDOStatement|PDOStatementProxy
      */
-    protected function executeResult(Statement $result, ?Event $event = null): PDOStatement|DatabasePDOStatement|PDOStatementProxy
+    protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): PDOStatement|DatabasePDOStatement|PDOStatementProxy
     {
         $stmt = $this->prepareStatement($result->query, $event);
+        $this->describeStatement($stmt, $result->bindings, $collection);
         foreach ($result->bindings as $i => $value) {
             if (\is_bool($value) && $this->supports(Capability::IntegerBooleans)) {
                 $value = (int) $value;
@@ -3383,11 +3431,32 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $result = $stmt->execute();
         $this->profiler->log(
             $stmt->queryString ?? '',
-            [],
+            $this->statementBindings[$stmt] ?? [],
             (\microtime(true) - $start) * 1000,
+            $this->statementCollections[$stmt] ?? '',
+            $this->getStatementEvent($stmt)?->value ?? '',
         );
 
         return $result;
+    }
+
+    /**
+     * Keep the values bound to a statement and the collection it runs on for the profiler, while
+     * one is recording.
+     *
+     * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
+     * @param  array<mixed>  $bindings
+     */
+    protected function describeStatement(PDOStatement|DatabasePDOStatement|PDOStatementProxy $stmt, array $bindings, string $collection): void
+    {
+        if ($this->profiler === null || ! $this->profiler->isEnabled()) {
+            return;
+        }
+
+        $this->statementBindings ??= new \WeakMap();
+        $this->statementBindings[$stmt] = $bindings;
+        $this->statementCollections ??= new \WeakMap();
+        $this->statementCollections[$stmt] = $collection;
     }
 
     /**
@@ -3651,16 +3720,29 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * database column names (like _uid, _id) and ensures internal columns
      * are always included.
      *
+     * An `alias.*` selection stands for the columns the join returns without a select, from $joinSelections.
+     *
      * @param  array<string>  $selections
      * @param  array<string>  $joinAliases
+     * @param  array<string, list<string>>  $joinSelections  The selections a read without a select makes under each join alias
      */
     private function applySelectionProjection(
         SQLBuilder $builder,
         array $selections,
         bool $includeInternal = true,
         array $joinAliases = [],
+        array $joinSelections = [],
     ): void {
-        $mapped = $this->mapSelectionsToColumns($selections, $includeInternal, $joinAliases);
+        $expanded = [];
+        foreach ($selections as $selection) {
+            if (\str_ends_with($selection, '.*') && isset($joinSelections[\substr($selection, 0, -2)])) {
+                \array_push($expanded, ...$joinSelections[\substr($selection, 0, -2)]);
+            } else {
+                $expanded[] = $selection;
+            }
+        }
+
+        $mapped = $this->mapSelectionsToColumns(\array_values(\array_unique($expanded)), $includeInternal, $joinAliases);
         $simple = [];
         foreach ($mapped as $column) {
             if (\str_contains($column, ' AS ')) {
@@ -3846,25 +3928,38 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $builder->select([$this->filter($alias).'.*']);
 
+        $this->applySelectionProjection(
+            $builder,
+            \array_merge(...\array_values($this->joinSelections($collection, $joinTablePrefixes))),
+            includeInternal: false,
+            joinAliases: \array_column($joinTablePrefixes, 'alias'),
+        );
+    }
+
+    /**
+     * What a read without a select returns under each join alias: the joined collection's `$id` and
+     * the attributes the Database layer handed over for it.
+     *
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @return array<string, list<string>>
+     */
+    private function joinSelections(Document $collection, array $joinTablePrefixes): array
+    {
         $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
         $selections = [];
         foreach ($joinTablePrefixes as $join) {
-            $selections[] = $join['alias'].'.'.Document::ID;
+            $selections[$join['alias']] ??= [];
+            $selections[$join['alias']][] = $join['alias'].'.'.Document::ID;
 
             $attributes = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? []) : [];
             foreach (\is_array($attributes) ? $attributes : [] as $attribute) {
                 if (\is_string($attribute) && $attribute !== '') {
-                    $selections[] = $join['alias'].'.'.$attribute;
+                    $selections[$join['alias']][] = $join['alias'].'.'.$attribute;
                 }
             }
         }
 
-        $this->applySelectionProjection(
-            $builder,
-            $selections,
-            includeInternal: false,
-            joinAliases: \array_column($joinTablePrefixes, 'alias'),
-        );
+        return $selections;
     }
 
     /**
@@ -4367,6 +4462,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         string $alias,
         array $roles,
         PermissionType $forPermission,
+        bool $qualifyCollidingGroups = true,
     ): bool {
         $hasSelectionProjection = false;
         if (! $hasAggregation) {
@@ -4385,6 +4481,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $selections,
                     includeInternal: ! $hasDistinct,
                     joinAliases: \array_column($joinTablePrefixes, 'alias'),
+                    joinSelections: $this->joinSelections($collection, $joinTablePrefixes),
                 );
                 // The projection replaces the select; forwarded as well, the builder would compile the caller's
                 // raw attribute names whenever the projection holds only aliased joined columns.
@@ -4470,10 +4567,22 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $this->remapDottedQueryAttributes([$columns], $joinTablePrefixes, $collection);
                     /** @var array<string> $groupCols */
                     $groupCols = $columns->getValues();
-                    $builder->select(\array_map(
-                        fn (string $col) => \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col)),
-                        $groupCols
-                    ));
+                    /** @var array<string> $groups */
+                    $groups = $query->getValues();
+                    $qualified = $qualifyCollidingGroups ? $this->qualifiedGroupNames($groups) : [];
+                    $plain = [];
+                    foreach ($groupCols as $index => $col) {
+                        if (! isset($qualified[$index])) {
+                            $plain[] = \str_contains($col, '.') ? $col : $this->filter($this->getInternalKeyForAttribute($col));
+                        }
+                    }
+                    if ($plain !== []) {
+                        $builder->select($plain);
+                    }
+                    foreach ($qualified as $index => $group) {
+                        [$table, $column] = \explode('.', $groupCols[$index], 2);
+                        $builder->select($this->quote($table).'.'.$this->quote($column).' AS '.$this->quote($group));
+                    }
                 }
             }
         }
@@ -4654,7 +4763,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Each aliased bitwise aggregate, keyed by the alias of the input count populationStatistics()
+     * Each bitwise aggregate, keyed by the alias of the input count populationStatistics()
      * adds for it: `$inputs:<n>` for the n-th of them. The name stays short because PostgreSQL
      * truncates an identifier to 63 bytes, and a truncated count named another aggregate's alias.
      *
@@ -4665,8 +4774,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $inputs = [];
         foreach ($queries as $query) {
-            $alias = $query->getValue('');
-            if (\in_array($query->getMethod(), self::BITWISE_AGGREGATES, true) && \is_string($alias) && $alias !== '') {
+            if (\in_array($query->getMethod(), self::BITWISE_AGGREGATES, true)) {
                 $inputs[self::BITWISE_INPUTS.\count($inputs)] = $query;
             }
         }
@@ -4860,6 +4968,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $alias,
             $roles,
             $forPermission,
+            qualifyCollidingGroups: false,
         ));
         $this->applyFindPage($aggregation, $orderAttributes, $orderTypes, $limit, $offset, $cursorDirection, joinAliases: $joinAliases);
         $columns = $this->fullOuterJoinColumns($aggregationQueries, $orderAttributes, $orderTypes, $joinAliases, $aggregateAliases, $alias);
@@ -4885,7 +4994,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $aggregation->fromSub($left, self::FOJ_ROWS_ALIAS);
         $aggregation->addHook(new AttributeMap($this->fullOuterJoinColumnSpellings($columns, $aggregateAliases, $alias)));
 
-        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind), $columns);
+        $qualifiedGroups = [];
+        foreach ($aggregationQueries as $query) {
+            if ($query->getMethod() === Method::GroupBy) {
+                /** @var array<string> $groups */
+                $groups = $query->getValues();
+                foreach ($this->qualifiedGroupNames($groups) as $group) {
+                    $dot = (int) \strpos($group, '.');
+                    $qualifiedGroups[\substr($group, 0, $dot).'.'.$this->getInternalKeyForAttribute(\substr($group, $dot + 1))] = $group;
+                }
+            }
+        }
+
+        return $this->fullOuterJoinResultNames($this->executeSelect($aggregation, Event::DocumentFind, $name), $columns, $qualifiedGroups);
     }
 
     private function shapesAggregatedRows(Method $method): bool
@@ -4988,30 +5109,72 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Name each result column the way the single statement names it: a derived column after the column
      * it holds, an expression over derived columns after the same expression over the columns they hold.
      *
+     * A joined group that qualifiedGroupNames() names by its alias comes last under that name, where the
+     * single statement selects it.
+     *
      * @param  array<int, array<string, mixed>>  $rows
      * @param  array<string, string>  $columns
+     * @param  array<string, string>  $qualifiedGroups  The name of each joined group qualified by its alias, by the column it holds
      * @return array<int, array<string, mixed>>
      */
-    private function fullOuterJoinResultNames(array $rows, array $columns): array
+    private function fullOuterJoinResultNames(array $rows, array $columns, array $qualifiedGroups = []): array
     {
         $names = [];
+        $qualified = [];
         $expressions = [];
         foreach ($columns as $source => $column) {
             [$table, $name] = \explode('.', $source, 2);
             $names[$column] = $name;
+            if (isset($qualifiedGroups[$source])) {
+                $qualified[$column] = $qualifiedGroups[$source];
+            }
             $expressions[$this->quote(self::FOJ_ROWS_ALIAS).'.'.$this->quote($column)] = $this->quote($table).'.'.$this->quote($name);
         }
 
         foreach ($rows as $index => $row) {
             $named = [];
+            $trailing = [];
             foreach ($row as $key => $value) {
                 $key = (string) $key;
+                if (isset($qualified[$key])) {
+                    $trailing[$qualified[$key]] = $value;
+
+                    continue;
+                }
                 $named[$names[$key] ?? \strtr($key, $expressions)] = $value;
             }
-            $rows[$index] = $named;
+            $rows[$index] = [...$named, ...$trailing];
         }
 
         return $rows;
+    }
+
+    /**
+     * The groups returned under their qualified name (`alias.attribute`), by position: a joined group
+     * whose column name another group of the query is also returned under. Every other group keeps
+     * the column name the engine gives it, so a joined group alone under its name stays reachable
+     * by that bare name, and the main collection's group keeps it when both are grouped.
+     *
+     * @param  array<string>  $groups
+     * @return array<int, string>
+     */
+    private function qualifiedGroupNames(array $groups): array
+    {
+        $names = [];
+        foreach ($groups as $index => $group) {
+            $dot = \strrpos($group, '.');
+            $names[$index] = $this->filter($this->getInternalKeyForAttribute($dot === false ? $group : \substr($group, $dot + 1)));
+        }
+
+        $counts = \array_count_values($names);
+        $qualified = [];
+        foreach ($groups as $index => $group) {
+            if ($counts[$names[$index]] > 1 && \str_contains($group, '.')) {
+                $qualified[$index] = $group;
+            }
+        }
+
+        return $qualified;
     }
 
     /**
@@ -5245,7 +5408,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function executeSelect(SQLBuilder $builder, Event $event): array
+    private function executeSelect(SQLBuilder $builder, Event $event, string $collection = ''): array
     {
         try {
             $result = $builder->build();
@@ -5257,7 +5420,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $results = [];
         $exception = null;
         try {
-            $stmt = $this->executeResult($result, $event);
+            $stmt = $this->executeResult($result, $event, $collection);
             $this->execute($stmt);
             /** @var array<int, array<string, mixed>> $results */
             $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -5291,6 +5454,61 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $name = \substr($column, $dot + 1);
 
         return $prefix.'.'.$this->getInternalKeyForAttribute($name);
+    }
+
+    /**
+     * An order names a bare attribute the main collection does not declare by the one join whose
+     * collection declares it, as an aggregate or a group does, and the cursor value under that name
+     * follows it. A name several joins declare is refused rather than read from one of them.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<string, mixed>  $cursor
+     * @param  list<array{table: string, alias: string}>  $joinTablePrefixes
+     * @return array{array<string>, array<string, mixed>}
+     *
+     * @throws QueryException
+     */
+    private function qualifyJoinedOrders(array $orderAttributes, array $cursor, Document $collection, array $joinTablePrefixes): array
+    {
+        $main = [];
+        foreach (Database::internalAttributes() as $attribute) {
+            $main[$attribute->key] = true;
+        }
+        /** @var array<Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $attribute) {
+            $main[$attribute->getId()] = true;
+        }
+
+        $joinAttributes = $collection->getAttribute(Database::JOIN_ATTRIBUTES, []);
+        $declared = [];
+        foreach ($joinTablePrefixes as $join) {
+            $keys = \is_array($joinAttributes) ? ($joinAttributes[$join['table']] ?? []) : [];
+            foreach (\is_array($keys) ? $keys : [] as $key) {
+                if (\is_string($key)) {
+                    $declared[$key][] = $join['alias'];
+                }
+            }
+        }
+
+        foreach ($orderAttributes as $index => $attribute) {
+            if (\str_contains($attribute, '.') || isset($main[$attribute]) || ! isset($declared[$attribute])) {
+                continue;
+            }
+
+            $aliases = \array_values(\array_unique($declared[$attribute]));
+            if (\count($aliases) > 1) {
+                throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+            }
+
+            $qualified = $aliases[0].'.'.$attribute;
+            $orderAttributes[$index] = $qualified;
+            if (\array_key_exists($attribute, $cursor) && ! \array_key_exists($qualified, $cursor)) {
+                $cursor[$qualified] = $cursor[$attribute];
+            }
+        }
+
+        return [$orderAttributes, $cursor];
     }
 
     /**

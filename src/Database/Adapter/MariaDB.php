@@ -402,6 +402,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $schema = $this->createSchemaBuilder();
         $tableRaw = $this->getSQLTableRaw($name);
 
+        if (! empty($newKey) && $this->isRenamed($collection, $id, $newKey)) {
+            $id = $newKey;
+            $newKey = null;
+        }
+
         if (! empty($newKey)) {
             $result = $schema->changeColumn($tableRaw, $id, $newKey, $sqlType);
         } else {
@@ -1166,6 +1171,19 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         } catch (PDOException $e) {
             throw new DatabaseException('Failed to get schema attributes', $e->getCode(), $e);
         }
+    }
+
+    /**
+     * @return array<string>
+     *
+     * @throws DatabaseException
+     */
+    protected function getColumnNames(string $collection): array
+    {
+        return \array_map(
+            static fn (Document $column): string => $column->getId(),
+            $this->getSchemaAttributes($collection),
+        );
     }
 
     /**

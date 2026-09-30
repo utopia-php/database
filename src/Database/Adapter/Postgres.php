@@ -574,6 +574,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $schema = $this->createSchemaBuilder();
 
+        if (! empty($newKey) && $this->isRenamed($collection, $id, $newKey)) {
+            $id = $newKey;
+            $newKey = null;
+        }
+
         // Rename column first if needed
         if (! empty($newKey) && $id !== $newKey) {
             $newKey = $this->filter($newKey);
@@ -584,7 +589,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             $sql = $renameResult->query;
 
-            $result = $this->executeStatement($sql, Event::AttributeUpdate);
+            try {
+                $result = $this->executeStatement($sql, Event::AttributeUpdate);
+            } catch (PDOException $e) {
+                throw $this->processException($e);
+            }
 
             // Rename mutates the schema. Invalidate now so a subsequent
             // alterColumnType failure can't leave the cache pointing at the
@@ -689,6 +698,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
+        if ($this->isRenamed($collection, $old, $new)) {
+            return true;
+        }
+
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $table->renameColumn($this->filter($old), $this->filter($new));
@@ -696,10 +709,40 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $sql = $result->query;
 
-        $ok = $this->executeStatement($sql, Event::AttributeUpdate);
+        try {
+            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
         $this->invalidateSpatialAttributesCache($collection);
 
         return $ok;
+    }
+
+    /**
+     * @return array<string>
+     *
+     * @throws DatabaseException
+     */
+    protected function getColumnNames(string $collection): array
+    {
+        $statement = $this->prepareStatement(
+            'SELECT a.attname FROM pg_attribute a WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped',
+            Event::CollectionRead,
+        );
+        $statement->bindValue(1, $this->getSQLTable($collection));
+
+        try {
+            $this->execute($statement);
+            /** @var array<string> $columns */
+            $columns = $statement->fetchAll(PDO::FETCH_COLUMN);
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $columns;
     }
 
     /**
@@ -833,6 +876,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $schemaBuilder = $this->createSchemaBuilder();
         $schemaQualifiedOld = $schemaName.'.'.$oldIndexName;
         $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $schemaQualifiedOld, $newIndexName)->query;
+        $sql = \str_replace('ALTER INDEX', 'ALTER INDEX IF EXISTS', $sql);
 
         return $this->executeStatement($sql, Event::IndexRename);
     }

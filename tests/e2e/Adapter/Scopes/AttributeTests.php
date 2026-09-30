@@ -6,6 +6,8 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -19,6 +21,7 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -2827,6 +2830,242 @@ trait AttributeTests
         return \array_map(
             static fn (Attribute $attribute): string => $attribute->key,
             \array_values($database->getCollection($collection)->attributes),
+        );
+    }
+
+    public function testSharedTablesLaterTenantGetsTheDefinitionItDeclares(): void
+    {
+        $this->runTenantIsolation(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            $database->setTenant($second);
+            $this->assertSame(['age', 'nick', 'email', 'bio', 'title'], $this->getTenantIsolationKeys($database, $collection));
+            $this->assertSame('title2', $database->getDocument($collection, 'user')->getAttribute('title'));
+            $this->assertTenantIsolationDuplicateRefused($database, $collection, ['title' => 'title2'], 'The unique index the later tenant declared must hold');
+
+            $database->setTenant($first);
+            $this->assertSame(['age', 'nick', 'email', 'bio', 'note'], $this->getTenantIsolationKeys($database, $collection));
+            $this->assertNull($database->getDocument($collection, 'user')->getAttribute('title'));
+            $database->createDocument($collection, new Document([Document::ID => 'other', 'age' => 11, 'email' => 'other@example.com', 'note' => 'note']));
+            $this->assertSame(2, $database->count($collection));
+        });
+    }
+
+    public function testSharedTablesAttributeChangesStayWithTheirTenant(): void
+    {
+        $this->runTenantIsolation(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            // SQL engines rename and drop the one column every tenant shares (j-db-fix-50), so
+            // only engines that keep attributes in each document can leave the other tenant's
+            // values in place until its own migration runs.
+            $adapter = $database->getAdapter();
+            $perDocument = $adapter instanceof Mongo || $adapter instanceof Redis;
+
+            $database->setTenant($first);
+            $this->assertTrue($database->renameAttribute($collection, 'nick', 'handle'));
+            $this->assertTrue($database->deleteAttribute($collection, 'note'));
+            if ($perDocument) {
+                $this->assertTrue($database->deleteAttribute($collection, 'bio'));
+            }
+            $document = $database->getDocument($collection, 'user');
+            $this->assertSame('nick1', $document->getAttribute('handle'));
+            $this->assertFalse($document->offsetExists('note'));
+
+            $database->setTenant($second);
+            $this->assertSame(['age', 'nick', 'email', 'bio', 'title'], $this->getTenantIsolationKeys($database, $collection));
+            if ($perDocument) {
+                $document = $database->getDocument($collection, 'user');
+                $this->assertSame('nick2', $document->getAttribute('nick'), 'Another tenant\'s rename must leave this tenant\'s documents');
+                $this->assertSame('bio2', $document->getAttribute('bio'), 'Another tenant\'s delete must leave this tenant\'s documents');
+                $database->updateDocument($collection, 'user', new Document(['title' => 'title3']));
+                $this->assertSame('title3', $database->getDocument($collection, 'user')->getAttribute('title'));
+            }
+
+            $this->assertTrue($database->renameAttribute($collection, 'nick', 'handle'));
+            $document = $database->getDocument($collection, 'user');
+            $this->assertSame('nick2', $document->getAttribute('handle'));
+            $this->assertSame('bio2', $document->getAttribute('bio'));
+            $database->updateDocument($collection, 'user', new Document(['title' => 'title4']));
+            $this->assertSame('title4', $database->getDocument($collection, 'user')->getAttribute('title'));
+
+            $database->setTenant($first);
+            $this->assertSame('nick1', $database->getDocument($collection, 'user')->getAttribute('handle'));
+        });
+    }
+
+    public function testSharedTablesIndexesStayWhileAnotherTenantListsThem(): void
+    {
+        $this->runTenantIsolation(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            $database->setTenant($first);
+            $this->assertTrue($database->deleteIndex($collection, 'byEmail'));
+            $this->assertSame(['byAge'], $this->getTenantIsolationIndexKeys($database, $collection));
+
+            $database->setTenant($second);
+            $this->assertSame(['byAge', 'byEmail', 'byTitle'], $this->getTenantIsolationIndexKeys($database, $collection));
+            $this->assertTenantIsolationDuplicateRefused($database, $collection, ['email' => 'same@example.com'], 'Another tenant deleting its index must leave the index this tenant lists');
+
+            $database->setTenant($first);
+            $this->assertTrue($database->createIndex($collection, Index::unique(key: 'byNick', attributes: ['nick'])));
+
+            $database->setTenant($second);
+            if ($database->getAdapter()->findSharedIndex($collection, 'byNick') !== null) {
+                try {
+                    $database->createIndex($collection, Index::key(key: 'byNick', attributes: ['nick']));
+                    $this->fail('A key another tenant indexes differently on the same table must be refused');
+                } catch (MismatchException $error) {
+                    $this->assertSame('Index exists in the shared table with another definition', $error->getMessage());
+                }
+                $this->assertTrue($database->createIndex($collection, Index::unique(key: 'byNick', attributes: ['nick'])));
+            } else {
+                $this->assertTrue($database->createIndex($collection, Index::key(key: 'byNick', attributes: ['nick'])));
+            }
+            $this->assertSame(['byAge', 'byEmail', 'byTitle', 'byNick'], $this->getTenantIsolationIndexKeys($database, $collection));
+
+            foreach ([$first, $second] as $index => $tenant) {
+                $database->setTenant($tenant);
+                $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'));
+
+                foreach ([$first, $second] as $reader => $readerTenant) {
+                    $database->setTenant($readerTenant);
+                    $this->assertSame(['user'], \array_map(
+                        static fn (Document $document): string => $document->getId(),
+                        $database->find($collection, [Query::equal('age', [($reader + 1) * 10])]),
+                    ), "Tenant {$reader} must keep querying after tenant {$index} renamed its index");
+                }
+            }
+
+            $database->setTenant($second);
+            $this->assertTrue($database->deleteIndex($collection, 'byEmail'));
+            $database->createDocument($collection, new Document([Document::ID => 'twin', 'age' => 21, 'email' => 'same@example.com']));
+            $this->assertSame(2, $database->count($collection), 'The last tenant that lists an index drops it');
+        });
+    }
+
+    public function testSharedTablesRenameThatShrinksChecksTheStoredValues(): void
+    {
+        $this->runTenantIsolation(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            if (! $database->getAdapter() instanceof SQL || ! $database->getAdapter()->supports(Capability::AttributeResizing)) {
+                $this->expectNotToPerformAssertions();
+
+                return;
+            }
+
+            $database->setTenant($second);
+            foreach (['byAge', 'byEmail', 'byTitle'] as $index) {
+                $database->deleteIndex($collection, $index);
+            }
+            try {
+                $database->updateAttribute($collection, 'title', size: 4, newKey: 'heading');
+                $this->fail('A size the stored values exceed must be refused with a new key too');
+            } catch (TruncateException) {
+                $this->addToAssertionCount(1);
+            }
+
+            $this->assertSame(['age', 'nick', 'email', 'bio', 'title'], $this->getTenantIsolationKeys($database, $collection));
+            $this->assertSame('title2', $database->getDocument($collection, 'user')->getAttribute('title'), 'A refused update must leave the column under its old key');
+
+            $this->assertSame('heading', $database->updateAttribute($collection, 'title', size: 32, newKey: 'heading')->getId());
+            $this->assertSame('title2', $database->getDocument($collection, 'user')->getAttribute('heading'));
+        });
+    }
+
+    /**
+     * @param  callable(Database, string, int|string, int|string): void  $scenario
+     */
+    private function runTenantIsolation(callable $scenario): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $originalTenant = $database->getTenant();
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $tenants = $integerTenants ? [511, 512] : ['tenant_511', 'tenant_512'];
+        $collection = 'tenantIsolation_'.\uniqid();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ];
+
+        try {
+            foreach ($tenants as $index => $tenant) {
+                $attributes = [
+                    Attribute::integer(key: 'age'),
+                    Attribute::string(key: 'nick', size: 64),
+                    Attribute::string(key: 'email', size: 64),
+                    Attribute::string(key: 'bio', size: 64),
+                ];
+                $indexes = [
+                    Index::key(key: 'byAge', attributes: ['age']),
+                    Index::unique(key: 'byEmail', attributes: ['email']),
+                ];
+                $values = [
+                    Document::ID => 'user',
+                    'age' => ($index + 1) * 10,
+                    'nick' => 'nick'.($index + 1),
+                    'email' => 'same@example.com',
+                    'bio' => 'bio'.($index + 1),
+                ];
+                if ($index === 0) {
+                    $attributes[] = Attribute::string(key: 'note', size: 64);
+                    $values['note'] = 'note1';
+                } else {
+                    $attributes[] = Attribute::string(key: 'title', size: 64);
+                    $indexes[] = Index::unique(key: 'byTitle', attributes: ['title']);
+                    $values['title'] = 'title2';
+                }
+
+                $database->setTenant($tenant);
+                $database->createCollection(new Collection(id: $collection, attributes: $attributes, indexes: $indexes, permissions: $permissions, documentSecurity: false));
+                $database->createDocument($collection, new Document($values));
+            }
+
+            $scenario($database, $collection, ...$tenants);
+        } finally {
+            foreach (\array_reverse($tenants) as $tenant) {
+                try {
+                    $database->setTenant($tenant)->deleteCollection($collection);
+                } catch (Throwable) {
+                }
+            }
+            $database->setTenant($originalTenant);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $values
+     */
+    private function assertTenantIsolationDuplicateRefused(Database $database, string $collection, array $values, string $message): void
+    {
+        try {
+            $database->createDocument($collection, new Document([Document::ID => 'twin', 'age' => 1, 'email' => 'twin@example.com', ...$values]));
+            $this->fail($message);
+        } catch (DuplicateException) {
+            $this->addToAssertionCount(1);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getTenantIsolationKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection($collection)->attributes),
+        );
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getTenantIsolationIndexKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Index $index): string => $index->key,
+            \array_values($database->getCollection($collection)->indexes),
         );
     }
 }

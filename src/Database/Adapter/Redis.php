@@ -2093,7 +2093,7 @@ class Redis extends Adapter implements
 
         $newSignatures = [];
         $sharedTables = $this->getSharedTables();
-        $tenant = $sharedTables ? ($document->getAttribute(Document::TENANT) ?? $this->getTenant()) : null;
+        $tenant = $sharedTables ? ($document->getTenant() ?? $this->getTenant()) : null;
         foreach ($uniqueIndexes as $i => $attributes) {
             $signature = [];
             $hasNull = false;
@@ -2118,7 +2118,7 @@ class Redis extends Adapter implements
             return;
         }
 
-        $idxKey = $this->idxKey($collection);
+        $idxKey = $this->idxKey($collection, $tenant);
         /** @var array<int, string>|false $docIds */
         $docIds = $client->sMembers($idxKey);
         if (! \is_array($docIds) || empty($docIds)) {
@@ -2131,7 +2131,7 @@ class Redis extends Adapter implements
             if ($excludeKey !== null && \strtolower((string) $docId) === $excludeKey) {
                 continue;
             }
-            $docKeys[(string) $docId] = $this->docKey($collection, (string) $docId);
+            $docKeys[(string) $docId] = $this->docKey($collection, (string) $docId, $tenant);
         }
         if ($docKeys === []) {
             return;
@@ -2147,7 +2147,7 @@ class Redis extends Adapter implements
             }
             $existing = $this->decode($payload);
             if ($sharedTables) {
-                $rowTenant = $existing->getAttribute(Document::TENANT);
+                $rowTenant = $existing->getTenant();
                 if ($rowTenant !== $tenant) {
                     continue;
                 }

@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
 #[RequiresPhpExtension('redis')]
@@ -52,6 +53,63 @@ final class RedisUniqueIndexTest extends TestCase
         $this->client = $this->fakeClient();
     }
 
+    public function testUpdateDocumentsRejectsADuplicateUniqueValue(): void
+    {
+        $database = $this->usersDatabase();
+
+        try {
+            $database->updateDocuments(self::USERS, new Document(['email' => 'first@example.test']), [Query::equal('$id', ['second'])]);
+            $this->fail('A batch update onto another document\'s unique value must be rejected');
+        } catch (UniqueException $exception) {
+            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        }
+
+        $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
+        $this->assertSame(1, $database->updateDocuments(self::USERS, new Document(['email' => 'second@example.test']), [Query::equal('$id', ['second'])]));
+        $this->assertSame(1, $database->updateDocuments(self::USERS, new Document(['email' => 'renamed@example.test']), [Query::equal('$id', ['second'])]));
+        $this->assertSame(['first@example.test', 'renamed@example.test', 'third@example.test'], $this->emails($database));
+    }
+
+    public function testUpsertRejectsADuplicateUniqueValue(): void
+    {
+        $database = $this->usersDatabase();
+
+        try {
+            $database->upsertDocuments(self::USERS, [new Document(['$id' => 'second', 'email' => 'first@example.test'])]);
+            $this->fail('An upsert that updates onto another document\'s unique value must be rejected');
+        } catch (UniqueException $exception) {
+            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        }
+
+        $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
+        $this->assertSame(1, $database->upsertDocuments(self::USERS, [new Document(['$id' => 'second', 'email' => 'renamed@example.test'])]));
+        $this->assertSame(['first@example.test', 'renamed@example.test', 'third@example.test'], $this->emails($database));
+    }
+
+    public function testABatchCannotCollideWithItself(): void
+    {
+        $database = $this->usersDatabase();
+
+        try {
+            $database->updateDocuments(self::USERS, new Document(['email' => 'shared@example.test']), [Query::equal('$id', ['second', 'third'])]);
+            $this->fail('A batch update that gives two documents one unique value must be rejected');
+        } catch (UniqueException $exception) {
+            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        }
+
+        try {
+            $database->upsertDocuments(self::USERS, [
+                new Document(['$id' => 'second', 'email' => 'shared@example.test']),
+                new Document(['$id' => 'third', 'email' => 'shared@example.test']),
+            ]);
+            $this->fail('An upsert batch that gives two documents one unique value must be rejected');
+        } catch (UniqueException $exception) {
+            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        }
+
+        $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
+    }
+
     public function testTenantPerDocumentChecksTheDocumentsTenant(): void
     {
         $database = $this->database()
@@ -82,6 +140,18 @@ final class RedisUniqueIndexTest extends TestCase
             ->setAuthorization($this->authorization)
             ->setDatabase('redis_unique')
             ->setNamespace('redis_unique');
+    }
+
+    private function usersDatabase(): Database
+    {
+        $database = $this->database();
+        $database->create();
+        $this->createUsers($database);
+        foreach (['first', 'second', 'third'] as $id) {
+            $database->createDocument(self::USERS, $this->user($id, $id.'@example.test'));
+        }
+
+        return $database;
     }
 
     private function createUsers(Database $database): void

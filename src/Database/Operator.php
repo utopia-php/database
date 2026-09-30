@@ -80,7 +80,15 @@ class Operator
      */
     public function getValues(): array
     {
-        return $this->values;
+        $exponent = $this->values[0] ?? null;
+        if ($this->method !== OperatorType::Power || ! \is_string($exponent) || ! \is_numeric($exponent)) {
+            return $this->values;
+        }
+
+        $values = $this->values;
+        $values[0] = $exponent + 0;
+
+        return $values;
     }
 
     /**
@@ -91,7 +99,7 @@ class Operator
      */
     public function getValue(mixed $default = null): mixed
     {
-        return $this->values[0] ?? $default;
+        return $this->getValues()[0] ?? $default;
     }
 
     /**

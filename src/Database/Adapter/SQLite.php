@@ -9,6 +9,7 @@ use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
+use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\SQLite as SQLiteBuilder;
 use Utopia\Database\Capability;
@@ -37,6 +38,7 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
@@ -546,8 +548,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 			)
 		";
 
+        $created = false;
+
         try {
             $this->execute($this->prepare($collection, event: Event::CollectionCreate));
+            $created = true;
 
             $this->execute($this->prepare($permissions, event: Event::CollectionCreate));
 
@@ -572,8 +577,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                     ttl: $index->ttl,
                 ), event: Event::CollectionCreate);
             }
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (Throwable $e) {
+            if ($e instanceof PDOException) {
+                $e = $this->processException($e);
+            }
+
+            if ($created && ! $e instanceof DuplicateException) {
+                $this->deleteCollection($id);
+            }
+
+            throw $e;
         }
 
         return true;
@@ -1572,12 +1585,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
 
         if ($type === ColumnType::Varchar) {
-            if ($size <= 0) {
-                throw new DatabaseException('VARCHAR size '.$size.' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
-            if ($size > $this->getMaxVarcharLength()) {
-                throw new DatabaseException('VARCHAR size '.$size.' exceeds maximum varchar length '.$this->getMaxVarcharLength().'. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
+            $this->assertVarcharSize($size);
 
             return "VARCHAR({$size})";
         }
@@ -2145,12 +2153,13 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             case OperatorType::ArrayRemove:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+                $removed = \is_float($values[0] ?? null) ? "CAST(:$bindKey AS REAL)" : ":$bindKey";
 
                 // SQLite: remove specific value from array
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
-                    WHERE value != :$bindKey
+                    WHERE value != {$removed}
                 )";
 
             case OperatorType::ArrayInsert:
@@ -2372,7 +2381,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 if ($change->getOld()->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
                         $default = $attributeDefaults[$operatorKey] ?? null;
-                        $currentRegularAttributes[$operatorKey] = $this->applyOperatorToValue($operator, $default);
+                        $value = $this->applyOperatorToValue($operator, $default);
+                        if ($operator->getMethod()->isNumeric() && \is_string($value) && ! BigInt::fitsPhpInt($value)) {
+                            throw new LimitException('Value out of range');
+                        }
+                        $currentRegularAttributes[$operatorKey] = $value;
                     }
                 }
 

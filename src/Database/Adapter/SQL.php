@@ -3227,12 +3227,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($type === ColumnType::Varchar) {
-            if ($size <= 0) {
-                throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
-            if ($size > $this->getMaxVarcharLength()) {
-                throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
+            $this->assertVarcharSize($size);
 
             return "VARCHAR({$size})";
         }
@@ -4228,6 +4223,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $table->json($filteredId)->nullable();
         }
 
+        if ($type === ColumnType::Varchar) {
+            $this->assertVarcharSize($size);
+        }
+
         $column = match ($type) {
             ColumnType::String => match (true) {
                 $size > 16777215 => $table->longText($filteredId),
@@ -4266,6 +4265,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $column->nullable();
 
         return $column;
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    protected function assertVarcharSize(int $size): void
+    {
+        if ($size <= 0) {
+            throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+        }
+        if ($size > $this->getMaxVarcharLength()) {
+            throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+        }
     }
 
     /**
@@ -5608,6 +5620,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
                     if ($orderType === OrderDirection::Random) {
                         $orderParts[] = $this->createBuilder()->compileOrder(BaseQuery::orderRandom());
+                        $sql = 'SELECT * FROM ('.$result->query.') AS '.$quote.self::FOJ_ROWS_ALIAS.$quote;
 
                         continue;
                     }
@@ -5996,7 +6009,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 // Bind limit if provided
                 if (isset($values[1])) {
                     $limitKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':'.$limitKey, $values[1], $this->getPDOType($values[1]));
+                    $limit = self::exactLimit($values[1]);
+                    $stmt->bindValue(':'.$limitKey, $limit, $this->getPDOType($limit));
                     $bindIndex++;
                 }
                 break;
@@ -6017,7 +6031,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 // Bind max limit if provided
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':'.$maxKey, $values[1], $this->getPDOType($values[1]));
+                    $limit = self::exactLimit($values[1]);
+                    $stmt->bindValue(':'.$maxKey, $limit, $this->getPDOType($limit));
                     $bindIndex++;
                 }
                 break;
@@ -6080,7 +6095,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 if (is_array($value)) {
                     $value = json_encode($value);
                 }
-                $stmt->bindValue(':'.$bindKey, $value, PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
                 $bindIndex++;
                 break;
 
@@ -6184,7 +6199,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
-                    $namedBindings["op_{$idx}"] = $values[1];
+                    $namedBindings["op_{$idx}"] = self::exactLimit($values[1]);
                     $idx++;
                 }
                 break;
@@ -6198,7 +6213,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
-                    $namedBindings["op_{$idx}"] = $values[1];
+                    $namedBindings["op_{$idx}"] = self::exactLimit($values[1]);
                     $idx++;
                 }
                 break;
@@ -6332,7 +6347,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $values = $operator->getValues();
         $exact = BigInt::calculateOutsideNative($method, $value ?? 0, $values[0] ?? 1);
         if ($exact !== null) {
-            $bound = $values[1] ?? null;
+            $bound = self::exactLimit($values[1] ?? null);
             if (BigInt::isIntegerValue($bound)) {
                 $upper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
                 if (($upper && BigInt::compare($exact, $bound) > 0)
@@ -6350,7 +6365,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         /** @var array<mixed> $arrVal */
         $arrVal = is_array($value) ? $value : [];
 
-        return match ($method) {
+        $result = match ($method) {
             OperatorType::Increment => $numVal + $numOp,
             OperatorType::Decrement => $numVal - $numOp,
             OperatorType::Multiply => $numVal * $numOp,
@@ -6377,14 +6392,82 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             OperatorType::ArrayUnique => array_values(array_unique(self::stringifyList($arrVal))),
             OperatorType::ArrayIntersect => array_values(array_intersect(self::stringifyList($arrVal), self::stringifyList($values))),
             OperatorType::ArrayDiff => array_values(array_diff(self::stringifyList($arrVal), self::stringifyList($values))),
-            OperatorType::ArrayFilter => $arrVal,
+            OperatorType::ArrayFilter => self::filterArray($arrVal, $values[0] ?? null, $values[1] ?? null),
             OperatorType::StringConcat => (\is_scalar($value) ? (string) $value : '') . (count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : ''),
             OperatorType::StringReplace => str_replace(count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : '', count($values) > 1 && \is_scalar($values[1]) ? (string) $values[1] : '', \is_scalar($value) ? (string) $value : ''),
             OperatorType::Toggle => ! ($value ?? false),
-            OperatorType::DateAddDays,
-            OperatorType::DateSubDays => $value,
+            OperatorType::DateAddDays => self::shiftDays($value, \is_numeric($firstValue) ? (int) $firstValue : 0),
+            OperatorType::DateSubDays => self::shiftDays($value, \is_numeric($firstValue) ? -(int) $firstValue : 0),
             OperatorType::DateSetNow => DateTime::now(),
         };
+
+        return self::keepWithinBound($method, $numVal, $result, $values[1] ?? null);
+    }
+
+    protected static function exactLimit(mixed $limit): mixed
+    {
+        if (! \is_float($limit) || ! \is_finite($limit)) {
+            return $limit;
+        }
+
+        return BigInt::integralValue($limit) ?? $limit;
+    }
+
+    private static function keepWithinBound(OperatorType $method, int|float $current, mixed $result, mixed $bound): mixed
+    {
+        if (! \is_numeric($bound) || (! \is_int($result) && ! \is_float($result))) {
+            return $result;
+        }
+
+        $limit = \is_float($bound) && \is_finite($bound) ? (BigInt::integralValue($bound) ?? $bound) : $bound;
+        $comparison = \is_int($result) && BigInt::isIntegerValue($limit)
+            ? BigInt::compare($result, $limit)
+            : $result <=> $limit + 0;
+
+        $crossed = match ($method) {
+            OperatorType::Increment, OperatorType::Multiply, OperatorType::Power => \is_nan((float) $result) || $comparison > 0,
+            OperatorType::Decrement, OperatorType::Divide => $comparison < 0,
+            default => false,
+        };
+
+        return $crossed ? $current : $result;
+    }
+
+    /**
+     * @param  array<mixed>  $items
+     * @return list<mixed>
+     */
+    private static function filterArray(array $items, mixed $condition, mixed $compare): array
+    {
+        return \array_values(\array_filter($items, static fn (mixed $item): bool => match ($condition) {
+            Method::Equal->value => $item == $compare,
+            Method::NotEqual->value => $item != $compare,
+            Method::GreaterThan->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 > $compare + 0,
+            Method::GreaterThanEqual->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 >= $compare + 0,
+            Method::LessThan->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 < $compare + 0,
+            Method::LessThanEqual->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 <= $compare + 0,
+            Method::IsNull->value => $item === null,
+            Method::IsNotNull->value => $item !== null,
+            default => true,
+        }));
+    }
+
+    private static function shiftDays(mixed $value, int $days): mixed
+    {
+        if (! \is_string($value) || $value === '') {
+            return $value;
+        }
+
+        try {
+            $date = new \DateTime($value);
+        } catch (Throwable) {
+            return $value;
+        }
+
+        $date->setTimezone(new \DateTimeZone(\date_default_timezone_get()));
+        $date->modify(\sprintf('%+d days', $days));
+
+        return DateTime::format($date);
     }
 
     /**

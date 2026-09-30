@@ -99,7 +99,7 @@ class PermissionFilter implements Filter, JoinFilter
         $hint = $this->semiJoin ? '' : self::NO_SEMIJOIN;
 
         return new Condition(
-            "{$quotedDocumentColumn} IN (SELECT {$hint}DISTINCT {$this->permDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permRoleColumn} IN ({$rolePlaceholders}) AND {$this->permTypeColumn} = ?{$columnClause}{$subFilterClause})",
+            "{$quotedDocumentColumn} IN (SELECT {$hint}{$this->permDocumentColumn} FROM {$quotedPermTable} WHERE {$this->permRoleColumn} IN ({$rolePlaceholders}) AND {$this->permTypeColumn} = ?{$columnClause}{$subFilterClause})",
             [...$this->roles, $this->type, ...$columnBindings, ...$subFilterBindings],
         );
     }

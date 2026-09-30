@@ -6,6 +6,7 @@ use Closure;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -14,6 +15,7 @@ use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
@@ -87,6 +89,63 @@ final class RelationshipSchemaTest extends TestCase
         }
     }
 
+    public function testAFailedDefinitionUpdateReversesTheSchemaRename(): void
+    {
+        $renames = [];
+        $failure = new RuntimeException('the related definition could not be written');
+        $adapter = $this->memory([
+            'updateRelationship' => static function (Relationship $relationship, ?string $newKey, ?string $newTwoWayKey) use (&$renames): ?bool {
+                $renames[] = "{$relationship->key}->{$newKey}";
+
+                return null;
+            },
+        ]);
+        $database = $this->intercepting($adapter, attributeMeta: static function (string $collection, string $id) use ($failure): void {
+            if ($collection === 'authors' && $id === 'books') {
+                throw $failure;
+            }
+        });
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        try {
+            $database->updateRelationship('books', 'author', newKey: 'writer');
+            $this->fail('a failed definition update must fail the rename');
+        } catch (RuntimeException $error) {
+            $this->assertSame($failure, $error);
+        }
+
+        $this->assertSame(['author->writer', 'writer->author'], $renames);
+        $this->assertContains('author', $this->attributeKeys($database, 'books'), 'the definition that was written is restored with the schema');
+        $this->assertNotContains('writer', $this->attributeKeys($database, 'books'));
+        $this->assertSame('books', $this->relationship($database, 'books', 'author')->twoWayKey);
+        $this->assertSame('author', $this->relationship($database, 'authors', 'books')->twoWayKey);
+    }
+
+    public function testAFailedJunctionDefinitionUpdateRestoresBothSides(): void
+    {
+        $failure = new RuntimeException('the junction definition could not be written');
+        $database = $this->intercepting(new Memory(), attributeMeta: static function (string $collection, string $id) use ($failure): void {
+            if (\str_starts_with($collection, '_') && $id === 'writers') {
+                throw $failure;
+            }
+        });
+        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+
+        try {
+            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $this->fail('a failed junction definition update must fail the rename');
+        } catch (RuntimeException $error) {
+            $this->assertSame($failure, $error);
+        }
+
+        $this->assertContains('writers', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('authors_of', $this->attributeKeys($database, 'books'));
+        $this->assertContains('works', $this->attributeKeys($database, 'authors'));
+        $this->assertNotContains('written', $this->attributeKeys($database, 'authors'));
+        $this->assertSame('works', $this->relationship($database, 'books', 'writers')->twoWayKey);
+        $this->assertSame('writers', $this->relationship($database, 'authors', 'works')->twoWayKey);
+    }
+
     /**
      * @return list<string>
      */
@@ -141,5 +200,115 @@ final class RelationshipSchemaTest extends TestCase
         $database->createCollection(new Collection(id: 'authors', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $permissions));
 
         return $database;
+    }
+
+    /**
+     * @param  array<string, Closure>  $overrides
+     */
+    private function memory(array $overrides): Memory
+    {
+        return new class ($overrides) extends Memory {
+            /**
+             * @param  array<string, Closure>  $overrides
+             */
+            public function __construct(private readonly array $overrides)
+            {
+                parent::__construct();
+            }
+
+            public function createRelationship(Relationship $relationship): bool
+            {
+                return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::createRelationship($relationship);
+            }
+
+            public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+            {
+                return $this->intercept(__FUNCTION__, [$relationship, $newKey, $newTwoWayKey]) ?? parent::updateRelationship($relationship, $newKey, $newTwoWayKey);
+            }
+
+            public function deleteRelationship(Relationship $relationship): bool
+            {
+                return $this->intercept(__FUNCTION__, [$relationship]) ?? parent::deleteRelationship($relationship);
+            }
+
+            public function deleteCollection(string $id): bool
+            {
+                if (! \str_starts_with($id, '_')) {
+                    return parent::deleteCollection($id);
+                }
+
+                return $this->intercept(__FUNCTION__, [$id]) ?? parent::deleteCollection($id);
+            }
+
+            public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
+            {
+                return $this->intercept(__FUNCTION__, [$collection, $index]) ?? parent::createIndex($collection, $index, $indexAttributeTypes, $collation);
+            }
+
+            public function deleteIndex(string $collection, string $id): bool
+            {
+                return $this->intercept(__FUNCTION__, [$collection, $id]) ?? parent::deleteIndex($collection, $id);
+            }
+
+            /**
+             * @param  list<mixed>  $arguments
+             */
+            private function intercept(string $method, array $arguments): ?bool
+            {
+                $override = $this->overrides[$method] ?? null;
+                $result = $override === null ? null : $override(...$arguments);
+
+                return \is_bool($result) ? $result : null;
+            }
+        };
+    }
+
+    /**
+     * @param  (Closure(string, string, Document): void)|null  $update
+     * @param  (Closure(string, string): void)|null  $attributeMeta
+     * @param  (Closure(string): void)|null  $create
+     */
+    private function intercepting(Adapter $adapter, ?Closure $update = null, ?Closure $attributeMeta = null, ?Closure $create = null): Database
+    {
+        $database = new class ($adapter, new Cache(new None()), $update, $attributeMeta, $create) extends Database {
+            public function __construct(
+                Adapter $adapter,
+                Cache $cache,
+                private readonly ?Closure $update,
+                private readonly ?Closure $attributeMeta,
+                private readonly ?Closure $create,
+            ) {
+                parent::__construct($adapter, $cache);
+            }
+
+            public function updateDocument(string $collection, string $id, Document $document): Document
+            {
+                if ($this->update !== null) {
+                    ($this->update)($collection, $id, $document);
+                }
+
+                return parent::updateDocument($collection, $id, $document);
+            }
+
+            public function createDocument(string $collection, Document $document): Document
+            {
+                if ($this->create !== null) {
+                    ($this->create)($collection);
+                }
+
+                return parent::createDocument($collection, $document);
+            }
+
+            protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
+            {
+                if ($this->attributeMeta !== null) {
+                    ($this->attributeMeta)($collection, $id);
+                }
+
+                return parent::updateAttributeMeta($collection, $id, $updateCallback, $triggerEvent);
+            }
+        };
+
+        return $this->prepare($database);
     }
 }

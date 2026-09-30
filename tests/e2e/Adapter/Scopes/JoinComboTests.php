@@ -1478,20 +1478,12 @@ trait JoinComboTests
             $this->assertNotNull($afterScore);
             $this->assertTrue($after[0]->getId() === '' || \in_array($after[0]->getId(), ['hm1', 'hm2', 'hm3'], true));
 
-            $expectedScore = null;
-            for ($index = (int) $cursorIndex + 1, $total = \count($full); $index < $total; $index++) {
-                $score = $this->comboJoinScore($full[$index]);
-                if ($score === null) {
-                    continue;
-                }
-                if ($score === $cursorScore && $full[$index]->getId() === $cursor->getId()) {
-                    continue;
-                }
-                $expectedScore = $score;
-                break;
-            }
-            $this->assertNotNull($expectedScore);
-            $this->assertSame($expectedScore, $afterScore);
+            $next = $full[$cursorIndex + 1] ?? null;
+            $this->assertNotNull($next);
+            $this->assertSame($this->comboJoinScore($next), $afterScore);
+            $this->assertSame($next->getId(), $after[0]->getId());
+            $this->assertSame($next->getAttribute('meta.$id'), $after[0]->getAttribute('meta.$id'));
+            $this->assertSame($next->getAttribute('peer.$id'), $after[0]->getAttribute('peer.$id'));
         });
 
         $this->cleanupAggCollections($database, $this->joinHardcoreCollections());

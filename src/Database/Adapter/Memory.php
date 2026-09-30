@@ -12,6 +12,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
@@ -102,8 +103,6 @@ class Memory extends Adapter implements Feature\Relationships
      * @var array<string, string>
      */
     protected array $filterCache = [];
-
-    protected bool $supportForAttributes = true;
 
     public function __construct()
     {
@@ -1937,9 +1936,7 @@ class Memory extends Adapter implements Feature\Relationships
 
     public function setSupportForAttributes(bool $support): bool
     {
-        $this->supportForAttributes = $support;
-
-        return $this->supportForAttributes;
+        return true;
     }
 
     public function getCountOfAttributes(Document $collection): int
@@ -3328,14 +3325,19 @@ class Memory extends Adapter implements Feature\Relationships
         $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
         if ($exact !== null) {
             $bound = $values[1] ?? null;
-            if ($method === OperatorType::Modulo || ! BigInt::isIntegerValue($bound)) {
+            if ($method === OperatorType::Modulo || ! \is_numeric($bound) || (\is_float($bound) && ! \is_finite($bound))) {
                 return $exact;
+            }
+
+            $limit = BigInt::integralValue($bound);
+            if ($limit === null) {
+                throw new OperatorException("Cannot apply {$method->value} operator: max/min limit must be a whole number, got {$bound}");
             }
 
             return $this->applyNumericLimit(
                 $current ?? 0,
                 $exact,
-                $bound,
+                $limit,
                 \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true)
             );
         }

@@ -576,57 +576,65 @@ class FindLogicTest extends TestCase
 
     public function testFindWithDistinct(): void
     {
-        $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
-            ->method('find')
-            ->with(
-                $this->anything(),
-                $this->callback(function (mixed $queries): bool {
-                    if (! \is_array($queries)) {
-                        return false;
-                    }
-                    foreach ($queries as $q) {
-                        if ($q instanceof Query && $q->getMethod()->value === 'distinct') {
-                            return true;
+        $db = $this->buildDbWithCapabilities([
+            Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
+            Capability::DefinedAttributes, Capability::Aggregations,
+        ], function (Adapter&MockObject $adapter): void {
+            $adapter->expects($this->once())
+                ->method('find')
+                ->with(
+                    $this->anything(),
+                    $this->callback(function (mixed $queries): bool {
+                        if (! \is_array($queries)) {
+                            return false;
                         }
-                    }
+                        foreach ($queries as $q) {
+                            if ($q instanceof Query && $q->getMethod()->value === 'distinct') {
+                                return true;
+                            }
+                        }
 
-                    return false;
-                }),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->anything()
-            )
-            ->willReturn([]);
+                        return false;
+                    }),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything()
+                )
+                ->willReturn([]);
+        });
 
-        $this->database->skipValidation(fn () => $this->database->find('testCol', [Query::distinct()]));
+        $db->skipValidation(fn () => $db->find('testCol', [Query::distinct()]));
     }
 
     public function testFindDistinctDoesNotAppendSequenceOrder(): void
     {
-        $this->setupCollectionLookup('testCol');
-        $this->adapter->expects($this->once())
-            ->method('find')
-            ->with(
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->callback(function (array $orderAttributes) {
-                    return ! \in_array(Document::SEQUENCE, $orderAttributes, true);
-                }),
-                $this->anything(),
-                $this->anything(),
-                $this->anything(),
-                $this->anything()
-            )
-            ->willReturn([]);
+        $db = $this->buildDbWithCapabilities([
+            Capability::Index, Capability::IndexArray, Capability::UniqueIndex,
+            Capability::DefinedAttributes, Capability::Aggregations,
+        ], function (Adapter&MockObject $adapter): void {
+            $adapter->expects($this->once())
+                ->method('find')
+                ->with(
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->callback(function (array $orderAttributes) {
+                        return ! \in_array(Document::SEQUENCE, $orderAttributes, true);
+                    }),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything(),
+                    $this->anything()
+                )
+                ->willReturn([]);
+        });
 
-        $this->database->skipValidation(fn () => $this->database->find('testCol', [
+        $db->skipValidation(fn () => $db->find('testCol', [
             Query::distinct(),
         ]));
     }

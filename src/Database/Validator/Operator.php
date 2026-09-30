@@ -129,6 +129,45 @@ class Operator extends Validator
         return $numeric >= $bounds['min'] && $numeric <= $bounds['max'];
     }
 
+    private function isValidLimit(mixed $limit, AttributeVO $attribute, DatabaseOperator $operator): bool
+    {
+        $methodName = $operator->getMethod()->value;
+        $finite = \is_int($limit) || (\is_float($limit) && \is_finite($limit)) || (\is_string($limit) && \is_numeric($limit));
+
+        if (! AttributeVO::isIntegerType($attribute->type) || ! $finite) {
+            if ($this->isNumericValueInBounds($limit, $attribute)) {
+                return true;
+            }
+
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($limit);
+
+            return false;
+        }
+
+        /** @var int|float|string $limit */
+        $integral = BigInt::integralValue($limit);
+        if ($integral === null) {
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be a whole number for integer attribute '{$operator->getAttribute()}', got {$limit}";
+
+            return false;
+        }
+
+        $bounds = $this->getNumericBounds($attribute);
+        if ($bounds === null) {
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($limit);
+
+            return false;
+        }
+
+        if (BigInt::compare($integral, $bounds['min']) < 0 || BigInt::compare($integral, $bounds['max']) > 0) {
+            $this->message = "Cannot apply {$methodName} operator: max/min limit must be between {$bounds['min']} and {$bounds['max']}";
+
+            return false;
+        }
+
+        return true;
+    }
+
     private function getIntegerValue(mixed $value): int|string|null
     {
         if (\is_int($value)) {
@@ -307,10 +346,7 @@ class Operator extends Validator
                     return false;
                 }
 
-                // Validate max/min if provided
-                if (\count($values) > 1 && $values[1] !== null && ! $this->isNumericValueInBounds($values[1], $attribute)) {
-                    $this->message = "Cannot apply {$methodName} operator: max/min limit must be numeric, got ".\gettype($values[1]);
-
+                if (\count($values) > 1 && $values[1] !== null && ! $this->isValidLimit($values[1], $attribute, $operator)) {
                     return false;
                 }
 

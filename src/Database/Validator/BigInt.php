@@ -335,6 +335,32 @@ class BigInt extends Validator
     }
 
     /**
+     * The exact integer a whole number stands for: an integer, an integer string, a string with only
+     * zero decimals, or a finite float without a fractional part (beyond PHP's int range as an integer
+     * string). Null for anything fractional or not finite.
+     */
+    public static function integralValue(int|float|string $value): int|string|null
+    {
+        if (self::isIntegerValue($value)) {
+            return self::toNative($value);
+        }
+
+        if (\is_string($value)) {
+            return \preg_match('/^(-?\d+)\.0+$/', $value, $matches) === 1 ? self::toNative($matches[1]) : null;
+        }
+
+        if (! \is_float($value) || ! \is_finite($value) || \floor($value) !== $value) {
+            return null;
+        }
+
+        if ($value >= (float) \PHP_INT_MIN && $value < -(float) \PHP_INT_MIN) {
+            return (int) $value;
+        }
+
+        return self::toNative(\sprintf('%.0F', $value));
+    }
+
+    /**
      * @phpstan-assert-if-true int|string $value
      */
     public static function isIntegerValue(mixed $value): bool

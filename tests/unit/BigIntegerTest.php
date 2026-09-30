@@ -18,8 +18,10 @@ use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Schema\ColumnType;
@@ -236,5 +238,126 @@ final class BigIntegerTest extends TestCase
         $this->expectException(TypeException::class);
         $this->expectExceptionMessage('outside the signed 64-bit integer range');
         $adapter->increaseDocumentAttribute('collection', 'document', 'value', BigInt::UNSIGNED_MAX, '2026-01-01T00:00:00.000+00:00');
+    }
+
+    public function testMemoryAndRedisHonourAFloatBoundOnTheExactBigIntegerPath(): void
+    {
+        $cases = [
+            'increment above a float max' => [PHP_INT_MAX - 5, Operator::increment(10, 9.0e18), PHP_INT_MAX - 5],
+            'increment above a whole float max' => [PHP_INT_MAX, Operator::increment(1, 100.0), PHP_INT_MAX],
+            'increment onto a float max' => [PHP_INT_MAX, Operator::increment(1, 9223372036854775808.0), '9223372036854775808'],
+            'increment below a float max' => [PHP_INT_MAX, Operator::increment(1, 1.0e19), '9223372036854775808'],
+            'increment below a whole string max' => [PHP_INT_MAX, Operator::increment(1, '9223372036854775808.0'), '9223372036854775808'],
+            'decrement below a float min' => [PHP_INT_MIN, Operator::decrement(1, -9.0e18), PHP_INT_MIN],
+            'decrement above a float min' => [PHP_INT_MIN, Operator::decrement(1, -1.0e19), '-9223372036854775809'],
+            'multiply above a float max' => [PHP_INT_MAX, Operator::multiply(2, 1.5e19), PHP_INT_MAX],
+            'unbounded increment' => [PHP_INT_MAX, Operator::increment(1), '9223372036854775808'],
+        ];
+
+        foreach (['memory' => self::memoryOperators(), 'redis' => self::redisOperators()] as $name => $adapter) {
+            foreach ($cases as $case => [$current, $operator, $expected]) {
+                $this->assertSame($expected, $adapter->apply($current, $operator), "{$name}: {$case}");
+            }
+        }
+    }
+
+    public function testMemoryAndRedisRefuseAFractionalBoundOnTheExactBigIntegerPath(): void
+    {
+        $cases = [
+            'float max' => [Operator::increment(1, 102.4), 'Cannot apply increment operator: max/min limit must be a whole number, got 102.4'],
+            'string max' => [Operator::increment(1, '9223372036854775808.5'), 'Cannot apply increment operator: max/min limit must be a whole number, got 9223372036854775808.5'],
+            'float min' => [Operator::decrement(1, -0.5), 'Cannot apply decrement operator: max/min limit must be a whole number, got -0.5'],
+        ];
+
+        foreach (['memory' => self::memoryOperators(), 'redis' => self::redisOperators()] as $name => $adapter) {
+            foreach ($cases as $case => [$operator, $message]) {
+                $current = $operator->getMethod() === OperatorType::Decrement ? PHP_INT_MIN : PHP_INT_MAX;
+                try {
+                    $adapter->apply($current, $operator);
+                    $this->fail("{$name}: {$case} must be refused");
+                } catch (OperatorException $exception) {
+                    $this->assertSame($message, $exception->getMessage(), "{$name}: {$case}");
+                }
+            }
+        }
+    }
+
+    public function testRedisOperatorPreservesUnsignedIntegerStrings(): void
+    {
+        $adapter = self::redisOperators();
+
+        $this->assertSame('9223372036854775808', $adapter->apply(PHP_INT_MAX, Operator::increment(1)));
+        $this->assertSame('18446744073709551615', $adapter->apply('18446744073709551614', Operator::increment(1)));
+        $this->assertSame(PHP_INT_MAX, $adapter->apply('9223372036854775808', Operator::decrement(1)));
+    }
+
+    public function testRedisKeepsTheStoredValueWhereAnOperatorCannotApply(): void
+    {
+        $adapter = self::redisOperators();
+
+        $this->assertSame(10.0, $adapter->apply(10.0, Operator::power(400, 1000)));
+        $this->assertSame(10, $adapter->apply(10, new Operator(OperatorType::Divide, 'value', [0])));
+        $this->assertSame(10, $adapter->apply(10, new Operator(OperatorType::Modulo, 'value', [0])));
+
+        try {
+            $adapter->apply(10.0, Operator::power(400));
+            $this->fail('An unbounded power that overflows must throw');
+        } catch (LimitException $exception) {
+            $this->assertSame('Value out of range', $exception->getMessage());
+        }
+    }
+
+    public function testMemoryKeepsTheStoredValueWhenABoundedPowerOverflows(): void
+    {
+        $adapter = self::memoryOperators();
+
+        $this->assertSame(10.0, $adapter->apply(10.0, Operator::power(400, 1000)));
+
+        try {
+            $adapter->apply(10.0, Operator::power(400));
+            $this->fail('An unbounded power that overflows must throw');
+        } catch (LimitException $exception) {
+            $this->assertSame('Value out of range', $exception->getMessage());
+        }
+    }
+
+    public function testMemoryOperatorsCoerceOperandsAndKeepUnparsableDates(): void
+    {
+        $adapter = self::memoryOperators();
+
+        $this->assertSame(3, $adapter->apply(1, Operator::increment('2')));
+        $this->assertSame(3.75, $adapter->apply(1.5, Operator::multiply('2.5')));
+        $this->assertSame('ab', $adapter->apply('ab', Operator::stringConcat(['x'])));
+        $this->assertSame('y', $adapter->apply(['x'], Operator::stringConcat('y')));
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateAddDays(1)));
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateSubDays(1)));
+    }
+
+    public function testRedisKeepsAnUnparsableDate(): void
+    {
+        $adapter = self::redisOperators();
+
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateAddDays(1)));
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateSubDays(1)));
+    }
+
+    private static function memoryOperators(): Memory
+    {
+        return new class () extends Memory {
+            public function apply(mixed $current, Operator $operator): mixed
+            {
+                return $this->applyOperator($current, $operator);
+            }
+        };
+    }
+
+    private static function redisOperators(): RedisAdapter
+    {
+        return new class (self::createStub(\Redis::class)) extends RedisAdapter {
+            public function apply(mixed $current, Operator $operator): mixed
+            {
+                return $this->applyOperator($current, $operator);
+            }
+        };
     }
 }

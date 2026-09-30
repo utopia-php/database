@@ -5199,4 +5199,52 @@ trait OperatorTests
 
         $database->deleteCollection($collectionId);
     }
+
+    public function testOperatorWholeFloatLimitHoldsAndAFractionalLimitIsRefused(): void
+    {
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionId = 'operator_integer_limits';
+        $database->createCollection(new Collection(id: $collectionId));
+        $database->createAttribute($collectionId, Attribute::bigInteger(key: 'counter'));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count'));
+
+        try {
+            $database->createDocument($collectionId, new Document([
+                '$id' => 'doc',
+                '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+                'counter' => PHP_INT_MAX - 5,
+                'count' => 100,
+            ]));
+
+            $updated = $database->updateDocument($collectionId, 'doc', new Document([
+                'counter' => Operator::increment(10, 9.0e18),
+            ]));
+
+            $this->assertSame(PHP_INT_MAX - 5, $updated->getAttribute('counter'));
+            $this->assertSame(PHP_INT_MAX - 5, $database->getDocument($collectionId, 'doc')->getAttribute('counter'));
+
+            try {
+                $database->updateDocument($collectionId, 'doc', new Document([
+                    'count' => Operator::increment(5, 102.4),
+                ]));
+                $this->fail('A fractional limit on an integer attribute must be refused');
+            } catch (StructureException $exception) {
+                $this->assertSame(
+                    "Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'count', got 102.4",
+                    $exception->getMessage(),
+                );
+            }
+
+            $this->assertSame(100, $database->getDocument($collectionId, 'doc')->getAttribute('count'));
+        } finally {
+            $database->deleteCollection($collectionId);
+        }
+    }
 }

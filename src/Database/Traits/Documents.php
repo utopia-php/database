@@ -3684,6 +3684,10 @@ trait Documents
             throw new QueryException('Aggregation queries are not supported by this adapter');
         }
 
+        if ($distinct && ! $this->adapter->supports(Capability::Aggregations)) {
+            throw new QueryException('Distinct queries are not supported by this adapter');
+        }
+
         foreach ($aggregations as $aggregation) {
             $method = $aggregation->getMethod();
             $capability = match ($method) {

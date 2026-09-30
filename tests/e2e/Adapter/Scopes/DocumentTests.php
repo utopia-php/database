@@ -2616,6 +2616,7 @@ trait DocumentTests
         $database->createCollection(new Collection(id: $collection, attributes: [
             Attribute::string(key: 'string', size: 100, format: ''),
             Attribute::integer(key: 'integer', size: 10000, format: ''),
+            Attribute::boolean(key: 'boolean', default: false),
         ], permissions: [
             Permission::read(Role::any()),
             Permission::create(Role::any()),
@@ -2628,6 +2629,7 @@ trait DocumentTests
                 '$id' => 'doc'.$i,
                 'string' => 'text📝 '.$i,
                 'integer' => $i,
+                'boolean' => true,
             ]));
         }
 
@@ -2645,6 +2647,7 @@ trait DocumentTests
 
         foreach ($results as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
+            $this->assertTrue($document->getAttribute('boolean'));
         }
 
         $updatedDocuments = $database->find($collection, [
@@ -2656,6 +2659,7 @@ trait DocumentTests
         foreach ($updatedDocuments as $document) {
             $this->assertEquals('text📝 updated', $document->getAttribute('string'));
             $this->assertGreaterThanOrEqual(5, $document->getAttribute('integer'));
+            $this->assertTrue($document->getAttribute('boolean'));
         }
 
         $controlDocuments = $database->find($collection, [

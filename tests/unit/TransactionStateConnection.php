@@ -9,7 +9,8 @@ use PDOStatement;
 /**
  * A MySQL connection as a reconnecting driver presents it to the adapter: the first
  * statement that finds the session ended reconnects and rethrows, and the new session
- * holds no transaction.
+ * holds no transaction. Prepared statements run through executeStatement(), which can
+ * lose a deadlock.
  */
 final class TransactionStateConnection extends PDO
 {
@@ -20,6 +21,8 @@ final class TransactionStateConnection extends PDO
     private bool $transaction = false;
 
     private bool $ended = false;
+
+    private bool $deadlocked = false;
 
     /**
      * @var array<string>
@@ -37,8 +40,38 @@ final class TransactionStateConnection extends PDO
 
     public function reconnectSilently(): void
     {
-        $this->transaction = false;
-        $this->savepoints = [];
+        $this->discardTransaction();
+    }
+
+    /**
+     * Make the next statement lose a deadlock, as MariaDB and MySQL report it: the engine
+     * rolls the whole transaction back, savepoints included.
+     */
+    public function deadlock(): void
+    {
+        $this->deadlocked = true;
+    }
+
+    public function executeStatement(): bool
+    {
+        if (! $this->deadlocked) {
+            return true;
+        }
+
+        $this->deadlocked = false;
+        $this->discardTransaction();
+
+        $message = 'SQLSTATE[40001]: Serialization failure: 1213 Deadlock found when trying to get lock; try restarting transaction';
+        $error = new class ($message) extends PDOException {
+            public function __construct(string $message)
+            {
+                parent::__construct($message);
+                $this->code = '40001';
+            }
+        };
+        $error->errorInfo = ['40001', 1213, $message];
+
+        throw $error;
     }
 
     public function beginTransaction(): bool
@@ -57,7 +90,7 @@ final class TransactionStateConnection extends PDO
         }
 
         $this->commits++;
-        $this->reconnectSilently();
+        $this->discardTransaction();
 
         return true;
     }
@@ -68,7 +101,7 @@ final class TransactionStateConnection extends PDO
             throw new PDOException('There is no active transaction');
         }
 
-        $this->reconnectSilently();
+        $this->discardTransaction();
 
         return true;
     }
@@ -104,6 +137,12 @@ final class TransactionStateConnection extends PDO
     public function prepare(string $query, array $options = []): PDOStatement
     {
         return $this->statement;
+    }
+
+    private function discardTransaction(): void
+    {
+        $this->transaction = false;
+        $this->savepoints = [];
     }
 
     private function reconnectIfEnded(): void

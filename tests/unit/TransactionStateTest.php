@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Throwable;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
@@ -184,6 +185,105 @@ final class TransactionStateTest extends TestCase
     }
 
     /**
+     * MariaDB and MySQL roll the whole transaction back when a statement loses a deadlock,
+     * and the nested call's savepoint goes with it. Nothing of the attempt is stored, so the
+     * nested call surfaces the deadlock without running again in a transaction that no
+     * longer exists, and the outermost call runs the whole unit again.
+     */
+    public function testOutermostTransactionRetriesAfterADeadlockRolledBackANestedCall(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $attempts = 0;
+        $nested = [];
+        $failures = [];
+        $stored = \uniqid();
+
+        $result = $adapter->withTransaction(function () use ($adapter, $connection, &$attempts, &$nested, &$failures, $stored): string {
+            $attempts++;
+            $attempt = $attempts;
+
+            try {
+                return $adapter->withTransaction(function () use ($adapter, $connection, $attempt, &$nested, $stored): string {
+                    $nested[] = $attempt;
+                    if ($attempt === 1) {
+                        $connection->deadlock();
+                    }
+                    $adapter->exists('database', 'aggregations');
+
+                    return $stored;
+                });
+            } catch (Throwable $error) {
+                $failures[] = $error;
+
+                throw $error;
+            }
+        });
+
+        $this->assertSame($stored, $result);
+        $this->assertSame(2, $attempts, 'The outermost call must run again after the engine rolled its transaction back');
+        $this->assertSame([1, 2], $nested, 'The nested call must not run again inside the rolled-back transaction');
+        $this->assertCount(1, $failures);
+        $this->assertInstanceOf(ContentionException::class, $failures[0]);
+        $this->assertSame('Deadlock detected', $failures[0]->getMessage(), 'The nested call must surface the deadlock, not a lost transaction');
+        $this->assertSame(2, $connection->begins);
+        $this->assertSame(1, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * An outermost call that keeps losing deadlocks gives up after as many attempts as a
+     * failed top-level call, and rethrows the deadlock.
+     */
+    public function testOutermostTransactionRethrowsTheDeadlockAfterItsRetries(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $attempts = 0;
+
+        $error = $this->capture(function () use ($adapter, $connection, &$attempts): void {
+            $adapter->withTransaction(function () use ($adapter, $connection, &$attempts): void {
+                $attempts++;
+                $adapter->withTransaction(function () use ($adapter, $connection): void {
+                    $connection->deadlock();
+                    $adapter->exists('database', 'aggregations');
+                });
+            });
+        });
+
+        $this->assertInstanceOf(ContentionException::class, $error);
+        $this->assertSame('Deadlock detected', $error->getMessage());
+        $this->assertSame(3, $attempts);
+        $this->assertSame(3, $connection->begins);
+        $this->assertSame(0, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
+     * A deadlock in the top-level callback itself leaves nothing to roll back either, and
+     * the call runs again, as it did in 7.x.
+     */
+    public function testTopLevelTransactionRetriesAfterADeadlock(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $attempts = 0;
+
+        $adapter->withTransaction(function () use ($adapter, $connection, &$attempts): void {
+            $attempts++;
+            if ($attempts === 1) {
+                $connection->deadlock();
+            }
+            $adapter->exists('database', 'aggregations');
+        });
+
+        $this->assertSame(2, $attempts);
+        $this->assertSame(2, $connection->begins);
+        $this->assertSame(1, $connection->commits);
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
      * @param callable(): mixed $callback
      */
     private function capture(callable $callback): ?Throwable
@@ -200,8 +300,9 @@ final class TransactionStateTest extends TestCase
     private function createConnection(): TransactionStateConnection
     {
         $statement = $this->createStub(PDOStatement::class);
-        $statement->method('execute')->willReturn(true);
+        $connection = new TransactionStateConnection($statement);
+        $statement->method('execute')->willReturnCallback($connection->executeStatement(...));
 
-        return new TransactionStateConnection($statement);
+        return $connection;
     }
 }

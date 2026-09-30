@@ -22,6 +22,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Character as CharacterException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
@@ -50,28 +51,28 @@ final class EngineErrorMappingTest extends TestCase
         $missingTable = self::engineError('42S02', 1146, "SQLSTATE[42S02]: Base table or view not found: 1146 Table 'utopiaTests.engine_orders' doesn't exist");
 
         return [
-            'MariaDB deadlock' => [self::mariaDB(), $deadlock, TransactionException::class, 'Deadlock detected'],
-            'MySQL deadlock' => [self::mySQL(), $deadlock, TransactionException::class, 'Deadlock detected'],
-            'MariaDB lock wait timeout' => [self::mariaDB(), $lockWait, TransactionException::class, 'Lock wait timeout exceeded'],
-            'MySQL lock wait timeout' => [self::mySQL(), $lockWait, TransactionException::class, 'Lock wait timeout exceeded'],
+            'MariaDB deadlock' => [self::mariaDB(), $deadlock, ContentionException::class, 'Deadlock detected'],
+            'MySQL deadlock' => [self::mySQL(), $deadlock, ContentionException::class, 'Deadlock detected'],
+            'MariaDB lock wait timeout' => [self::mariaDB(), $lockWait, ContentionException::class, 'Lock wait timeout exceeded'],
+            'MySQL lock wait timeout' => [self::mySQL(), $lockWait, ContentionException::class, 'Lock wait timeout exceeded'],
             'MariaDB statement on a missing table' => [self::mariaDB(), $missingTable, NotFoundException::class, 'Collection not found'],
             'MySQL statement on a missing table' => [self::mySQL(), $missingTable, NotFoundException::class, 'Collection not found'],
             'Postgres deadlock' => [
                 self::postgres(),
                 self::engineError('40P01', 7, "SQLSTATE[40P01]: Deadlock detected: 7 ERROR:  deadlock detected\nDETAIL:  Process 81 waits for ShareLock on transaction 740; blocked by process 82."),
-                TransactionException::class,
+                ContentionException::class,
                 'Deadlock detected',
             ],
             'Postgres serialization failure' => [
                 self::postgres(),
                 self::engineError('40001', 7, 'SQLSTATE[40001]: Serialization failure: 7 ERROR:  could not serialize access due to concurrent update'),
-                TransactionException::class,
+                ContentionException::class,
                 'Could not serialize access due to a concurrent update',
             ],
             'Postgres lock not available' => [
                 self::postgres(),
                 self::engineError('55P03', 7, 'SQLSTATE[55P03]: Lock not available: 7 ERROR:  canceling statement due to lock timeout'),
-                TransactionException::class,
+                ContentionException::class,
                 'Lock not available',
             ],
             'Postgres invalid UTF-8' => [

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Validator;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Role;
@@ -86,5 +87,23 @@ class RolesTest extends TestCase
         $object = new Roles();
         $this->assertTrue($object->isValid(['label:123']));
         $this->assertFalse($object->isValid(['label:not-alphanumeric']));
+    }
+
+    #[DataProvider('unparseableRoles')]
+    public function test_unparseable_role(string $role, string $message): void
+    {
+        $object = new Roles();
+
+        $this->assertFalse($object->isValid([$role]));
+        $this->assertSame($message, $object->getDescription());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function unparseableRoles(): iterable
+    {
+        yield 'an empty dimension' => ['users/', 'Dimension must not be empty'];
+        yield 'two dimensions' => ['users/verified/extra', 'Only one dimension can be provided'];
     }
 }

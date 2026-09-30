@@ -85,9 +85,11 @@ final class DocumentMinorsTest extends TestCase
             {
                 $document = parent::getDocument($collection, $id, $queries, $forUpdate);
                 if ($forUpdate && $collection === 'parents') {
+                    /** @var array<Document|string> $children */
+                    $children = $document->getAttribute('children', []);
                     $document->setAttribute('children', \array_map(
-                        static fn (mixed $child): mixed => $child instanceof Document ? $child->getId() : $child,
-                        $document->getAttribute('children', []),
+                        static fn (Document|string $child): string => $child instanceof Document ? $child->getId() : $child,
+                        $children,
                     ));
                 }
 

@@ -8,7 +8,7 @@ use Utopia\Query\Hook\Filter;
 
 final readonly class AllowNullColumn implements Filter
 {
-    private const IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/';
+    private const IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
 
     public function __construct(
         private Filter $filter,

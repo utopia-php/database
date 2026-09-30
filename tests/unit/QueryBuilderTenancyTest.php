@@ -333,6 +333,35 @@ final class QueryBuilderTenancyTest extends TestCase
         );
     }
 
+    #[DataProvider('dialects')]
+    public function testADigitLeadingDatabaseAndJoinAliasAreQuotedInTheTenantConditions(SQL $adapter, string $quote): void
+    {
+        $adapter->setDatabase('1db');
+        $adapter->setNamespace('capture');
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $raw = fn (string $collection): string => $this->rawTable($adapter, $collection);
+        $quoted = static fn (string $identifier): string => \implode('.', \array_map(
+            static fn (string $part): string => $quote.$part.$quote,
+            \explode('.', $identifier),
+        ));
+        $authors = $quoted($raw(self::AUTHORS));
+
+        $sql = $adapter->getBuilder(self::AUTHORS)
+            ->rightJoin($raw(self::REVIEWS), $raw(self::AUTHORS).'.authorId', '9x.authorId', '=', '9x')
+            ->select([$raw(self::AUTHORS).'.name'])
+            ->build()
+            ->query;
+
+        $tenant = static fn (string $table): string => "{$quoted($table)}._tenant IN (?)";
+        $missing = static fn (string $table): string => "({$tenant($table)} OR {$quoted($table.'.'.Storage::UID)} IS NULL)";
+        $this->assertStringStartsWith("SELECT {$authors}.{$quote}name{$quote} FROM {$authors}", $sql);
+        $this->assertStringContainsString("{$quote}1db{$quote}.", $sql);
+        $this->assertStringContainsString($tenant('9x'), $sql);
+        $this->assertStringEndsWith(" WHERE {$missing($raw(self::AUTHORS))} AND {$missing('9x')}", $sql);
+    }
+
     /**
      * @param array<string, list<array{JoinType, string, ?string}>> $chains
      */

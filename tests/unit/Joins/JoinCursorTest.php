@@ -361,6 +361,7 @@ final class JoinCursorTest extends TestCase
         $rows = $helper === 'cursor'
             ? $this->database->cursor('authors', $queries, 2)
             : $this->database->iterate('authors', [...$queries, Query::limit(2)]);
+        /** @var int $yielded */
         $yielded = 0;
 
         try {

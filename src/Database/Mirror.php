@@ -775,7 +775,8 @@ class Mirror extends Database
     {
         $result = $this->source->updateCollection($id, $permissions, $documentSecurity);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
@@ -786,7 +787,7 @@ class Mirror extends Database
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeUpdateCollection(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $id,
                     collection: $filtered,
                 );
@@ -796,7 +797,7 @@ class Mirror extends Database
             }
             $result = $filtered;
 
-            $this->destination->updateCollection($id, $permissions, $documentSecurity);
+            $destination->updateCollection($id, $permissions, $documentSecurity);
         } catch (Throwable $err) {
             $this->logError('updateCollection', $err);
         }
@@ -811,19 +812,20 @@ class Mirror extends Database
     {
         $result = $this->source->deleteCollection($id);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
         $this->awaitReplications($id);
 
         try {
-            $this->destination->deleteCollection($id);
+            $destination->deleteCollection($id);
 
             foreach ($this->writeFilters as $filter) {
                 $filter->beforeDeleteCollection(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $id,
                 );
             }
@@ -841,7 +843,8 @@ class Mirror extends Database
     {
         $result = $this->source->createAttribute($collection, $attribute);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
@@ -855,7 +858,7 @@ class Mirror extends Database
             foreach ($this->writeFilters as $filter) {
                 $document = $filter->beforeCreateAttribute(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     attributeId: $attribute->key,
                     attribute: $document,
@@ -867,7 +870,7 @@ class Mirror extends Database
 
             if ($document !== null) {
                 $filteredAttribute = Attribute::fromDocument($document);
-                $result = $this->destination->createAttribute($collection, $filteredAttribute);
+                $result = $destination->createAttribute($collection, $filteredAttribute);
             }
         } catch (Throwable $err) {
             $this->logError('createAttribute', $err);
@@ -883,7 +886,8 @@ class Mirror extends Database
     {
         $result = $this->source->createAttributes($collection, $attributes);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
@@ -899,7 +903,7 @@ class Mirror extends Database
                 foreach ($this->writeFilters as $filter) {
                     $document = $filter->beforeCreateAttribute(
                         source: $this->source,
-                        destination: $this->destination,
+                        destination: $destination,
                         collectionId: $collection,
                         attributeId: $attribute->key,
                         attribute: $document,
@@ -915,7 +919,7 @@ class Mirror extends Database
             }
 
             if ($filteredAttributes !== []) {
-                $result = $this->destination->createAttributes(
+                $result = $destination->createAttributes(
                     $collection,
                     $filteredAttributes,
                 );
@@ -947,7 +951,8 @@ class Mirror extends Database
             $newKey,
         );
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $document;
         }
 
@@ -958,7 +963,7 @@ class Mirror extends Database
             foreach ($this->writeFilters as $filter) {
                 $filtered = $filter->beforeUpdateAttribute(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     attributeId: $id,
                     attribute: $filtered,
@@ -971,7 +976,7 @@ class Mirror extends Database
 
             $typedAttr = Attribute::fromDocument($document);
 
-            $this->destination->updateAttribute(
+            $destination->updateAttribute(
                 $collection,
                 $id,
                 $typedAttr->type,
@@ -999,7 +1004,8 @@ class Mirror extends Database
     {
         $result = $this->source->deleteAttribute($collection, $id);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
@@ -1009,13 +1015,13 @@ class Mirror extends Database
             foreach ($this->writeFilters as $filter) {
                 $filter->beforeDeleteAttribute(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     attributeId: $id,
                 );
             }
 
-            $this->destination->deleteAttribute($collection, $id);
+            $destination->deleteAttribute($collection, $id);
         } catch (Throwable $err) {
             $this->logError('deleteAttribute', $err);
         }
@@ -1030,7 +1036,8 @@ class Mirror extends Database
     {
         $result = $this->source->createIndex($collection, $index);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
@@ -1044,7 +1051,7 @@ class Mirror extends Database
             foreach ($this->writeFilters as $filter) {
                 $document = $filter->beforeCreateIndex(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     indexId: $index->key,
                     index: $document,
@@ -1056,7 +1063,7 @@ class Mirror extends Database
 
             if ($document !== null) {
                 $filteredIndex = Index::fromDocument($document);
-                $result = $this->destination->createIndex($collection, $filteredIndex);
+                $result = $destination->createIndex($collection, $filteredIndex);
             }
         } catch (Throwable $err) {
             $this->logError('createIndex', $err);
@@ -1072,19 +1079,20 @@ class Mirror extends Database
     {
         $result = $this->source->deleteIndex($collection, $id);
 
-        if ($this->destination === null) {
+        $destination = $this->destination;
+        if ($destination === null) {
             return $result;
         }
 
         $this->awaitReplications($collection);
 
         try {
-            $this->destination->deleteIndex($collection, $id);
+            $destination->deleteIndex($collection, $id);
 
             foreach ($this->writeFilters as $filter) {
                 $filter->beforeDeleteIndex(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     indexId: $id,
                 );
@@ -1103,9 +1111,10 @@ class Mirror extends Database
     {
         $document = $this->source->createDocument($collection, $document);
 
+        $destination = $this->destination;
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-            || $this->destination === null
+            || $destination === null
         ) {
             return $this->decorate(Event::DocumentCreate, $collection, $document);
         }
@@ -1121,20 +1130,19 @@ class Mirror extends Database
             foreach ($this->writeFilters as $filter) {
                 $clone = $filter->beforeCreateDocument(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     document: $clone,
                 );
             }
 
             $this->awaitReplications($collection, [$document->getId()]);
-            $destination = $this->destination;
             $destination->withPreserveDates(fn (): Document => $destination->createDocument($collection, $clone));
 
             foreach ($this->writeFilters as $filter) {
                 $filter->afterCreateDocument(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     document: $clone,
                 );
@@ -1248,9 +1256,10 @@ class Mirror extends Database
     {
         $document = $this->source->updateDocument($collection, $id, $document);
 
+        $destination = $this->destination;
         if (
             \in_array($collection, self::SOURCE_ONLY_COLLECTIONS)
-            || $this->destination === null
+            || $destination === null
         ) {
             return $this->decorate(Event::DocumentUpdate, $collection, $document);
         }
@@ -1267,20 +1276,19 @@ class Mirror extends Database
             foreach ($this->writeFilters as $filter) {
                 $clone = $filter->beforeUpdateDocument(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     document: $clone,
                 );
             }
 
             $this->awaitReplications($collection, [$id]);
-            $destination = $this->destination;
             $destination->withPreserveDates(fn (): Document => $destination->updateDocument($collection, $id, $clone));
 
             foreach ($this->writeFilters as $filter) {
                 $filter->afterUpdateDocument(
                     source: $this->source,
-                    destination: $this->destination,
+                    destination: $destination,
                     collectionId: $collection,
                     document: $clone,
                 );
@@ -1813,10 +1821,9 @@ class Mirror extends Database
         $snapshot = $this->source->snapshot();
         $apply = function () use ($action, $destination, $snapshot, $write): void {
             try {
-                $destination->withSnapshot(
-                    $snapshot,
-                    fn (): mixed => $destination->withRequestTimestamp(null, $write),
-                );
+                $destination->withSnapshot($snapshot, function () use ($destination, $write): void {
+                    $destination->withRequestTimestamp(null, $write);
+                });
             } catch (Throwable $error) {
                 $this->logError($action, $error);
             }

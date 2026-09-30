@@ -16,12 +16,16 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
 
 final class CollectionGuardsTest extends TestCase
 {
     private const string COLLECTION = 'shared';
+
+    private const int TENANT = 5;
 
     public function testDeletingTheMetadataCollectionDropsItsTable(): void
     {
@@ -91,6 +95,74 @@ final class CollectionGuardsTest extends TestCase
         $this->assertStringContainsString("Failed to rollback collection 'failing': the table could not be dropped", $log, 'the failed cleanup is logged');
     }
 
+    public function testATenantCannotChangeATenantlessCollection(): void
+    {
+        $database = $this->sharedDatabase();
+        $permissions = $database->getCollection(self::COLLECTION)->getPermissions();
+
+        $database->setTenant(self::TENANT);
+        try {
+            $database->updateCollection(self::COLLECTION, [Permission::read(Role::user('intruder'))], true);
+            $this->fail('a tenant must not change a collection it does not own');
+        } catch (NotFoundException $error) {
+            $this->assertSame('Collection not found', $error->getMessage());
+        }
+
+        $database->setTenant(null);
+        $this->assertSame($permissions, $database->getCollection(self::COLLECTION)->getPermissions());
+    }
+
+    public function testATenantCannotDeleteATenantlessCollection(): void
+    {
+        $database = $this->sharedDatabase();
+
+        $database->setTenant(self::TENANT);
+        try {
+            $database->deleteCollection(self::COLLECTION);
+            $this->fail('a tenant must not delete a collection it does not own');
+        } catch (NotFoundException $error) {
+            $this->assertSame('Collection not found', $error->getMessage());
+        }
+
+        $database->setTenant(null);
+        $this->assertFalse($database->getCollection(self::COLLECTION)->isEmpty());
+    }
+
+    public function testADefinitionThatCannotBeDeletedRestoresTheTable(): void
+    {
+        $adapter = new Memory();
+        $cause = new RuntimeException('the definition could not be deleted');
+        $database = new class ($adapter, new Cache(new None()), $cause) extends Database {
+            public function __construct(Adapter $adapter, Cache $cache, private readonly RuntimeException $cause)
+            {
+                parent::__construct($adapter, $cache);
+            }
+
+            public function deleteDocument(string $collection, string $id): bool
+            {
+                if ($collection === self::METADATA) {
+                    throw $this->cause;
+                }
+
+                return parent::deleteDocument($collection, $id);
+            }
+        };
+        $this->prepare($database);
+        $database->createDocument(self::COLLECTION, new Document([Document::ID => 'row', 'name' => 'row']));
+
+        try {
+            $database->deleteCollection(self::COLLECTION);
+            $this->fail('a collection whose definition stays must not lose its table');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to persist metadata for collection deletion '".self::COLLECTION."': the definition could not be deleted", $error->getMessage());
+            $this->assertSame($cause, $error->getPrevious());
+        }
+
+        $this->assertTrue($adapter->exists('guards', self::COLLECTION), 'the table is created again');
+        $this->assertFalse($database->getCollection(self::COLLECTION)->isEmpty());
+        $this->assertSame([], $database->find(self::COLLECTION), 'the restored table is empty: only its definition survives');
+    }
+
     private function database(Adapter $adapter): Database
     {
         return $this->prepare(new Database($adapter, new Cache(new None())));
@@ -99,6 +171,25 @@ final class CollectionGuardsTest extends TestCase
     private function prepare(Database $database): Database
     {
         $database->setDatabase('guards')->setNamespace('guards_'.\uniqid());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: self::COLLECTION,
+            attributes: [Attribute::string(key: 'name', size: 32)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        return $database;
+    }
+
+    private function sharedDatabase(): Database
+    {
+        $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()));
+        $database
+            ->setAuthorization(new Authorization())
+            ->setDatabase('guards')
+            ->setNamespace('guards_'.\uniqid())
+            ->setSharedTables(true)
+            ->setTenant(null);
         $database->create();
         $database->createCollection(new Collection(
             id: self::COLLECTION,

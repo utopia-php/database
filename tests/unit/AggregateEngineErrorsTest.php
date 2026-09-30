@@ -2,13 +2,11 @@
 
 namespace Tests\Unit;
 
-use Exception;
 use PDO;
 use PDOException;
+use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use ReflectionProperty;
 use stdClass;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoCache;
@@ -156,27 +154,27 @@ final class AggregateEngineErrorsTest extends TestCase
         $unknownDroppedColumn = self::engineError('42000', 1091, "SQLSTATE[42000]: Syntax error or access violation: 1091 Can't DROP COLUMN `score`; check that it exists");
 
         return [
-            'MariaDB unknown column' => [new MariaDB(new stdClass()), $unknownColumn, NotFoundException::class, 'Attribute not found'],
-            'MySQL unknown column' => [new MySQL(new stdClass()), $unknownColumn, NotFoundException::class, 'Attribute not found'],
-            'MariaDB column that cannot be dropped' => [new MariaDB(new stdClass()), $unknownDroppedColumn, NotFoundException::class, 'Attribute not found'],
+            'MariaDB unknown column' => [MariaDB::class, $unknownColumn, NotFoundException::class, 'Attribute not found'],
+            'MySQL unknown column' => [MySQL::class, $unknownColumn, NotFoundException::class, 'Attribute not found'],
+            'MariaDB column that cannot be dropped' => [MariaDB::class, $unknownDroppedColumn, NotFoundException::class, 'Attribute not found'],
             'Postgres unknown column' => [
-                new Postgres(new stdClass()),
+                Postgres::class,
                 self::engineError('42703', 7, 'SQLSTATE[42703]: Undefined column: 7 ERROR:  column table_main.no_such_attribute does not exist'),
                 NotFoundException::class,
                 'Attribute not found',
             ],
-            'MariaDB too many tables' => [new MariaDB(new stdClass()), $tooManyTables, QueryException::class, 'Too many tables in a join'],
-            'MySQL too many tables' => [new MySQL(new stdClass()), $tooManyTables, QueryException::class, 'Too many tables in a join'],
-            'MariaDB no fulltext index' => [new MariaDB(new stdClass()), $noFulltextIndex, QueryException::class, 'Searching requires a fulltext index on the searched attributes'],
-            'MySQL no fulltext index' => [new MySQL(new stdClass()), $noFulltextIndex, QueryException::class, 'Searching requires a fulltext index on the searched attributes'],
+            'MariaDB too many tables' => [MariaDB::class, $tooManyTables, QueryException::class, 'Too many tables in a join'],
+            'MySQL too many tables' => [MySQL::class, $tooManyTables, QueryException::class, 'Too many tables in a join'],
+            'MariaDB no fulltext index' => [MariaDB::class, $noFulltextIndex, QueryException::class, 'Searching requires a fulltext index on the searched attributes'],
+            'MySQL no fulltext index' => [MySQL::class, $noFulltextIndex, QueryException::class, 'Searching requires a fulltext index on the searched attributes'],
             'MySQL distinct ordered by an unselected column' => [
-                new MySQL(new stdClass()),
+                MySQL::class,
                 self::engineError('HY000', 3065, "SQLSTATE[HY000]: General error: 3065 Expression #1 of ORDER BY clause is not in SELECT list, references column 'utopiaTests.ns_distinct_order.score' which is not in SELECT list; this is incompatible with DISTINCT"),
                 QueryException::class,
                 self::DISTINCT_ORDER,
             ],
             'Postgres distinct ordered by an unselected column' => [
-                new Postgres(new stdClass()),
+                Postgres::class,
                 self::engineError('42P10', 7, "SQLSTATE[42P10]: Invalid column reference: 7 ERROR:  for SELECT DISTINCT, ORDER BY expressions must appear in select list\nLINE 1: ...\"table_main\" ORDER BY \"table_main\".\"score\" ASC"),
                 QueryException::class,
                 self::DISTINCT_ORDER,
@@ -185,12 +183,13 @@ final class AggregateEngineErrorsTest extends TestCase
     }
 
     /**
+     * @param  class-string<SQL>  $adapter
      * @param  class-string<Throwable>  $expected
      */
     #[DataProvider('mappedEngineErrorProvider')]
-    public function testEngineErrorsAreMappedToLibraryExceptions(SQL $adapter, PDOException $error, string $expected, string $message): void
+    public function testEngineErrorsAreMappedToLibraryExceptions(string $adapter, PDOException $error, string $expected, string $message): void
     {
-        $processed = $this->process($adapter, $error);
+        $processed = $this->readFailure($adapter, $error);
 
         $this->assertInstanceOf($expected, $processed);
         $this->assertSame($message, $processed->getMessage());
@@ -238,24 +237,47 @@ final class AggregateEngineErrorsTest extends TestCase
     {
         $error = self::engineError('42P10', 7, 'SQLSTATE[42P10]: Invalid column reference: 7 ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification');
 
-        $this->assertSame($error, $this->process(new Postgres(new stdClass()), $error));
+        $this->assertSame($error, $this->readFailure(Postgres::class, $error));
     }
 
     private static function engineError(string $state, int $code, string $message): PDOException
     {
-        $error = new PDOException($message);
-        (new ReflectionProperty(Exception::class, 'code'))->setValue($error, $state);
+        $error = new class ($message, $state) extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $error->errorInfo = [$state, $code, $message];
 
         return $error;
     }
 
-    private function process(SQL $adapter, PDOException $error): Throwable
+    /**
+     * @param  class-string<SQL>  $adapter
+     */
+    private function readFailure(string $adapter, PDOException $error): Throwable
     {
-        $processed = (new ReflectionMethod($adapter, 'processException'))->invoke($adapter, $error);
-        $this->assertInstanceOf(Throwable::class, $processed);
+        $statement = self::createStub(PDOStatement::class);
+        $statement->method('execute')->willThrowException($error);
+        $pdo = self::createStub(PDO::class);
+        $pdo->method('prepare')->willReturn($statement);
 
-        return $processed;
+        $sql = new $adapter($pdo);
+        $sql->setDatabase('database');
+        $sql->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $sql->setAuthorization($authorization);
+
+        try {
+            $sql->find(new Document(['$id' => self::COLLECTION]));
+        } catch (Throwable $failure) {
+            return $failure;
+        }
+
+        $this->fail('The read succeeded');
     }
 
     /**

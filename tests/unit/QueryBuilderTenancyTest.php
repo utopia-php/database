@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
@@ -645,10 +644,7 @@ final class QueryBuilderTenancyTest extends TestCase
 
     private function rawTable(SQL $adapter, string $collection): string
     {
-        $table = (new ReflectionMethod($adapter, 'getSQLTableRaw'))->invoke($adapter, $collection);
-        $this->assertIsString($table);
-
-        return $table;
+        return $adapter->getDatabase().'.'.$adapter->getNamespace().'_'.$collection;
     }
 
     private static function table(string $collection): string

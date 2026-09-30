@@ -299,6 +299,18 @@ final class BigIntegerTest extends TestCase
         }
     }
 
+    public function testMemoryOperatorsCoerceOperandsAndKeepUnparsableDates(): void
+    {
+        $adapter = self::memoryOperators();
+
+        $this->assertSame(3, $adapter->apply(1, Operator::increment('2')));
+        $this->assertSame(3.75, $adapter->apply(1.5, Operator::multiply('2.5')));
+        $this->assertSame('ab', $adapter->apply('ab', Operator::stringConcat(['x'])));
+        $this->assertSame('y', $adapter->apply(['x'], Operator::stringConcat('y')));
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateAddDays(1)));
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateSubDays(1)));
+    }
+
     private static function memoryOperators(): Memory
     {
         return new class () extends Memory {

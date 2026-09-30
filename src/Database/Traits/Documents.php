@@ -16,6 +16,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Cache\Owners;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\DateTime;
 use Utopia\Database\Document;
@@ -201,6 +202,43 @@ trait Documents
         return \str_contains(\strtolower($value), '.') || \str_contains(\strtolower($value), 'e')
             ? (float) $value
             : (int) $value;
+    }
+
+    private function declaredAttribute(Collection $collection, string $key): ?Attribute
+    {
+        foreach ($collection->attributes as $attribute) {
+            if ($attribute->key === $key) {
+                return $attribute;
+            }
+        }
+
+        return null;
+    }
+
+    private function isDeclaredInteger(?Attribute $attribute): bool
+    {
+        return $attribute !== null && ! $attribute->array && Attribute::isIntegerType($attribute->type);
+    }
+
+    private function integerBound(int|float|string $bound, string $name): int|string
+    {
+        if (\is_int($bound)) {
+            return $bound;
+        }
+
+        if (\is_float($bound)) {
+            if (! \is_finite($bound) || \floor($bound) !== $bound) {
+                throw new TypeException($name.' must be an integer.');
+            }
+
+            return BigInt::toNative(\sprintf('%.0f', $bound));
+        }
+
+        if (! BigInt::isIntegerString($bound)) {
+            throw new TypeException($name.' must be an integer.');
+        }
+
+        return $bound;
     }
 
     /**
@@ -2258,6 +2296,10 @@ trait Documents
             $numericAttribute = $matchedAttr;
         }
 
+        if ($max !== null && $this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+            $max = $this->integerBound($max, 'Max');
+        }
+
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
@@ -2379,6 +2421,10 @@ trait Documents
                 throw new TypeException('Attribute must be an integer or float and can not be an array.');
             }
             $numericAttribute = $matchedDecAttr;
+        }
+
+        if ($min !== null && $this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+            $min = $this->integerBound($min, 'Min');
         }
 
         $cacheTarget = $collection->getId() === self::METADATA

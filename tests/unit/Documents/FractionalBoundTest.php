@@ -2,15 +2,18 @@
 
 namespace Tests\Unit\Documents;
 
-use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Validator\Authorization;
@@ -21,19 +24,108 @@ final class FractionalBoundTest extends TestCase
 
     private const string DOCUMENT = 'counter';
 
-    private Database $database;
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function lanes(): iterable
+    {
+        yield 'defined attributes' => [true];
+        yield 'schemaless' => [false];
+    }
 
-    protected function setUp(): void
+    #[DataProvider('lanes')]
+    public function testIncreaseWithAFractionalMaximumOnAnIntegerIsRefused(bool $definedAttributes): void
+    {
+        $database = $this->database($definedAttributes);
+
+        try {
+            $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 102.4);
+            $this->fail('A fractional maximum on an integer attribute was accepted');
+        } catch (TypeException $error) {
+            $this->assertSame('Max must be an integer.', $error->getMessage());
+        }
+
+        $this->assertSame(100, $this->stored($database, 'count'));
+    }
+
+    #[DataProvider('lanes')]
+    public function testDecreaseWithAFractionalMinimumOnAnIntegerIsRefused(bool $definedAttributes): void
+    {
+        $database = $this->database($definedAttributes);
+
+        try {
+            $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 0.5);
+            $this->fail('A fractional minimum on an integer attribute was accepted');
+        } catch (TypeException $error) {
+            $this->assertSame('Min must be an integer.', $error->getMessage());
+        }
+
+        $this->assertSame(100, $this->stored($database, 'count'));
+    }
+
+    #[DataProvider('lanes')]
+    public function testANonNumericBoundOnAnIntegerIsRefused(bool $definedAttributes): void
+    {
+        $database = $this->database($definedAttributes);
+
+        $this->expectException(TypeException::class);
+        $this->expectExceptionMessage('Max must be an integer.');
+
+        $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, '102.5');
+    }
+
+    #[DataProvider('lanes')]
+    public function testWholeFloatBoundsOnAnIntegerAreComparedExactly(bool $definedAttributes): void
+    {
+        $database = $this->database($definedAttributes);
+
+        $this->assertSame(101, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 101.0)->getAttribute('count'));
+
+        try {
+            $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 101.0);
+            $this->fail('An increase past a whole float maximum was accepted');
+        } catch (LimitException $error) {
+            $this->assertSame('Attribute value exceeds maximum limit: 101', $error->getMessage());
+        }
+
+        $this->assertSame(102, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 9.0e18)->getAttribute('count'));
+        $this->assertSame(101, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, -9.0e18)->getAttribute('count'));
+        $this->assertSame(102, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 1.0e19)->getAttribute('count'));
+        $this->assertSame(101, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, -1.0e19)->getAttribute('count'));
+        $this->assertSame(101, $this->stored($database, 'count'));
+    }
+
+    #[DataProvider('lanes')]
+    public function testFractionalBoundsOnADoubleAreAccepted(bool $definedAttributes): void
+    {
+        $database = $this->database($definedAttributes);
+
+        $this->assertSame(2.5, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'ratio', 1, 2.5)->getAttribute('ratio'));
+        $this->assertSame(2.0, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'ratio', 0.5, 2.0)->getAttribute('ratio'));
+        $this->assertSame(2.0, $this->stored($database, 'ratio'));
+    }
+
+    private function database(bool $definedAttributes): Database
     {
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
 
-        $this->database = (new Database(new Memory(), new Cache(new None())))
+        $adapter = $definedAttributes ? new Memory() : new class () extends Memory {
+            public function capabilities(): array
+            {
+                return \array_values(\array_filter(
+                    parent::capabilities(),
+                    static fn (Capability $capability): bool => $capability !== Capability::DefinedAttributes,
+                ));
+            }
+        };
+
+        $database = (new Database($adapter, new Cache(new None())))
             ->setAuthorization($authorization)
             ->setDatabase('fractional_bound')
             ->setNamespace('fractional_bound');
-        $this->database->create();
-        $this->database->createCollection(new Collection(
+        $database->create();
+        $database->createCollection(new Collection(
             id: self::COLLECTION,
             attributes: [
                 Attribute::integer(key: 'count'),
@@ -46,52 +138,17 @@ final class FractionalBoundTest extends TestCase
             ],
             documentSecurity: false,
         ));
-        $this->database->createDocument(self::COLLECTION, new Document([
+        $database->createDocument(self::COLLECTION, new Document([
             '$id' => self::DOCUMENT,
             'count' => 100,
             'ratio' => 1.5,
         ]));
+
+        return $database;
     }
 
-    public function testIncreaseWithAFractionalMaximumOnAnIntegerIsRefused(): void
+    private function stored(Database $database, string $attribute): mixed
     {
-        try {
-            $this->database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 102.4);
-            $this->fail('A fractional maximum on an integer attribute was accepted');
-        } catch (InvalidArgumentException $error) {
-            $this->assertSame('Value must be an integer.', $error->getMessage());
-        }
-
-        $this->assertSame(100, $this->stored('count'));
-    }
-
-    public function testDecreaseWithAFractionalMinimumOnAnIntegerIsRefused(): void
-    {
-        try {
-            $this->database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 0.5);
-            $this->fail('A fractional minimum on an integer attribute was accepted');
-        } catch (InvalidArgumentException $error) {
-            $this->assertSame('Value must be an integer.', $error->getMessage());
-        }
-
-        $this->assertSame(100, $this->stored('count'));
-    }
-
-    public function testWholeBoundsOnAnIntegerAreAccepted(): void
-    {
-        $this->assertSame(101, $this->database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 102.0)->getAttribute('count'));
-        $this->assertSame(100, $this->database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 99)->getAttribute('count'));
-    }
-
-    public function testFractionalBoundsOnADoubleAreAccepted(): void
-    {
-        $this->assertSame(2.5, $this->database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'ratio', 1, 2.5)->getAttribute('ratio'));
-        $this->assertSame(2.0, $this->database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'ratio', 0.5, 2.0)->getAttribute('ratio'));
-        $this->assertSame(2.0, $this->stored('ratio'));
-    }
-
-    private function stored(string $attribute): mixed
-    {
-        return $this->database->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute($attribute);
+        return $database->getDocument(self::COLLECTION, self::DOCUMENT)->getAttribute($attribute);
     }
 }

@@ -2,17 +2,15 @@
 
 namespace Tests\Unit;
 
-use Exception;
 use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Query;
@@ -73,22 +71,28 @@ final class SQLFindTest extends TestCase
         yield 'builder path' => [false];
     }
 
-    public function testJoinDocumentSecurityLookupMatchesRemappedPhysicalIds(): void
+    /**
+     * @return iterable<string, array{array<string, bool>, bool}>
+     */
+    public static function joinDocumentSecurityMaps(): iterable
     {
-        $adapter = new MySQL(self::createStub(\PDO::class));
-        $adapter->setDatabase('appwrite');
-        $adapter->setNamespace('_5');
+        yield 'disabled under the collection id' => [['database_1_collection_2' => false], false];
+        yield 'disabled under the qualified physical name' => [['appwrite._5_database_1_collection_2' => false], false];
+        yield 'disabled under the physical table name' => [['_5_database_1_collection_2' => false], false];
+        yield 'enabled under the qualified physical name' => [['appwrite._5_database_1_collection_2' => true], true];
+        yield 'disabled for another collection only' => [['database_1_collection_9' => false], true];
+        yield 'no entries' => [[], true];
+    }
 
-        $method = new ReflectionMethod(MySQL::class, 'joinDocumentSecurityEnabled');
+    /**
+     * @param  array<string, bool>  $joinDocumentSecurity
+     */
+    #[DataProvider('joinDocumentSecurityMaps')]
+    public function testJoinDocumentSecurityLookupMatchesRemappedPhysicalIds(array $joinDocumentSecurity, bool $filtered): void
+    {
+        $sql = $this->captureJoinDocumentSecuritySql($joinDocumentSecurity);
 
-        $map = ['database_1_collection_2' => false];
-        $this->assertFalse($method->invoke($adapter, $map, 'database_1_collection_2'));
-        $this->assertFalse($method->invoke($adapter, $map, 'appwrite._5_database_1_collection_2'));
-        $this->assertFalse($method->invoke($adapter, $map, '_5_database_1_collection_2'));
-
-        $this->assertTrue($method->invoke($adapter, $map, 'database_1_collection_9'));
-        $this->assertTrue($method->invoke($adapter, [], 'appwrite._5_database_1_collection_2'));
-        $this->assertTrue($method->invoke($adapter, ['database_1_collection_2' => true], 'appwrite._5_database_1_collection_2'));
+        $this->assertSame($filtered, \str_contains($sql, '`appwrite`.`_5_database_1_collection_2_perms`'), $sql);
     }
 
     public function testJoinWithoutSelectLeavesJoinedInternalsOut(): void
@@ -390,38 +394,17 @@ final class SQLFindTest extends TestCase
 
     public function testSqliteJoinSideSearchQuotesJoinAlias(): void
     {
-        $adapter = new SQLite(new \PDO('sqlite::memory:'));
-        $adapter->setNamespace('namespace');
-        $compile = new ReflectionMethod(SQLite::class, 'compileAdapterFilter');
+        $joined = $this->captureSqliteSearchCondition(Query::search('meta.body', 'needle'));
 
-        $compiled = $compile->invoke(
-            $adapter,
-            Query::search('meta.body', 'needle'),
-            'jh_m',
-            Query::DEFAULT_ALIAS,
-        );
+        $this->assertStringContainsString('`meta`.`body`', $joined);
+        $this->assertStringContainsString('LIKE', $joined);
+        $this->assertStringNotContainsString('metabody', $joined);
+        $this->assertStringNotContainsString('`table_main`.`metabody`', $joined);
+        $this->assertStringNotContainsString(Storage::SEQUENCE, $joined);
 
-        $this->assertIsArray($compiled);
-        $this->assertArrayHasKey('expression', $compiled);
-        $this->assertIsString($compiled['expression']);
-        $expression = $compiled['expression'];
-        $this->assertStringContainsString('`meta`.`body`', $expression);
-        $this->assertStringContainsString('LIKE', $expression);
-        $this->assertStringNotContainsString('metabody', $expression);
-        $this->assertStringNotContainsString('`table_main`.`metabody`', $expression);
-        $this->assertStringNotContainsString(Storage::SEQUENCE, $expression);
+        $main = $this->captureSqliteSearchCondition(Query::search('body', 'needle'));
 
-        $main = $compile->invoke(
-            $adapter,
-            Query::search('body', 'needle'),
-            'jh_m',
-            Query::DEFAULT_ALIAS,
-        );
-
-        $this->assertIsArray($main);
-        $this->assertArrayHasKey('expression', $main);
-        $this->assertIsString($main['expression']);
-        $this->assertStringContainsString('`table_main`.`body`', $main['expression']);
+        $this->assertStringContainsString('`table_main`.`body`', $main);
     }
 
     public function testEmulatesFullOuterJoinCursorAfterUsesJoinQualifiedOrder(): void
@@ -449,33 +432,21 @@ final class SQLFindTest extends TestCase
 
     public function testQualifyDottedAttributeKeepsNestedObjectPaths(): void
     {
-        $adapter = new MySQL(self::createStub(\PDO::class));
-        $method = new ReflectionMethod(MySQL::class, 'qualifyDottedAttribute');
+        $sql = $this->captureFindSql(
+            [
+                Query::join('orders', '$id', 'customerId', '=', 'orders'),
+                Query::equal('meta.score', [1]),
+                Query::equal('orders.email', ['a@b.co']),
+                Query::equal('orders.$id', ['order-1']),
+                Query::equal('profile.user.email', ['c@d.co']),
+            ],
+            attributes: [new Document(['$id' => 'meta.score', 'key' => 'meta.score'])],
+        );
 
-        $aliasSet = [
-            Query::DEFAULT_ALIAS => true,
-            'orders' => true,
-        ];
-        $mainAttributes = [
-            'meta.score' => true,
-        ];
-
-        $this->assertSame(
-            'metascore',
-            $method->invoke($adapter, 'meta.score', $aliasSet, $mainAttributes)
-        );
-        $this->assertSame(
-            'orders.email',
-            $method->invoke($adapter, 'orders.email', $aliasSet, $mainAttributes)
-        );
-        $this->assertSame(
-            'orders._uid',
-            $method->invoke($adapter, 'orders.$id', $aliasSet, $mainAttributes)
-        );
-        $this->assertSame(
-            'profile.user.email',
-            $method->invoke($adapter, 'profile.user.email', $aliasSet, $mainAttributes)
-        );
+        $this->assertStringContainsString('`table_main`.`metascore` IN (?)', $sql);
+        $this->assertStringContainsString('`orders`.`email` IN (?)', $sql);
+        $this->assertStringContainsString('`orders`.`_uid` IN (?)', $sql);
+        $this->assertStringContainsString('`profile`.`user`.`email` IN (?)', $sql);
     }
 
     /**
@@ -483,6 +454,7 @@ final class SQLFindTest extends TestCase
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
+     * @param  array<Document>  $attributes
      */
     private function captureFindSql(
         array $queries,
@@ -490,6 +462,7 @@ final class SQLFindTest extends TestCase
         array $orderAttributes = [],
         array $orderTypes = [],
         array $cursor = [],
+        array $attributes = [],
     ): string {
         $statement = $this->statement();
         $statement->method('execute')->willReturn(true);
@@ -516,7 +489,7 @@ final class SQLFindTest extends TestCase
         $adapter->setAuthorization($authorization);
 
         $adapter->find(
-            new Document(['$id' => 'collection']),
+            new Document(['$id' => 'collection', 'attributes' => $attributes]),
             $queries,
             limit: $limit,
             orderAttributes: $orderAttributes,
@@ -527,6 +500,75 @@ final class SQLFindTest extends TestCase
         $this->assertNotSame('', $sql);
 
         return $sql;
+    }
+
+    /**
+     * @param  array<string, bool>  $joinDocumentSecurity
+     */
+    private function captureJoinDocumentSecuritySql(array $joinDocumentSecurity): string
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = self::createStub(\PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+            $sql = $query;
+
+            return $statement;
+        });
+
+        $adapter = new MySQL($pdo);
+        $adapter->setDatabase('appwrite');
+        $adapter->setNamespace('_5');
+        $authorization = new Authorization();
+        $authorization->addRole('any');
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(
+            new Document(['$id' => 'database_1_collection_1', Database::JOIN_DOCUMENT_SECURITY => $joinDocumentSecurity]),
+            [Query::join('database_1_collection_2', '$id', 'mainId')],
+        );
+
+        $this->assertNotSame('', $sql);
+
+        return $sql;
+    }
+
+    private function captureSqliteSearchCondition(Query $search): string
+    {
+        $statement = $this->statement();
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = self::createStub(\PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+            $sql = $query;
+
+            return $statement;
+        });
+
+        $adapter = new SQLite($pdo);
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(new Document(['$id' => 'collection']), [
+            Query::leftJoin('meta', '$id', 'mainId', '=', 'meta'),
+            $search,
+        ]);
+
+        $where = \strpos($sql, ' WHERE ');
+        $limit = \strrpos($sql, ' LIMIT ');
+        $this->assertNotFalse($where, $sql);
+        $this->assertNotFalse($limit, $sql);
+
+        return \substr($sql, $where, $limit - $where);
     }
 
     private function assertEmulatedFullOuterJoin(string $sql): void
@@ -646,9 +688,13 @@ final class SQLFindTest extends TestCase
 
     private function createTimeoutException(): PDOException
     {
-        $exception = new PDOException('Query execution was interrupted');
-        $code = new ReflectionProperty(Exception::class, 'code');
-        $code->setValue($exception, 'HY000');
+        $exception = new class ('Query execution was interrupted', 'HY000') extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $exception->errorInfo = ['HY000', 3024, 'Query execution was interrupted'];
 
         return $exception;

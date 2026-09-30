@@ -57,14 +57,14 @@ class Relationships implements Hook
     private Value $inBatchPopulation;
 
     /**
-     * @var array<int, non-empty-list<string>> The collections of each coroutine's relationship writes in progress,
-     *                                         innermost last, by coroutine id
+     * @var array<int, list<string>> The collections of each coroutine's relationship writes in progress, innermost
+     *                               last, by coroutine id
      */
     private array $writeStacks = [];
 
     /**
-     * @var array<int, non-empty-list<Document>> The relationships of each coroutine's cascading deletes in progress,
-     *                                           innermost last, by coroutine id
+     * @var array<int, list<Document>> The relationships of each coroutine's cascading deletes in progress,
+     *                                 innermost last, by coroutine id
      */
     private array $deleteStacks = [];
 

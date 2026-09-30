@@ -6,6 +6,7 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -2666,5 +2667,158 @@ trait AttributeTests
         } catch (Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
         }
+    }
+
+    public function testCreateAttributesSkipsAColumnThatExistsOnlyInTheSchema(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BatchCreateAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'schemaOnlyColumn';
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+        $database->getAdapter()->createAttribute($collection, Attribute::string(key: 'b', size: 64));
+
+        $this->assertTrue($database->createAttributes($collection, [
+            Attribute::integer(key: 'a'),
+            Attribute::string(key: 'b', size: 64),
+        ]));
+
+        $this->assertSame(['a', 'b'], \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection($collection)->attributes),
+        ));
+
+        $database->createDocument($collection, new Document([Document::ID => 'one', 'a' => 1, 'b' => 'kept']));
+        $document = $database->getDocument($collection, 'one');
+        $this->assertSame(1, $document->getAttribute('a'));
+        $this->assertSame('kept', $document->getAttribute('b'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testSharedTablesNeverDropAnotherTenantsColumn(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getSharedTables()) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $originalTenant = $database->getTenant();
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $first = $integerTenants ? 301 : 'tenant_301';
+        $second = $integerTenants ? 302 : 'tenant_302';
+        $collection = 'sharedColumn_'.\uniqid();
+        $definition = new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false);
+
+        try {
+            $database->setTenant($first);
+            $database->createCollection($definition);
+            $database->createAttribute($collection, Attribute::integer(key: 'age'));
+            $database->createDocument($collection, new Document([Document::ID => 'first', 'age' => 7]));
+
+            $database->setTenant($second);
+            $database->createCollection($definition);
+
+            if ($database->getAdapter()->hasFeature(Feature\SchemaAttributes::class)) {
+                try {
+                    $database->createAttribute($collection, Attribute::string(key: 'age', size: 64));
+                    $this->fail('A column another tenant stores with another type must be refused');
+                } catch (DuplicateException $error) {
+                    $this->assertSame('Attribute exists in the shared table with another type', $error->getMessage());
+                }
+
+                $this->assertTrue($database->createAttribute($collection, Attribute::integer(key: 'age')));
+                $this->assertSame(['age'], \array_map(
+                    static fn (Attribute $attribute): string => $attribute->key,
+                    \array_values($database->getCollection($collection)->attributes),
+                ));
+            } else {
+                $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'age', size: 64)));
+            }
+
+            $database->setTenant($first);
+            $this->assertSame(7, $database->getDocument($collection, 'first')->getAttribute('age'));
+        } finally {
+            foreach ([$second, $first] as $tenant) {
+                try {
+                    $database->setTenant($tenant)->deleteCollection($collection);
+                } catch (Throwable) {
+                }
+            }
+            $database->setTenant($originalTenant);
+        }
+    }
+
+    public function testRenameAttributeCompletesAnOrphanedRename(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+        $schemaAttributes = $adapter->hasFeature(Feature\SchemaAttributes::class);
+
+        if (! $schemaAttributes && ! $adapter instanceof SQL) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'orphanedRename';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::string(key: 'before', size: 64),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+        $database->createDocument($collection, new Document([Document::ID => 'one', 'before' => 'kept']));
+
+        try {
+            $adapter->renameAttribute($collection, 'before', 'after');
+
+            if (! $schemaAttributes) {
+                try {
+                    $database->renameAttribute($collection, 'before', 'after');
+                    $this->fail('Without schema introspection a failed rename must be reported');
+                } catch (DatabaseException $error) {
+                    $this->assertStringStartsWith("Failed to rename attribute 'before' to 'after': ", $error->getMessage());
+                }
+
+                $this->assertSame(['before'], $this->getAttributeKeys($database, $collection));
+
+                return;
+            }
+
+            $this->assertTrue($database->renameAttribute($collection, 'before', 'after'));
+            $this->assertSame(['after'], $this->getAttributeKeys($database, $collection));
+
+            $document = $database->getDocument($collection, 'one');
+            $this->assertSame('kept', $document->getAttribute('after'));
+            $this->assertFalse($document->offsetExists('before'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getAttributeKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection($collection)->attributes),
+        );
     }
 }

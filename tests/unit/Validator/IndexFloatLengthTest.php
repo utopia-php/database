@@ -47,4 +47,35 @@ class IndexFloatLengthTest extends TestCase
 
         $this->assertTrue($validator->isValid(Index::key(key: 'idx_title_score', attributes: ['title', 'score'])), $validator->getDescription());
     }
+
+    /**
+     * @return array<string, array{Attribute}>
+     */
+    public static function eightByteIntegers(): array
+    {
+        return [
+            'big integer' => [Attribute::bigInteger(key: 'score')],
+            'id' => [Attribute::id(key: 'score')],
+            'integer stored as a big integer' => [Attribute::integer(key: 'score', size: 8)],
+        ];
+    }
+
+    #[DataProvider('eightByteIntegers')]
+    public function testBigIntColumnsCountEightBytes(Attribute $number): void
+    {
+        $over = new IndexValidator(
+            attributes: [Attribute::string(key: 'title', size: 767), $number],
+            indexes: [],
+            maxLength: self::MARIADB_MAX_INDEX_LENGTH,
+        );
+        $this->assertFalse($over->isValid(Index::key(key: 'idx_title_score', attributes: ['title', 'score'])));
+        $this->assertSame('Index length is longer than the maximum: 768', $over->getDescription());
+
+        $at = new IndexValidator(
+            attributes: [Attribute::string(key: 'title', size: 766), $number],
+            indexes: [],
+            maxLength: self::MARIADB_MAX_INDEX_LENGTH,
+        );
+        $this->assertTrue($at->isValid(Index::key(key: 'idx_title_score', attributes: ['title', 'score'])), $at->getDescription());
+    }
 }

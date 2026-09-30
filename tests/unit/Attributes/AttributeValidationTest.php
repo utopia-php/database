@@ -371,4 +371,13 @@ class AttributeValidationTest extends TestCase
         $this->expectExceptionMessage('No attributes to create');
         $this->database->createAttributes('testCol', []);
     }
+
+    public function testCreateAttributesOnMissingCollectionThrows(): void
+    {
+        $this->adapter->method('getDocument')->willReturn(new Document());
+
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('Collection not found');
+        $this->database->createAttributes('nonexistent', [Attribute::string(key: 'name', size: 128)]);
+    }
 }

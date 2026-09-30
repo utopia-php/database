@@ -37,6 +37,16 @@ use Utopia\Query\Schema\IndexType;
 trait Attributes
 {
     /**
+     * @var array<string, string>
+     */
+    private const array COLUMN_TYPE_SPELLINGS = [
+        '/\s+/' => ' ',
+        '/ (NOT )?NULL$/' => '',
+        '/^(POINT|LINESTRING|POLYGON)\b.*$/' => '$1',
+        '/\b(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\(\d+\)/' => '$1',
+    ];
+
+    /**
      * Create Attribute
      *
      * @param  string  $collection  The collection identifier
@@ -97,57 +107,7 @@ trait Attributes
                 $schemaAttributes
             );
         } catch (DuplicateException $e) {
-            // If the column exists in the physical schema but not in collection
-            // metadata, this is recovery from a partial failure where the column
-            // was created but metadata wasn't updated. Allow re-creation by
-            // skipping physical column creation and proceeding to metadata update.
-            // checkDuplicateId (metadata) runs before checkDuplicateInSchema, so
-            // if the attribute is absent from metadata the duplicate is in the
-            // physical schema only — a recoverable partial-failure state.
-            $existsInMetadata = false;
-            /** @var array<Attribute> $checkAttrs */
-            $checkAttrs = $collection->getAttribute('attributes', []);
-            foreach ($checkAttrs as $attr) {
-                if (\strtolower($attr->key) === \strtolower($id)) {
-                    $existsInMetadata = true;
-                    break;
-                }
-            }
-
-            if ($existsInMetadata) {
-                throw $e;
-            }
-
-            // Check if the existing schema column matches the requested type.
-            // If it matches we can skip column creation. If not, drop the
-            // orphaned column so it gets recreated with the correct type.
-            $typesMatch = true;
-            $expectedColumnType = $this->adapter->hasFeature(Feature\ColumnTypes::class)
-                ? $this->adapter->getColumnType($type->value, $size, $signed, $array, $required)
-                : '';
-            if ($expectedColumnType !== '') {
-                $filteredId = $this->adapter->filter($id);
-                foreach ($schemaAttributes as $schemaAttr) {
-                    $schemaId = $schemaAttr->getId();
-                    if (\strtolower($schemaId) === \strtolower($filteredId)) {
-                        $rawColumnType = $schemaAttr->getAttribute('columnType', '');
-                        $actualColumnType = \strtoupper(\is_string($rawColumnType) ? $rawColumnType : '');
-                        if ($actualColumnType !== \strtoupper($expectedColumnType)) {
-                            $typesMatch = false;
-                        }
-                        break;
-                    }
-                }
-            }
-
-            if (! $typesMatch) {
-                // Column exists with wrong type and is not tracked in metadata,
-                // so no indexes or relationships reference it. Drop and recreate.
-                $this->adapter->deleteAttribute($collection->getId(), $id);
-            } else {
-                $existsInSchema = true;
-            }
-
+            $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $e);
         }
 
         $created = false;
@@ -255,48 +215,7 @@ trait Attributes
                     $schemaAttributes
                 );
             } catch (DuplicateException $e) {
-                // Check if the duplicate is in metadata or only in schema
-                $existsInMetadata = false;
-                /** @var array<Attribute> $checkAttrs2 */
-                $checkAttrs2 = $collection->getAttribute('attributes', []);
-                foreach ($checkAttrs2 as $attr) {
-                    if (\strtolower($attr->key) === \strtolower($attribute->key)) {
-                        $existsInMetadata = true;
-                        break;
-                    }
-                }
-
-                if ($existsInMetadata) {
-                    throw $e;
-                }
-
-                // Schema-only orphan — check type match
-                $expectedColumnType = $this->adapter->hasFeature(Feature\ColumnTypes::class)
-                    ? $this->adapter->getColumnType(
-                        $attribute->type->value,
-                        $attribute->size,
-                        $attribute->signed,
-                        $attribute->array,
-                        $attribute->required
-                    )
-                    : '';
-                if ($expectedColumnType !== '') {
-                    $filteredId = $this->adapter->filter($attribute->key);
-                    foreach ($schemaAttributes as $schemaAttr) {
-                        if (\strtolower($schemaAttr->getId()) === \strtolower($filteredId)) {
-                            $rawColType2 = $schemaAttr->getAttribute('columnType', '');
-                            $actualColumnType = \strtoupper(\is_string($rawColType2) ? $rawColType2 : '');
-                            if ($actualColumnType !== \strtoupper($expectedColumnType)) {
-                                // Type mismatch — drop orphaned column so it gets recreated
-                                $this->adapter->deleteAttribute($collection->getId(), $attribute->key);
-                            } else {
-                                $existsInSchema = true;
-                            }
-                            break;
-                        }
-                    }
-                }
-
+                $existsInSchema = $this->reconcileSchemaOnlyColumn($collection, $attribute, $schemaAttributes, $e);
             }
 
             $attributeModels[] = $attribute;
@@ -305,15 +224,14 @@ trait Attributes
             }
         }
 
-        $created = false;
+        $createdAttributes = [];
 
         if (! empty($attributesToCreate)) {
             try {
-                $created = $this->adapter->createAttributes($collection->getId(), $attributesToCreate);
-
-                if (! $created) {
+                if (! $this->adapter->createAttributes($collection->getId(), $attributesToCreate)) {
                     throw new DatabaseException('Failed to create attributes');
                 }
+                $createdAttributes = $attributesToCreate;
             } catch (DuplicateException) {
                 // Batch failed because at least one column already exists.
                 // Fallback to per-attribute creation so non-duplicates still land in schema.
@@ -323,7 +241,7 @@ trait Attributes
                             $collection->getId(),
                             $attr
                         );
-                        $created = true;
+                        $createdAttributes[] = $attr;
                     } catch (DuplicateException) {
                         // Column already exists in schema — skip
                     }
@@ -337,8 +255,8 @@ trait Attributes
 
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: fn () => $this->cleanupAttributes($collection->getId(), $attributeModels),
-            shouldRollback: $created,
+            rollbackOperation: fn () => $this->cleanupAttributes($collection->getId(), $createdAttributes),
+            shouldRollback: $createdAttributes !== [],
             operationDescription: 'attributes creation',
             rollbackReturnsErrors: true
         );
@@ -364,6 +282,83 @@ trait Attributes
         $this->triggerHooks(Event::AttributesCreate, $createdAttributes);
 
         return true;
+    }
+
+    /**
+     * A column in the schema but not in this collection's metadata is reused when its type
+     * matches the request, and dropped to be recreated otherwise. Under shared tables it
+     * belongs to another tenant's collection, so a mismatch is refused instead.
+     *
+     * @param  array<Document>  $schemaAttributes
+     * @return bool True when the existing column is reused
+     *
+     * @throws DuplicateException
+     */
+    private function reconcileSchemaOnlyColumn(
+        Document $collection,
+        Attribute $attribute,
+        array $schemaAttributes,
+        DuplicateException $duplicate,
+    ): bool {
+        /** @var array<Attribute> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $existing) {
+            if (\strtolower($existing->key) === \strtolower($attribute->key)) {
+                throw $duplicate;
+            }
+        }
+
+        if (! $this->adapter->hasFeature(Feature\ColumnTypes::class)) {
+            return true;
+        }
+
+        $expected = $this->adapter->getColumnType(
+            $attribute->type->value,
+            $attribute->size,
+            $attribute->signed,
+            $attribute->array,
+            $attribute->required,
+        );
+        if ($expected === '') {
+            return true;
+        }
+
+        $filteredId = \strtolower($this->adapter->filter($attribute->key));
+        foreach ($schemaAttributes as $column) {
+            if (\strtolower($column->getId()) !== $filteredId) {
+                continue;
+            }
+
+            $columnType = $column->getAttribute('columnType', '');
+            if (self::canonicalColumnType(\is_string($columnType) ? $columnType : '') === self::canonicalColumnType($expected)) {
+                return true;
+            }
+
+            if ($this->getSharedTables()) {
+                throw new DuplicateException('Attribute exists in the shared table with another type', previous: $duplicate);
+            }
+
+            $this->adapter->deleteAttribute($collection->getId(), $attribute->key);
+
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Engines report integer display widths (int(11)), spatial types without their SRID or
+     * nullability, and MariaDB's JSON as LONGTEXT.
+     */
+    private static function canonicalColumnType(string $columnType): string
+    {
+        $canonical = \preg_replace(
+            \array_keys(self::COLUMN_TYPE_SPELLINGS),
+            \array_values(self::COLUMN_TYPE_SPELLINGS),
+            \strtoupper(\trim($columnType)),
+        ) ?? $columnType;
+
+        return $canonical === 'JSON' ? 'LONGTEXT' : $canonical;
     }
 
     /**

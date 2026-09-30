@@ -5,8 +5,11 @@ namespace Tests\Unit\Validator;
 use Exception;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
+use Utopia\Database\Document;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\Order;
 
 class IndexTest extends TestCase
@@ -429,5 +432,113 @@ class IndexTest extends TestCase
         $validatorNoSupport = new IndexValidator($attributes, $indexesWithTTL, 768, [], false, false, false, false, false, false, false, false, false);
         $this->assertFalse($validatorNoSupport->isValid($validIndex));
         $this->assertEquals('TTL indexes are not supported', $validatorNoSupport->getDescription());
+    }
+
+    public function testIndexWithoutATypeIsRejected(): void
+    {
+        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'by_title',
+            'attributes' => ['title'],
+        ])));
+        $this->assertStringStartsWith('Unknown index type: . Must be one of ', $validator->getDescription());
+    }
+
+    public function testTtlIndexWithoutATtlIsRejected(): void
+    {
+        $validator = new IndexValidator(
+            attributes: [Attribute::datetime(key: 'expiresAt')],
+            indexes: [],
+            maxLength: 768,
+            supportForTTLIndexes: true,
+        );
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'expiry',
+            'type' => IndexType::Ttl->value,
+            'attributes' => ['expiresAt'],
+        ])));
+        $this->assertSame('TTL must be at least 1 second', $validator->getDescription());
+    }
+
+    public function testUnknownIndexTypeIsAValidationFailure(): void
+    {
+        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+
+        $this->assertFalse($validator->isValid(new Document([
+            Document::ID => 'by_title',
+            'type' => 'bogus',
+            'attributes' => ['title'],
+        ])));
+        $this->assertStringStartsWith('Unknown index type: bogus. Must be one of ', $validator->getDescription());
+    }
+
+    public function testStoredIndexOfAnUnknownTypeIsReadLeniently(): void
+    {
+        $stored = new Document([
+            Document::ID => 'by_title',
+            'type' => 'bogus',
+            'attributes' => ['title'],
+        ]);
+
+        $this->assertSame(['title'], Index::fromDocument($stored)->attributes);
+        $this->assertTrue((new IndexedQueries([Attribute::string(key: 'title', size: 64)], [$stored]))->isValid([]));
+    }
+
+    public function testTextAttributeWithoutASizeIsJudgedAgainstTheTextMaximum(): void
+    {
+        $validator = new IndexValidator([Attribute::text(key: 'body')], [], 768);
+
+        $this->assertTrue($validator->isValid(Index::key(key: 'by_body', attributes: ['body'], lengths: [100])), $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_body', attributes: ['body'])));
+        $this->assertSame('Index length is longer than the maximum: 768', $validator->getDescription());
+    }
+
+    public function testKeyAndUniqueIndexesAreRejectedWithoutAdapterSupport(): void
+    {
+        $validator = new IndexValidator(
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            indexes: [],
+            maxLength: 768,
+            supportForKeyIndexes: false,
+            supportForUniqueIndexes: false,
+        );
+        $key = Index::key(key: 'by_title', attributes: ['title']);
+        $unique = Index::unique(key: 'by_title', attributes: ['title']);
+
+        $this->assertFalse($validator->isValid($key));
+        $this->assertSame('Key index is not supported', $validator->getDescription());
+        $this->assertFalse($validator->checkKeyUniqueFulltextSupport($key));
+        $this->assertSame('Key index is not supported', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid($unique));
+        $this->assertSame('Unique index is not supported', $validator->getDescription());
+        $this->assertFalse($validator->checkKeyUniqueFulltextSupport($unique));
+        $this->assertSame('Unique index is not supported', $validator->getDescription());
+    }
+
+    public function testIndexTypeWithoutValidationRulesIsRejected(): void
+    {
+        $validator = new IndexValidator([Attribute::string(key: 'title', size: 64)], [], 768);
+
+        $this->assertFalse($validator->isValid(Index::index(key: 'by_title', attributes: ['title'])));
+        $this->assertStringStartsWith('Unknown index type: index. Must be one of ', $validator->getDescription());
+    }
+
+    public function testOrderOnAnArrayAttributeIsRejected(): void
+    {
+        $validator = new IndexValidator(
+            attributes: [Attribute::string(key: 'tags', size: 64, array: true)],
+            indexes: [],
+            maxLength: 768,
+            supportForArrayIndexes: true,
+        );
+
+        $this->assertFalse($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64], orders: [Order::Asc])));
+        $this->assertSame('Invalid index order "'.Order::Asc->value.'" on array attribute "tags"', $validator->getDescription());
+
+        $this->assertTrue($validator->isValid(Index::key(key: 'by_tags', attributes: ['tags'], lengths: [64])), $validator->getDescription());
     }
 }

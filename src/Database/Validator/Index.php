@@ -25,6 +25,8 @@ class Index extends Validator
         ColumnType::LongText,
     ];
 
+    private const int BIG_INTEGER_SIZE = 8;
+
     protected string $message = 'Invalid index';
 
     /**
@@ -120,6 +122,10 @@ class Index extends Validator
      */
     public function isValid($value): bool
     {
+        if (! $this->checkStoredDefinition($value)) {
+            return false;
+        }
+
         $index = $value instanceof IndexVO ? $value : IndexVO::fromDocument($value);
 
         if (! $this->checkValidIndex($index)) {
@@ -277,12 +283,43 @@ class Index extends Validator
                 break;
 
             default:
-                $this->message = 'Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value.', '.IndexType::Trigram->value.', '.IndexType::Ttl->value;
+                $this->message = self::unknownTypeMessage($type->value);
 
                 return false;
         }
 
         return true;
+    }
+
+    /**
+     * Index::fromDocument() reads stored metadata leniently, since every validated query parses
+     * it, so the stored type and ttl are checked here before the conversion.
+     */
+    private function checkStoredDefinition(Document $index): bool
+    {
+        $type = $index->getAttribute('type');
+        if ($type instanceof IndexType) {
+            $type = $type->value;
+        }
+
+        if (! \is_string($type) || IndexType::tryFrom($type) === null) {
+            $this->message = self::unknownTypeMessage(\is_string($type) ? $type : '');
+
+            return false;
+        }
+
+        if ($type === IndexType::Ttl->value && $index->getAttribute('ttl') === null) {
+            $this->message = 'TTL must be at least 1 second';
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function unknownTypeMessage(string $type): string
+    {
+        return 'Unknown index type: '.$type.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value.', '.IndexType::Trigram->value.', '.IndexType::Ttl->value;
     }
 
     /**
@@ -471,7 +508,7 @@ class Index extends Validator
             $attribute = $this->attributes[\strtolower($attributeName)];
 
             $attrType = $attribute->type;
-            $attrSize = $attribute->size;
+            $attrSize = $attribute->resolvedSize();
             [$attributeSize, $indexLength] = match ($attrType) {
                 ColumnType::String,
                 ColumnType::Varchar,
@@ -482,7 +519,10 @@ class Index extends Validator
                     ! empty($index->lengths[$attributePosition]) ? $index->lengths[$attributePosition] : $attrSize,
                 ],
                 ColumnType::Float,
-                ColumnType::Double => [2, 2],
+                ColumnType::Double,
+                ColumnType::BigInteger,
+                ColumnType::Id => [2, 2],
+                ColumnType::Integer => $attrSize >= self::BIG_INTEGER_SIZE ? [2, 2] : [1, 1],
                 default => [1, 1],
             };
             if ($indexLength < 0) {
@@ -748,6 +788,7 @@ class Index extends Validator
 
     /**
      * Check that identical indexes (same attributes and orders) are not created when unsupported.
+     * The index itself is skipped, so revalidating an existing index does not compare it with itself.
      *
      * @param IndexVO $index The index to validate
      * @return bool
@@ -759,6 +800,10 @@ class Index extends Validator
         }
 
         foreach ($this->indexes as $existingIndex) {
+            if (\strtolower($existingIndex->key) === \strtolower($index->key)) {
+                continue;
+            }
+
             $attributesMatch = false;
             if (empty(\array_diff($existingIndex->attributes, $index->attributes)) &&
                 empty(\array_diff($index->attributes, $existingIndex->attributes))) {

@@ -335,6 +335,30 @@ class BigInt extends Validator
     }
 
     /**
+     * The integer an operator bound allows: a fractional or float bound rounds inward (down for a
+     * maximum, up for a minimum) so it compares exactly against a big-integer result. Null for a
+     * bound that is not finite.
+     */
+    public static function integerBound(int|float|string $bound, bool $isUpper): int|string|null
+    {
+        if (self::isIntegerValue($bound)) {
+            return $bound;
+        }
+
+        $value = (float) $bound;
+        if (! \is_finite($value)) {
+            return null;
+        }
+
+        $whole = $isUpper ? \floor($value) : \ceil($value);
+        if ($whole >= (float) \PHP_INT_MIN && $whole < -(float) \PHP_INT_MIN) {
+            return (int) $whole;
+        }
+
+        return \sprintf('%.0F', $whole);
+    }
+
+    /**
      * @phpstan-assert-if-true int|string $value
      */
     public static function isIntegerValue(mixed $value): bool

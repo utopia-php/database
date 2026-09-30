@@ -3331,16 +3331,13 @@ class Redis extends Adapter implements
         $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
         if ($exact !== null) {
             $bound = $values[1] ?? null;
-            if ($method === OperatorType::Modulo || ! BigInt::isIntegerValue($bound)) {
+            $isUpper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
+            $limit = \is_numeric($bound) ? BigInt::integerBound($bound, $isUpper) : null;
+            if ($method === OperatorType::Modulo || $limit === null) {
                 return $exact;
             }
 
-            return $this->applyNumericLimit(
-                $current ?? 0,
-                $exact,
-                $bound,
-                \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true)
-            );
+            return $this->applyNumericLimit($current ?? 0, $exact, $limit, $isUpper);
         }
 
         switch ($method) {

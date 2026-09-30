@@ -928,6 +928,11 @@ takes precedence over a global filter of the same name (`Database::addFilter()`)
 
 ## Known limitations
 
+- A transaction begun on the adapter directly (`$database->getAdapter()->startTransaction()`) is not seen by the
+  cache invalidation or the `document_purge` queue that `withTransaction()` keeps. Each write inside it invalidates
+  the caches and fires `document_purge` when that write returns, inside the adapter transaction and before it
+  commits, and a rollback does not withdraw them. Reads inside it are not served from the document cache. Group
+  writes with `withTransaction()` instead.
 - `Database::sum()` reads a bare attribute name from the main collection. A name that only a joined collection
   declares throws `Utopia\Database\Exception\Query` (`Attribute not found in schema: <name>`), where `find()` would
   resolve it through the join. Qualify a joined attribute with its join alias

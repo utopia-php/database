@@ -358,6 +358,9 @@ not change anything for an upgrade from 7.x.
 
 ### Known limitations
 
+- A transaction begun on the adapter directly (`getAdapter()->startTransaction()`) is not an invalidation scope: each
+  write inside it invalidates the caches and fires `document_purge` before that transaction commits. Use
+  `withTransaction()`.
 - `Database::sum()` reads a bare attribute name from the main collection; qualify a joined attribute with its join
   alias (`sum('orders', 'item.price', [$join])`).
 - `groupBy()` over a main and a joined attribute of the same name (`groupBy(['name', 'note.name'])`) returns both

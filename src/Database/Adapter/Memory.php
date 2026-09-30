@@ -1654,8 +1654,8 @@ class Memory extends Adapter implements Feature\Relationships
             }
         }
 
-        $tenant = $this->getTenant();
-        $this->removePermissionsForDocument($key, $id, $tenant, $this->sharedTables);
+        $storedId = $existing[Storage::UID] ?? $id;
+        $this->removePermissionsForDocument($key, \is_string($storedId) ? $storedId : $id, $this->getTenant(), $this->sharedTables);
 
         return true;
     }

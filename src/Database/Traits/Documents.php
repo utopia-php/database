@@ -203,15 +203,6 @@ trait Documents
             : (int) $value;
     }
 
-    private function integerBound(int|float|string $bound, bool $upper): int|float|string
-    {
-        if (! \is_float($bound) || ! \is_finite($bound)) {
-            return $bound;
-        }
-
-        return BigInt::toNative(\sprintf('%.0f', $upper ? \floor($bound) : \ceil($bound)));
-    }
-
     /**
      * Cached validator instances keyed by context and a
      * stable schema/authorization fingerprint.
@@ -2302,12 +2293,10 @@ trait Documents
                 }
                 $result = $currentVal + $this->getNativeNumber($value);
             }
-            $integerAttribute = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type);
-            $bound = $max === null || ! $integerAttribute ? $max : $this->integerBound($max, upper: true);
-            $exceedsMaximum = ! \is_null($bound) && (
-                $integerAttribute
-                    ? BigInt::compare($result, $bound) > 0
-                    : $result > $bound
+            $exceedsMaximum = ! \is_null($max) && (
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::compare($result, $max) > 0
+                    : $result > $max
             );
             if ($exceedsMaximum) {
                 throw new LimitException('Attribute value exceeds maximum limit: '.$max);
@@ -2316,10 +2305,10 @@ trait Documents
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
-            if ($bound !== null) {
-                $max = $integerAttribute
-                    ? BigInt::subtract($bound, $value)
-                    : $this->getNativeNumber($bound) - $this->getNativeNumber($value);
+            if ($max !== null) {
+                $max = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::subtract($max, $value)
+                    : $this->getNativeNumber($max) - $this->getNativeNumber($value);
             }
 
             $this->adapter->increaseDocumentAttribute(
@@ -2427,12 +2416,10 @@ trait Documents
                 }
                 $result = $currentDecVal - $this->getNativeNumber($value);
             }
-            $integerAttribute = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type);
-            $bound = $min === null || ! $integerAttribute ? $min : $this->integerBound($min, upper: false);
-            $belowMinimum = ! \is_null($bound) && (
-                $integerAttribute
-                    ? BigInt::compare($result, $bound) < 0
-                    : $result < $bound
+            $belowMinimum = ! \is_null($min) && (
+                $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::compare($result, $min) < 0
+                    : $result < $min
             );
             if ($belowMinimum) {
                 throw new LimitException('Attribute value exceeds minimum limit: '.$min);
@@ -2441,10 +2428,10 @@ trait Documents
             $time = DateTime::nowAfter($document->getUpdatedAt());
             $updatedAt = $document->getUpdatedAt();
             $updatedAt = (empty($updatedAt) || ! $this->preserveDates) ? $time : DateTime::setTimezone($updatedAt);
-            if ($bound !== null) {
-                $min = $integerAttribute
-                    ? BigInt::add($bound, $value)
-                    : $this->getNativeNumber($bound) + $this->getNativeNumber($value);
+            if ($min !== null) {
+                $min = $numericAttribute instanceof Attribute && Attribute::isIntegerType($numericAttribute->type)
+                    ? BigInt::add($min, $value)
+                    : $this->getNativeNumber($min) + $this->getNativeNumber($value);
             }
 
             $this->adapter->increaseDocumentAttribute(

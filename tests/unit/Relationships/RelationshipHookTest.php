@@ -21,6 +21,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Schema\ForeignKeyAction;
@@ -197,7 +198,7 @@ final class RelationshipHookTest extends TestCase
 
         $database->createDocument('child', new Document(['$id' => 'deletable', '$permissions' => [Permission::delete(Role::any())]]));
         $database->createDocument('child', new Document(['$id' => 'protected', '$permissions' => [Permission::delete(Role::user('admin'))]]));
-        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['deletable', 'protected']]));
+        $database->getAuthorization()->skip(fn () => $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['deletable', 'protected']])));
 
         $this->assertDeleteRejected($database, 'parent', 'parent1');
 
@@ -226,7 +227,7 @@ final class RelationshipHookTest extends TestCase
         foreach (['child1', 'child2', 'child3'] as $id) {
             $database->createDocument('child', new Document(['$id' => $id, '$permissions' => [Permission::delete(Role::any())]]));
         }
-        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1', 'child2', 'child3']]));
+        $database->getAuthorization()->skip(fn () => $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1', 'child2', 'child3']])));
 
         $database->skipRelationships(fn () => $database->deleteDocument('child', 'child2'));
 
@@ -626,5 +627,277 @@ final class RelationshipHookTest extends TestCase
         \sort($ids);
 
         return $ids;
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAFailedNestedOneToOneWriteLeavesNoWriteStackEntry(Closure $adapter): void
+    {
+        $database = $this->writeStackDatabase($adapter);
+
+        foreach ([1, 2] as $attempt) {
+            $this->failNestedOneToOneWrite($database, $attempt);
+
+            $this->assertSame(0, $database->getRelationshipHook()?->getWriteStackCount(), "Attempt {$attempt} left an entry on the write stack");
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testANestedCreateAfterAFailedNestedWriteStoresItsRelatedDocuments(Closure $adapter): void
+    {
+        $database = $this->writeStackDatabase($adapter);
+
+        $this->failNestedOneToOneWrite($database, 1);
+        $this->failNestedOneToOneWrite($database, 2);
+
+        $database->createDocument('owner', new Document([
+            '$id' => 'owner2',
+            'items' => [new Document(['$id' => 'item1', 'details' => [new Document(['$id' => 'detail1'])]])],
+        ]));
+
+        $this->assertSame(['item1'], $this->ids($database, 'item'));
+        $this->assertSame(['detail1'], $this->ids($database, 'detail'));
+        $this->assertSame(['item1'], $this->relatedIds($database->getDocument('owner', 'owner2'), 'items'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    private function writeStackDatabase(Closure $adapter): Database
+    {
+        $database = $this->database($adapter);
+        $database->createCollection(new Collection(id: 'owner', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'solo', attributes: [Attribute::string(key: 'name', size: 64)], permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+        $database->createCollection(new Collection(id: 'item', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'detail', permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::oneToOne(collection: 'owner', relatedCollection: 'solo', twoWay: true, key: 'solo', twoWayKey: 'owner', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: 'owner', relatedCollection: 'item', twoWay: true, key: 'items', twoWayKey: 'owner', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: 'item', relatedCollection: 'detail', twoWay: true, key: 'details', twoWayKey: 'item', onDelete: ForeignKeyAction::SetNull));
+
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createDocument('owner', new Document(['$id' => 'owner1']));
+            $database->createDocument('solo', new Document(['$id' => 'solo1', 'name' => 'before']));
+        });
+
+        return $database;
+    }
+
+    private function failNestedOneToOneWrite(Database $database, int $attempt): void
+    {
+        try {
+            $database->updateDocument('owner', 'owner1', new Document(['solo' => new Document(['$id' => 'solo1', 'name' => "attempt {$attempt}"])]));
+            $this->fail('Updating a related document the caller may not update must be rejected');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame("No permissions provided for action 'update'", $exception->getMessage());
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testDeleteDocumentsWithASelectCascadesToChildren(Closure $adapter): void
+    {
+        foreach ($this->deletePairs() as $type => [$relationship, $link]) {
+            $database = $this->database($adapter);
+            $this->relate($database, $relationship(ForeignKeyAction::Cascade));
+            $link($database, 'parent1', 'child1');
+            $link($database, 'parent2', 'child2');
+
+            $deleted = $database->deleteDocuments('parent', [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+
+            $this->assertSame(1, $deleted, $type);
+            $this->assertSame(['parent1'], $this->ids($database, 'parent'), $type);
+            $this->assertSame(['child1'], $this->ids($database, 'child'), "{$type}: the deleted parent's child must be deleted with it");
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testDeleteDocumentsWithASelectHonoursRestrict(Closure $adapter): void
+    {
+        foreach ($this->deletePairs() as $type => [$relationship, $link]) {
+            $database = $this->database($adapter);
+            $this->relate($database, $relationship(ForeignKeyAction::Restrict));
+            $link($database, 'parent1', 'child1');
+            $link($database, 'parent2', 'child2');
+
+            try {
+                $database->deleteDocuments('parent', [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+                $this->fail("{$type}: deleting a parent with a related document must be restricted");
+            } catch (RestrictedException) {
+            }
+
+            $this->assertSame(['parent1', 'parent2'], $this->ids($database, 'parent'), $type);
+            $this->assertSame(['child1', 'child2'], $this->ids($database, 'child'), $type);
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testDeleteDocumentsWithASelectCascadesFromTheChildSideOfATwoWayOneToOne(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
+        foreach (['1', '2'] as $suffix) {
+            $database->createDocument('child', new Document(['$id' => "child{$suffix}"]));
+            $database->createDocument('parent', new Document(['$id' => "parent{$suffix}", 'child' => "child{$suffix}"]));
+        }
+
+        $this->assertSame(1, $database->deleteDocuments('child', [Query::equal('$id', ['child2']), Query::select(['$id'])]));
+
+        $this->assertSame(['child1'], $this->ids($database, 'child'));
+        $this->assertSame(['parent1'], $this->ids($database, 'parent'));
+    }
+
+    /**
+     * @return array<string, array{Closure(ForeignKeyAction): Relationship, Closure(Database, string, string): void}>
+     */
+    private function deletePairs(): array
+    {
+        $parentHoldsChild = function (Database $database, string $parent, string $child): void {
+            $database->createDocument('child', new Document(['$id' => $child]));
+            $database->createDocument('parent', new Document(['$id' => $parent, 'child' => $child]));
+        };
+        $parentListsChild = function (Database $database, string $parent, string $child): void {
+            $database->createDocument('child', new Document(['$id' => $child]));
+            $database->createDocument('parent', new Document(['$id' => $parent, 'children' => [$child]]));
+        };
+        $childHoldsKey = function (Database $database, string $parent, string $child): void {
+            $database->createDocument('parent', new Document(['$id' => $parent]));
+            $database->createDocument('child', new Document(['$id' => $child, 'parent' => $parent]));
+        };
+
+        return [
+            'one-to-one' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'child', twoWayKey: 'parent', onDelete: $onDelete),
+                $parentHoldsChild,
+            ],
+            'one-to-many' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: $onDelete),
+                $childHoldsKey,
+            ],
+            'many-to-one' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::manyToOne(collection: 'child', relatedCollection: 'parent', twoWay: true, key: 'parent', twoWayKey: 'children', onDelete: $onDelete),
+                $childHoldsKey,
+            ],
+            'many-to-many' => [
+                fn (ForeignKeyAction $onDelete): Relationship => Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: $onDelete),
+                $parentListsChild,
+            ],
+        ];
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAManyToManyDocumentByIdNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('parent', 'parent1', new Document(['children' => ['readonly']])));
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+
+        $database->getAuthorization()->addRole(self::ADMIN);
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => ['readonly']]));
+        $this->assertSame(['readonly'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAManyToManyDocumentGivenAsADocumentNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('parent', 'parent1', new Document(['children' => [new Document(['$id' => 'readonly'])]])));
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAManyToManyDocumentThroughANestedUpdateNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->updateDocument('grandparent', 'grandparent1', new Document([
+            'parent' => new Document(['$id' => 'parent1', 'children' => ['readonly']]),
+        ])));
+
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testLinkingAnExistingManyToManyDocumentThroughACreateNeedsUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $this->assertLinkRejected(fn () => $database->createDocument('parent', new Document(['$id' => 'parent2', 'children' => ['readonly']])));
+        $this->assertLinkRejected(fn () => $database->createDocument('parent', new Document(['$id' => 'parent3', 'children' => [new Document(['$id' => 'readonly'])]])));
+        $this->assertLinkRejected(fn () => $database->createDocument('grandparent', new Document([
+            '$id' => 'grandparent2',
+            'parent' => new Document(['$id' => 'parent4', 'children' => ['readonly']]),
+        ])));
+
+        $this->assertSame(['parent1'], $this->ids($database, 'parent'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCreatingAManyToManyDocumentThroughALinkNeedsNoUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => [new Document(['$id' => 'created'])]]));
+        $database->createDocument('parent', new Document(['$id' => 'parent2', 'children' => [new Document(['$id' => 'nested'])]]));
+
+        $this->assertSame(['created'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame(['nested'], $this->relatedIds($database->getDocument('parent', 'parent2'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testKeepingOrUnlinkingAManyToManyDocumentNeedsNoUpdatePermission(Closure $adapter): void
+    {
+        $database = $this->nestedLinkDatabase($adapter, $this->manyToManyLink());
+        $database->getAuthorization()->skip(fn () => $database->updateDocument('parent', 'parent1', new Document(['children' => ['readonly']])));
+
+        $database->updateDocument('parent', 'parent1', new Document(['name' => 'kept', 'children' => ['readonly']]));
+        $this->assertSame(['readonly'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => []]));
+        $this->assertSame([], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+        $this->assertSame([], $this->relatedIds($database->getDocument('child', 'readonly'), 'parents'));
+    }
+
+    private function manyToManyLink(): Relationship
+    {
+        return Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
     }
 }

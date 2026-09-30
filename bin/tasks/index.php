@@ -1,10 +1,5 @@
 <?php
 
-/**
- * @var CLI $cli
- */
-global $cli;
-
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\CLI\CLI;
@@ -18,6 +13,11 @@ use Utopia\Database\PDO;
 use Utopia\Query\Schema\Order;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Text;
+
+/**
+ * @var CLI $cli
+ */
+global $cli;
 
 /**
  * @Example

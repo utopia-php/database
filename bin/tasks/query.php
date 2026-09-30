@@ -1,10 +1,5 @@
 <?php
 
-/**
- * @var CLI $cli
- */
-global $cli;
-
 use Faker\Factory;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
@@ -20,6 +15,11 @@ use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Boolean;
 use Utopia\Validator\Integer;
 use Utopia\Validator\Text;
+
+/**
+ * @var CLI $cli
+ */
+global $cli;
 
 /**
  * @Example

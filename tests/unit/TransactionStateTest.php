@@ -194,8 +194,11 @@ final class TransactionStateTest extends TestCase
     {
         $connection = $this->createConnection();
         $adapter = new MariaDB($connection);
+        /** @var int $attempts */
         $attempts = 0;
+        /** @var list<int> $nested */
         $nested = [];
+        /** @var list<Throwable> $failures */
         $failures = [];
         $stored = \uniqid();
 

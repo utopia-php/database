@@ -5,7 +5,6 @@ namespace Tests\E2E\Adapter;
 use PDO as PhpPDO;
 use Redis;
 use Swoole\Coroutine;
-use Swoole\Coroutine\WaitGroup;
 use Swoole\Runtime;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoCache;
@@ -89,19 +88,21 @@ class MariaDBTest extends Base
 
         $hooks = Runtime::getHookFlags();
         $options = Coroutine::getOptions()['hook_flags'] ?? SWOOLE_HOOK_ALL;
+        /** @var int $arrived */
         $arrived = 0;
+        /** @var array<string, int> $attempts */
         $attempts = [];
+        /** @var list<string> $conflicts */
         $conflicts = [];
+        /** @var array<string, string> $failures */
         $failures = [];
 
         Coroutine::set(['hook_flags' => SWOOLE_HOOK_ALL]);
 
         try {
             run(function () use ($collection, &$arrived, &$attempts, &$conflicts, &$failures): void {
-                $group = new WaitGroup();
                 foreach (['starter', 'pro'] as $id) {
-                    $group->add();
-                    Coroutine::create(function () use ($collection, $id, $group, &$arrived, &$attempts, &$conflicts, &$failures): void {
+                    Coroutine::create(function () use ($collection, $id, &$arrived, &$attempts, &$conflicts, &$failures): void {
                         try {
                             $connection = $this->connect();
                             $attempts[$id] = 0;
@@ -126,12 +127,9 @@ class MariaDBTest extends Base
                             });
                         } catch (Throwable $error) {
                             $failures[$id] = $error::class.': '.$error->getMessage();
-                        } finally {
-                            $group->done();
                         }
                     });
                 }
-                $group->wait();
             });
         } finally {
             Coroutine::set(['hook_flags' => $options]);

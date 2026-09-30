@@ -882,4 +882,61 @@ class DocumentTest extends TestCase
         $this->assertFalse($document->findAndRemove('name', 'missing', 'items'));
         $this->assertSame([1 => ['name' => 'y']], $document->getAttribute('items'));
     }
+
+    public function testFindAndReplaceWithoutSubjectPrefersTheTopLevelKey(): void
+    {
+        $document = new Document([
+            'meta' => ['title' => 'x'],
+            'title' => 'x',
+        ]);
+
+        $this->assertTrue($document->findAndReplace('title', 'x', 'y'));
+        $this->assertSame('y', $document->getAttribute('title'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
+    }
+
+    public function testFindAndReplaceWithoutSubjectIgnoresNestedMatches(): void
+    {
+        $document = new Document(['meta' => ['title' => 'x']]);
+
+        $this->assertFalse($document->findAndReplace('title', 'x', 'y'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
+    }
+
+    public function testFindAndReplaceWithADocumentSubjectReplacesInsideIt(): void
+    {
+        $document = new Document(['child' => new Document(['$id' => 'c', 'name' => 'x'])]);
+
+        $this->assertTrue($document->findAndReplace('name', 'x', 'y', 'child'));
+        $this->assertSame('y', $document->getDocument('child')->getAttribute('name'));
+    }
+
+    public function testFindAndRemoveWithoutSubjectPrefersTheTopLevelKey(): void
+    {
+        $document = new Document([
+            'meta' => ['title' => 'x'],
+            'title' => 'x',
+        ]);
+
+        $this->assertTrue($document->findAndRemove('title', 'x'));
+        $this->assertFalse($document->isSet('title'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
+    }
+
+    public function testFindAndRemoveWithADocumentSubjectRemovesInsideIt(): void
+    {
+        $document = new Document(['child' => new Document(['$id' => 'c', 'name' => 'x'])]);
+
+        $this->assertTrue($document->findAndRemove('name', 'x', 'child'));
+        $this->assertFalse($document->getDocument('child')->isSet('name'));
+        $this->assertSame('c', $document->getDocument('child')->getId());
+    }
+
+    public function testFindAndRemoveWithoutSubjectIgnoresNestedMatches(): void
+    {
+        $document = new Document(['meta' => ['title' => 'x']]);
+
+        $this->assertFalse($document->findAndRemove('title', 'x'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
+    }
 }

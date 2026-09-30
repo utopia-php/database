@@ -18,6 +18,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
@@ -246,7 +247,7 @@ final class BigIntegerTest extends TestCase
             'increment above a whole float max' => [PHP_INT_MAX, Operator::increment(1, 100.0), PHP_INT_MAX],
             'increment onto a float max' => [PHP_INT_MAX, Operator::increment(1, 9223372036854775808.0), '9223372036854775808'],
             'increment below a float max' => [PHP_INT_MAX, Operator::increment(1, 1.0e19), '9223372036854775808'],
-            'increment below a fractional string max' => [PHP_INT_MAX, Operator::increment(1, '9223372036854775808.5'), '9223372036854775808'],
+            'increment below a whole string max' => [PHP_INT_MAX, Operator::increment(1, '9223372036854775808.0'), '9223372036854775808'],
             'decrement below a float min' => [PHP_INT_MIN, Operator::decrement(1, -9.0e18), PHP_INT_MIN],
             'decrement above a float min' => [PHP_INT_MIN, Operator::decrement(1, -1.0e19), '-9223372036854775809'],
             'multiply above a float max' => [PHP_INT_MAX, Operator::multiply(2, 1.5e19), PHP_INT_MAX],
@@ -256,6 +257,27 @@ final class BigIntegerTest extends TestCase
         foreach (['memory' => self::memoryOperators(), 'redis' => self::redisOperators()] as $name => $adapter) {
             foreach ($cases as $case => [$current, $operator, $expected]) {
                 $this->assertSame($expected, $adapter->apply($current, $operator), "{$name}: {$case}");
+            }
+        }
+    }
+
+    public function testMemoryAndRedisRefuseAFractionalBoundOnTheExactBigIntegerPath(): void
+    {
+        $cases = [
+            'float max' => [Operator::increment(1, 102.4), 'Cannot apply increment operator: max/min limit must be a whole number, got 102.4'],
+            'string max' => [Operator::increment(1, '9223372036854775808.5'), 'Cannot apply increment operator: max/min limit must be a whole number, got 9223372036854775808.5'],
+            'float min' => [Operator::decrement(1, -0.5), 'Cannot apply decrement operator: max/min limit must be a whole number, got -0.5'],
+        ];
+
+        foreach (['memory' => self::memoryOperators(), 'redis' => self::redisOperators()] as $name => $adapter) {
+            foreach ($cases as $case => [$operator, $message]) {
+                $current = $operator->getMethod() === OperatorType::Decrement ? PHP_INT_MIN : PHP_INT_MAX;
+                try {
+                    $adapter->apply($current, $operator);
+                    $this->fail("{$name}: {$case} must be refused");
+                } catch (OperatorException $exception) {
+                    $this->assertSame($message, $exception->getMessage(), "{$name}: {$case}");
+                }
             }
         }
     }

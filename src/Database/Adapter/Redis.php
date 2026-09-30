@@ -15,6 +15,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Unique as UniqueException;
@@ -3327,13 +3328,21 @@ class Redis extends Adapter implements
         $exact = BigInt::calculateOutsideNative($method, $current ?? 0, $values[0] ?? 1);
         if ($exact !== null) {
             $bound = $values[1] ?? null;
-            $isUpper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
-            $limit = \is_numeric($bound) ? BigInt::integerBound($bound, $isUpper) : null;
-            if ($method === OperatorType::Modulo || $limit === null) {
+            if ($method === OperatorType::Modulo || ! \is_numeric($bound) || (\is_float($bound) && ! \is_finite($bound))) {
                 return $exact;
             }
 
-            return $this->applyNumericLimit($current ?? 0, $exact, $limit, $isUpper);
+            $limit = BigInt::integralValue($bound);
+            if ($limit === null) {
+                throw new OperatorException("Cannot apply {$method->value} operator: max/min limit must be a whole number, got {$bound}");
+            }
+
+            return $this->applyNumericLimit(
+                $current ?? 0,
+                $exact,
+                $limit,
+                \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true)
+            );
         }
 
         switch ($method) {

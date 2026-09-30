@@ -15,11 +15,13 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
@@ -373,6 +375,29 @@ final class RedisAdapterPathsTest extends TestCase
 
         $this->expectException(DuplicateException::class);
         $adapter->createDocument($this->notes(), new Document(['$id' => 'second', '$permissions' => [], 'tags' => ['a', 'b']]));
+    }
+
+    public function testFractionalOperatorLimitIsRefusedBeforeTheWrite(): void
+    {
+        $database = $this->database();
+        $database->create();
+        $database->createCollection(new Collection(
+            id: self::NOTES,
+            attributes: [Attribute::integer(key: 'count'), Attribute::bigInteger(key: 'big')],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+        ));
+        $database->createDocument(self::NOTES, new Document(['$id' => 'counter', 'count' => 100, 'big' => PHP_INT_MAX - 5]));
+
+        try {
+            $database->updateDocument(self::NOTES, 'counter', new Document(['count' => Operator::increment(5, 102.4)]));
+            $this->fail('A fractional limit on an integer attribute must be refused');
+        } catch (StructureException $exception) {
+            $this->assertSame("Invalid document structure: Cannot apply increment operator: max/min limit must be a whole number for integer attribute 'count', got 102.4", $exception->getMessage());
+        }
+        $this->assertSame(100, $database->getDocument(self::NOTES, 'counter')->getAttribute('count'));
+
+        $database->updateDocument(self::NOTES, 'counter', new Document(['big' => Operator::increment(10, 9.0e18)]));
+        $this->assertSame(PHP_INT_MAX - 5, $database->getDocument(self::NOTES, 'counter')->getAttribute('big'));
     }
 
     private function petsDatabase(RelationType $type, string $key, string $twoWayKey, string $from = 'owners', string $to = 'pets'): Database

@@ -1650,9 +1650,6 @@ trait Documents
                         $this->silent(fn () => $hook->afterDocumentUpdate($collection, $document, $new));
                     }
 
-                    $document = $new;
-
-                    // Check if document was updated after the request timestamp
                     try {
                         $oldUpdatedAt = new PhpDateTime($document->getUpdatedAt() ?? 'now');
                     } catch (Exception $e) {
@@ -1662,6 +1659,8 @@ trait Documents
                     if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
+
+                    $document = $new;
 
                     $encoded = $this->encode($collection, $document);
                     $batch[$index] = $this->castingBefore($collection, $encoded);

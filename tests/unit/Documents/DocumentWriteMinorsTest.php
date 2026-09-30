@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Documents;
 
+use DateTime;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -13,6 +14,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
@@ -69,6 +71,40 @@ final class DocumentWriteMinorsTest extends TestCase
 
         $this->assertSame(['second'], \array_map(static fn (Document $document): string => $document->getId(), $page));
         $this->assertSame($before, $cursor->getArrayCopy());
+    }
+
+    public function testBulkUpdateInsideARequestTimestampComparesTheStoredTimestamp(): void
+    {
+        $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
+        $database->createDocument(self::COLLECTION, new Document(['$id' => 'first', 'counter' => 1]));
+        $requestTimestamp = new DateTime();
+        \usleep(5_000);
+
+        $modified = $database->withRequestTimestamp(
+            $requestTimestamp,
+            fn (): int => $database->updateDocuments(self::COLLECTION, new Document(['counter' => 2])),
+        );
+
+        $this->assertSame(1, $modified);
+        $this->assertSame(2, $database->getDocument(self::COLLECTION, 'first')->getAttribute('counter'));
+    }
+
+    public function testBulkUpdateOfADocumentWrittenAfterTheRequestTimestampConflicts(): void
+    {
+        $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
+        $database->createDocument(self::COLLECTION, new Document(['$id' => 'first', 'counter' => 1]));
+
+        try {
+            $database->withRequestTimestamp(
+                new DateTime('-1 hour'),
+                fn (): int => $database->updateDocuments(self::COLLECTION, new Document(['counter' => 2])),
+            );
+            $this->fail('A bulk update of a document written after the request timestamp was accepted');
+        } catch (ConflictException $exception) {
+            $this->assertSame('Document was updated after the request timestamp', $exception->getMessage());
+        }
+
+        $this->assertSame(1, $database->getDocument(self::COLLECTION, 'first')->getAttribute('counter'));
     }
 
     /**

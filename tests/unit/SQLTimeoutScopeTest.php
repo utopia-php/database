@@ -4,7 +4,6 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
@@ -20,6 +19,7 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\PDO as DatabasePDO;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
 final class SQLTimeoutScopeTest extends TestCase
@@ -211,13 +211,24 @@ final class SQLTimeoutScopeTest extends TestCase
             ->disableOriginalConstructor()
             ->getMock();
         $statement->expects($this->exactly(2))->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('fetch')->willReturn([Storage::SEQUENCE => 1]);
+        $statement->method('closeCursor')->willReturn(true);
+        $pdo->expects($this->exactly(2))->method('prepare')->willReturn($statement);
+        $pdo->method('lastInsertId')->willReturn('1');
 
         $adapter = new $adapterClass($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
         $adapter->setTimeout(25, Event::DocumentFind);
-        $execute = new ReflectionMethod($adapter, 'execute');
 
-        $this->assertTrue($execute->invoke($adapter, $statement, Event::DocumentFind));
-        $this->assertTrue($execute->invoke($adapter, $statement, Event::DocumentCreate));
+        $collection = new Document(['$id' => 'movies']);
+        $adapter->find($collection, orderAttributes: [Document::SEQUENCE]);
+        $adapter->createDocument($collection, new Document(['$id' => 'movie', '$permissions' => []]));
+
         $this->assertSame($expected, $statements);
     }
 

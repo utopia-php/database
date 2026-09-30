@@ -313,8 +313,8 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     /**
      * The tenant the calling coroutine's statements run as, exactly as it was set. The adapters read it through
-     * this method rather than the `$tenant` property hook: PHP 8.5.10's tracing JIT crashes on a hot trace that
-     * passes a hooked property as a call argument.
+     * this method rather than the `$tenant` property hook: with the hook on their hot paths, PHP 8.5's tracing JIT
+     * (8.5.10 and 8.5.11) crashes the process.
      */
     protected function currentTenant(): int|string|null
     {

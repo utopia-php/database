@@ -162,6 +162,14 @@ final class RawTenantFilterTest extends TestCase
         );
     }
 
+    public function testADigitLeadingOuterJoinAliasAndDatabaseAreQuoted(): void
+    {
+        $filter = new RawTenantFilter(self::TENANT, '1db.ns_authors', false, '`');
+
+        $this->assertSame('(`9x`._tenant IN (?) OR `9x`.`_uid` IS NULL)', $filter->filterJoin('9x', JoinType::Right)->condition->expression);
+        $this->assertSame('(`1db`.`ns_authors`._tenant IN (?) OR `1db`.`ns_authors`.`_uid` IS NULL)', $filter->filter('1db.ns_authors')->expression);
+    }
+
     private function filter(): RawTenantFilter
     {
         return new RawTenantFilter(self::TENANT, self::TABLE, false, '`');

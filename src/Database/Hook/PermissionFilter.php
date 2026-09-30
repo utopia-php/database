@@ -20,6 +20,8 @@ class PermissionFilter implements Filter, JoinFilter
 {
     private const string IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/';
 
+    private const string QUOTED_IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
+
     private const string NO_SEMIJOIN = '/*+ NO_SEMIJOIN() */ ';
 
     /**
@@ -66,7 +68,7 @@ class PermissionFilter implements Filter, JoinFilter
         /** @var string $permTable */
         $permTable = ($this->permissionsTable)($table);
 
-        if (! \preg_match(self::IDENTIFIER_PATTERN, $permTable)) {
+        if (! \preg_match(self::QUOTED_IDENTIFIER_PATTERN, $permTable)) {
             throw new InvalidArgumentException('Invalid permissions table name: '.$permTable);
         }
 

@@ -4,12 +4,16 @@ namespace Tests\Unit\Type;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\FilterRegistry;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Database;
+use Utopia\Database\Document;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Type\TypeRegistry;
+use Utopia\Query\Schema\ColumnType;
 
 final class TypeRegistryTest extends TestCase
 {
@@ -63,37 +67,41 @@ final class TypeRegistryTest extends TestCase
 
     public function testRegisteringLeavesTheGlobalFiltersUntouched(): void
     {
-        $filters = new \ReflectionProperty(Database::class, 'filters');
-        $before = $filters->getValue();
-
         (new TypeRegistry())->register(new Reversed());
 
-        $this->assertSame($before, $filters->getValue());
+        $notes = new Document([
+            '$id' => 'notes',
+            'attributes' => [
+                new Document([
+                    '$id' => 'body',
+                    'type' => ColumnType::String->value,
+                    'array' => false,
+                    'filters' => ['reversed'],
+                ]),
+            ],
+        ]);
+
+        $this->expectException(NotFoundException::class);
+        (new Database(new Memory(), new Cache(new None())))->decode($notes, new Document(['body' => 'olleh']));
     }
 
     public function testDefaultFiltersNameEveryBuiltInFilter(): void
     {
-        $filters = new \ReflectionProperty(Database::class, 'filters');
-        $registered = new \ReflectionProperty(Database::class, 'defaultFiltersRegistered');
-        $previousFilters = $filters->getValue();
-        $previousRegistered = $registered->getValue();
+        $previousFilters = FilterRegistry::filters();
+        $previousRegistered = FilterRegistry::defaultsRegistered();
 
         try {
-            $filters->setValue(null, []);
-            $registered->setValue(null, false);
+            FilterRegistry::clear();
             new Database(new Memory(), new Cache(new None()));
 
-            $builtIn = $filters->getValue();
-            $this->assertIsArray($builtIn);
-            $names = \array_keys($builtIn);
+            $names = \array_keys(FilterRegistry::filters());
             $expected = Database::DEFAULT_FILTERS;
             \sort($names);
             \sort($expected);
 
             $this->assertSame($expected, $names);
         } finally {
-            $filters->setValue(null, $previousFilters);
-            $registered->setValue(null, $previousRegistered);
+            FilterRegistry::restore($previousFilters, $previousRegistered);
         }
     }
 }

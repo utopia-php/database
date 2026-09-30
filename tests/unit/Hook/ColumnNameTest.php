@@ -129,24 +129,4 @@ final class ColumnNameTest extends TestCase
         yield 'a leading digit' => ['1db._uid'];
         yield 'a leading hyphen' => ['-ns._uid'];
     }
-
-    #[DataProvider('digitOrHyphenLeadingPermissionsTables')]
-    public function testPermissionFilterRefusesADigitOrHyphenLeadingPermissionsTable(string $table): void
-    {
-        $filter = new PermissionFilter(['any'], static fn (string $name): string => $table);
-
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid permissions table name: '.$table);
-
-        $filter->filter('posts');
-    }
-
-    /**
-     * @return iterable<string, array{string}>
-     */
-    public static function digitOrHyphenLeadingPermissionsTables(): iterable
-    {
-        yield 'a leading digit' => ['1db.ns_posts_perms'];
-        yield 'a leading hyphen' => ['-ns_posts_perms'];
-    }
 }

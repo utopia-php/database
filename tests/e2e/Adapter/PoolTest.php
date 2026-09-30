@@ -3,7 +3,6 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
-use ReflectionClass;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -87,9 +86,7 @@ class PoolTest extends Base
         $sql = "ALTER TABLE {$sqlTable} DROP COLUMN `{$column}`";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            $class = new ReflectionClass($adapter);
-            $property = $class->getProperty('pdo');
-            $pdo = $property->getValue($adapter);
+            $pdo = $adapter->getDriver();
             assert($pdo instanceof PDO);
             $pdo->exec($sql);
         });
@@ -103,9 +100,7 @@ class PoolTest extends Base
         $sql = "DROP INDEX `{$index}` ON {$sqlTable}";
 
         self::$pool->use(function (Adapter $adapter) use ($sql) {
-            $class = new ReflectionClass($adapter);
-            $property = $class->getProperty('pdo');
-            $pdo = $property->getValue($adapter);
+            $pdo = $adapter->getDriver();
             assert($pdo instanceof PDO);
             $pdo->exec($sql);
         });
@@ -114,16 +109,14 @@ class PoolTest extends Base
     }
 
     /**
-     * Execute raw SQL via the pool using reflection to access the adapter's PDO.
+     * Execute raw SQL via the pool on the adapter's driver.
      *
      * @param  array<string, mixed>  $binds
      */
     private function execRawSQL(string $sql, array $binds = []): void
     {
         self::$pool->use(function (Adapter $adapter) use ($sql, $binds) {
-            $class = new ReflectionClass($adapter);
-            $property = $class->getProperty('pdo');
-            $pdo = $property->getValue($adapter);
+            $pdo = $adapter->getDriver();
             assert($pdo instanceof PDO);
             $stmt = $pdo->prepare($sql);
             foreach ($binds as $key => $value) {

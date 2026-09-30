@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
@@ -796,5 +797,89 @@ class DocumentTest extends TestCase
     {
         yield 'an integer $id' => [[Document::ID => 5], '$id must be of type string'];
         yield 'a string $permissions' => [[Document::PERMISSIONS => 'read("any")'], '$permissions must be of type array'];
+    }
+
+    #[DataProvider('tenantsOfAnotherType')]
+    public function testATenantOfAnotherTypeReadsAsNoTenant(mixed $tenant): void
+    {
+        $document = new Document([Document::TENANT => $tenant]);
+
+        $this->assertNull($document->getTenant());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function tenantsOfAnotherType(): iterable
+    {
+        yield 'a float' => [1.0];
+        yield 'a boolean' => [true];
+        yield 'an array' => [[1]];
+        yield 'an object' => [new stdClass()];
+    }
+
+    public function testGetDocumentsWrapsArrayItemsAndSkipsScalars(): void
+    {
+        $first = new Document(['name' => 'first']);
+        $document = new Document([
+            'items' => [$first, ['name' => 'x', 0 => 'y'], 'scalar', null],
+            'text' => 'not a list',
+        ]);
+
+        $documents = $document->getDocuments('items');
+
+        $this->assertCount(2, $documents);
+        $this->assertSame($first, $documents[0]);
+        $this->assertSame(['name' => 'x'], $documents[1]->getArrayCopy());
+        $this->assertSame([], $document->getDocuments('missing'));
+        $this->assertSame([], $document->getDocuments('text'));
+    }
+
+    #[DataProvider('valuesThatAreNotADocument')]
+    public function testGetDocumentReturnsAnEmptyDocumentForAValueThatIsNotOne(mixed $value): void
+    {
+        $document = new Document(['value' => $value]);
+
+        $this->assertTrue($document->getDocument('value')->isEmpty());
+        $this->assertTrue($document->getDocument('missing')->isEmpty());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function valuesThatAreNotADocument(): iterable
+    {
+        yield 'null' => [null];
+        yield 'an empty array' => [[]];
+        yield 'a list' => [['a', 'b']];
+        yield 'a string' => ['x'];
+    }
+
+    public function testGetDocumentWrapsTheStringKeysOfAnAssociativeArray(): void
+    {
+        $child = new Document(['name' => 'child']);
+        $document = new Document([
+            'map' => ['name' => 'x', 0 => 'y'],
+            'child' => $child,
+        ]);
+
+        $this->assertSame(['name' => 'x'], $document->getDocument('map')->getArrayCopy());
+        $this->assertSame($child, $document->getDocument('child'));
+    }
+
+    public function testFindAndRemoveRemovesAPlainArrayItemFromASubject(): void
+    {
+        $document = new Document([
+            'items' => [
+                ['name' => 'x'],
+                ['name' => 'y'],
+            ],
+        ]);
+
+        $this->assertTrue($document->findAndRemove('name', 'x', 'items'));
+        $this->assertSame([1 => ['name' => 'y']], $document->getAttribute('items'));
+
+        $this->assertFalse($document->findAndRemove('name', 'missing', 'items'));
+        $this->assertSame([1 => ['name' => 'y']], $document->getAttribute('items'));
     }
 }

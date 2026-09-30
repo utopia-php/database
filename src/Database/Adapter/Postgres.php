@@ -292,8 +292,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $permsSql = $permsResult->query.'; '.implode('; ', $permsIndexStatements);
 
+        $created = false;
+
         try {
             $this->executeStatement($collectionSql, Event::CollectionCreate);
+            $created = true;
             $this->executeStatement($permsSql, Event::CollectionCreate);
 
             foreach ($indexes as $index) {
@@ -326,12 +329,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                     event: Event::CollectionCreate,
                 );
             }
-        } catch (DuplicateException $e) {
-            throw $e;
-        } catch (PDOException $e) {
-            $e = $this->processException($e);
+        } catch (Throwable $e) {
+            if ($e instanceof PDOException) {
+                $e = $this->processException($e);
+            }
 
-            if (! ($e instanceof DuplicateException)) {
+            if ($created && ! ($e instanceof DuplicateException)) {
                 $dropSchema = $this->createSchemaBuilder();
                 $dropSql = $dropSchema->table($tableRaw)->dropIfExists()->query.'; '.$dropSchema->table($permsTableRaw)->dropIfExists()->query;
                 $this->executeStatement($dropSql, Event::CollectionCreate);

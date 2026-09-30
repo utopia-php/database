@@ -9,6 +9,7 @@ use PDOException;
 use PDOStatement;
 use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
+use Throwable;
 use Utopia\Database\Attribute;
 use Utopia\Database\Builder\SQLite as SQLiteBuilder;
 use Utopia\Database\Capability;
@@ -541,8 +542,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 			)
 		";
 
+        $created = false;
+
         try {
             $this->execute($this->prepare($collection, event: Event::CollectionCreate));
+            $created = true;
 
             $this->execute($this->prepare($permissions, event: Event::CollectionCreate));
 
@@ -567,8 +571,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                     ttl: $index->ttl,
                 ), event: Event::CollectionCreate);
             }
-        } catch (PDOException $e) {
-            throw $this->processException($e);
+        } catch (Throwable $e) {
+            if ($e instanceof PDOException) {
+                $e = $this->processException($e);
+            }
+
+            if ($created && ! $e instanceof DuplicateException) {
+                $this->deleteCollection($id);
+            }
+
+            throw $e;
         }
 
         return true;

@@ -236,11 +236,22 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $permsResult = $permsTable->create();
         $permissions = $permsResult->query;
 
+        $created = false;
+
         try {
             $this->executeStatement($collection, Event::CollectionCreate);
+            $created = true;
             $this->executeStatement($permissions, Event::CollectionCreate);
         } catch (PDOException $e) {
-            throw $this->processException($e);
+            $error = $this->processException($e);
+
+            if ($created && ! $error instanceof DuplicateException) {
+                $main = $schema->table($this->getSQLTableRaw($id))->dropIfExists();
+                $permissionsTable = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
+                $this->executeStatement($main->query.'; '.$permissionsTable->query, Event::CollectionCreate);
+            }
+
+            throw $error;
         }
 
         return true;

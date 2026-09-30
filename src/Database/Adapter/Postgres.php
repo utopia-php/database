@@ -1300,7 +1300,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
-                    $namedBindings["op_{$idx}"] = $values[1];
+                    $namedBindings["op_{$idx}"] = self::exactLimit($values[1]);
                     $idx++;
                 }
                 break;
@@ -1314,7 +1314,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
-                    $namedBindings["op_{$idx}"] = $values[1];
+                    $namedBindings["op_{$idx}"] = self::exactLimit($values[1]);
                     $idx++;
                 }
                 break;

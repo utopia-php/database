@@ -5619,7 +5619,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 // Bind limit if provided
                 if (isset($values[1])) {
                     $limitKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':'.$limitKey, $values[1], $this->getPDOType($values[1]));
+                    $limit = self::exactLimit($values[1]);
+                    $stmt->bindValue(':'.$limitKey, $limit, $this->getPDOType($limit));
                     $bindIndex++;
                 }
                 break;
@@ -5640,7 +5641,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 // Bind max limit if provided
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
-                    $stmt->bindValue(':'.$maxKey, $values[1], $this->getPDOType($values[1]));
+                    $limit = self::exactLimit($values[1]);
+                    $stmt->bindValue(':'.$maxKey, $limit, $this->getPDOType($limit));
                     $bindIndex++;
                 }
                 break;
@@ -5807,7 +5809,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
-                    $namedBindings["op_{$idx}"] = $values[1];
+                    $namedBindings["op_{$idx}"] = self::exactLimit($values[1]);
                     $idx++;
                 }
                 break;
@@ -5821,7 +5823,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $namedBindings["op_{$idx}"] = $values[0] ?? 1;
                 $idx++;
                 if (isset($values[1])) {
-                    $namedBindings["op_{$idx}"] = $values[1];
+                    $namedBindings["op_{$idx}"] = self::exactLimit($values[1]);
                     $idx++;
                 }
                 break;
@@ -5955,7 +5957,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $values = $operator->getValues();
         $exact = BigInt::calculateOutsideNative($method, $value ?? 0, $values[0] ?? 1);
         if ($exact !== null) {
-            $bound = $values[1] ?? null;
+            $bound = self::exactLimit($values[1] ?? null);
             if (BigInt::isIntegerValue($bound)) {
                 $upper = \in_array($method, [OperatorType::Increment, OperatorType::Multiply, OperatorType::Power], true);
                 if (($upper && BigInt::compare($exact, $bound) > 0)
@@ -6012,15 +6014,29 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return self::keepWithinBound($method, $numVal, $result, $values[1] ?? null);
     }
 
+    protected static function exactLimit(mixed $limit): mixed
+    {
+        if (! \is_float($limit) || ! \is_finite($limit)) {
+            return $limit;
+        }
+
+        return BigInt::integralValue($limit) ?? $limit;
+    }
+
     private static function keepWithinBound(OperatorType $method, int|float $current, mixed $result, mixed $bound): mixed
     {
         if (! \is_numeric($bound) || (! \is_int($result) && ! \is_float($result))) {
             return $result;
         }
 
+        $limit = \is_float($bound) && \is_finite($bound) ? (BigInt::integralValue($bound) ?? $bound) : $bound;
+        $comparison = \is_int($result) && BigInt::isIntegerValue($limit)
+            ? BigInt::compare($result, $limit)
+            : $result <=> $limit + 0;
+
         $crossed = match ($method) {
-            OperatorType::Increment, OperatorType::Multiply, OperatorType::Power => \is_nan((float) $result) || $result > $bound + 0,
-            OperatorType::Decrement, OperatorType::Divide => $result < $bound + 0,
+            OperatorType::Increment, OperatorType::Multiply, OperatorType::Power => \is_nan((float) $result) || $comparison > 0,
+            OperatorType::Decrement, OperatorType::Divide => $comparison < 0,
             default => false,
         };
 

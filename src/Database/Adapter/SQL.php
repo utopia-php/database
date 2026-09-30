@@ -666,7 +666,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $sql .= $name === Database::METADATA || $name === Storage::permissionsTable(Database::METADATA)
                     ? " AND ({$tenantColumn} IN (:".Storage::TENANT.") OR {$tenantColumn} IS NULL)"
                     : " AND {$tenantColumn} IN (:".Storage::TENANT.')';
-                $bindings[':'.Storage::TENANT] = $this->tenant;
+                $bindings[':'.Storage::TENANT] = $this->currentTenant();
             }
             if ($forUpdate && $this->supports(Capability::UpdateLock)) {
                 $sql .= ' FOR UPDATE';

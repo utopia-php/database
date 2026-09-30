@@ -331,10 +331,10 @@ trait Documents
      */
     private function documentsValidatorCacheKey(Document $collection, string $context, bool $supportForJoins, bool $supportForAggregations): string
     {
-        $fingerprint = \hash('sha256', \serialize([
-            'attributes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('attributes', [])),
-            'indexes' => $this->normalizeQueryCacheQueryValue($collection->getAttribute('indexes', [])),
-            'permissions' => $this->normalizeQueryCacheQueryValue($collection->getAttribute(Document::PERMISSIONS, [])),
+        $fingerprint = \hash('xxh128', \serialize([
+            'attributes' => $collection->getAttribute('attributes', []),
+            'indexes' => $collection->getAttribute('indexes', []),
+            'permissions' => $collection->getAttribute(Document::PERMISSIONS, []),
             'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
         ]));
 

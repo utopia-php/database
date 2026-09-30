@@ -619,26 +619,12 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $options = $this->getTransactionOptions();
             $this->getClient()->createCollection($id, $options);
         } catch (MongoException $e) {
-            // Client throws "Collection Exists" (code 0) if it already exists
             if (\str_contains($e->getMessage(), 'Collection Exists')) {
                 return true;
             }
             $e = $this->processException($e);
-            if ($e instanceof DuplicateException) {
-                if ($this->getSharedTables() || $name === Database::METADATA) {
-                    return true;
-                }
-                throw $e;
-            }
-            // Client throws code-0 "Collection Exists" when its pre-check
-            // finds the collection. In shared-tables/metadata context this
-            // is a no-op; otherwise re-throw as DuplicateException so
-            // Database::createCollection() can run orphan reconciliation.
-            if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
-                if ($this->getSharedTables() || $name === Database::METADATA) {
-                    return true;
-                }
-                throw new DuplicateException('Collection already exists', $e->getCode(), $e);
+            if ($e instanceof DuplicateException && ($this->getSharedTables() || $name === Database::METADATA)) {
+                return true;
             }
             throw $e;
         }

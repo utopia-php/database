@@ -2915,12 +2915,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $id = $this->filter($id);
 
         $schema = $this->createSchemaBuilder();
-        $mainResult = $schema->table($this->getSQLTableRaw($id))->drop();
-        $permsResult = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->drop();
+        $main = $schema->table($this->getSQLTableRaw($id))->drop();
+        $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
 
-        $sql = $mainResult->query . '; ' . $permsResult->query;
+        try {
+            return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionDelete);
+        } catch (PDOException $e) {
+            $error = $this->processException($e);
+            if ($error instanceof NotFoundException && $this->inTransaction === 0) {
+                $this->executeStatement($permissions->query, Event::CollectionDelete);
+            }
 
-        return $this->executeStatement($sql, Event::CollectionDelete);
+            throw $error;
+        }
     }
 
     /**
@@ -5506,7 +5513,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($exception !== null) {
-            throw $this->processException($exception);
+            throw $this->processSelectException($exception, $result);
         }
 
         return $results;
@@ -6339,6 +6346,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function processException(PDOException $e): Exception
     {
         return $e;
+    }
+
+    protected function processSelectException(PDOException $e, Statement $statement): Exception
+    {
+        return $this->processException($e);
     }
 
     /**

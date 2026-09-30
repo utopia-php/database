@@ -8,6 +8,9 @@ use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -22,6 +25,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1836,5 +1840,145 @@ trait CollectionTests
 
         $database->deleteCollection('row_size_1');
         $database->deleteCollection('row_size_2');
+    }
+
+    public function testCollectionWhoseTableIsGoneIsNotFoundAndCanBeDeleted(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'tableGone';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+
+        $this->dropCollectionTable($database, $collection);
+
+        try {
+            $database->find($collection);
+            $this->fail('Expected NotFoundException for a collection whose table is gone');
+        } catch (NotFoundException $e) {
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
+
+        $this->assertTrue($database->deleteCollection($collection));
+        $this->assertTrue($database->getCollection($collection)->isEmpty());
+
+        if ($adapter instanceof Postgres || $adapter instanceof SQLite) {
+            $database->createCollection(new Collection(id: $collection, permissions: [Permission::read(Role::any())]));
+            $this->assertTrue($database->deleteCollection($collection), 'The permissions table of the collection whose table was gone was left behind');
+        }
+    }
+
+    public function testIndexOnAColumnTheTableLacksIsAttributeNotFound(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\RawQuery::class) || $adapter->hasFeature(SQLite::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'indexDrifted';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+
+        $this->deleteColumn($collection, 'name');
+
+        try {
+            $database->createIndex($collection, Index::key(key: 'nameIndex', attributes: ['name']));
+            $this->fail('Expected NotFoundException for an index on a column the table lacks');
+        } catch (NotFoundException $e) {
+            $this->assertSame('Attribute not found', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testPostgresAggregateOverATypeWithoutTheFunctionIsAQueryError(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Postgres::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'maxOverBoolean';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::boolean(key: 'active')], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'active' => true,
+        ]));
+
+        try {
+            $database->skipValidation(fn () => $database->find($collection, [Query::max('active', 'most')]));
+            $this->fail('Expected QueryException for max() over a boolean attribute');
+        } catch (QueryException $e) {
+            $this->assertSame('Query applies a function or operator the attribute type does not support', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testMongoIncrementOfATextValueIsAnInvalidOperation(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Mongo::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'incrementText';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'text',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'plain',
+        ]));
+
+        try {
+            $adapter->increaseDocumentAttribute($collection, 'text', 'name', 1, $document->getUpdatedAt() ?? '');
+            $this->fail('Expected TypeException for an increment of a text value');
+        } catch (TypeException $e) {
+            $this->assertSame('Invalid operation', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    private function dropCollectionTable(Database $database, string $collection): void
+    {
+        $table = $database->getNamespace().'_'.$collection;
+        if (! $database->getAdapter() instanceof SQLite) {
+            $table = $database->getDatabase().'.'.$table;
+        }
+
+        $database->getAuthorization()->skip(fn () => $database->schema()->table($table)->drop()->execute());
     }
 }

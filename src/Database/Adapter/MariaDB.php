@@ -22,6 +22,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
@@ -1523,15 +1524,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             return new NotFoundException('Database not found', $e->getCode(), $e);
         }
 
-        // Unknown collection
-        if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1049) {
-            return new NotFoundException('Collection not found', $e->getCode(), $e);
-        }
-
-        // Unknown collection
-        // We have two of same, because docs point to 1051.
-        // Keeping previous 1049 (above) just in case it's for older versions
-        if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1051) {
+        if ($e->getCode() === '42S02' && isset($e->errorInfo[1]) && ($e->errorInfo[1] === 1051 || $e->errorInfo[1] === 1146)) {
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
@@ -1541,6 +1534,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         }
 
         if ($e->getCode() === '42S22' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1054) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '42000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1072) {
             return new NotFoundException('Attribute not found', $e->getCode(), $e);
         }
 
@@ -1554,6 +1551,14 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3065) {
             return new QueryException('A distinct() query can only be ordered by a selected attribute on this database', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '40001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1213) {
+            return new TransactionException('Deadlock detected', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1205) {
+            return new TransactionException('Lock wait timeout exceeded', $e->getCode(), $e);
         }
 
         return $e;

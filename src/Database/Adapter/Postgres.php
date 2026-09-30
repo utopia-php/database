@@ -15,12 +15,14 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Hook\PermissionFilter;
@@ -54,6 +56,10 @@ use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Feature\Timeouts
 {
     public const MAX_IDENTIFIER_NAME = 63;
+
+    private const string QUOTED_IDENTIFIER = '/["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}][\s\x{A0}\x{202F}]*([^"\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]+?)[\s\x{A0}\x{202F}]*["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]/u';
+
+    private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/';
 
     /**
      * Get the list of capabilities supported by the PostgreSQL adapter.
@@ -1632,8 +1638,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
         }
 
-        // Unknown table
         if ($e->getCode() === '42P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            if ($this->isUndefinedAlias($e->getMessage())) {
+                return new QueryException('Query references an undefined table or alias', $e->getCode(), $e);
+            }
+
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
@@ -1651,7 +1660,66 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return new QueryException('A distinct() query can only be ordered by a selected attribute on this database', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === '40P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TransactionException('Deadlock detected', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '40001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TransactionException('Could not serialize access due to a concurrent update', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '55P03' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TransactionException('Lock not available', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '22021' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new CharacterException('Invalid character', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '42883' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new QueryException('Query applies a function or operator the attribute type does not support', $e->getCode(), $e);
+        }
+
         return $e;
+    }
+
+    #[\Override]
+    protected function processSelectException(PDOException $e, Statement $statement): Exception
+    {
+        if (
+            $e->getCode() === '42P10'
+            && isset($e->errorInfo[1])
+            && $e->errorInfo[1] === 7
+            && \str_starts_with($statement->query, 'SELECT DISTINCT ')
+        ) {
+            return new QueryException('A distinct() query can only be ordered by a selected attribute on this database', $e->getCode(), $e);
+        }
+
+        return parent::processSelectException($e, $statement);
+    }
+
+    /**
+     * Whether a 42P01 names something other than a table of this namespace, whatever the server's
+     * language. A statement names a missing table with its schema and a DROP without one, but only a
+     * statement reports a position, so an unqualified name followed by one is an alias.
+     */
+    protected function isUndefinedAlias(string $message): bool
+    {
+        $message = \rtrim($message);
+        $firstLine = \explode("\n", $message, 2)[0];
+        if (\preg_match(self::QUOTED_IDENTIFIER, $firstLine, $matches) !== 1) {
+            return false;
+        }
+
+        $name = $matches[1];
+        $separator = \strrpos($name, '.');
+        $relation = $separator === false ? $name : \substr($name, $separator + 1);
+
+        if (! \str_starts_with($relation, $this->getNamespace().'_') && \preg_match(self::HASHED_IDENTIFIER, $relation) !== 1) {
+            return true;
+        }
+
+        return $separator === false && \str_contains($message, "\n");
     }
 
     /**

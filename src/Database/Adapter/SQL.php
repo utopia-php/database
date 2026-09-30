@@ -1229,15 +1229,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $attribute = $this->filter($attribute);
 
         $builder = $this->newBuilder($name);
-        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
+        $builder->setRaw($attribute, 'COALESCE('.$this->quote($attribute).', 0) + ?', [$value]);
         $builder->set([Storage::UPDATED_AT => $updatedAt]);
 
         $filters = [BaseQuery::equal(Storage::UID, [$id])];
         if ($max !== null) {
-            $filters[] = BaseQuery::lessThanEqual($attribute, $max);
+            $withinMaximum = BaseQuery::lessThanEqual($attribute, $max);
+            $filters[] = (float) $max >= 0 ? BaseQuery::or([$withinMaximum, BaseQuery::isNull($attribute)]) : $withinMaximum;
         }
         if ($min !== null) {
-            $filters[] = BaseQuery::greaterThanEqual($attribute, $min);
+            $withinMinimum = BaseQuery::greaterThanEqual($attribute, $min);
+            $filters[] = (float) $min <= 0 ? BaseQuery::or([$withinMinimum, BaseQuery::isNull($attribute)]) : $withinMinimum;
         }
         $builder->filter($filters);
 

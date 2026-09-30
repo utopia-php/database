@@ -14,6 +14,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -9696,6 +9697,57 @@ trait DocumentTests
                 $this->assertSame($expected, $ids, $case);
                 $this->assertSame(\count($expected), $database->count($collection, [$countQuery]), $case);
             }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testIncreasingAnUnsetOptionalNumberStoresIt(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'unset_optional_numbers';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: $database->getAdapter()->supports(Capability::DefinedAttributes)
+                ? [
+                    Attribute::integer(key: 'visits', required: false),
+                    Attribute::integer(key: 'capped', required: false),
+                    Attribute::integer(key: 'excluded', required: false),
+                    Attribute::double(key: 'balance', required: false),
+                    Attribute::double(key: 'floored', required: false),
+                ]
+                : [],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+        ));
+
+        try {
+            $database->createDocument($collection, new Document([Document::ID => 'unset']));
+
+            $database->increaseDocumentAttribute($collection, 'unset', 'visits', 3);
+            $database->increaseDocumentAttribute($collection, 'unset', 'capped', 4, max: 10);
+            $database->decreaseDocumentAttribute($collection, 'unset', 'balance', 1.5);
+            $database->decreaseDocumentAttribute($collection, 'unset', 'floored', 2.5, min: -10);
+            $database->getAdapter()->increaseDocumentAttribute($collection, 'unset', 'excluded', 5, DateTime::now(), max: -1);
+
+            $stored = $database->getDocument($collection, 'unset');
+            $this->assertSame(3, $stored->getAttribute('visits'));
+            $this->assertSame(4, $stored->getAttribute('capped'));
+            $this->assertSame(-1.5, $stored->getAttribute('balance'));
+            $this->assertSame(-2.5, $stored->getAttribute('floored'));
+            $this->assertNull($stored->getAttribute('excluded'), 'A bound that excludes zero must leave an unset number unset');
+
+            foreach (['visits' => 3, 'capped' => 4, 'balance' => -1.5, 'floored' => -2.5] as $attribute => $value) {
+                $this->assertSame(1, $database->count($collection, [Query::equal($attribute, [$value])]), "'{$attribute}' must be stored as {$value}");
+            }
+
+            $database->increaseDocumentAttribute($collection, 'unset', 'capped', 6, max: 10);
+            $this->assertSame(10, $database->getDocument($collection, 'unset')->getAttribute('capped'));
         } finally {
             $database->deleteCollection($collection);
         }

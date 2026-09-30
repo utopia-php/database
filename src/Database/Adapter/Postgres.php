@@ -776,7 +776,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             foreach ($attributes as $attr => $value) {
                 $column = $this->filter($attr);
 
-                if (isset($spatialMap[$attr]) || $this->isSpatialWkt($value)) {
+                if (isset($spatialMap[$attr])) {
                     $row[$column] = $this->encodeSpatialWriteValue($value);
                     $builder->insertColumnExpression($column, $this->getSpatialGeomFromText('?'));
                 } else {
@@ -850,7 +850,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                         $opResult = $this->getOperatorBuilderExpression($column, $op);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
-                } elseif (isset($spatialMap[$attribute]) || $this->isSpatialWkt($value)) {
+                } elseif (isset($spatialMap[$attribute])) {
                     $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$this->encodeSpatialWriteValue($value)]);
                 } else {
                     if (\is_array($value)) {

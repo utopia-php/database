@@ -594,7 +594,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             foreach ($attributes as $attr => $value) {
                 $column = $this->filter($attr);
 
-                if (isset($spatialMap[$attr]) || $this->isSpatialWkt($value)) {
+                if (isset($spatialMap[$attr])) {
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
                     $row[$column] = $value;
@@ -696,7 +696,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
                         $opResult = $this->getOperatorBuilderExpression($column, $op);
                         $builder->setRaw($column, $opResult['expression'], $opResult['bindings']);
                     }
-                } elseif (isset($spatialMap[$attribute]) || $this->isSpatialWkt($value)) {
+                } elseif (isset($spatialMap[$attribute])) {
                     $value = $this->encodeSpatialWriteValue($value);
                     $value = (\is_bool($value)) ? (int) $value : $value;
                     $builder->setRaw($column, $this->getSpatialGeomFromText('?'), [$value]);

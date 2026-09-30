@@ -12,15 +12,22 @@ use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
 use stdClass;
 use Throwable;
+use Utopia\Cache\Adapter\None as NoCache;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\OrderDirection;
@@ -138,6 +145,38 @@ final class EngineErrorMappingTest extends TestCase
         $error = self::engineError('42000', 1072, "SQLSTATE[42000]: Syntax error or access violation: 1072 Key column 'name' doesn't exist in table");
 
         $this->assertMapped($map, $error, NotFoundException::class, 'Attribute not found');
+    }
+
+    public function testSQLiteUnknownColumnIsAttributeNotFound(): void
+    {
+        $error = self::engineError('HY000', 1, 'SQLSTATE[HY000]: General error: 1 no such column: items');
+
+        $this->assertMapped(self::sqlite(), $error, NotFoundException::class, 'Attribute not found');
+    }
+
+    public function testSQLiteReadOnAnUnknownColumnIsAttributeNotFound(): void
+    {
+        $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new NoCache()));
+        $database
+            ->setDatabase('engine_errors')
+            ->setNamespace(self::NAMESPACE)
+            ->setAuthorization(new Authorization());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'orders',
+            attributes: [Attribute::string(key: 'category', size: 20)],
+            permissions: [Permission::read(Role::any())],
+        ));
+
+        $error = null;
+        try {
+            $database->skipValidation(fn () => $database->find('orders', [Query::equal('no_such_attribute', ['x'])]));
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(NotFoundException::class, $error);
+        $this->assertSame('Attribute not found', $error->getMessage());
     }
 
     public function testPostgresDistinctReadOrderedByAnUnselectedAttributeIsAQueryErrorInAnyLanguage(): void

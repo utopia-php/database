@@ -1762,6 +1762,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'no such column') !== false) {
+            return new NotFoundException('Attribute not found', $e->getCode(), $e);
+        }
+
         // Duplicate - SQLite uses various error codes for constraint violations:
         // - Error code 19 is SQLITE_CONSTRAINT (includes UNIQUE violations)
         // - Error code 1 is also used for some duplicate cases

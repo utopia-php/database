@@ -2823,7 +2823,9 @@ trait Documents
     {
         $this->silent(fn () => $this->authorization->skip(fn () => $this->foreach(
             self::METADATA,
-            fn (Document $definition) => $this->cache->purge($this->getDefinitionCacheKey($definition->getId())),
+            function (Document $definition): void {
+                $this->cache->purge($this->getDefinitionCacheKey($definition->getId()));
+            },
         )));
     }
 

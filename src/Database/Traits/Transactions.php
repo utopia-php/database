@@ -104,6 +104,26 @@ trait Transactions
     }
 
     /**
+     * Fire every queued document purge event, even after one of them fails.
+     *
+     * @param  list<Closure(): void>  $events
+     * @return Throwable|null The first failure
+     */
+    private function announceDocumentPurges(array $events): ?Throwable
+    {
+        $failure = null;
+        foreach ($events as $announce) {
+            try {
+                $announce();
+            } catch (Throwable $error) {
+                $failure ??= $error;
+            }
+        }
+
+        return $failure;
+    }
+
+    /**
      * Keep all nested mutation tombstones blocked, and purge every written document
      * again, once the outer transaction has committed or rolled back. Document purge
      * events queued in the scope fire after a commit, even when the invalidation after it
@@ -194,13 +214,8 @@ trait Transactions
                 $failure ??= $error;
             }
 
-            foreach ($purgeEvents as $announce) {
-                try {
-                    $announce();
-                } catch (Throwable $error) {
-                    $failure ??= $error;
-                }
-            }
+            $announcement = $this->announceDocumentPurges($purgeEvents);
+            $failure ??= $announcement;
 
             if ($failure !== null) {
                 throw $failure;

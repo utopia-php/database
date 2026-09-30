@@ -896,7 +896,8 @@ trait GeneralTests
 
             $keys = \count($this->scanKeys($redis, $collection));
             $this->assertSame($keysAfterFirstRound, $keys, 'Redis keeps a purged key with no expiry, so writes and reads of the same documents must not add keys');
-            $this->assertLessThanOrEqual(3 * $documents, $keys, 'The cache holds at most one key per document plus a few per collection');
+            $databases = $destination === null ? 1 : 2;
+            $this->assertLessThanOrEqual(3 * $documents * $databases, $keys, 'Each database writing to the cache holds at most one key per document plus a few per collection');
             $this->assertCount($documents, $database->find($collection, [Query::limit(100)]));
         } finally {
             $database->setQueryCache($queryCache)->setCache($original);
@@ -1744,6 +1745,7 @@ trait GeneralTests
 
                 return $database->getDocument($collection, 'created');
             }));
+            $this->assertInstanceOf(Document::class, $read);
             $this->assertSame('created', $read->getAttribute('name'));
             $this->assertSame('again', $database->getDocument($collection, 'written')->getAttribute('name'));
         } finally {

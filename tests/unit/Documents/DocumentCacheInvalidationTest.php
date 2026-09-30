@@ -10,6 +10,7 @@ use Tests\Unit\Cache\CountingCache;
 use Tests\Unit\Cache\PausedSQLite;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
+use Throwable;
 use Utopia\Cache\Adapter as CacheAdapter;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
@@ -198,6 +199,7 @@ final class DocumentCacheInvalidationTest extends TestCase
 
     public function testAFailedPurgeInsideTheTransactionRollsTheWriteBack(): void
     {
+        /** @var bool $refusing */
         $refusing = false;
         $database = $this->createDatabase(new CountingMemory(), $this->purgeRefusingCache(
             static function (string $key) use (&$refusing): bool {
@@ -211,7 +213,7 @@ final class DocumentCacheInvalidationTest extends TestCase
         $failure = null;
         try {
             $database->updateDocument('webhooks', 'hook', new Document(['name' => 'renamed']));
-        } catch (RuntimeException $error) {
+        } catch (Throwable $error) {
             $failure = $error->getMessage();
         }
 
@@ -236,6 +238,7 @@ final class DocumentCacheInvalidationTest extends TestCase
             $writerConnection->exec('PRAGMA busy_timeout = 1000');
             $readerConnection->exec('PRAGMA busy_timeout = 1000');
 
+            /** @var bool $refusing */
             $refusing = false;
             $cache = $this->purgeRefusingCache(static function (string $key) use (&$refusing): bool {
                 return $refusing && \str_ends_with($key, ':hook');
@@ -255,7 +258,7 @@ final class DocumentCacheInvalidationTest extends TestCase
             $failure = null;
             try {
                 $writer->updateDocument('webhooks', 'hook', new Document(['name' => 'renamed']));
-            } catch (RuntimeException $error) {
+            } catch (Throwable $error) {
                 $failure = $error->getMessage();
             }
 

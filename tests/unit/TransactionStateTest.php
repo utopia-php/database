@@ -63,9 +63,11 @@ final class TransactionStateTest extends TestCase
 
         $outer = $this->capture(function () use ($adapter, $connection, &$nested): void {
             $adapter->withTransaction(function () use ($adapter, $connection, &$nested): void {
-                $nested = $this->capture(fn (): mixed => $adapter->withTransaction(function () use ($connection): void {
-                    $connection->reconnectSilently();
-                }));
+                $nested = $this->capture(function () use ($adapter, $connection): void {
+                    $adapter->withTransaction(function () use ($connection): void {
+                        $connection->reconnectSilently();
+                    });
+                });
 
                 if ($nested !== null) {
                     throw $nested;
@@ -89,16 +91,18 @@ final class TransactionStateTest extends TestCase
         $connection = $this->createConnection();
         $adapter = new MariaDB($connection);
 
-        $outer = $this->capture(fn (): mixed => $adapter->withTransaction(function () use ($adapter, $connection): void {
-            try {
-                $adapter->withTransaction(function () use ($connection): void {
-                    $connection->endSession();
+        $outer = $this->capture(function () use ($adapter, $connection): void {
+            $adapter->withTransaction(function () use ($adapter, $connection): void {
+                try {
+                    $adapter->withTransaction(function () use ($connection): void {
+                        $connection->endSession();
 
-                    throw new DuplicateException('Document already exists');
-                });
-            } catch (DuplicateException) {
-            }
-        }));
+                        throw new DuplicateException('Document already exists');
+                    });
+                } catch (DuplicateException) {
+                }
+            });
+        });
 
         $this->assertInstanceOf(TransactionException::class, $outer, 'A lost transaction must not surface as the duplicate the caller expects');
         $this->assertSame(1, $connection->begins, 'Only the outer call may begin a transaction');
@@ -115,19 +119,20 @@ final class TransactionStateTest extends TestCase
         $connection = $this->createConnection();
         $adapter = new MariaDB($connection);
         $attempts = 0;
+        $stored = \uniqid();
 
-        $result = $adapter->withTransaction(function () use ($adapter, &$attempts): string {
-            return $adapter->withTransaction(function () use (&$attempts): string {
+        $result = $adapter->withTransaction(function () use ($adapter, &$attempts, $stored): string {
+            return $adapter->withTransaction(function () use (&$attempts, $stored): string {
                 $attempts++;
                 if ($attempts === 1) {
                     throw new RuntimeException('Transient failure');
                 }
 
-                return 'stored';
+                return $stored;
             });
         });
 
-        $this->assertSame('stored', $result);
+        $this->assertSame($stored, $result);
         $this->assertSame(2, $attempts);
         $this->assertSame(1, $connection->begins);
         $this->assertSame(1, $connection->commits);
@@ -142,10 +147,11 @@ final class TransactionStateTest extends TestCase
         $connection = $this->createConnection();
         $adapter = new MariaDB($connection);
         $connection->endSession();
+        $stored = \uniqid();
 
-        $result = $adapter->withTransaction(fn (): string => 'stored');
+        $result = $adapter->withTransaction(fn (): string => $stored);
 
-        $this->assertSame('stored', $result);
+        $this->assertSame($stored, $result);
         $this->assertSame(1, $connection->begins);
         $this->assertSame(1, $connection->commits);
         $this->assertFalse($adapter->inTransaction());

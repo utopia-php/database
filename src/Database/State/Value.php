@@ -3,6 +3,7 @@
 namespace Utopia\Database\State;
 
 use Swoole\Coroutine;
+use Swoole\Coroutine\Context;
 use WeakMap;
 
 /**
@@ -156,8 +157,13 @@ final class Value
     private static function coroutine(): int
     {
         self::$coroutines ??= \extension_loaded('swoole');
+        if (! self::$coroutines) {
+            return -1;
+        }
 
-        return self::$coroutines ? Coroutine::getCid() : -1;
+        $coroutine = Coroutine::getCid();
+
+        return \is_int($coroutine) ? $coroutine : -1;
     }
 
     /**
@@ -166,7 +172,7 @@ final class Value
     private static function scopes(int $coroutine, bool $create = false): ?WeakMap
     {
         $context = Coroutine::getContext($coroutine);
-        if ($context === null) {
+        if (! $context instanceof Context) {
             return null;
         }
 

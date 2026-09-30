@@ -102,6 +102,7 @@ final class CoroutineStateTest extends TestCase
     {
         $audits = new NamedRecordingLifecycle('audits');
         $this->database->addHook($audits);
+        /** @var ArrayObject<string, bool> $seen */
         $seen = new ArrayObject();
 
         $this->inCoroutine(function () use ($seen): void {

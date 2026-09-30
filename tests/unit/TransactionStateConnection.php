@@ -78,7 +78,7 @@ final class TransactionStateConnection extends PDO
         return $this->transaction;
     }
 
-    public function exec(string $statement): int|false
+    public function exec(string $statement): int
     {
         $this->reconnectIfEnded();
 
@@ -101,7 +101,7 @@ final class TransactionStateConnection extends PDO
     /**
      * @param array<mixed> $options
      */
-    public function prepare(string $query, array $options = []): PDOStatement|false
+    public function prepare(string $query, array $options = []): PDOStatement
     {
         return $this->statement;
     }

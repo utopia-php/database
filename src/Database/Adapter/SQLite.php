@@ -2505,11 +2505,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return false;
     }
 
-    protected function getInsertKeyword(): string
-    {
-        return $this->skipDuplicates ? 'INSERT OR IGNORE INTO' : 'INSERT INTO';
-    }
-
     /**
      * SQLite's ALTER TABLE accepts a single column per statement, so the
      * shared SQL implementation that joins many ADD COLUMN clauses with

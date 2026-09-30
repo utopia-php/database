@@ -36,6 +36,7 @@ use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Builder\Statement;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
@@ -427,10 +428,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeCreate);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeCreate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -471,11 +469,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
             $result = $this->executeStatement($sql, Event::AttributeUpdate);
 
-            // Rename mutates the schema. Invalidate now so a subsequent
-            // alterColumnType failure can't leave the cache pointing at the
-            // pre-rename column id.
-            $this->invalidateSpatialAttributesCache($collection);
-
             if (! $result) {
                 return false;
             }
@@ -508,13 +501,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 $ok = $this->executeStatement($nullable->query, Event::AttributeUpdate);
             }
 
-            $this->invalidateSpatialAttributesCache($collection);
-
             return $ok;
         } catch (PDOException $e) {
-            // alterColumnType can partially modify the column; drop the cache
-            // so the next read rescans live schema.
-            $this->invalidateSpatialAttributesCache($collection);
             throw $this->processException($e);
         }
     }
@@ -551,14 +539,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeDelete);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeDelete);
         } catch (PDOException $e) {
             if ($e->getCode() === '42703' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
-                $this->invalidateSpatialAttributesCache($collection);
-
                 return true;
             }
 
@@ -581,10 +564,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         $sql = $result->query;
 
-        $ok = $this->executeStatement($sql, Event::AttributeUpdate);
-        $this->invalidateSpatialAttributesCache($collection);
-
-        return $ok;
+        return $this->executeStatement($sql, Event::AttributeUpdate);
     }
 
     /**
@@ -1705,32 +1685,18 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         return '"';
     }
 
-    protected function getInsertSuffix(string $table): string
+    /**
+     * Only a stored id is skipped; a row colliding on another unique index still fails with
+     * Unique, as a bare ON CONFLICT DO NOTHING would skip it silently.
+     */
+    #[\Override]
+    protected function insertOrIgnore(SQLBuilder $builder): Statement
     {
-        if (! $this->skipDuplicates) {
-            return '';
-        }
+        $insert = $builder->insert();
+        $target = \implode(', ', \array_map($this->quote(...), $this->documentKeyColumns()));
 
-        $conflictTarget = $this->sharedTables
-            ? '("'.Storage::UID.'", "'.Storage::TENANT.'")'
-            : '("'.Storage::UID.'")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
+        return new Statement($insert->query.' ON CONFLICT ('.$target.') DO NOTHING', $insert->bindings);
     }
-
-    protected function getInsertPermissionsSuffix(): string
-    {
-        if (! $this->skipDuplicates) {
-            return '';
-        }
-
-        $conflictTarget = $this->sharedTables
-            ? '("'.Storage::PERM_TYPE.'", "'.Storage::PERM_PERMISSION.'", "'.Storage::PERM_DOCUMENT.'", "'.Storage::TENANT.'")'
-            : '("'.Storage::PERM_TYPE.'", "'.Storage::PERM_PERMISSION.'", "'.Storage::PERM_DOCUMENT.'")';
-
-        return "ON CONFLICT {$conflictTarget} DO NOTHING";
-    }
-
 
     /**
      * Get SQL expression for operator

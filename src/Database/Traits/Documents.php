@@ -1110,7 +1110,7 @@ trait Documents
                 function () use ($collection, $chunk): array {
                     $batch = $this->adapter->createDocuments($collection, $chunk);
 
-                    foreach ($batch as $document) {
+                    foreach ($chunk as $document) {
                         $this->withDocumentTenant(
                             $document,
                             fn () => $this->advanceCollectionCacheEpoch($collection->getId(), $document->getId())

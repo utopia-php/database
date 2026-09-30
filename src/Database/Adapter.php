@@ -844,7 +844,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      * Create Documents in batches
      *
      * @param  array<Document>  $documents
-     * @return array<Document>
+     * @return array<Document> The documents written; under skipDuplicates() the skipped ones are left out
      *
      * @throws DatabaseException
      */

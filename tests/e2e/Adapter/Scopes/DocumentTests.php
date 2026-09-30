@@ -3,12 +3,14 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use PDO;
 use PDOException;
 use PHPUnit\Framework\Attributes\Depends;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -30,6 +32,7 @@ use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\SetType;
@@ -8951,10 +8954,8 @@ trait DocumentTests
             });
         });
 
-        $this->assertSame(2, $count);
-        $this->assertCount(2, $emittedIds);
-        \sort($emittedIds);
-        $this->assertSame(['doc1', 'doc3'], $emittedIds);
+        $this->assertSame(1, $count, 'A skipped duplicate is not counted as created');
+        $this->assertSame(['doc3'], $emittedIds, 'A skipped duplicate is not handed to onNext');
 
         $doc1 = $database->getDocument(__FUNCTION__, 'doc1');
         $this->assertSame('Original A', $doc1->getAttribute('name'));
@@ -9002,8 +9003,8 @@ trait DocumentTests
             });
         });
 
-        $this->assertSame(1, $count);
-        $this->assertSame(['existing'], $emittedIds);
+        $this->assertSame(0, $count, 'A skipped duplicate is not counted as created');
+        $this->assertSame([], $emittedIds, 'A skipped duplicate is not handed to onNext');
 
         $doc = $database->getDocument(__FUNCTION__, 'existing');
         $this->assertSame('Original', $doc->getAttribute('name'));
@@ -9055,14 +9056,14 @@ trait DocumentTests
                     $makeDoc('innerNew', 'InnerNew'),
                 ]);
             });
-            $this->assertSame(2, $countInner);
+            $this->assertSame(1, $countInner);
 
             return $database->createDocuments($collection, [
                 $makeDoc('seed', 'Dup2'),
                 $makeDoc('outerNew', 'OuterNew'),
             ]);
         });
-        $this->assertSame(2, $countOuter, 'Leaving the inner scope must keep the outer scope skipping duplicates');
+        $this->assertSame(1, $countOuter, 'Leaving the inner scope must keep the outer scope skipping duplicates');
 
         $thrown = null;
         try {
@@ -9120,8 +9121,9 @@ trait DocumentTests
             });
         });
 
-        $this->assertSame(300, $count);
-        $this->assertCount(300, $emittedIds);
+        $this->assertSame(250, $count, 'The 50 seeded ids are skipped and not counted');
+        $this->assertCount(250, $emittedIds);
+        $this->assertNotContains('doc_25', $emittedIds);
 
         $seedDoc = $database->getDocument($collection, 'doc_25');
         $this->assertSame(25, $seedDoc->getAttribute('idx'), 'An existing row must not be overwritten by its duplicate');
@@ -9165,9 +9167,8 @@ trait DocumentTests
                 $emittedIds[] = $doc->getId();
             });
         });
-        $this->assertSame(3, $secondCount);
-        \sort($emittedIds);
-        $this->assertSame(['a', 'b', 'c'], $emittedIds);
+        $this->assertSame(0, $secondCount, 'A batch of stored ids creates nothing');
+        $this->assertSame([], $emittedIds);
 
         foreach (['a', 'b', 'c'] as $id) {
             $doc = $database->getDocument($collection, $id);
@@ -9749,5 +9750,137 @@ trait DocumentTests
         } finally {
             $database->deleteCollection($collection);
         }
+    }
+
+    public function testSkipDuplicatesNeverGrantsAnExistingDocument(): void
+    {
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $collection = 'skipDupGrants';
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            permissions: [Permission::create(Role::any())],
+            documentSecurity: true,
+        ));
+        $database->createAttribute($collection, Attribute::integer(key: 'rank', required: true));
+
+        $readableIds = fn (): array => \array_map(
+            fn (Document $document): string => $document->getId(),
+            $database->find($collection, [Query::orderAsc('$id')]),
+        );
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'existing',
+                '$permissions' => [Permission::read(Role::user('alice'))],
+                'rank' => 5,
+            ]));
+
+            $emittedIds = [];
+            $created = $database->skipDuplicates(function () use ($database, $collection, &$emittedIds): int {
+                return $database->createDocuments($collection, [
+                    new Document([
+                        '$id' => 'existing',
+                        '$permissions' => [Permission::read(Role::any())],
+                        'rank' => 7,
+                    ]),
+                    new Document([
+                        '$id' => 'fresh',
+                        '$permissions' => [Permission::read(Role::any())],
+                        'rank' => 3,
+                    ]),
+                ], onNext: function (Document $document) use (&$emittedIds): void {
+                    $emittedIds[] = $document->getId();
+                });
+            });
+
+            $this->assertSame(1, $created, 'A skipped duplicate is not counted as created');
+            $this->assertSame(['fresh'], $emittedIds, 'A skipped duplicate is not handed to onNext');
+
+            $authorization->cleanRoles();
+            $authorization->addRole(Role::any()->toString());
+
+            $this->assertSame(['fresh'], $readableIds(), 'A guest must not find a document only alice may read');
+            $this->assertSame(1, $database->count($collection), 'A guest must not count a document only alice may read');
+            $this->assertSame(3, (int) $database->sum($collection, 'rank'), 'A guest must not sum a document only alice may read');
+            $this->assertTrue($database->getDocument($collection, 'existing')->isEmpty());
+
+            $authorization->addRole(Role::user('alice')->toString());
+
+            $this->assertSame(['existing', 'fresh'], $readableIds());
+            $existing = $database->getDocument($collection, 'existing');
+            $this->assertSame(5, $existing->getAttribute('rank'), 'The stored document is not overwritten');
+            $this->assertSame([Permission::read(Role::user('alice'))], $existing->getPermissions());
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testSkipDuplicatesStillThrowsUniqueForAnotherUniqueIndex(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::UniqueIndex)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'skipDupUnique';
+        $permissions = [Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::create(Role::any())]));
+        $database->createAttribute($collection, Attribute::string(key: 'slug', size: 64, required: true));
+        $database->createIndex($collection, Index::unique(key: 'slugUnique', attributes: ['slug'], lengths: [64]));
+
+        try {
+            $database->createDocument($collection, new Document(['$id' => 'taken', '$permissions' => $permissions, 'slug' => 'shared']));
+
+            $created = null;
+            $thrown = null;
+            try {
+                $created = $database->skipDuplicates(fn (): int => $database->createDocuments($collection, [
+                    new Document(['$id' => 'colliding', '$permissions' => $permissions, 'slug' => 'shared']),
+                ]));
+            } catch (DuplicateException $exception) {
+                $thrown = $exception;
+            }
+
+            if ($this->skipsOnlyStoredIds($database)) {
+                $this->assertInstanceOf(UniqueException::class, $thrown, 'PostgreSQL and MongoDB skip only a stored id, so a new id colliding on another unique index throws');
+                $this->assertNull($created);
+            } else {
+                $this->assertNull($thrown, 'MariaDB, MySQL, SQLite, Memory and Redis cannot name the index to ignore and skip the row');
+                $this->assertSame(0, $created);
+            }
+
+            $this->assertTrue($database->getDocument($collection, 'colliding')->isEmpty());
+            $this->assertSame('shared', $database->getDocument($collection, 'taken')->getAttribute('slug'));
+            $this->assertSame(1, $database->count($collection));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * Whether the engine behind the database, pooled or not, can skip a stored id without
+     * skipping other unique collisions.
+     */
+    private function skipsOnlyStoredIds(Database $database): bool
+    {
+        $adapter = $database->getAdapter();
+        if ($adapter instanceof Mongo) {
+            return true;
+        }
+
+        $driver = $adapter->getDriver();
+
+        return ($driver instanceof PDO || $driver instanceof DatabasePDO)
+            && $driver->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
     }
 }

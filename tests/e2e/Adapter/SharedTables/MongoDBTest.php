@@ -141,9 +141,9 @@ class MongoDBTest extends Base
                     $this->assertSame($name, $stored->getAttribute('name'));
                     $this->assertNotEmpty($stored->getSequence());
                     $this->assertSame(
-                        $stored->getSequence(),
+                        $id === 'existing' ? null : $stored->getSequence(),
                         $this->emittedSequences[$id][$documentTenant] ?? null,
-                        "Tenant {$documentTenant}'s {$id} document must carry its own \$sequence",
+                        "Tenant {$documentTenant}'s {$id} document must carry its own \$sequence, and a skipped one is not emitted",
                     );
                 }
             }

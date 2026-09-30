@@ -50,6 +50,7 @@ use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
+use Utopia\Query\Builder\Feature\MariaDB\Returning as MariaDBReturning;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
@@ -106,19 +107,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * Controls how many fractional digits are used when binding float parameters.
      */
     protected int $floatPrecision = 17;
-
-    /**
-     * Memoized spatial column ids, keyed by database/namespace/collection so
-     * that Pool sibling adapters reusing the same instance across tenants
-     * never cross-contaminate. The cached entry also stores an attribute
-     * fingerprint so a long-lived process (Appwrite API workers) that added
-     * spatial columns after the first write still rescans instead of serving
-     * a stale empty list. Explicitly invalidated on schema mutations via
-     * invalidateSpatialAttributesCache().
-     *
-     * @var array<string, array{fingerprint: string, attributes: list<string>}>
-     */
-    private array $spatialAttributesCache = [];
 
     /**
      * Lazily constructed AttributeMap shared by every newBuilder() call.
@@ -536,10 +524,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         try {
-            $ok = $this->executeStatement($sql, $event);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, $event);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -576,10 +561,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributesCreate);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributesCreate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -601,10 +583,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeDelete);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeDelete);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -626,10 +605,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $sql = $result->query;
 
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
-            $this->invalidateSpatialAttributesCache($collection);
-
-            return $ok;
+            return $this->executeStatement($sql, Event::AttributeUpdate);
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
@@ -809,6 +785,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * Create Documents in batches
      *
+     * Under skipDuplicates() only the documents written are returned and handed to the write
+     * hooks, so a skipped document writes no permission rows for a stored one.
+     *
      * @param  array<Document>  $documents
      * @return array<Document>
      *
@@ -827,72 +806,320 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $collection = $collection->getId();
         try {
             $name = $this->filter($collection);
-
-            $attributeKeySet = [];
-            foreach (Database::INTERNAL_ATTRIBUTE_KEYS as $k) {
-                $attributeKeySet[$k] = true;
-            }
-
-            $hasSequence = null;
-            foreach ($documents as $document) {
-                foreach ($document->getAttributes() as $key => $value) {
-                    $attributeKeySet[$key] = true;
-                }
-
-                if ($hasSequence === null) {
-                    $hasSequence = ! empty($document->getSequence());
-                } elseif ($hasSequence == empty($document->getSequence())) {
-                    throw new DatabaseException('All documents must have an sequence if one is set');
-                }
-            }
-
-            $attributeKeys = \array_keys($attributeKeySet);
-
-            if ($hasSequence) {
-                $attributeKeys[] = Storage::SEQUENCE;
-            }
-
-            $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
-
-            // Hoist per-row guards out of the document loop so a 1k-doc batch
-            // doesn't reallocate the spatial map and re-resolve the capability
-            // 1k times. Also pick up WKT / geometry-array values the collection
-            // metadata scan missed (stale process-local cache, typed Attribute
-            // objects, or encode() already converting defaults to WKT).
-            $spatialAttributes = $this->expandSpatialAttributes($spatialAttributes, $documents);
-            $spatialMap = \array_fill_keys($spatialAttributes, true);
-
-            foreach ($spatialAttributes as $spatialCol) {
-                $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
-            }
-
-            $intBools = $this->supports(Capability::IntegerBooleans);
-
-            foreach ($documents as $document) {
-                $row = $this->buildDocumentRow($document, $attributeKeys, $spatialMap, $intBools);
-                $row = $this->decorateRow($row, $this->documentMetadata($document));
-                $builder->set($row);
-            }
+            $hasSequence = $this->batchHasSequence($documents);
 
             if ($this->skipDuplicates) {
-                if (! $builder instanceof InsertOrIgnoreFeature) {
-                    throw new DatabaseException('Insert-or-ignore is not supported on this dialect');
-                }
-
-                $result = $builder->insertOrIgnore();
+                $documents = $this->firstCopies($documents);
+                $documents = $this->supportsInsertReturning()
+                    ? $this->insertReturning($name, $documents, $spatialAttributes, $hasSequence)
+                    : $this->insertThenReadBack($name, $documents, $spatialAttributes, $hasSequence);
             } else {
-                $result = $builder->insert();
+                $insert = $this->buildDocumentsInsert($name, $documents, $spatialAttributes, $hasSequence)->insert();
+                $this->execute($this->executeResult($insert, Event::DocumentsCreate));
             }
-            $stmt = $this->executeResult($result, Event::DocumentsCreate);
-            $this->execute($stmt);
 
-            $ctx = $this->buildWriteContext($name);
-            $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, $documents, $ctx));
+            if (! empty($documents)) {
+                $context = $this->buildWriteContext($name);
+                $this->runWriteHooks(fn ($hook) => $hook->afterDocumentCreate($name, $documents, $context));
+            }
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
 
         return $documents;
+    }
+
+    protected function supportsInsertReturning(): bool
+    {
+        return true;
+    }
+
+    /**
+     * MariaDB, MySQL and SQLite cannot name the index to ignore, so they skip any unique collision.
+     *
+     * @throws DatabaseException
+     */
+    protected function insertOrIgnore(SQLBuilder $builder): Statement
+    {
+        if (! $builder instanceof InsertOrIgnoreFeature) {
+            throw new DatabaseException('Insert-or-ignore is not supported on this dialect');
+        }
+
+        return $builder->insertOrIgnore();
+    }
+
+    /**
+     * @return list<string>
+     */
+    protected function documentKeyColumns(): array
+    {
+        return $this->sharedTables ? [Storage::UID, Storage::TENANT] : [Storage::UID];
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     *
+     * @throws DatabaseException
+     */
+    private function batchHasSequence(array $documents): bool
+    {
+        $hasSequence = null;
+        foreach ($documents as $document) {
+            if ($hasSequence === null) {
+                $hasSequence = ! empty($document->getSequence());
+            } elseif ($hasSequence == empty($document->getSequence())) {
+                throw new DatabaseException('All documents must have an sequence if one is set');
+            }
+        }
+
+        return $hasSequence ?? false;
+    }
+
+    /**
+     * A single statement writes at most one copy of an id, and a later copy may be written when
+     * the first is skipped for another unique value; keeping only the first copy leaves no row
+     * whose grants could be taken from another copy.
+     *
+     * @param  array<Document>  $documents
+     * @return list<Document>
+     */
+    private function firstCopies(array $documents): array
+    {
+        $seen = [];
+        $firstCopies = [];
+        foreach ($documents as $document) {
+            [$tenant, $id] = $this->documentKey($document);
+            if (isset($seen[$tenant][$id])) {
+                continue;
+            }
+            $seen[$tenant][$id] = true;
+            $firstCopies[] = $document;
+        }
+
+        return $firstCopies;
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @param  list<string>  $spatialAttributes
+     *
+     * @throws DatabaseException
+     */
+    private function buildDocumentsInsert(string $name, array $documents, array $spatialAttributes, bool $hasSequence): SQLBuilder
+    {
+        $attributeKeySet = [];
+        foreach (Database::INTERNAL_ATTRIBUTE_KEYS as $key) {
+            $attributeKeySet[$key] = true;
+        }
+
+        foreach ($documents as $document) {
+            foreach ($document->getAttributes() as $key => $value) {
+                $attributeKeySet[$key] = true;
+            }
+        }
+
+        $attributeKeys = \array_keys($attributeKeySet);
+
+        if ($hasSequence) {
+            $attributeKeys[] = Storage::SEQUENCE;
+        }
+
+        $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
+
+        $spatialAttributes = $this->expandSpatialAttributes($spatialAttributes, $documents);
+        $spatialMap = \array_fill_keys($spatialAttributes, true);
+
+        foreach ($spatialAttributes as $spatialColumn) {
+            $builder->insertColumnExpression($spatialColumn, $this->getSpatialGeomFromText('?'));
+        }
+
+        $intBools = $this->supports(Capability::IntegerBooleans);
+
+        foreach ($documents as $document) {
+            $row = $this->buildDocumentRow($document, $attributeKeys, $spatialMap, $intBools);
+            $row = $this->decorateRow($row, $this->documentMetadata($document));
+            $builder->set($row);
+        }
+
+        return $builder;
+    }
+
+    /**
+     * @param  list<Document>  $documents
+     * @param  list<string>  $spatialAttributes
+     * @return list<Document>
+     *
+     * @throws DatabaseException
+     */
+    private function insertReturning(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
+    {
+        $builder = $this->buildDocumentsInsert($name, $documents, $spatialAttributes, $hasSequence);
+        $columns = $this->documentKeyColumns();
+
+        if ($builder instanceof MariaDBReturning) {
+            $insert = $this->insertOrIgnore($builder->returning($columns));
+        } else {
+            $insert = $this->insertOrIgnore($builder);
+            $quoted = \array_map($this->quote(...), $columns);
+            $insert = new Statement($insert->query.' RETURNING '.\implode(', ', $quoted), $insert->bindings);
+        }
+
+        $statement = $this->executeResult($insert, Event::DocumentsCreate);
+        $this->execute($statement);
+        /** @var list<list<mixed>> $rows */
+        $rows = $statement->fetchAll(PDO::FETCH_NUM);
+        $statement->closeCursor();
+
+        $written = $this->rowKeys($rows);
+
+        return \array_values(\array_filter(
+            $documents,
+            fn (Document $document): bool => $this->hasKey($written, $document),
+        ));
+    }
+
+    /**
+     * Without RETURNING the ids are read before the insert, which keeps a stored id out of it,
+     * and read back when the insert wrote fewer rows than it was sent. A row read back is taken
+     * as written only when it carries the document's own permissions: a row another writer
+     * stored meanwhile under the same id then gains no grant it does not already state.
+     *
+     * @param  list<Document>  $documents
+     * @param  list<string>  $spatialAttributes
+     * @return list<Document>
+     *
+     * @throws DatabaseException
+     */
+    private function insertThenReadBack(string $name, array $documents, array $spatialAttributes, bool $hasSequence): array
+    {
+        $stored = $this->rowKeys($this->readRows($name, $documents, $this->documentKeyColumns()));
+        $candidates = \array_values(\array_filter(
+            $documents,
+            fn (Document $document): bool => ! $this->hasKey($stored, $document),
+        ));
+
+        if (empty($candidates)) {
+            return [];
+        }
+
+        $statement = $this->executeResult(
+            $this->insertOrIgnore($this->buildDocumentsInsert($name, $candidates, $spatialAttributes, $hasSequence)),
+            Event::DocumentsCreate,
+        );
+        $this->execute($statement);
+        $written = $statement->rowCount();
+        $statement->closeCursor();
+
+        if ($written === \count($candidates)) {
+            return $candidates;
+        }
+
+        $permissions = [];
+        foreach ($this->readRows($name, $candidates, [...$this->documentKeyColumns(), Storage::PERMISSIONS]) as $row) {
+            $rowPermissions = \end($row);
+            $permissions[$this->rowTenant($row)][$this->rowId($row)] = \is_string($rowPermissions) ? \json_decode($rowPermissions, true) : null;
+        }
+
+        return \array_values(\array_filter(
+            $candidates,
+            function (Document $document) use ($permissions): bool {
+                [$tenant, $id] = $this->documentKey($document);
+
+                return \array_key_exists($id, $permissions[$tenant] ?? [])
+                    && $permissions[$tenant][$id] === $document->getPermissions();
+            },
+        ));
+    }
+
+    /**
+     * @param  list<Document>  $documents
+     * @param  list<string>  $columns
+     * @return list<list<mixed>>
+     *
+     * @throws DatabaseException
+     */
+    private function readRows(string $name, array $documents, array $columns): array
+    {
+        $ids = [];
+        $tenants = [];
+        foreach ($documents as $document) {
+            $ids[] = $document->getId();
+            $tenant = $this->documentTenant($document);
+            if ($this->sharedTables && $this->tenantPerDocument && ! \in_array($tenant, $tenants, true)) {
+                $tenants[] = $tenant;
+            }
+        }
+
+        $builder = $this->newBuilder($name, tenants: $tenants);
+        $builder->select($columns);
+        $builder->filter([BaseQuery::equal(Storage::UID, \array_values(\array_unique($ids)))]);
+
+        $statement = $this->executeResult($builder->build(), Event::DocumentRead);
+        $this->execute($statement);
+        /** @var list<list<mixed>> $rows */
+        $rows = $statement->fetchAll(PDO::FETCH_NUM);
+        $statement->closeCursor();
+
+        return $rows;
+    }
+
+    /**
+     * @param  list<list<mixed>>  $rows  each starting with `_uid`, then `_tenant` under shared tables
+     * @return array<string, array<string, true>>
+     */
+    private function rowKeys(array $rows): array
+    {
+        $keys = [];
+        foreach ($rows as $row) {
+            $keys[$this->rowTenant($row)][$this->rowId($row)] = true;
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @param  list<mixed>  $row
+     */
+    private function rowId(array $row): string
+    {
+        $id = $row[0] ?? null;
+
+        return \is_scalar($id) ? (string) $id : '';
+    }
+
+    /**
+     * @param  list<mixed>  $row
+     */
+    private function rowTenant(array $row): string
+    {
+        $tenant = $this->sharedTables ? ($row[1] ?? null) : null;
+
+        return \is_scalar($tenant) ? (string) $tenant : '';
+    }
+
+    /**
+     * @param  array<string, array<string, true>>  $keys
+     */
+    private function hasKey(array $keys, Document $document): bool
+    {
+        [$tenant, $id] = $this->documentKey($document);
+
+        return isset($keys[$tenant][$id]);
+    }
+
+    /**
+     * @return array{string, string}
+     */
+    private function documentKey(Document $document): array
+    {
+        $tenant = $this->documentTenant($document);
+
+        return [$tenant === null ? '' : (string) $tenant, $document->getId()];
+    }
+
+    private function documentTenant(Document $document): int|string|null
+    {
+        return $this->sharedTables ? ($document->getTenant() ?? $this->tenant) : null;
     }
 
     /**
@@ -2677,12 +2904,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $sql = $mainResult->query . '; ' . $permsResult->query;
 
-        $ok = $this->executeStatement($sql, Event::CollectionDelete);
-        // Schema is gone; drop any memoized spatial column list so a later
-        // recreate-with-different-schema doesn't see the stale entry.
-        $this->invalidateSpatialAttributesCache($id);
-
-        return $ok;
+        return $this->executeStatement($sql, Event::CollectionDelete);
     }
 
     /**
@@ -5427,58 +5649,23 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Helper method to extract spatial type attributes from collection attributes.
-     *
-     * The result is memoized by collection id and an attribute-set fingerprint
-     * so a process that created documents before spatial columns existed does
-     * not keep serving an empty list. Invalidate via
-     * invalidateSpatialAttributesCache() when adding or removing attributes.
-     *
      * @return list<string>
      */
     protected function getSpatialAttributes(Document $collection): array
     {
-        $key = $this->spatialCacheKey($collection->getId());
         /** @var array<mixed> $collectionAttributes */
         $collectionAttributes = $collection->getAttribute('attributes', []);
-        $fingerprint = $this->spatialAttributeFingerprint($collectionAttributes);
-        $cached = $this->spatialAttributesCache[$key] ?? null;
-        if ($cached !== null && $cached['fingerprint'] === $fingerprint) {
-            return $cached['attributes'];
-        }
+        $spatialTypes = [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value];
 
         $spatialAttributes = [];
-        $spatialTypes = [ColumnType::Point->value, ColumnType::Linestring->value, ColumnType::Polygon->value];
-        foreach ($collectionAttributes as $attr) {
-            [$attributeKey, $attributeType] = $this->attributeKeyAndType($attr);
+        foreach ($collectionAttributes as $attribute) {
+            [$attributeKey, $attributeType] = $this->attributeKeyAndType($attribute);
             if (\is_string($attributeKey) && \in_array($attributeType, $spatialTypes, true)) {
                 $spatialAttributes[] = $attributeKey;
             }
         }
 
-        $this->spatialAttributesCache[$key] = [
-            'fingerprint' => $fingerprint,
-            'attributes' => $spatialAttributes,
-        ];
-
         return $spatialAttributes;
-    }
-
-    /**
-     * @param  array<mixed>  $collectionAttributes
-     */
-    private function spatialAttributeFingerprint(array $collectionAttributes): string
-    {
-        $parts = [];
-        foreach ($collectionAttributes as $attr) {
-            [$key, $type] = $this->attributeKeyAndType($attr);
-            if (\is_string($key)) {
-                $parts[] = $key.':'.($type ?? '');
-            }
-        }
-        \sort($parts);
-
-        return \implode(',', $parts);
     }
 
     /**
@@ -5556,28 +5743,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $value;
-    }
-
-    /**
-     * Invalidate the spatial attributes cache for a collection. Called from
-     * createAttribute / deleteAttribute / updateAttribute / renameAttribute /
-     * deleteCollection paths so the next write rescans the column list.
-     */
-    protected function invalidateSpatialAttributesCache(string $collectionId): void
-    {
-        unset($this->spatialAttributesCache[$this->spatialCacheKey($collectionId)]);
-    }
-
-    /**
-     * Compose a cache key scoped to the current database and namespace so
-     * that Pool sibling adapters reused across schemas never collide on a
-     * shared collection id. Tenant is intentionally excluded: collection
-     * schema (and therefore the spatial-attribute set) is shared across
-     * tenants under shared tables.
-     */
-    private function spatialCacheKey(string $collectionId): string
-    {
-        return $this->database.'/'.$this->namespace.'/'.$collectionId;
     }
 
     /**

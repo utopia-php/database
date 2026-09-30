@@ -9,6 +9,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
@@ -664,6 +665,10 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * Run the callback in a transaction, retrying a failed attempt up to twice. A nested call whose enclosing
+     * transaction is gone is never retried: it throws `Exception\Transaction`, or the `Exception\Contention` that made
+     * the engine roll the transaction back, which the outermost call retries because nothing of that attempt is stored.
+     *
      * @template T
      *
      * @param  callable(): T  $callback
@@ -701,7 +706,13 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
                 }
 
                 if ($lost) {
-                    throw new TransactionException('Failed to execute transaction: the transaction was lost before it could commit', previous: $action);
+                    if (! $action instanceof ContentionException) {
+                        throw new TransactionException('Failed to execute transaction: the transaction was lost before it could commit', previous: $action);
+                    }
+
+                    if ($depth > 0) {
+                        throw $action;
+                    }
                 }
 
                 if (

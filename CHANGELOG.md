@@ -223,7 +223,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   flags the same way.
 - `Database::setCacheWriterTimeout()` and `QueryCache`'s `writerTimeout` argument bound how long an unfinished
   invalidation keeps a collection's cache off.
-- `Exception\Unique::MESSAGE`, `Exception\Mismatch` (a `Duplicate` for a shared-table column of another type) and
+- `Exception\Unique::MESSAGE`, `Exception\Mismatch` (a `Duplicate` for a shared-table column of another type),
+  `Exception\Contention` (a `Transaction` for a lock conflict with a concurrent transaction) and
   `Validator\Structure`'s `storedAttributes` parameter.
 
 ### Changed
@@ -359,6 +360,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   `withTransaction()` whose commit finds the connection no longer holds the transaction throws
   `Exception\Transaction` instead of returning as if its work were stored; `commitTransaction()` no longer returns
   `false` for it.
+- A nested `withTransaction()` whose statement lost a deadlock on MariaDB or MySQL rethrows the deadlock
+  (`Exception\Contention`), and the outermost call runs again as in 7.x. The engine rolls the whole transaction back,
+  so nothing of that attempt is stored. The 8.0 pre-releases reported such a transaction as lost and did not run it
+  again.
 - `Utopia\Database\PDO` refuses statements after a reconnect lost the open transaction, until the transaction is
   rolled back, so a swallowed connection error can no longer make later statements autocommit.
   `Utopia\Database\PDO::reconnect()` replays attributes set with `setAttribute()` after connecting.
@@ -415,7 +420,7 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `analyzeCollection()` refreshes planner statistics on PostgreSQL and SQLite (the collection's table and its
   permissions table) and returns `true`; it returned `false` there. Call it after bulk loads.
 - Engine errors map to library exceptions: lock conflicts (MariaDB/MySQL 1213, 1205; PostgreSQL 40P01, 40001,
-  55P03) to `Exception\Transaction`; MariaDB/MySQL 1146 and 1072, SQLite `no such column`, PostgreSQL 22021, 42883
+  55P03; SQLite `database is locked`) to `Exception\Contention`, a subclass of `Exception\Transaction`; MariaDB/MySQL 1146 and 1072, SQLite `no such column`, PostgreSQL 22021, 42883
   and 42P01 naming an alias to `NotFound`, `Character` and `Query`; PostgreSQL's distinct() order error in any server
   language. PostgreSQL `deleteCollection()` of a collection whose table is gone succeeds again, and MariaDB/MySQL drop
   its permissions table too, so the collection can be created again. See [Errors](UPGRADE.md#errors).

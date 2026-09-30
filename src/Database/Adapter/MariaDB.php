@@ -16,13 +16,13 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
-use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
@@ -1586,11 +1586,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         }
 
         if ($e->getCode() === '40001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1213) {
-            return new TransactionException('Deadlock detected', $e->getCode(), $e);
+            return new ContentionException('Deadlock detected', $e->getCode(), $e);
         }
 
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1205) {
-            return new TransactionException('Lock wait timeout exceeded', $e->getCode(), $e);
+            return new ContentionException('Lock wait timeout exceeded', $e->getCode(), $e);
         }
 
         return $e;

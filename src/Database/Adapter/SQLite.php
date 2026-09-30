@@ -19,6 +19,7 @@ use Utopia\Database\DateTime as DatabaseDateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Contention as ContentionException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
@@ -1833,6 +1834,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         // String or BLOB exceeds size limit
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 18) {
             return new LimitException('Value too large', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 5) {
+            return new ContentionException('Database is locked', $e->getCode(), $e);
         }
 
         return $e;

@@ -601,7 +601,7 @@ outside a transaction; elsewhere it reads them one after another. Related docume
 
   | Engine condition | Exception |
   |---|---|
-  | MariaDB/MySQL deadlock (1213) or lock wait timeout (1205); PostgreSQL deadlock (40P01), serialization failure (40001) or lock not available (55P03) | `Exception\Transaction`, which `withTransaction()` retries twice before rethrowing |
+  | MariaDB/MySQL deadlock (1213) or lock wait timeout (1205); PostgreSQL deadlock (40P01), serialization failure (40001) or lock not available (55P03); SQLite `database is locked` (5) | `Exception\Contention`, a subclass of `Exception\Transaction`, which `withTransaction()` retries twice before rethrowing |
   | MariaDB/MySQL statement on a missing table (1146) | `Exception\NotFound` (`Collection not found`), as 1051, PostgreSQL 42P01 and SQLite `no such table` |
   | MariaDB/MySQL index on a column the table lacks (1072); SQLite `no such column` | `Exception\NotFound` (`Attribute not found`), as 1054 and PostgreSQL 42703 |
   | PostgreSQL invalid UTF-8 (22021) | `Exception\Character` (`Invalid character`), as MariaDB/MySQL 1366 |
@@ -909,7 +909,11 @@ as wildcards and a backslash as a literal character.
   surface) throws `Exception\Transaction` too, and the callback is not run again: statements after such a reconnect
   may already have run on their own. Code that catches an expected exception (for example `Duplicate`) from a
   nested call and carries on no longer receives that exception when the transaction was lost underneath it: catch
-  `Exception\Transaction` around the outermost call and run the whole unit again.
+  `Exception\Transaction` around the outermost call and run the whole unit again. A transaction the engine rolled
+  back over a lock conflict is not lost: MariaDB and MySQL roll the whole transaction back, savepoints included, when
+  a statement loses a deadlock (1213), or a lock wait timeout (1205) with `innodb_rollback_on_timeout`. The nested
+  calls rethrow that `Exception\Contention` unchanged, and the outermost call runs again, as in 7.x, because nothing
+  of the attempt is stored.
 - **Statements after a lost transaction.** When `Utopia\Database\PDO` reconnects because a statement inside a
   transaction found the connection gone, it rethrows and then refuses every statement (`exec()`, `query()`,
   `prepare()`, `beginTransaction()`, `commit()`) with a `PDOException` until the transaction is ended with

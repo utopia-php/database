@@ -713,24 +713,19 @@ class Redis extends Adapter implements
             throw new NotFoundException('Collection not found');
         }
 
-        $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): void {
+        return $this->tx(function (RedisClient $client) use ($metaKey, $old, $new): bool {
             $indexes = $this->readIndexesField($client, $metaKey);
-            $changed = false;
-            foreach ($indexes as $i => $index) {
-                if (($index[Document::ID] ?? $index['key'] ?? null) === $old) {
-                    $indexes[$i][Document::ID] = $new;
-                    $indexes[$i]['key'] = $new;
-                    $changed = true;
-                    break;
-                }
+            $ids = \array_map(static fn (array $index): mixed => $index[Document::ID] ?? $index['key'] ?? null, $indexes);
+            $position = \array_search($old, $ids, true);
+            if ($position === false) {
+                return \in_array($new, $ids, true);
             }
-            if (! $changed) {
-                return;
-            }
+            $indexes[$position][Document::ID] = $new;
+            $indexes[$position]['key'] = $new;
             $client->hSet($metaKey, 'indexes', \json_encode(\array_values($indexes), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
-        });
 
-        return true;
+            return true;
+        }) === true;
     }
 
     public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document

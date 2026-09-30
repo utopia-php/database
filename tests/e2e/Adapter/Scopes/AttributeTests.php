@@ -8,6 +8,7 @@ use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -2845,17 +2846,58 @@ trait AttributeTests
                 $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'));
             }
 
-            foreach ([$first, $second] as $index => $tenant) {
-                $database->setTenant($tenant);
-                $indexes = $database->getCollection($collection)->indexes;
+            $this->assertTenantsFindByTheRenamedIndex($database, $collection, $first, $second);
+        }, sqlOnly: false);
+    }
 
-                $this->assertSame(['ageIndex'], \array_map(static fn (Index $value): string => $value->key, \array_values($indexes)));
-                $this->assertSame(['user'], \array_map(
-                    static fn (Document $document): string => $document->getId(),
-                    $database->find($collection, [Query::equal('age', [($index + 1) * 10])]),
-                ));
+    public function testSharedTablesALaterTenantRenamesAnIndexFirst(): void
+    {
+        $this->runSharedRename(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            foreach ([$second, $first] as $tenant) {
+                $database->setTenant($tenant);
+                $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'));
             }
-        });
+
+            $this->assertTenantsFindByTheRenamedIndex($database, $collection, $first, $second);
+        }, sqlOnly: false);
+    }
+
+    public function testSharedTablesRenameOfAnIndexNoTenantHasInTheSchemaFails(): void
+    {
+        $this->runSharedRename(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            $database->setTenant($first);
+            $database->getAdapter()->deleteIndex($collection, 'byAge');
+
+            $database->setTenant($second);
+            if ($database->getAdapter() instanceof SQLite) {
+                $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'), 'SQLite builds the tenant its own index under the new name');
+                $this->assertSame(['ageIndex'], $this->getIndexKeys($database, $collection));
+
+                return;
+            }
+
+            try {
+                $database->renameIndex($collection, 'byAge', 'ageIndex');
+                $this->fail('A rename no tenant\'s index backs must fail');
+            } catch (DatabaseException $error) {
+                $this->assertStringStartsWith("Failed to rename index 'byAge' to 'ageIndex': ", $error->getMessage());
+            }
+
+            $this->assertSame(['byAge'], $this->getIndexKeys($database, $collection));
+        }, sqlOnly: false);
+    }
+
+    private function assertTenantsFindByTheRenamedIndex(Database $database, string $collection, int|string ...$tenants): void
+    {
+        foreach ($tenants as $index => $tenant) {
+            $database->setTenant($tenant);
+
+            $this->assertSame(['ageIndex'], $this->getIndexKeys($database, $collection));
+            $this->assertSame(['user'], \array_map(
+                static fn (Document $document): string => $document->getId(),
+                $database->find($collection, [Query::equal('age', [($index + 1) * 10])]),
+            ));
+        }
     }
 
     public function testSharedTablesRenameOfAMissingAttributeIsNotFound(): void
@@ -2911,11 +2953,11 @@ trait AttributeTests
     /**
      * @param  callable(Database, string, int|string, int|string): void  $scenario
      */
-    private function runSharedRename(callable $scenario): void
+    private function runSharedRename(callable $scenario, bool $sqlOnly = true): void
     {
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || ! $database->getAdapter() instanceof SQL) {
+        if (! $database->getSharedTables() || ($sqlOnly && ! $database->getAdapter() instanceof SQL)) {
             $this->expectNotToPerformAssertions();
 
             return;

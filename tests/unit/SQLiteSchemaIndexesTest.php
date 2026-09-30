@@ -136,6 +136,25 @@ final class SQLiteSchemaIndexesTest extends TestCase
         $this->assertSame([0, ['body']], $this->indexes($database)['lookup'] ?? null);
     }
 
+    #[DataProvider('tables')]
+    public function testRenamingAnIndexTheSchemaNoLongerHasRebuildsItUnderTheNewName(bool $shared): void
+    {
+        $database = $this->database($shared);
+        $database->createIndex(self::COLLECTION, Index::key(key: 'by_title', attributes: ['title']));
+        $database->getAdapter()->deleteIndex(self::COLLECTION, 'by_title');
+        $this->assertArrayNotHasKey('by_title', $this->indexes($database));
+
+        $this->assertTrue($database->renameIndex(self::COLLECTION, 'by_title', 'by_heading'));
+
+        $indexes = $this->indexes($database);
+        $this->assertArrayNotHasKey('by_title', $indexes);
+        $this->assertSame([1, [...($shared ? ['_tenant'] : []), 'title']], $indexes['by_heading'] ?? null, 'the metadata names an index the schema has');
+        $this->assertSame(['by_heading'], \array_values(\array_map(
+            static fn (Index $index): string => $index->key,
+            $database->getCollection(self::COLLECTION)->indexes,
+        )));
+    }
+
     /**
      * @return array<string, array{int, list<string>}>
      */

@@ -11,6 +11,7 @@ use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -1442,6 +1443,76 @@ trait IndexTests
 
             $database->deleteCollection($collection);
         }
+    }
+
+    public function testRenamingAnIndexTheSchemaNoLongerHasFails(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'renameDroppedIndex';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::integer(key: 'age'),
+        ], indexes: [
+            Index::key(key: 'byAge', attributes: ['age']),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $database->getAdapter()->deleteIndex($collection, 'byAge');
+
+            if ($database->getAdapter() instanceof SQLite) {
+                $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'), 'SQLite rebuilds the index under the new name from its definition');
+                $this->assertSame(['ageIndex'], $this->getIndexKeys($database, $collection));
+
+                return;
+            }
+
+            try {
+                $database->renameIndex($collection, 'byAge', 'ageIndex');
+                $this->fail('A rename of an index the schema does not have must fail');
+            } catch (DatabaseException $error) {
+                $this->assertStringStartsWith("Failed to rename index 'byAge' to 'ageIndex': ", $error->getMessage());
+            }
+
+            $this->assertSame(['byAge'], $this->getIndexKeys($database, $collection));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testRenamingAnIndexTheSchemaAlreadyRenamedCompletes(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'renameRenamedIndex';
+        $database->createCollection(new Collection(id: $collection, attributes: [
+            Attribute::integer(key: 'age'),
+        ], indexes: [
+            Index::key(key: 'byAge', attributes: ['age']),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ], documentSecurity: false));
+
+        try {
+            $this->assertTrue($database->getAdapter()->renameIndex($collection, 'byAge', 'ageIndex'));
+
+            $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'));
+            $this->assertSame(['ageIndex'], $this->getIndexKeys($database, $collection));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getIndexKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Index $index): string => $index->key,
+            \array_values($database->getCollection($collection)->indexes),
+        );
     }
 
     /**

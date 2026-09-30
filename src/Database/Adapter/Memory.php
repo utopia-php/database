@@ -1025,7 +1025,7 @@ class Memory extends Adapter implements Feature\Relationships
         $new = $this->filter($new);
 
         if (! isset($this->data[$key]['indexes'][$old])) {
-            return true;
+            return isset($this->data[$key]['indexes'][$new]);
         }
 
         $this->data[$key]['indexes'][$new] = $this->data[$key]['indexes'][$old];

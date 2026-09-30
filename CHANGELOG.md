@@ -389,7 +389,13 @@ have to make, with the 7.x and 8.0 forms side by side.
   appended, instead of letting the driver error escape and leaving the remaining columns. A PHP `Error` (for
   example a `TypeError`) raised while dropping a column is rethrown unchanged instead of being collected.
 - `renameIndex()` fails with `Failed to rename index '<old>' to '<new>'` and keeps the old key in the metadata when
-  the adapter renames nothing, instead of recording a rename that did not happen.
+  the schema has the index under neither name, instead of recording a rename that did not happen. This holds on
+  PostgreSQL, MariaDB, MySQL, MongoDB, Memory and Redis; PostgreSQL, Memory and Redis used to report such a rename
+  as done. SQLite rebuilds the index under the new name from its definition, so its schema matches the metadata.
+  An index the schema already has under the new name completes the rename on every adapter. Under shared tables a
+  tenant's rename also completes while the collection's shared index has either name (on PostgreSQL, while another
+  tenant's copy of it does); on MongoDB a later tenant's rename of an index another tenant already renamed completes
+  instead of failing.
 - A failed `updateRelationship()` restores the definitions it had already written (parent, two-way child, junction
   keys) and rethrows the original error. Its rollback reverses the column rename before renaming the indexes back,
   so SQLite, Memory and MongoDB rebuild each index over the column it covers instead of losing it.

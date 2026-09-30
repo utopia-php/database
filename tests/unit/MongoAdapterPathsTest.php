@@ -116,6 +116,33 @@ final class MongoAdapterPathsTest extends TestCase
         $this->assertSame([], $this->argumentsOf('createIndexes'));
     }
 
+    public function testRenamingAnIndexTheSchemaDoesNotHaveRenamesNothing(): void
+    {
+        $this->replyWithIndexes(['_id_', '_uid']);
+
+        $this->assertFalse($this->adapter()->renameIndex('books', 'by_title', 'by_name'));
+        $this->assertSame([], $this->argumentsOf('dropIndexes'));
+        $this->assertSame([], $this->argumentsOf('createIndexes'));
+    }
+
+    public function testRenamingAnIndexTheSchemaAlreadyRenamedIsReportedRenamed(): void
+    {
+        $this->replyWithIndexes(['_id_', '_uid', 'by_name']);
+
+        $this->assertTrue($this->adapter()->renameIndex('books', 'by_title', 'by_name'));
+        $this->assertSame([], $this->argumentsOf('dropIndexes'));
+        $this->assertSame([], $this->argumentsOf('createIndexes'));
+    }
+
+    public function testRenamingAnIndexTheSchemaHasRebuildsItUnderTheNewName(): void
+    {
+        $this->replyWithIndexes(['_id_', '_uid', 'by_title']);
+
+        $this->assertTrue($this->adapter()->renameIndex('books', 'by_title', 'by_name'));
+        $this->assertSame([[self::NAMESPACE.'_books', ['by_title'], []]], $this->argumentsOf('dropIndexes'));
+        $this->assertSame(['by_name'], \array_map(static fn (array $arguments): mixed => \is_array($arguments[1] ?? null) ? ($arguments[1][0]['name'] ?? null) : null, $this->argumentsOf('createIndexes')));
+    }
+
     public function testANonNumericPowerExponentIsRefused(): void
     {
         try {
@@ -366,6 +393,22 @@ final class MongoAdapterPathsTest extends TestCase
         $reply = $this->replies[$method] ?? null;
 
         return $reply !== null ? $reply($arguments) : null;
+    }
+
+    /**
+     * @param  list<string>  $physical
+     */
+    private function replyWithIndexes(array $physical): void
+    {
+        $this->replies['find'] = static fn (): stdClass => self::batch([(object) [
+            Storage::UID => 'books',
+            'indexes' => \json_encode([['$id' => 'by_title', 'key' => 'by_title', 'type' => 'key', 'attributes' => ['title']]]),
+            'attributes' => \json_encode([['$id' => 'title', 'key' => 'title', 'type' => 'string']]),
+        ]]);
+        $this->replies['query'] = static fn (array $arguments): stdClass => (object) ['cursor' => (object) [
+            'firstBatch' => \array_map(static fn (string $name): stdClass => (object) ['name' => $name], $physical),
+            'id' => 0,
+        ]];
     }
 
     private function adapter(): Mongo

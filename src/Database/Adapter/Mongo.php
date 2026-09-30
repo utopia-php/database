@@ -1279,6 +1279,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             if (! $index) {
                 throw new DatabaseException('Index not found: '.$old);
             }
+            $physical = $this->getIndexNames($collection);
+            if (! \in_array($old, $physical, true)) {
+                return \in_array($new, $physical, true);
+            }
             $deletedindex = $this->deleteIndex($collection, $old);
             /** @var array<string> $indexAttributes */
             $indexAttributes = $index['attributes'] ?? [];
@@ -1305,6 +1309,34 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return false;
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @throws MongoException
+     */
+    private function getIndexNames(string $collection): array
+    {
+        /** @var stdClass $listing */
+        $listing = $this->getClient()->query([
+            'listIndexes' => $this->getNamespace().'_'.$collection,
+        ]);
+
+        /** @var stdClass $cursor */
+        $cursor = $listing->cursor;
+        /** @var array<mixed> $batch */
+        $batch = $cursor->firstBatch ?? [];
+
+        $names = [];
+        foreach ($batch as $index) {
+            $name = $this->getClient()->toArray($index)['name'] ?? null;
+            if (\is_string($name)) {
+                $names[] = $name;
+            }
+        }
+
+        return $names;
     }
 
     /**

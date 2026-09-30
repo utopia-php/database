@@ -744,7 +744,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value),
         };
 
-        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
+        $keyName = $this->getIndexName($collection, $id, $this->tenant);
         $tableRaw = $this->getSQLTableRaw($collection);
         $schema = $this->createSchemaBuilder();
 
@@ -812,7 +812,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
+        $keyName = $this->getIndexName($collection, $id, $this->tenant);
         $schemaQualifiedName = $this->getDatabase().'.'.$keyName;
 
         $schema = $this->createSchemaBuilder();
@@ -826,25 +826,94 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     /**
      * Rename Index
      *
+     * Reports the index renamed when the schema holds it under the new name afterwards. Under shared tables an
+     * index is named after the tenant that created it, so a tenant without its own copy is renamed in its metadata
+     * when another tenant's copy of the collection's index exists under the old or the new name.
+     *
      * @throws Exception
      * @throws PDOException
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
-        $collection = $this->filter($collection);
-        $namespace = $this->getNamespace();
+        $name = $this->filter($collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $schemaName = $this->getDatabase();
-        $oldIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$old}");
-        $newIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$new}");
+        $oldIndexName = $this->getIndexName($name, $old, $this->tenant);
+        $newIndexName = $this->getIndexName($name, $new, $this->tenant);
 
         $schemaBuilder = $this->createSchemaBuilder();
-        $schemaQualifiedOld = $schemaName.'.'.$oldIndexName;
-        $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $schemaQualifiedOld, $newIndexName)->query;
+        $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($name), $this->getDatabase().'.'.$oldIndexName, $newIndexName)->query;
         $sql = \str_replace('ALTER INDEX', 'ALTER INDEX IF EXISTS', $sql);
 
-        return $this->executeStatement($sql, Event::IndexRename);
+        $this->executeStatement($sql, Event::IndexRename);
+
+        $names = [$newIndexName];
+        if ($this->sharedTables) {
+            foreach ($this->getCollectionTenants($collection) as $tenant) {
+                \array_push($names, $this->getIndexName($name, $old, $tenant), $this->getIndexName($name, $new, $tenant));
+            }
+        }
+
+        return $this->anyIndexExists($names);
+    }
+
+    private function getIndexName(string $collection, string $id, int|string|null $tenant): string
+    {
+        return $this->getShortKey("{$this->getNamespace()}_{$tenant}_{$collection}_{$id}");
+    }
+
+    /**
+     * @return list<string>
+     *
+     * @throws DatabaseException
+     */
+    private function getCollectionTenants(string $collection): array
+    {
+        $statement = $this->prepareStatement(
+            'SELECT DISTINCT '.$this->quote(Storage::TENANT).' FROM '.$this->getSQLTable(Database::METADATA).' WHERE '.$this->quote(Storage::UID).' = ?',
+            Event::IndexRename,
+        );
+        $statement->bindValue(1, $collection);
+
+        try {
+            $this->execute($statement);
+            /** @var list<string> $tenants */
+            $tenants = $statement->fetchAll(PDO::FETCH_COLUMN);
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $tenants;
+    }
+
+    /**
+     * @param  list<string>  $names
+     *
+     * @throws DatabaseException
+     */
+    private function anyIndexExists(array $names): bool
+    {
+        $names = \array_values(\array_unique($names));
+        $placeholders = \implode(', ', \array_fill(0, \count($names), '?'));
+        $statement = $this->prepareStatement(
+            "SELECT c.relname FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = ? AND c.relkind = 'i' AND c.relname IN ({$placeholders})",
+            Event::IndexRename,
+        );
+        $statement->bindValue(1, $this->getDatabase());
+        foreach ($names as $position => $indexName) {
+            $statement->bindValue($position + 2, $indexName);
+        }
+
+        try {
+            $this->execute($statement);
+            $found = $statement->fetchAll(PDO::FETCH_COLUMN);
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return $found !== [];
     }
 
     /**

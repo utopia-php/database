@@ -170,19 +170,8 @@ final class MariaDBSchemaTest extends TestCase
             'attributes' => \json_encode([['$id' => 'happened', 'type' => 'datetime', 'array' => false]]),
         ]);
 
-        $adapter = $class === MySQL::class
-            ? new class ($this->connection(), $collection) extends MySQL {
-                public function __construct(object $pdo, private readonly Document $collection)
-                {
-                    parent::__construct($pdo);
-                }
-
-                public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
-                {
-                    return $collection->getId() === Database::METADATA && $id === $this->collection->getId() ? $this->collection : new Document();
-                }
-            }
-            : new class ($this->connection(), $collection) extends MariaDB {
+        if ($class === MySQL::class) {
+            $adapter = new class ($this->connection(), $collection) extends MySQL {
                 public function __construct(object $pdo, private readonly Document $collection)
                 {
                     parent::__construct($pdo);
@@ -193,6 +182,20 @@ final class MariaDBSchemaTest extends TestCase
                     return $collection->getId() === Database::METADATA && $id === $this->collection->getId() ? $this->collection : new Document();
                 }
             };
+        } else {
+            $adapter = new class ($this->connection(), $collection) extends MariaDB {
+                public function __construct(object $pdo, private readonly Document $collection)
+                {
+                    parent::__construct($pdo);
+                }
+
+                public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+                {
+                    return $collection->getId() === Database::METADATA && $id === $this->collection->getId() ? $this->collection : new Document();
+                }
+            };
+        }
+
         $adapter->setDatabase('database');
         $adapter->setNamespace('namespace');
 

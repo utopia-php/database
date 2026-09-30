@@ -28,7 +28,7 @@ class FilterRegistryTest extends TestCase
     private Database $database;
 
     /**
-     * @var array<mixed>
+     * @var array<string, array{encode: callable, decode: callable, signature: string}>
      */
     private array $registry = [];
 
@@ -43,8 +43,7 @@ class FilterRegistryTest extends TestCase
         // Snapshot once the constructor has registered the built-ins, so the
         // restore in tearDown puts back a populated registry rather than an
         // empty one.
-        $registry = (new \ReflectionProperty(Database::class, 'filters'))->getValue();
-        $this->registry = \is_array($registry) ? $registry : [];
+        $this->registry = FilterRegistry::filters();
 
         $this->database->create();
         $this->database->createCollection(new Collection(id: 'projects'));
@@ -60,8 +59,7 @@ class FilterRegistryTest extends TestCase
     {
         // addFilter() writes to a static registry with no removal API, so a test
         // registering one would otherwise leak into every later test.
-        (new \ReflectionProperty(Database::class, 'filters'))->setValue(null, $this->registry);
-        (new \ReflectionProperty(Database::class, 'defaultFiltersRegistered'))->setValue(null, true);
+        FilterRegistry::restore($this->registry, true);
     }
 
     private function createDatabase(): Database
@@ -143,8 +141,7 @@ class FilterRegistryTest extends TestCase
     {
         // A fresh process: nothing has constructed a Database yet, so the
         // built-ins are not in the registry.
-        (new \ReflectionProperty(Database::class, 'filters'))->setValue(null, []);
-        (new \ReflectionProperty(Database::class, 'defaultFiltersRegistered'))->setValue(null, false);
+        FilterRegistry::clear();
 
         $identity = fn (mixed $value) => $value;
         Database::addFilter('datetime', $identity, $identity);

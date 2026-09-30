@@ -103,6 +103,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     protected bool $supportForAttributes = true;
 
+    private const array PREFIX_SWAPPED_KEYS = ['permissions', 'createdAt', 'updatedAt', 'collection'];
+
     /**
      * @var list<array{'$id': string, type: ColumnType, array: bool}>|null
      */
@@ -3305,13 +3307,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function replaceChars(string $from, string $to, array $array): array
     {
-        $filter = [
-            \substr(Document::PERMISSIONS, 1),
-            \substr(Document::CREATED_AT, 1),
-            \substr(Document::UPDATED_AT, 1),
-            \substr(Document::COLLECTION, 1),
-        ];
-
         // First pass: recursively process array values and collect keys to rename
         $keysToRename = [];
         foreach ($array as $k => $v) {
@@ -3320,11 +3315,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $array[$k] = $this->replaceChars($from, $to, $v);
             }
 
+            if (\is_int($k)) {
+                continue;
+            }
+
             $newKey = $k;
 
             // Handle key replacement for filtered attributes
             $clean_key = str_replace($from, '', $k);
-            if (in_array($clean_key, $filter)) {
+            if (in_array($clean_key, self::PREFIX_SWAPPED_KEYS)) {
                 $newKey = str_replace($from, $to, $k);
             } elseif (\str_starts_with($k, $from) && ! in_array($k, [Document::ID, Document::SEQUENCE, Document::TENANT, Storage::UID, Storage::SEQUENCE, Storage::TENANT])) {
                 // Handle any other key starting with the 'from' char (e.g. user-defined $-prefixed keys)

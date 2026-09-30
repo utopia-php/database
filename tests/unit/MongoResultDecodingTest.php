@@ -9,6 +9,78 @@ use Utopia\Query\Schema\ColumnType;
 
 final class MongoResultDecodingTest extends TestCase
 {
+    public function testStoredRecordKeysAreRestored(): void
+    {
+        $adapter = new class () extends Mongo {
+            public function __construct()
+            {
+            }
+
+            /**
+             * @param  array<string, mixed>  $record
+             * @return array<string, mixed>
+             */
+            public function restore(array $record): array
+            {
+                return $this->replaceChars('_', '$', $record);
+            }
+        };
+
+        $restored = $adapter->restore([
+            '_uid' => 'movie1',
+            '_id' => '17',
+            '_permissions' => ['read("any")', 'update("user:1")'],
+            '_createdAt' => '2026-01-01 00:00:00.000',
+            'tags' => ['t1', 't2'],
+            'profile__dot__name' => 'Ann',
+            'matrix' => [['_uid' => 'nested', 'a__dot__b' => 1], ['x', 'y']],
+        ]);
+
+        $this->assertSame([
+            'tags' => ['t1', 't2'],
+            'matrix' => [['a.b' => 1, '$id' => 'nested'], ['x', 'y']],
+            '$permissions' => ['read("any")', 'update("user:1")'],
+            '$createdAt' => '2026-01-01 00:00:00.000',
+            'profile.name' => 'Ann',
+            '$sequence' => '17',
+            '$id' => 'movie1',
+        ], $restored);
+    }
+
+    public function testDocumentKeysAreStored(): void
+    {
+        $adapter = new class () extends Mongo {
+            public function __construct()
+            {
+            }
+
+            /**
+             * @param  array<string, mixed>  $document
+             * @return array<string, mixed>
+             */
+            public function store(array $document): array
+            {
+                return $this->replaceChars('$', '_', $document);
+            }
+        };
+
+        $stored = $adapter->store([
+            '$id' => 'movie1',
+            '$permissions' => ['read("any")'],
+            'tags' => ['a.b', '$c'],
+            'profile.name' => 'Ann',
+            '$custom' => 'value',
+        ]);
+
+        $this->assertSame([
+            'tags' => ['a.b', '$c'],
+            '_permissions' => ['read("any")'],
+            'profile__dot__name' => 'Ann',
+            '_custom' => 'value',
+            '_uid' => 'movie1',
+        ], $stored);
+    }
+
     public function testCastingAfterCastsCollectionAndInternalAttributes(): void
     {
         $adapter = new class () extends Mongo {

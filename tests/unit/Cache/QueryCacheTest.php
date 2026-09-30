@@ -1003,16 +1003,6 @@ class QueryCacheTest extends TestCase
         return $cache;
     }
 
-    private function countFields(RedisLeasableCache $adapter): int
-    {
-        $fields = 0;
-        foreach ($adapter->keys() as $key) {
-            $fields += \count($adapter->list($key));
-        }
-
-        return $fields;
-    }
-
     private function epochOf(OwnershipCache $adapter, string $key): string
     {
         $epoch = $adapter->load($key.'#epoch', \PHP_INT_MAX);

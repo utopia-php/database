@@ -243,11 +243,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $indexStatements = [];
 
         if ($this->sharedTables) {
-            $uidIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}".Storage::UID);
-            $createdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_created");
-            $updatedIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_updated");
-            $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}".Storage::INDEX_TENANT_ID);
-            $permissionsIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}".Storage::PERMISSIONS);
+            $uidIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}".Storage::UID);
+            $createdIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_created");
+            $updatedIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_updated");
+            $tenantIdIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}".Storage::INDEX_TENANT_ID);
+            $permissionsIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}".Storage::PERMISSIONS);
             $indexStatements[] = $schema->createIndex($tableRaw, $uidIndex, [Storage::UID, Storage::TENANT], unique: true, collations: [Storage::UID => 'utf8_ci_ai'])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $createdIndex, [Storage::TENANT, Storage::CREATED_AT])->query;
             $indexStatements[] = $schema->createIndex($tableRaw, $updatedIndex, [Storage::TENANT, Storage::UPDATED_AT])->query;
@@ -278,8 +278,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $permsIndexStatements = [];
 
         if ($this->sharedTables) {
-            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_ukey");
-            $permissionIndex = $this->getShortKey("{$namespace}_{$this->tenant}_{$id}_permission");
+            $uniquePermissionIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_ukey");
+            $permissionIndex = $this->getShortKey("{$namespace}_{$this->currentTenant()}_{$id}_permission");
             $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $uniquePermissionIndex, [Storage::TENANT, Storage::PERM_DOCUMENT, Storage::PERM_TYPE, Storage::PERM_PERMISSION], unique: true, method: 'btree')->query;
             $permsIndexStatements[] = $schema->createIndex($permsTableRaw, $permissionIndex, [Storage::TENANT, Storage::PERM_PERMISSION, Storage::PERM_TYPE], method: 'btree')->query;
         } else {
@@ -744,7 +744,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value),
         };
 
-        $keyName = $this->getIndexName($collection, $id, $this->tenant);
+        $keyName = $this->getIndexName($collection, $id, $this->currentTenant());
         $tableRaw = $this->getSQLTableRaw($collection);
         $schema = $this->createSchemaBuilder();
 
@@ -812,7 +812,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-        $keyName = $this->getIndexName($collection, $id, $this->tenant);
+        $keyName = $this->getIndexName($collection, $id, $this->currentTenant());
         $schemaQualifiedName = $this->getDatabase().'.'.$keyName;
 
         $schema = $this->createSchemaBuilder();
@@ -838,8 +838,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $name = $this->filter($collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $oldIndexName = $this->getIndexName($name, $old, $this->tenant);
-        $newIndexName = $this->getIndexName($name, $new, $this->tenant);
+        $oldIndexName = $this->getIndexName($name, $old, $this->currentTenant());
+        $newIndexName = $this->getIndexName($name, $new, $this->currentTenant());
 
         $schemaBuilder = $this->createSchemaBuilder();
         $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($name), $this->getDatabase().'.'.$oldIndexName, $newIndexName)->query;

@@ -34,7 +34,7 @@ final class MongoSkipDuplicatesTest extends TestCase
         $this->assertSame(['fresh'], $this->ids($created));
         $this->assertSame('first', $created[0]->getAttribute('name'));
         $this->assertSame(['stored', 'fresh'], $this->storedIds($rows));
-        $this->assertSame('first', $rows[1]->name);
+        $this->assertSame('first', $rows->getArrayCopy()[1]->name ?? null);
     }
 
     public function testAnIdStoredUnderAnotherTenantIsNew(): void
@@ -148,7 +148,12 @@ final class MongoSkipDuplicatesTest extends TestCase
      */
     private function storedIds(ArrayObject $rows): array
     {
-        return \array_values(\array_map(static fn (stdClass $row): string => $row->{Storage::UID}, $rows->getArrayCopy()));
+        return \array_values(\array_map(static function (stdClass $row): string {
+            $id = $row->{Storage::UID};
+            self::assertIsString($id);
+
+            return $id;
+        }, $rows->getArrayCopy()));
     }
 
     /**

@@ -107,22 +107,24 @@ class TransactionRetryTest extends TestCase
         $this->assertSame(1, $attempts);
     }
 
-    /**
-     * A failed rollback in the Redis adapter must reset the depth counter and
-     * the journal stack together. Resetting only the counter would strand the
-     * parent frames, breaking the count($journalStack) === inTransaction
-     * invariant and letting later transactions merge into a stale frame.
-     */
-    public function testRedisRollbackFailureClearsJournalStack(): void
+    public function testRedisRollbackFailureEndsTheTransaction(): void
     {
         if (!\extension_loaded('redis')) {
             $this->markTestSkipped('redis extension not loaded');
         }
 
         $adapter = new class (new \Redis()) extends RedisAdapter {
+            public bool $failReplay = true;
+
             protected function rollbackJournal(): void
             {
-                throw new \RuntimeException('rollback replay failed');
+                if ($this->failReplay) {
+                    $this->failReplay = false;
+
+                    throw new \RuntimeException('rollback replay failed');
+                }
+
+                parent::rollbackJournal();
             }
         };
 
@@ -137,10 +139,14 @@ class TransactionRetryTest extends TestCase
         }
 
         $this->assertInstanceOf(\RuntimeException::class, $thrown);
-
         $this->assertFalse($adapter->inTransaction());
+        $this->assertFalse($adapter->commitTransaction(), 'No transaction is left open to commit');
+        $this->assertFalse($adapter->rollbackTransaction(), 'No transaction is left open to roll back');
 
-        $journalStack = new \ReflectionProperty(RedisAdapter::class, 'journalStack');
-        $this->assertSame([], $journalStack->getValue($adapter));
+        $this->assertTrue($adapter->startTransaction());
+        $this->assertTrue($adapter->startTransaction());
+        $this->assertTrue($adapter->commitTransaction());
+        $this->assertTrue($adapter->rollbackTransaction());
+        $this->assertFalse($adapter->inTransaction(), 'A later nested transaction must unwind to no transaction');
     }
 }

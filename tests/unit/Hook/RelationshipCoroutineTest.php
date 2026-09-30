@@ -82,10 +82,13 @@ final class RelationshipCoroutineTest extends TestCase
             $done->pop();
 
             $seen['book'] = $database->getDocument('books', 'dune')->getId();
-            $seen['shelf'] = \array_map(
-                static fn (Document $book): string => $book->getId(),
-                $database->getDocument('shelves', 'fiction')->getAttribute('books', []),
-            );
+            $books = $database->getDocument('shelves', 'fiction')->getAttribute('books', []);
+            $this->assertIsArray($books);
+            $seen['shelf'] = \array_map(static function (mixed $book): string {
+                self::assertInstanceOf(Document::class, $book);
+
+                return $book->getId();
+            }, $books);
             $seen['three'] = $database->getDocument('levelThree', 'three')->getId();
         });
 

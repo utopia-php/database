@@ -48,6 +48,7 @@ final class Value
             return $this->value;
         }
 
+        /** @var int $reader */
         $reader = self::$coroutines ? Coroutine::getCid() : self::OUTSIDE;
         $coroutine = $reader;
         while (! isset($this->scopes[$coroutine])) {
@@ -55,6 +56,7 @@ final class Value
                 return $this->value;
             }
 
+            /** @var int|false $parent */
             $parent = Coroutine::getPcid($coroutine);
             $coroutine = $parent === false ? self::OUTSIDE : $parent;
         }
@@ -155,11 +157,15 @@ final class Value
 
     private static function coroutine(): int
     {
-        return self::$coroutines ? Coroutine::getCid() : self::OUTSIDE;
+        /** @var int $coroutine */
+        $coroutine = self::$coroutines ? Coroutine::getCid() : self::OUTSIDE;
+
+        return $coroutine;
     }
 
     private static function parent(int $coroutine): int
     {
+        /** @var int|false $parent */
         $parent = Coroutine::getPcid($coroutine);
 
         return $parent === false ? self::OUTSIDE : $parent;

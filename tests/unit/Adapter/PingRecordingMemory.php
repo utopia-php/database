@@ -29,7 +29,9 @@ final class PingRecordingMemory extends Memory
             $pause();
         }
 
-        $this->pings[] = ['coroutine' => Coroutine::getCid(), 'before' => $before, 'after' => $this->getTenant()];
+        /** @var int $coroutine */
+        $coroutine = Coroutine::getCid();
+        $this->pings[] = ['coroutine' => $coroutine, 'before' => $before, 'after' => $this->getTenant()];
 
         return true;
     }

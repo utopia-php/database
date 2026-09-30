@@ -2375,7 +2375,10 @@ class Relationships implements Hook
 
     private function coroutine(): int
     {
-        return \extension_loaded('swoole') ? Coroutine::getCid() : -1;
+        /** @var int $coroutine */
+        $coroutine = \extension_loaded('swoole') ? Coroutine::getCid() : -1;
+
+        return $coroutine;
     }
 
     /**

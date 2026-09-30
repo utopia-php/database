@@ -262,6 +262,7 @@ final class ValueTest extends TestCase
 
     public function testANullWriteInACoroutineStartedInsideAnOverrideIsKept(): void
     {
+        /** @var Value<string|null> $value */
         $value = new Value('handle');
         $seen = null;
 

@@ -1163,12 +1163,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $documentIds = [];
         $tenants = [];
+        $keyedByTenant = $this->sharedTables && $this->tenantPerDocument;
 
         foreach ($documents as $document) {
             if (empty($document->getSequence())) {
                 $documentIds[] = $document->getId();
 
-                if ($this->sharedTables && $this->tenantPerDocument) {
+                if ($keyedByTenant) {
                     $tenant = $document->getTenant();
                     if (! \in_array($tenant, $tenants, true)) {
                         $tenants[] = $tenant;
@@ -1182,19 +1183,33 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $builder = $this->newBuilder($collection, tenants: $tenants);
-        $builder->select([Storage::UID, Storage::SEQUENCE]);
+        $builder->select($keyedByTenant
+            ? [Storage::UID, Storage::SEQUENCE, Storage::TENANT]
+            : [Storage::UID, Storage::SEQUENCE]);
         $builder->filter([BaseQuery::equal(Storage::UID, $documentIds)]);
 
         $result = $builder->build();
         $stmt = $this->executeResult($result, Event::DocumentRead);
         $this->execute($stmt);
-        /** @var array<string, mixed> $sequences */
-        $sequences = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
+
+        $sequenceKey = static fn (mixed $tenant, mixed $id): string => (\is_scalar($tenant) ? (string) $tenant : '')."\0".(\is_scalar($id) ? (string) $id : '');
+
+        if ($keyedByTenant) {
+            $sequences = [];
+            /** @var array<string, mixed> $row */
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $sequences[$sequenceKey($row[Storage::TENANT] ?? null, $row[Storage::UID] ?? null)] = $row[Storage::SEQUENCE] ?? null;
+            }
+        } else {
+            /** @var array<string, mixed> $sequences */
+            $sequences = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        }
         $stmt->closeCursor();
 
         foreach ($documents as $document) {
-            if (isset($sequences[$document->getId()])) {
-                $document[Document::SEQUENCE] = $sequences[$document->getId()];
+            $key = $keyedByTenant ? $sequenceKey($document->getTenant(), $document->getId()) : $document->getId();
+            if (isset($sequences[$key])) {
+                $document[Document::SEQUENCE] = $sequences[$key];
             }
         }
 

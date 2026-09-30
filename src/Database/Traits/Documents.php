@@ -1437,19 +1437,18 @@ trait Documents
 
             $document = $this->castingBefore($collection, $document);
 
-            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate));
+            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $old->getId(), $document, $skipPermissionsUpdate));
 
             $document = $this->castingAfter($collection, $document);
 
-            $this->purgeCachedDocumentInternal($collection->getId(), $id);
+            $purgedIds = \array_values(\array_unique([$id, $old->getId(), $document->getId()]));
 
-            if ($document->getId() !== $id) {
-                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            foreach ($purgedIds as $purgedId) {
+                $this->purgeCachedDocumentInternal($collection->getId(), $purgedId);
             }
 
-            $this->queueDocumentPurge($collection->getId(), $id);
-            if ($document->getId() !== $id) {
-                $this->queueDocumentPurge($collection->getId(), $document->getId());
+            foreach ($purgedIds as $purgedId) {
+                $this->queueDocumentPurge($collection->getId(), $purgedId);
             }
 
             if ($hasOperators) {
@@ -1574,6 +1573,7 @@ trait Documents
         $updatedAt = $updates->getUpdatedAt();
         $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
 
+        $decodedUpdates = clone $updates;
         $updates = $this->encode(
             $collection,
             $updates,
@@ -1606,6 +1606,9 @@ trait Documents
             $adapterData[$key] = $value;
         }
         $selections = $this->validateSelections($collection, $grouped['selections']);
+        $decodedKeys = $selections === []
+            ? []
+            : \array_values(\array_unique([...$selections, ...\array_map(\strval(...), \array_keys($adapterData))]));
         $adapterUpdates = $this->castingBefore($collection, new Document($adapterData));
 
         $originalLimit = $limit;
@@ -1642,8 +1645,9 @@ trait Documents
             sort($currentPermissions);
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $adapterUpdates, &$batch, $currentPermissions) {
-                foreach ($batch as $index => $document) {
+            $found = $batch;
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+                foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists(Document::PERMISSIONS)) {
@@ -1661,7 +1665,7 @@ trait Documents
                     $document->setAttribute(Document::SKIP_PERMISSIONS_UPDATE, $skipPermissionsUpdate);
 
                     $updateData = [];
-                    foreach ($updates->getArrayCopy() as $key => $value) {
+                    foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
                         $updateData[$key] = $value instanceof Operator ? clone $value : $value;
                     }
                     $new = new Document(\array_merge($document->getArrayCopy(), $updateData));
@@ -1671,9 +1675,6 @@ trait Documents
                         $this->silent(fn () => $hook->afterDocumentUpdate($collection, $document, $new));
                     }
 
-                    $document = $new;
-
-                    // Check if document was updated after the request timestamp
                     try {
                         $oldUpdatedAt = new PhpDateTime($document->getUpdatedAt() ?? 'now');
                     } catch (Exception $e) {
@@ -1683,6 +1684,8 @@ trait Documents
                     if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
+
+                    $document = $new;
 
                     $encoded = $this->encode($collection, $document);
                     $batch[$index] = $this->castingBefore($collection, $encoded);
@@ -1714,7 +1717,7 @@ trait Documents
             $batch = \array_map(
                 fn (Document $doc) => $hasOperators
                     ? $this->castingAfter($collection, $doc)
-                    : $this->decode($collection, $this->castingAfter($collection, $doc), $selections),
+                    : $this->decode($collection, $this->castingAfter($collection, $doc), $decodedKeys),
                 $batch
             );
 
@@ -3722,7 +3725,7 @@ trait Documents
         }
 
         if (! empty($cursor)) {
-            $cursor = $this->encode($collection, $cursor);
+            $cursor = $this->encode($collection, clone $cursor);
             $cursor = $this->castingBefore($collection, $cursor);
             $cursor = $this->encodeJoins($cursor, $joinedCollections);
             $cursor = $cursor->getArrayCopy();

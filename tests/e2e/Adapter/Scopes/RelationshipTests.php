@@ -19,6 +19,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Helpers\ID;
@@ -4675,6 +4676,81 @@ trait RelationshipTests
 
         $database->deleteCollection($parents);
         $database->deleteCollection($children);
+    }
+
+    public function testTwoWayOneToOneLinkChecksTheDocumentsOwnCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection(new Collection(id: $parents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $children, permissions: $permissions));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: $parents,
+            relatedCollection: $children,
+            twoWay: true,
+            key: 'partner',
+            twoWayKey: 'parent',
+        ));
+        $link = fn (string $collection, string $id, string $key): ?string => $database->skipRelationships(
+            fn () => $database->getDocument($collection, $id)
+        )->getAttribute($key);
+
+        try {
+            foreach (['a', 'b', 'L', 'free'] as $id) {
+                $database->createDocument($children, new Document(['$id' => $id]));
+            }
+            $database->createDocument($parents, new Document(['$id' => 'x', 'partner' => 'L']));
+            $database->createDocument($parents, new Document(['$id' => 'a', 'partner' => 'b']));
+            $database->createDocument($parents, new Document(['$id' => 'c']));
+            $database->createDocument($parents, new Document(['$id' => 'd']));
+
+            $database->updateDocument($parents, 'c', new Document(['partner' => 'a']));
+            $this->assertSame('a', $link($parents, 'c', 'partner'));
+            $this->assertSame('c', $link($children, 'a', 'parent'));
+            $this->assertSame('a', $link($children, 'b', 'parent'));
+
+            $duplicates = [
+                'id' => fn () => $database->updateDocument($parents, 'd', new Document(['partner' => 'L'])),
+                'document' => fn () => $database->updateDocument($parents, 'd', new Document(['partner' => new Document(['$id' => 'L'])])),
+                'child side' => fn () => $database->updateDocument($children, 'free', new Document(['parent' => 'x'])),
+            ];
+            foreach ($duplicates as $case => $write) {
+                try {
+                    $write();
+                    $this->fail($case.': linking a document that is already linked elsewhere was accepted');
+                } catch (DuplicateException $exception) {
+                    $this->assertSame(DuplicateException::class, $exception::class, $case);
+                    $this->assertSame('Document already has a related document', $exception->getMessage(), $case);
+                }
+            }
+            $this->assertNull($link($parents, 'd', 'partner'));
+            $this->assertNull($link($children, 'free', 'parent'));
+            $this->assertSame('x', $link($children, 'L', 'parent'));
+
+            $database->updateDocument($parents, 'x', new Document(['partner' => null]));
+            $database->updateDocument($parents, 'd', new Document(['partner' => 'L']));
+            $this->assertNull($link($parents, 'x', 'partner'));
+            $this->assertSame('L', $link($parents, 'd', 'partner'));
+            $this->assertSame('d', $link($children, 'L', 'parent'));
+        } finally {
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
     }
 
     /**

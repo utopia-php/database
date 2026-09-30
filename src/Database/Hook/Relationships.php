@@ -522,10 +522,7 @@ class Relationships implements Hook
                                 $oldValueDoc = $oldValue instanceof Document ? $oldValue : null;
                                 if (
                                     $oldValueDoc?->getId() !== $value
-                                    && ! ($this->db->skipRelationships(fn () => $this->db->findOne($relatedCollection->getId(), [
-                                        Query::select([Document::ID]),
-                                        Query::equal($twoWayKey, [$value]),
-                                    ]))->isEmpty())
+                                    && $this->isLinkedElsewhere($collection, $key, $value, $document)
                                 ) {
                                     throw new DuplicateException('Document already has a related document');
                                 }
@@ -543,10 +540,7 @@ class Relationships implements Hook
                             $oldValueDoc2 = $oldValue instanceof Document ? $oldValue : null;
                             if (
                                 $oldValueDoc2?->getId() !== $value->getId()
-                                && ! ($this->db->skipRelationships(fn () => $this->db->findOne($relatedCollection->getId(), [
-                                    Query::select([Document::ID]),
-                                    Query::equal($twoWayKey, [$value->getId()]),
-                                ]))->isEmpty())
+                                && $this->isLinkedElsewhere($collection, $key, $value->getId(), $document)
                             ) {
                                 throw new DuplicateException('Document already has a related document');
                             }
@@ -1567,6 +1561,15 @@ class Relationships implements Hook
         return $side === RelationSide::Parent
             ? '_'.$collection->getSequence().'_'.$relatedCollection->getSequence()
             : '_'.$relatedCollection->getSequence().'_'.$collection->getSequence();
+    }
+
+    private function isLinkedElsewhere(Document $collection, string $key, string $relatedId, Document $document): bool
+    {
+        return ! $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->findOne($collection->getId(), [
+            Query::select([Document::ID]),
+            Query::equal($key, [$relatedId]),
+            Query::notEqual(Document::ID, $document->getId()),
+        ])))->isEmpty();
     }
 
     /**

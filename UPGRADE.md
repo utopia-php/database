@@ -601,7 +601,7 @@ outside a transaction; elsewhere it reads them one after another. Related docume
 
   | Engine condition | Exception |
   |---|---|
-  | MariaDB/MySQL deadlock (1213) or lock wait timeout (1205); PostgreSQL deadlock (40P01), serialization failure (40001) or lock not available (55P03) | `Exception\Contention`, a subclass of `Exception\Transaction`, which `withTransaction()` retries twice before rethrowing |
+  | MariaDB/MySQL deadlock (1213) or lock wait timeout (1205); PostgreSQL deadlock (40P01), serialization failure (40001) or lock not available (55P03); SQLite `database is locked` (5) | `Exception\Contention`, a subclass of `Exception\Transaction`, which `withTransaction()` retries twice before rethrowing |
   | MariaDB/MySQL statement on a missing table (1146) | `Exception\NotFound` (`Collection not found`), as 1051, PostgreSQL 42P01 and SQLite `no such table` |
   | MariaDB/MySQL index on a column the table lacks (1072); SQLite `no such column` | `Exception\NotFound` (`Attribute not found`), as 1054 and PostgreSQL 42703 |
   | PostgreSQL invalid UTF-8 (22021) | `Exception\Character` (`Invalid character`), as MariaDB/MySQL 1366 |

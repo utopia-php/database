@@ -75,6 +75,12 @@ final class EngineErrorMappingTest extends TestCase
                 ContentionException::class,
                 'Lock not available',
             ],
+            'SQLite busy database' => [
+                self::sqlite(),
+                self::engineError('HY000', 5, 'SQLSTATE[HY000]: General error: 5 database is locked'),
+                ContentionException::class,
+                'Database is locked',
+            ],
             'Postgres invalid UTF-8' => [
                 self::postgres(),
                 self::engineError('22021', 7, 'SQLSTATE[22021]: Character not in repertoire: 7 ERROR:  invalid byte sequence for encoding "UTF8": 0xc3 0x28'),

@@ -420,7 +420,7 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `analyzeCollection()` refreshes planner statistics on PostgreSQL and SQLite (the collection's table and its
   permissions table) and returns `true`; it returned `false` there. Call it after bulk loads.
 - Engine errors map to library exceptions: lock conflicts (MariaDB/MySQL 1213, 1205; PostgreSQL 40P01, 40001,
-  55P03) to `Exception\Contention`, a subclass of `Exception\Transaction`; MariaDB/MySQL 1146 and 1072, SQLite `no such column`, PostgreSQL 22021, 42883
+  55P03; SQLite `database is locked`) to `Exception\Contention`, a subclass of `Exception\Transaction`; MariaDB/MySQL 1146 and 1072, SQLite `no such column`, PostgreSQL 22021, 42883
   and 42P01 naming an alias to `NotFound`, `Character` and `Query`; PostgreSQL's distinct() order error in any server
   language. PostgreSQL `deleteCollection()` of a collection whose table is gone succeeds again, and MariaDB/MySQL drop
   its permissions table too, so the collection can be created again. See [Errors](UPGRADE.md#errors).

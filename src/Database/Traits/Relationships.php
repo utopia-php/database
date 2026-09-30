@@ -680,6 +680,29 @@ trait Relationships
                     throw new RelationshipException('Invalid relationship type.');
             }
         } catch (Throwable $e) {
+            // Reverse adapter update
+            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
+                try {
+                    $reverseRelModel2 = new Relationship(
+                        collection: $collection->getId(),
+                        relatedCollection: $relatedCollection->getId(),
+                        type: $oldRel->type,
+                        twoWay: $oldRel->twoWay,
+                        key: $actualNewKey,
+                        twoWayKey: $actualNewTwoWayKey,
+                        onDelete: $oldRel->onDelete,
+                        side: $oldRel->side,
+                    );
+                    $this->adapter->updateRelationship(
+                        $reverseRelModel2,
+                        $id,
+                        $oldTwoWayKey
+                    );
+                } catch (Throwable) {
+                    // Best effort
+                }
+            }
+
             // Reverse completed index renames
             foreach (\array_reverse($indexRenamesCompleted) as [$coll, $from, $to]) {
                 try {
@@ -730,29 +753,6 @@ trait Relationships
                         $attr->setAttribute(Document::ID, $oldTwoWayKey);
                         $attr->setAttribute('key', $oldTwoWayKey);
                     }, triggerEvent: false);
-                } catch (Throwable) {
-                    // Best effort
-                }
-            }
-
-            // Reverse adapter update
-            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
-                try {
-                    $reverseRelModel2 = new Relationship(
-                        collection: $collection->getId(),
-                        relatedCollection: $relatedCollection->getId(),
-                        type: $oldRel->type,
-                        twoWay: $oldRel->twoWay,
-                        key: $actualNewKey,
-                        twoWayKey: $actualNewTwoWayKey,
-                        onDelete: $oldRel->onDelete,
-                        side: $oldRel->side,
-                    );
-                    $this->adapter->updateRelationship(
-                        $reverseRelModel2,
-                        $id,
-                        $oldTwoWayKey
-                    );
                 } catch (Throwable) {
                     // Best effort
                 }

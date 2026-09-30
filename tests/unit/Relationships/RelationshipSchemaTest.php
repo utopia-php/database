@@ -147,6 +147,44 @@ final class RelationshipSchemaTest extends TestCase
     }
 
     /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAFailedSecondIndexRenameReversesTheFirstAndTheDefinitions(Closure $adapter): void
+    {
+        $database = $this->database($adapter());
+        $database->createRelationship(Relationship::oneToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
+        $database->deleteIndex('authors', '_index_owner');
+        $physical = $this->schemaIndexIds($database, 'books');
+
+        try {
+            $database->updateRelationship('books', 'library', newKey: 'shelf', newTwoWayKey: 'keeper');
+            $this->fail('a rename whose second index is gone must fail');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to update relationship indexes for 'library': Index not found", $error->getMessage());
+        }
+
+        $this->assertSame(['library'], $this->indexAttributes($database, 'books', '_index_library'));
+        $this->assertNull($this->index($database, 'books', '_index_shelf'));
+        $this->assertContains('library', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('shelf', $this->attributeKeys($database, 'books'));
+        $this->assertContains('owner', $this->attributeKeys($database, 'authors'));
+        $this->assertNotContains('keeper', $this->attributeKeys($database, 'authors'));
+        $this->assertSame($physical, $this->schemaIndexIds($database, 'books'), 'the physical index is back under its old name');
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function schemaIndexIds(Database $database, string $collection): array
+    {
+        $ids = \array_map(static fn (Document $index): string => $index->getId(), $database->getSchemaIndexes($collection));
+        \sort($ids);
+
+        return $ids;
+    }
+
+    /**
      * @return list<string>
      */
     private function attributeKeys(Database $database, string $collection): array
@@ -310,5 +348,29 @@ final class RelationshipSchemaTest extends TestCase
         };
 
         return $this->prepare($database);
+    }
+
+    private function index(Database $database, string $collection, string $key): ?Index
+    {
+        /** @var array<Index> $indexes */
+        $indexes = $database->getCollection($collection)->getAttribute('indexes', []);
+        foreach ($indexes as $index) {
+            if ($index->key === $key) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function indexAttributes(Database $database, string $collection, string $key): array
+    {
+        $index = $this->index($database, $collection, $key);
+        $this->assertNotNull($index, "{$collection} has no index {$key}");
+
+        return $index->attributes;
     }
 }

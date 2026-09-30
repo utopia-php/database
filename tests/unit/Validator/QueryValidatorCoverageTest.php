@@ -8,9 +8,11 @@ use Utopia\Database\Document;
 use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
+use Utopia\Query\Schema\IndexType;
 
 final class QueryValidatorCoverageTest extends TestCase
 {
@@ -134,6 +136,27 @@ final class QueryValidatorCoverageTest extends TestCase
 
         $this->assertFalse($filter->isValid(new Query(Method::VectorEuclidean, 'author.embedding', [[1.0, 2.0, 3.0]])));
         $this->assertSame('Vector queries can only be used on vector attributes', $filter->getDescription());
+    }
+
+    public function testStringQueriesAreCheckedAgainstTheIndexesLikeQueryObjects(): void
+    {
+        $search = '{"method":"search","attribute":"name","values":["phrase"]}';
+        $attributes = [new Document([Document::ID => 'name', 'key' => 'name', 'type' => ColumnType::String->value, 'array' => false])];
+
+        $withoutFulltext = new IndexedQueries($attributes, [], [new Filter($attributes, ColumnType::Integer->value)]);
+        $this->assertFalse($withoutFulltext->isValid([$search]));
+        $this->assertSame('Searching by attribute "name" requires a fulltext index.', $withoutFulltext->getDescription());
+        $this->assertFalse($withoutFulltext->isValid([Query::parse($search)]));
+        $this->assertSame('Searching by attribute "name" requires a fulltext index.', $withoutFulltext->getDescription());
+
+        $withFulltext = new IndexedQueries(
+            $attributes,
+            [new Document(['type' => IndexType::Fulltext->value, 'attributes' => ['name']])],
+            [new Filter($attributes, ColumnType::Integer->value)],
+        );
+        $this->assertTrue($withFulltext->isValid([$search]), $withFulltext->getDescription());
+        $this->assertFalse($withFulltext->isValid(['{"method":"search"']));
+        $this->assertStringStartsWith('Invalid query: ', $withFulltext->getDescription());
     }
 
     private function filter(bool $supportForAttributes = true): Filter

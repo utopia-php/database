@@ -142,6 +142,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::Fulltext,
             Capability::TTLIndexes,
             Capability::Regex,
+            Capability::QueryContains,
             Capability::BatchCreateAttributes,
             Capability::Caching,
             Capability::Hostname,

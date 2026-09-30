@@ -142,4 +142,50 @@ trait MongoReadFilterTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testContainsFamilyMatchesLikeTheOtherEngines(): void
+    {
+        $database = $this->getDatabase();
+        $this->assertTrue($database->getAdapter()->supports(Capability::QueryContains));
+
+        $collection = 'contains_family';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 64, required: true),
+                Attribute::string(key: 'tags', size: 32, required: false, array: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        try {
+            $documents = [
+                'captain' => ['name' => 'Captain America', 'tags' => ['comics', 'action']],
+                'work' => ['name' => 'Work in Progress', 'tags' => ['drama']],
+                'kids' => ['name' => 'Frozen', 'tags' => ['kids']],
+                'untagged' => ['name' => 'Untitled', 'tags' => []],
+            ];
+            foreach ($documents as $id => $attributes) {
+                $database->createDocument($collection, new Document(['$id' => $id, ...$attributes]));
+            }
+
+            $idsOf = function (Query $query) use ($database, $collection): array {
+                $ids = \array_map(fn (Document $document): string => $document->getId(), $database->find($collection, [$query]));
+                \sort($ids);
+
+                return $ids;
+            };
+
+            $this->assertSame(['captain', 'kids'], $idsOf(Query::contains('tags', ['comics', 'kids'])));
+            $this->assertSame(['captain', 'kids'], $idsOf(Query::containsAny('tags', ['comics', 'kids'])));
+            $this->assertSame(['kids', 'untagged', 'work'], $idsOf(Query::notContains('tags', ['comics'])));
+            $this->assertSame(['captain', 'work'], $idsOf(Query::contains('name', ['Captain', 'Work'])));
+            $this->assertSame(['captain', 'work'], $idsOf(Query::containsAny('name', ['Captain', 'Work'])));
+            $this->assertSame(['kids', 'untagged', 'work'], $idsOf(Query::notContains('name', ['Captain'])));
+            $this->assertSame(['kids', 'untagged'], $database->skipValidation(fn (): array => $idsOf(Query::notEqual('name', ['Captain America', 'Work in Progress']))));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

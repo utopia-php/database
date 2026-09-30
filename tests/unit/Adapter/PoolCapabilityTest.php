@@ -19,6 +19,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 
@@ -56,7 +57,39 @@ final class PoolCapabilityTest extends TestCase
 
     public function testAWarmValidatedReadChecksOutOnlyForDefinedAttributes(): void
     {
-        $memory = new class () extends Memory {
+        $memory = $this->askedMemory();
+        $database = $this->database($this->connections($memory));
+        $selection = [Query::select(['title'])];
+        $database->getDocument('posts', 'first', $selection);
+
+        $this->checkouts = 0;
+        $memory->asked = [];
+        $database->getDocument('posts', 'first', $selection);
+
+        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $memory->asked);
+        $this->assertSame(2, $this->checkouts);
+    }
+
+    public function testAWarmValidatedReadWithoutQueriesChecksOutNoConnection(): void
+    {
+        $memory = $this->askedMemory();
+        $database = $this->database($this->connections($memory));
+        $database->getDocument('posts', 'first');
+
+        $this->checkouts = 0;
+        $memory->asked = [];
+        $database->getDocument('posts', 'first');
+
+        $this->assertSame([], $memory->asked);
+        $this->assertSame(0, $this->checkouts);
+    }
+
+    /**
+     * @return Memory&object{asked: list<string>}
+     */
+    private function askedMemory(): Memory
+    {
+        return new class () extends Memory {
             /** @var list<string> */
             public array $asked = [];
 
@@ -67,15 +100,6 @@ final class PoolCapabilityTest extends TestCase
                 return parent::supports($feature);
             }
         };
-        $database = $this->database($this->connections($memory));
-        $database->getDocument('posts', 'first');
-
-        $this->checkouts = 0;
-        $memory->asked = [];
-        $database->getDocument('posts', 'first');
-
-        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $memory->asked);
-        $this->assertSame(2, $this->checkouts);
     }
 
     public function testACapabilityQuestionOnAColdPoolChecksOutOnce(): void

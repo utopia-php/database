@@ -2,10 +2,8 @@
 
 namespace Tests\Unit;
 
-use Exception;
 use PDOException;
 use PHPUnit\Framework\TestCase;
-use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Document;
@@ -363,9 +361,13 @@ final class SQLGetDocumentTest extends TestCase
 
     private function createTimeoutException(): PDOException
     {
-        $exception = new PDOException('Query execution was interrupted');
-        $code = new ReflectionProperty(Exception::class, 'code');
-        $code->setValue($exception, 'HY000');
+        $exception = new class ('Query execution was interrupted', 'HY000') extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $exception->errorInfo = ['HY000', 3024, 'Query execution was interrupted'];
 
         return $exception;

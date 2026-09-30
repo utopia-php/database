@@ -992,37 +992,32 @@ class Redis extends Adapter implements
                     $merged[Document::PERMISSIONS] = $updates->getPermissions();
                 }
 
-                $writes[] = [
-                    'id' => $doc->getId(),
-                    'docKey' => $docKeys[$i],
-                    'payload' => $existingPayload,
-                    'document' => new Document($merged),
-                ];
+                $writes[] = new Write($doc->getId(), $docKeys[$i], $existingPayload, new Document($merged));
             }
 
             if ($attrs !== []) {
                 $this->enforceUniqueIndexesForDocuments(
                     $redis,
                     $col,
-                    \array_column($writes, 'document'),
-                    \array_column($writes, 'id'),
+                    \array_map(static fn (Write $write): Document => $write->document, $writes),
+                    \array_map(static fn (Write $write): string => $write->id, $writes),
                 );
             }
 
-            foreach ($writes as ['id' => $uid, 'docKey' => $docKey, 'payload' => $existingPayload, 'document' => $mergedDocument]) {
-                $redis->set($docKey, $this->encode($mergedDocument));
+            foreach ($writes as $write) {
+                $redis->set($write->key, $this->encode($write->document));
 
                 $this->journal('updateDoc', [
                     'collection' => $col,
-                    'id' => $uid,
-                    'newId' => $uid,
-                    'payload' => $existingPayload,
-                    'docKey' => $docKey,
+                    'id' => $write->id,
+                    'newId' => $write->id,
+                    'payload' => $write->payload,
+                    'docKey' => $write->key,
                 ]);
 
                 if ($hasPermissions) {
-                    $this->clearPermissions($col, $uid);
-                    $this->writePermissions($col, $uid, $mergedDocument);
+                    $this->clearPermissions($col, $write->id);
+                    $this->writePermissions($col, $write->id, $write->document);
                 }
             }
 

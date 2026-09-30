@@ -76,13 +76,8 @@ trait Transactions
     }
 
     /**
-     * Run the callback in an adapter transaction that leaves no document purge event of a
-     * rolled-back attempt queued: each attempt starts from the events queued before the
-     * transaction, and a transaction that fails drops the events queued inside it when the
-     * adapter rolls a nested transaction back to its savepoint. Without savepoints nothing
-     * rolls a failed nested call back, so its writes stay in the caller's transaction and so
-     * do their events; a failed outermost transaction drops every event in the invalidation
-     * scope instead.
+     * Run the callback in an adapter transaction, dropping the document purge events of every attempt the adapter
+     * rolls back. Without savepoints a failed nested call is not rolled back, so its events stay queued.
      *
      * @template T
      *

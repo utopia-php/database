@@ -13,6 +13,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
+use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -640,7 +641,7 @@ trait Documents
 
         $collectionState = $cacheable && $definition
             ? $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])
-            : ['epoch' => null, 'blockedAt' => null];
+            : new Epoch();
 
         $document = $this->castingAfter($collection, $document);
 
@@ -691,12 +692,12 @@ trait Documents
                     $field,
                     $document->getArrayCopy(),
                     [
-                        self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionState['epoch'],
-                        self::DOCUMENT_CACHE_BLOCKED_AT => $collectionState['blockedAt'],
+                        self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionState->value,
+                        self::DOCUMENT_CACHE_BLOCKED_AT => $collectionState->blockedAt,
                         self::DOCUMENT_CACHE_CHECKED_AT => \time(),
                     ],
                     $generation,
-                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])['epoch'] === $collectionState['epoch'],
+                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])->value === $collectionState->value,
                 );
             }
         } catch (Exception $e) {
@@ -707,7 +708,7 @@ trait Documents
 
         $this->trigger(Event::DocumentRead, $document);
 
-        $this->attachCollectionCacheEpoch($document, $collectionState['epoch']);
+        $this->attachCollectionCacheEpoch($document, $collectionState->value);
 
         return $document;
     }
@@ -2964,10 +2965,8 @@ trait Documents
      * The epoch a collection's documents may be cached under, or null while a write to the collection
      * is in flight, with the time that write blocked it. A tombstone older than the writer timeout
      * lapses into an epoch of its own, which a later activation changes.
-     *
-     * @return array{epoch: ?string, blockedAt: ?int}
      */
-    private function loadDocumentCacheState(string $collectionKey): array
+    private function loadDocumentCacheState(string $collectionKey): Epoch
     {
         $now = \time();
 
@@ -2984,13 +2983,13 @@ trait Documents
             if (\str_starts_with($record, self::DOCUMENT_CACHE_BLOCKED_PREFIX)) {
                 $blockedAt = \ctype_digit($stamp) ? (int) $stamp : 0;
                 if ($blockedAt + $this->cacheWriterTimeout > $now) {
-                    return ['epoch' => null, 'blockedAt' => $blockedAt];
+                    return new Epoch(blockedAt: $blockedAt);
                 }
 
                 $tombstone = \substr($record, \strlen(self::DOCUMENT_CACHE_BLOCKED_PREFIX));
                 $finished = $this->cache->getGeneration($collectionKey.'#finished');
 
-                return ['epoch' => self::DOCUMENT_CACHE_LAPSED_PREFIX.$tombstone.self::DOCUMENT_CACHE_SEPARATOR.$finished, 'blockedAt' => null];
+                return new Epoch(self::DOCUMENT_CACHE_LAPSED_PREFIX.$tombstone.self::DOCUMENT_CACHE_SEPARATOR.$finished);
             }
 
             $started = $this->cache->getGeneration($collectionKey.'#started');
@@ -2998,14 +2997,14 @@ trait Documents
                 ($separator !== false && $started === $stamp)
                 || $started === $this->cache->getGeneration($collectionKey.'#finished')
             ) {
-                return ['epoch' => $marker, 'blockedAt' => null];
+                return new Epoch($marker);
             }
 
             return $this->restoreDocumentCacheEpoch($collectionKey, $now);
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to load document cache epoch: '.$error->getMessage());
 
-            return ['epoch' => null, 'blockedAt' => $now];
+            return new Epoch(blockedAt: $now);
         }
     }
 
@@ -3013,24 +3012,22 @@ trait Documents
      * Replace a missing or unusable epoch: with a fresh one when no write is counted in flight, or
      * else with a tombstone of its own, so the collection lapses back into the cache after the writer
      * timeout even when the write that blocked it left no tombstone behind.
-     *
-     * @return array{epoch: ?string, blockedAt: ?int}
      */
-    private function restoreDocumentCacheEpoch(string $collectionKey, int $now): array
+    private function restoreDocumentCacheEpoch(string $collectionKey, int $now): Epoch
     {
         $started = $this->cache->getGeneration($collectionKey.'#started');
         if ($started !== $this->cache->getGeneration($collectionKey.'#finished')) {
             $this->cache->save($collectionKey.'#epoch', self::DOCUMENT_CACHE_BLOCKED_PREFIX.$this->createDocumentCacheToken().self::DOCUMENT_CACHE_SEPARATOR.$now);
 
-            return ['epoch' => null, 'blockedAt' => $now];
+            return new Epoch(blockedAt: $now);
         }
 
         $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
         if ($this->cache->save($collectionKey.'#epoch', $epoch.self::DOCUMENT_CACHE_SEPARATOR.$started) === false) {
-            return ['epoch' => null, 'blockedAt' => $now];
+            return new Epoch(blockedAt: $now);
         }
 
-        return ['epoch' => $epoch, 'blockedAt' => null];
+        return new Epoch($epoch);
     }
 
     /**

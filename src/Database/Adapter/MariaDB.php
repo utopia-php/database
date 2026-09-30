@@ -1028,6 +1028,10 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
 
     private function applyTimeout(int $milliseconds): void
     {
+        if ($milliseconds === 0 && $this->appliedTimeout === 0) {
+            return;
+        }
+
         $round = $this->getSessionRound();
         if ($round !== $this->appliedRound) {
             $this->appliedTimeout = 0;

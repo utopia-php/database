@@ -1179,23 +1179,60 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
+     * The LOCAL statement timeout in force in the open transaction, in milliseconds:
+     * 0 is the default, null is unknown after a rollback to a savepoint.
+     */
+    private ?int $localTimeout = 0;
+
+    public function commitTransaction(): bool
+    {
+        try {
+            return parent::commitTransaction();
+        } finally {
+            if ($this->inTransaction === 0) {
+                $this->localTimeout = 0;
+            }
+        }
+    }
+
+    public function rollbackTransaction(): bool
+    {
+        try {
+            return parent::rollbackTransaction();
+        } finally {
+            $this->localTimeout = $this->inTransaction === 0 ? 0 : null;
+        }
+    }
+
+    public function reconnect(): void
+    {
+        $this->localTimeout = null;
+        parent::reconnect();
+        $this->localTimeout = 0;
+    }
+
+    /**
      * @param  PDOStatement|DatabasePDOStatement|PDOStatementProxy  $stmt
      */
     protected function execute(mixed $stmt, ?Event $event = null): bool
     {
-        $pdo = $this->getPDO();
         $event ??= $this->getStatementEvent($stmt);
         $timeout = $event === null ? $this->getTimeout() : $this->getTimeout($event);
+
+        if ($this->inTransaction > 0) {
+            $this->applyLocalTimeout($timeout);
+
+            return $this->executeAndProfile($stmt);
+        }
+
+        $this->localTimeout = 0;
 
         if ($timeout === 0) {
             return $this->executeAndProfile($stmt);
         }
 
-        $sql = $this->inTransaction === 0
-            ? "SET statement_timeout = '{$timeout}ms'"
-            : "SET LOCAL statement_timeout = '{$timeout}ms'";
-
-        $pdo->exec($sql);
+        $pdo = $this->getPDO();
+        $pdo->exec("SET statement_timeout = '{$timeout}ms'");
 
         $exception = null;
         try {
@@ -1205,15 +1242,26 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             throw $error;
         } finally {
             try {
-                $pdo->exec($this->inTransaction === 0
-                    ? 'RESET statement_timeout'
-                    : 'SET LOCAL statement_timeout = DEFAULT');
+                $pdo->exec('RESET statement_timeout');
             } catch (Throwable $error) {
                 if ($exception === null) {
                     throw $error;
                 }
             }
         }
+    }
+
+    private function applyLocalTimeout(int $milliseconds): void
+    {
+        if ($milliseconds === $this->localTimeout) {
+            return;
+        }
+
+        $this->getPDO()->exec($milliseconds === 0
+            ? 'SET LOCAL statement_timeout = DEFAULT'
+            : "SET LOCAL statement_timeout = '{$milliseconds}ms'");
+
+        $this->localTimeout = $milliseconds;
     }
 
     /**

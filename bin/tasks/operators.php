@@ -57,9 +57,6 @@ $cli
         Console::info("Database: {$name}");
         Console::info("=============================================================\n");
 
-        // ------------------------------------------------------------------
-        // Adapter configuration
-        // ------------------------------------------------------------------
         $dbAdapters = [
             'mariadb' => [
                 'host' => 'mariadb',
@@ -947,9 +944,6 @@ function displayResults(array $results, string $adapter, int $iterations, int $s
     Console::info("Seeded documents: {$seed}");
     Console::info("=============================================================\n");
 
-    // ==================================================================
-    // OPERATION TYPE RESULTS
-    // ==================================================================
     Console::info("=== OPERATION PERFORMANCE (Overhead Check) ===\n");
     Console::info("This section verifies NO OVERHEAD for non-operator operations:\n");
 

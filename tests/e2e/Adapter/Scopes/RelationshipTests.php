@@ -557,13 +557,17 @@ trait RelationshipTests
         // fetch user with posts populated
         $fetchedUser = $database->getDocument('usersSimple', 'user1');
         $posts = $fetchedUser->getDocuments('posts');
+        $populatedPosts = $fetchedUser->getAttribute('posts');
 
         $this->assertCount(2, $posts, 'Should have 2 posts');
+        $this->assertIsArray($populatedPosts);
+        $this->assertInstanceOf(Document::class, $populatedPosts[0] ?? null, 'First post should be a Document object');
         $this->assertEquals('First Post', $posts[0]->getAttribute('title'), 'First post title should be populated');
 
         $fetchedPosts = $database->find('postsSimple');
 
         $this->assertCount(2, $fetchedPosts, 'Should fetch 2 posts');
+        $this->assertInstanceOf(Document::class, $fetchedPosts[0]->getAttribute('author'), 'Author should be a Document object');
         $this->assertEquals('John Doe', $fetchedPosts[0]->getDocument('author')->getAttribute('name'), 'Author name should be populated');
     }
 

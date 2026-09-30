@@ -2,47 +2,41 @@
 
 namespace Tests\Unit;
 
-use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use Utopia\Database\Adapter\MySQL;
-use Utopia\Database\Adapter\Postgres;
-use Utopia\Database\Adapter\SQL;
+use Utopia\Cache\Adapter\None;
+use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Operator;
 use Utopia\Database\PDO;
 
 final class SQLOperatorBindingTest extends TestCase
 {
-    /**
-     * @return array<string, array{class-string<SQL>}>
-     */
-    public static function adapterClasses(): array
+    public function testUpsertBindsOperatorsToDatabaseStatement(): void
     {
-        return [
-            'mysql' => [MySQL::class],
-            'postgres' => [Postgres::class],
-            'sqlite' => [SQLite::class],
-        ];
-    }
+        $database = new Database(new SQLite(new PDO('sqlite::memory:', null, null)), new Cache(new None()));
+        $database->setDatabase('operators')->setNamespace('operators');
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'scores',
+            attributes: [Attribute::integer(key: 'value')],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+        $database->createDocument('scores', new Document(['$id' => 'first', 'value' => 1]));
 
-    /**
-     * @param class-string<SQL> $adapterClass
-     */
-    #[DataProvider('adapterClasses')]
-    public function testBindsOperatorsToDatabaseStatement(string $adapterClass): void
-    {
-        $connection = new PDO('sqlite::memory:', null, null);
-        $statement = $connection->prepare('SELECT :op_0');
-        $adapter = new $adapterClass($connection);
-        $bindIndex = 0;
+        $database->upsertDocuments('scores', [new Document(['$id' => 'first', 'value' => Operator::increment(2)])]);
 
-        $method = new ReflectionMethod($adapter, 'bindOperatorParams');
-        $method->invokeArgs($adapter, [$statement, Operator::increment(2), &$bindIndex]);
-
-        /** @var mixed $bindIndex */
-        $this->assertSame(1, $bindIndex);
-        $this->assertTrue($statement->execute());
-        $this->assertSame(2, $statement->fetchColumn());
+        $this->assertSame(3, $database->getDocument('scores', 'first')->getAttribute('value'));
     }
 }

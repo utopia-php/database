@@ -346,7 +346,7 @@ class CollectionModelTest extends TestCase
         $this->assertSame($indexes, $collection->indexes);
         $this->assertSame($permissions, $collection->permissions);
         $this->assertFalse($collection->documentSecurity);
-        $this->assertSame('title', $collection->search);
+        $this->assertSame('title', $collection->__get('search'));
     }
 
     public function testAssigningNullPermissions(): void

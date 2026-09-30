@@ -3368,10 +3368,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * Keys cannot begin with $ in MongoDB
      * Convert $ prefix to _ on $id, $permissions, and $collection
      *
-     * @template TKey of array-key
-     *
-     * @param  array<TKey, mixed>  $array
-     * @return array<TKey|string, mixed>
+     * @param  array<mixed>  $array  A document's fields, or a nested value of one (a list keeps its keys)
+     * @return array<string, mixed>
      */
     protected function replaceChars(string $from, string $to, array $array): array
     {
@@ -3379,7 +3377,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $keysToRename = [];
         foreach ($array as $k => $v) {
             if (is_array($v)) {
-                /** @var array<array-key, mixed> $v */
                 $array[$k] = $this->replaceChars($from, $to, $v);
             }
 
@@ -3445,6 +3442,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
         }
 
+        /** @var array<string, mixed> $array */
         return $array;
     }
 

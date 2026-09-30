@@ -1478,7 +1478,7 @@ trait JoinComboTests
             $this->assertNotNull($afterScore);
             $this->assertTrue($after[0]->getId() === '' || \in_array($after[0]->getId(), ['hm1', 'hm2', 'hm3'], true));
 
-            $next = $full[$cursorIndex + 1] ?? null;
+            $next = $full[(int) $cursorIndex + 1] ?? null;
             $this->assertNotNull($next);
             $this->assertSame($this->comboJoinScore($next), $afterScore);
             $this->assertSame($next->getId(), $after[0]->getId());

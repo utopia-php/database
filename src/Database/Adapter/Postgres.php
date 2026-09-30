@@ -344,6 +344,27 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
+     * Refresh the planner statistics of a collection's table and its permissions table.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+        $schema = $this->createSchemaBuilder();
+
+        $main = $schema->analyzeTable($this->getSQLTableRaw($name));
+        $permissions = $schema->analyzeTable($this->getSQLTableRaw(Storage::permissionsTable($name)));
+
+        try {
+            return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionUpdate);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+    }
+
+    /**
      * Get Collection Size on disk
      *
      * @throws DatabaseException

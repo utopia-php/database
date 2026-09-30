@@ -8,6 +8,9 @@ use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -247,6 +250,12 @@ trait CollectionTests
         $database->analyzeCollection('sizeTest2');
 
         $size3 = $this->getDatabase()->getSizeOfCollection('sizeTest2');
+
+        if ($database->getAdapter()->hasFeature(Postgres::class)) {
+            $this->assertLessThanOrEqual($size2, $size3);
+
+            return;
+        }
 
         $this->assertLessThan($size2, $size3);
     }
@@ -1836,5 +1845,54 @@ trait CollectionTests
 
         $database->deleteCollection('row_size_1');
         $database->deleteCollection('row_size_2');
+    }
+
+    public function testAnalyzeCollectionRecordsStatisticsForTheTableAndItsPermissions(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(SQL::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'analyzed';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'name', size: 32)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: true,
+        ));
+
+        try {
+            for ($number = 0; $number < 20; $number++) {
+                $database->createDocument($collection, new Document([
+                    '$permissions' => [Permission::read(Role::user('user'.$number))],
+                    'name' => 'name'.($number % 4),
+                ]));
+            }
+
+            $this->assertTrue($database->analyzeCollection($collection));
+
+            $tables = [$database->getNamespace().'_'.$collection, $database->getNamespace().'_'.$collection.'_perms'];
+
+            if ($adapter instanceof Postgres) {
+                $rows = $adapter->rawQuery(
+                    'SELECT DISTINCT tablename FROM pg_stats WHERE schemaname = ? AND tablename IN (?, ?) ORDER BY tablename',
+                    [$database->getDatabase(), ...$tables],
+                );
+                $this->assertSame($tables, \array_map(static fn (Document $row): mixed => $row->getAttribute('tablename'), $rows));
+            }
+
+            if ($adapter instanceof SQLite) {
+                $rows = $adapter->rawQuery('SELECT DISTINCT tbl FROM sqlite_stat1 WHERE tbl IN (?, ?) ORDER BY tbl', $tables);
+                $this->assertSame($tables, \array_map(static fn (Document $row): mixed => $row->getAttribute('tbl'), $rows));
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
     }
 }

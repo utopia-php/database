@@ -6,6 +6,7 @@ use Closure;
 use Exception;
 use PDO;
 use PDOException;
+use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
@@ -83,6 +84,55 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertSame($error, self::sqlite()($error));
     }
 
+    public function testPostgresDeleteCollectionWithoutItsTableIsNotFoundAndStillDropsThePermissionsTable(): void
+    {
+        $statements = [];
+        $adapter = $this->postgresRecording($statements, self::engineError('42P01', 7, 'SQLSTATE[42P01]: Undefined table: 7 ERROR:  table "engine_orders" does not exist'));
+
+        $error = null;
+        try {
+            $adapter->deleteCollection('orders');
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(NotFoundException::class, $error);
+        $this->assertSame('Collection not found', $error->getMessage());
+        $this->assertSame([
+            'DROP TABLE "utopiaTests"."engine_orders"; DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
+            'DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
+        ], $statements);
+    }
+
+    public function testPostgresDeleteCollectionDropsBothTablesInOneStatement(): void
+    {
+        $statements = [];
+        $adapter = $this->postgresRecording($statements);
+
+        $this->assertTrue($adapter->deleteCollection('orders'));
+        $this->assertSame([
+            'DROP TABLE "utopiaTests"."engine_orders"; DROP TABLE IF EXISTS "utopiaTests"."engine_orders_perms"',
+        ], $statements);
+    }
+
+    public function testPostgresDeleteCollectionPassesOtherErrorsThrough(): void
+    {
+        $statements = [];
+        $lockTimeout = self::engineError('55P03', 7, 'SQLSTATE[55P03]: Lock not available: 7 ERROR:  canceling statement due to lock timeout');
+        $adapter = $this->postgresRecording($statements, $lockTimeout);
+
+        $error = null;
+        try {
+            $adapter->deleteCollection('orders');
+        } catch (Throwable $caught) {
+            $error = $caught;
+        }
+
+        $this->assertInstanceOf(TransactionException::class, $error);
+        $this->assertSame($lockTimeout, $error->getPrevious());
+        $this->assertCount(1, $statements);
+    }
+
     /**
      * @param  Closure(PDOException): Throwable  $map
      * @param  class-string<Throwable>  $expected
@@ -94,6 +144,31 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertInstanceOf($expected, $mapped);
         $this->assertSame($message, $mapped->getMessage());
         $this->assertSame($error, $mapped->getPrevious());
+    }
+
+    /**
+     * @param  list<string>  $statements
+     */
+    private function postgresRecording(array &$statements, ?PDOException $firstError = null): Postgres
+    {
+        $pdo = $this->createStub(PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $sql) use (&$statements, $firstError): PDOStatement {
+            $statements[] = $sql;
+            $statement = $this->createStub(PDOStatement::class);
+            if ($firstError !== null && \count($statements) === 1) {
+                $statement->method('execute')->willThrowException($firstError);
+            } else {
+                $statement->method('execute')->willReturn(true);
+            }
+
+            return $statement;
+        });
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('utopiaTests');
+        $adapter->setNamespace(self::NAMESPACE);
+
+        return $adapter;
     }
 
     private static function engineError(string $state, int $code, string $message): PDOException

@@ -8,6 +8,8 @@ use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -1836,5 +1838,51 @@ trait CollectionTests
 
         $database->deleteCollection('row_size_1');
         $database->deleteCollection('row_size_2');
+    }
+
+    public function testCollectionWhoseTableIsGoneIsNotFoundAndCanBeDeleted(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'tableGone';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+
+        $this->dropCollectionTable($database, $collection);
+
+        try {
+            $database->find($collection);
+            $this->fail('Expected NotFoundException for a collection whose table is gone');
+        } catch (NotFoundException $e) {
+            $this->assertSame('Collection not found', $e->getMessage());
+        }
+
+        $this->assertTrue($database->deleteCollection($collection));
+        $this->assertTrue($database->getCollection($collection)->isEmpty());
+
+        if ($adapter instanceof Postgres || $adapter instanceof SQLite) {
+            $database->createCollection(new Collection(id: $collection, permissions: [Permission::read(Role::any())]));
+            $this->assertTrue($database->deleteCollection($collection), 'The permissions table of the collection whose table was gone was left behind');
+        }
+    }
+
+    private function dropCollectionTable(Database $database, string $collection): void
+    {
+        $table = $database->getNamespace().'_'.$collection;
+        if (! $database->getAdapter() instanceof SQLite) {
+            $table = $database->getDatabase().'.'.$table;
+        }
+
+        $database->getAuthorization()->skip(fn () => $database->schema()->table($table)->drop()->execute());
     }
 }

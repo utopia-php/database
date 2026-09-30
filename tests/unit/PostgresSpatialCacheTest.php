@@ -134,8 +134,9 @@ final class PostgresSpatialCacheTest extends TestCase
 
         $adapter->createDocument($collection, new Document(['$id' => 'document', '$permissions' => [], ...$attributes]));
 
-        $this->assertNotSame([], $this->statements);
+        $statement = $this->statements[0] ?? null;
+        $this->assertIsString($statement);
 
-        return $this->statements[0];
+        return $statement;
     }
 }

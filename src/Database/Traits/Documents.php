@@ -1624,8 +1624,9 @@ trait Documents
             sort($currentPermissions);
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $adapterUpdates, &$batch, $currentPermissions) {
-                foreach ($batch as $index => $document) {
+            $found = $batch;
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+                foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists(Document::PERMISSIONS)) {

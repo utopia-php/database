@@ -130,6 +130,47 @@ final class DocumentWriteMinorsTest extends TestCase
         $this->assertSame(['k' => 2], $database->getDocument(self::COLLECTION, 'first')->getAttribute('data'));
     }
 
+    public function testRetriedBulkUpdateHandsOnNextDecodedValues(): void
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite
+        {
+            public int $commitFailures = 0;
+
+            public function commitTransaction(): bool
+            {
+                if ($this->commitFailures > 0) {
+                    $this->commitFailures--;
+
+                    throw new RuntimeException('Commit failed');
+                }
+
+                return parent::commitTransaction();
+            }
+        };
+        $database = $this->database($adapter);
+        $database->createDocument(self::COLLECTION, new Document(['$id' => 'first', 'counter' => 1, 'secret' => 'alpha']));
+        /** @var list<Document> $handed */
+        $handed = [];
+        $adapter->commitFailures = 1;
+
+        $modified = $database->updateDocuments(
+            self::COLLECTION,
+            new Document(['counter' => 2]),
+            onNext: function (Document $document) use (&$handed): void {
+                $handed[] = $document;
+            },
+        );
+
+        $this->assertSame(0, $adapter->commitFailures);
+        $this->assertSame(1, $modified);
+        $this->assertCount(1, $handed);
+        $this->assertSame('alpha', $handed[0]->getAttribute('secret'));
+        $this->assertSame(2, $handed[0]->getAttribute('counter'));
+        $stored = $database->getDocument(self::COLLECTION, 'first');
+        $this->assertSame('alpha', $stored->getAttribute('secret'));
+        $this->assertSame(2, $stored->getAttribute('counter'));
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

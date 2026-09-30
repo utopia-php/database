@@ -133,6 +133,15 @@ final class ColumnRenameTest extends TestCase
         $this->assertSame([], \array_filter($this->statements, fn (string $statement): bool => \str_starts_with($statement, self::POSTGRES_CATALOG)));
     }
 
+    public function testPostgresRenameIndexLeavesAnIndexAnotherTenantCreatedToItsOwner(): void
+    {
+        $adapter = $this->createPostgres([]);
+
+        $this->assertTrue($adapter->renameIndex('users', 'byAge', 'byYears'));
+
+        $this->assertSame(['ALTER INDEX IF EXISTS "database"."namespace_2_users_byAge" RENAME TO "namespace_2_users_byYears"'], $this->statements);
+    }
+
     /**
      * @param  class-string<MariaDB>  $adapterClass
      */

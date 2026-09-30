@@ -782,6 +782,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $schemaBuilder = $this->createSchemaBuilder();
         $schemaQualifiedOld = $schemaName.'.'.$oldIndexName;
         $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $schemaQualifiedOld, $newIndexName)->query;
+        $sql = \str_replace('ALTER INDEX', 'ALTER INDEX IF EXISTS', $sql);
 
         return $this->executeStatement($sql, Event::IndexRename);
     }

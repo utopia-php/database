@@ -412,8 +412,7 @@ class Mirror extends Database
     }
 
     /**
-     * The source's and destination's scopes enclose the mirror's own: Database::skipFilters()
-     * disables through disableFilters(), which reaches them, but restores only the mirror's flag.
+     * Opens the scope on the mirror, its source and its destination.
      *
      * {@inheritdoc}
      */
@@ -532,30 +531,43 @@ class Mirror extends Database
     }
 
     /**
-     * Writes through the mirror run on the source, so the scope opens there too. The destination
-     * keeps its own state: a replicated write can still be running on it after the scope closes.
+     * Opens the scope on the mirror, its source and its destination, so the writes the mirror replicates before
+     * returning use the tenant too; the replications it queues carry it (see replicate()).
      *
      * {@inheritdoc}
      */
     public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
-        return parent::withTenant($tenant, fn (): mixed => $this->source->withTenant($tenant, $callback));
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withTenant($tenant, $callback);
+
+        return parent::withTenant($tenant, fn (): mixed => $this->source->withTenant($tenant, $scoped));
     }
 
     /**
+     * Opens the scope on the mirror, its source and its destination.
+     *
      * {@inheritdoc}
      */
     public function withPreserveDates(callable $callback): mixed
     {
-        return parent::withPreserveDates(fn (): mixed => $this->source->withPreserveDates($callback));
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveDates($callback);
+
+        return parent::withPreserveDates(fn (): mixed => $this->source->withPreserveDates($scoped));
     }
 
     /**
+     * Opens the scope on the mirror, its source and its destination.
+     *
      * {@inheritdoc}
      */
     public function withPreserveSequence(callable $callback): mixed
     {
-        return parent::withPreserveSequence(fn (): mixed => $this->source->withPreserveSequence($callback));
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveSequence($callback);
+
+        return parent::withPreserveSequence(fn (): mixed => $this->source->withPreserveSequence($scoped));
     }
 
     /**
@@ -630,7 +642,8 @@ class Mirror extends Database
     }
 
     /**
-     * Scoped to the mirror and its source, like withTenant(), so the callback runs once.
+     * Scoped to the mirror and its source only: the source checks the timestamp, and the destination applies
+     * what the source accepted.
      *
      * {@inheritdoc}
      */
@@ -1742,8 +1755,9 @@ class Mirror extends Database
     }
 
     /**
-     * Applies a write to the destination under the authorization, relationship and silence state the caller has at
-     * the time of the call, and reports a failure through onError(). Inside a coroutine the write runs in a coroutine
+     * Applies a write to the destination under the authorization, relationship, silence, tenant and toggle state the
+     * caller has at the time of the call, without its request timestamp (the source checked it), and reports a
+     * failure through onError(). Inside a coroutine the write runs in a coroutine
      * of its own, once every earlier replication that can reach the same documents has finished; outside one it runs
      * before this returns, since a task that yields outside a scheduler never resumes.
      *
@@ -1760,7 +1774,10 @@ class Mirror extends Database
         $snapshot = $this->source->snapshot();
         $apply = function () use ($action, $destination, $snapshot, $write): void {
             try {
-                $destination->withSnapshot($snapshot, $write);
+                $destination->withSnapshot(
+                    $snapshot,
+                    fn (): mixed => $destination->withRequestTimestamp(null, $write),
+                );
             } catch (Throwable $error) {
                 $this->logError($action, $error);
             }

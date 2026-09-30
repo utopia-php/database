@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use Closure;
+use DateTime;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -278,6 +279,100 @@ final class MirrorReplicationTest extends TestCase
 
         $this->assertSame(2, $pending, 'The bulk update waits on the create, and the delete on the bulk update');
         $this->assertSame(0, $mirror->countPendingReplications());
+    }
+
+    public function testConcurrentReplicationsDoNotShareTheDestinationsSkipDuplicates(): void
+    {
+        $this->authorization->skip(fn (): Document => $this->destination->createDocument(self::NOTES, new Document([
+            Document::ID => 'second',
+            'title' => 'only on the destination',
+        ])));
+        $this->writes = [];
+        $this->delays = ['skipping' => 0.03];
+
+        $this->inCoroutine(function (): void {
+            $this->mirror->skipDuplicates(fn (): int => $this->mirror->createDocuments(self::NOTES, [
+                new Document([Document::ID => 'first', 'title' => 'skipping']),
+            ]));
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'second', 'title' => 'duplicate'])]);
+        });
+
+        $this->assertCount(1, $this->errors);
+        $this->assertSame('createDocuments', $this->errors[0][0]);
+        $this->assertStringContainsString('already exists', $this->errors[0][1]);
+        $this->assertSame([['first', 'skipping']], $this->titlesWritten());
+        $this->assertSame('only on the destination', $this->destination->getDocument(self::NOTES, 'second')->getAttribute('title'));
+    }
+
+    public function testOverlappingReplicationsLeaveTheDestinationsPreserveDatesSetting(): void
+    {
+        $this->delays = ['early' => 0.01, 'late' => 0.03];
+
+        $this->inCoroutine(function (): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'early'])]);
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'second', 'title' => 'late'])]);
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['first', 'early'], ['second', 'late']], $this->titlesWritten());
+        $this->assertFalse($this->destination->getPreserveDates());
+    }
+
+    public function testAReplicationDoesNotRecheckTheCallersRequestTimestampOnTheDestination(): void
+    {
+        \usleep(5000);
+        $requestTimestamp = new DateTime();
+        \usleep(5000);
+        $this->destination->updateDocument(self::NOTES, 'public', new Document(['views' => 2]));
+        $this->writes = [];
+
+        $this->inCoroutine(function () use ($requestTimestamp): void {
+            $this->mirror->withRequestTimestamp(
+                $requestTimestamp,
+                fn (): int => $this->mirror->upsertDocuments(self::NOTES, [new Document([Document::ID => 'public', 'title' => 'v1'])]),
+            );
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['public', 'v1']], $this->titlesWritten());
+    }
+
+    public function testSynchronousAndAsynchronousReplicationsUseTheCallersTenant(): void
+    {
+        $destination = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()));
+        $mirror = new Mirror(new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None())), $destination);
+        $mirror
+            ->setAuthorization(new Authorization())
+            ->setDatabase('mirror')
+            ->setNamespace('tenants_'.\uniqid())
+            ->setSharedTables(true)
+            ->setTenant(1)
+            ->create();
+        $mirror->onError(function (string $action, Throwable $error): void {
+            $this->errors[] = [$action, $error->getMessage()];
+        });
+        foreach ([1, 2] as $tenant) {
+            $mirror->setTenant($tenant);
+            $mirror->createCollection(new Collection(
+                id: self::NOTES,
+                attributes: [Attribute::string(key: 'title', size: 64)],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            ));
+        }
+        $mirror->setTenant(1);
+
+        $mirror->withTenant(2, fn (): Document => $mirror->createDocument(self::NOTES, new Document([Document::ID => 'synchronous', 'title' => 'synchronous'])));
+        $this->inCoroutine(function () use ($mirror): void {
+            $mirror->withTenant(2, fn (): int => $mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'asynchronous', 'title' => 'asynchronous'])]));
+        });
+
+        $idsUnder = static fn (int $tenant): array => \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $destination->withTenant($tenant, static fn (): array => $destination->find(self::NOTES, [Query::orderAsc(Document::ID)])),
+        );
+        $this->assertSame([], $this->errors);
+        $this->assertSame([1 => [], 2 => ['asynchronous', 'synchronous']], [1 => $idsUnder(1), 2 => $idsUnder(2)]);
+        $this->assertSame(1, $destination->getTenant());
     }
 
     /**

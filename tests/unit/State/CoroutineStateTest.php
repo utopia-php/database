@@ -212,6 +212,14 @@ final class CoroutineStateTest extends TestCase
             population: $population,
             silenced: false,
             silencedListeners: [],
+            tenant: null,
+            filters: true,
+            disabledFilters: [],
+            validation: true,
+            preserveDates: false,
+            preserveSequence: false,
+            skipDuplicates: false,
+            requestTimestamp: null,
         );
     }
 

@@ -123,12 +123,14 @@ final class PDOStatementTest extends TestCase
 
     public function testIsIterableAndDelegatesIterationToTheStatement(): void
     {
+        $rows = [['id' => 1], ['id' => 2]];
         $pdo = self::createStub(PDO::class);
         $statement = self::createStub(\PDOStatement::class);
+        $statement->method('getIterator')->willReturn(new \ArrayIterator($rows));
 
         $wrapper = new PDOStatement($pdo, $statement, 'SELECT 1');
 
-        $this->assertSame($statement, $wrapper->getIterator());
+        $this->assertSame($rows, iterator_to_array($wrapper));
     }
 
     public function testDoesNotReconnectForNonExecuteMethods(): void

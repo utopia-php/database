@@ -47,35 +47,49 @@ final class PermissionsTest extends TestCase
         $this->assertSame(4, $updates->calls);
     }
 
-    public function testUniqueAdditionsRemovesDuplicateRoles(): void
+    public function testUpdateKeepsPermissionRowsUnderTheStoredDocumentIdCasing(): void
     {
-        $additions = $this->invokeHook('uniqueAdditions', [
-            ['any', 'guests', 'guests', 'any'],
-            ['any'],
-        ]);
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $adapter = $this->adapterWithLegacyCasedPermissions($pdo);
+        $collection = new Document(['$id' => 'movies']);
 
-        $this->assertSame(['guests'], $additions);
+        $adapter->updateDocument($collection, 'CaseSensitive', new Document([
+            '$id' => 'CaseSensitive',
+            '$permissions' => [
+                Permission::create(Role::any()),
+                Permission::create(Role::guests()),
+                Permission::create(Role::guests()),
+                Permission::read(Role::guests()),
+            ],
+        ]), false);
+
+        $this->assertSame([
+            ['_document' => 'caseSensitive', '_type' => 'create', '_permission' => 'any'],
+            ['_document' => 'caseSensitive', '_type' => 'create', '_permission' => 'guests'],
+            ['_document' => 'caseSensitive', '_type' => 'read', '_permission' => 'guests'],
+        ], $this->permissionRows($pdo));
     }
 
-    public function testCurrentPermissionsLookupUsesStoredDocumentIdCase(): void
+    public function testBatchUpdateKeepsPermissionRowsUnderTheStoredDocumentIdCasing(): void
     {
-        $stored = [
-            PermissionType::Create->value => ['any'],
-            PermissionType::Read->value => ['any'],
-            PermissionType::Update->value => [],
-            PermissionType::Delete->value => [],
-        ];
+        $pdo = new PDO('sqlite::memory:', null, null);
+        $adapter = $this->adapterWithLegacyCasedPermissions($pdo);
+        $collection = new Document(['$id' => 'movies']);
 
-        /** @var array<string, list<string>> $current */
-        $current = $this->invokeHook('currentPermissions', [
-            [
-                'caseSensitive' => $stored,
+        $adapter->updateDocuments($collection, new Document([
+            '$permissions' => [
+                Permission::create(Role::any()),
+                Permission::create(Role::users()),
+                Permission::create(Role::users()),
+                Permission::read(Role::guests()),
             ],
-            'CaseSensitive',
-        ]);
+        ]), $adapter->find($collection));
 
-        $this->assertSame(['any'], $current[PermissionType::Create->value]);
-        $this->assertSame(['any'], $current[PermissionType::Read->value]);
+        $this->assertSame([
+            ['_document' => 'caseSensitive', '_type' => 'create', '_permission' => 'any'],
+            ['_document' => 'caseSensitive', '_type' => 'create', '_permission' => 'users'],
+            ['_document' => 'caseSensitive', '_type' => 'read', '_permission' => 'guests'],
+        ], $this->permissionRows($pdo));
     }
 
     public function testCurrentPermissionsPrefersExactDocumentIdWhenBothCasingsExist(): void
@@ -105,30 +119,6 @@ final class PermissionsTest extends TestCase
         $this->assertSame(['guests'], $current[PermissionType::Create->value]);
     }
 
-    public function testGroupPermissionRowsMapsStoredDocumentIdToRequestedCasing(): void
-    {
-        /** @var array<string, array<string, list<string>>> $map */
-        $map = $this->invokeHook('groupPermissionRows', [
-            ['CaseSensitive'],
-            [
-                [
-                    Storage::PERM_DOCUMENT => 'caseSensitive',
-                    Storage::PERM_TYPE => PermissionType::Create->value,
-                    Storage::PERM_PERMISSION => 'any',
-                ],
-                [
-                    Storage::PERM_DOCUMENT => 'caseSensitive',
-                    Storage::PERM_TYPE => PermissionType::Read->value,
-                    Storage::PERM_PERMISSION => 'any',
-                ],
-            ],
-        ]);
-
-        $this->assertArrayHasKey('CaseSensitive', $map);
-        $this->assertSame(['any'], $map['CaseSensitive'][PermissionType::Create->value]);
-        $this->assertSame(['any'], $map['CaseSensitive'][PermissionType::Read->value]);
-    }
-
     public function testGroupPermissionRowsPopulatesBothRequestedCasings(): void
     {
         /** @var array<string, array<string, list<string>>> $map */
@@ -145,42 +135,6 @@ final class PermissionsTest extends TestCase
 
         $this->assertSame(['any'], $map['CaseSensitive'][PermissionType::Create->value]);
         $this->assertSame(['any'], $map['caseSensitive'][PermissionType::Create->value]);
-    }
-
-    public function testStoredDocumentIdsKeepsTableCasing(): void
-    {
-        /** @var array<string, string> $stored */
-        $stored = $this->invokeHook('storedDocumentIds', [
-            ['CaseSensitive', 'caseSensitive'],
-            [
-                [
-                    Storage::PERM_DOCUMENT => 'caseSensitive',
-                    Storage::PERM_TYPE => PermissionType::Create->value,
-                    Storage::PERM_PERMISSION => 'any',
-                ],
-            ],
-        ]);
-
-        $this->assertSame('caseSensitive', $stored['CaseSensitive']);
-        $this->assertSame('caseSensitive', $stored['caseSensitive']);
-    }
-
-    public function testPermissionDocumentIdUsesStoredCasing(): void
-    {
-        $this->assertSame(
-            'caseSensitive',
-            $this->invokeHook('permissionDocumentId', [
-                'CaseSensitive',
-                ['CaseSensitive' => 'caseSensitive'],
-            ])
-        );
-        $this->assertSame(
-            'new-id',
-            $this->invokeHook('permissionDocumentId', [
-                'new-id',
-                ['old-id' => 'old-id'],
-            ])
-        );
     }
 
     public function testUpdateDoesNotInsertDuplicatePermissionRows(): void
@@ -309,6 +263,35 @@ final class PermissionsTest extends TestCase
             ['_document' => 'after', '_type' => 'read', '_permission' => 'user:alice'],
             ['_document' => 'after', '_type' => 'update', '_permission' => 'user:alice'],
         ], $rows->fetchAll(\PDO::FETCH_ASSOC), 'The rows keyed by the old id are unreadable and must follow the document to its new id');
+    }
+
+    private function adapterWithLegacyCasedPermissions(PDO $pdo): SQLite
+    {
+        $adapter = $this->adapter($pdo);
+        $this->assertTrue($adapter->createCollection('movies'));
+        $adapter->createDocuments(new Document(['$id' => 'movies']), [
+            new Document([
+                '$id' => 'CaseSensitive',
+                '$permissions' => [
+                    Permission::create(Role::any()),
+                    Permission::read(Role::any()),
+                ],
+            ]),
+        ]);
+        $pdo->exec("UPDATE permissions_movies_perms SET _document = 'caseSensitive'");
+
+        return $adapter;
+    }
+
+    /**
+     * @return array<mixed>
+     */
+    private function permissionRows(PDO $pdo): array
+    {
+        $rows = $pdo->prepare('SELECT _document, _type, _permission FROM permissions_movies_perms ORDER BY _type, _permission');
+        $rows->execute();
+
+        return $rows->fetchAll(\PDO::FETCH_ASSOC);
     }
 
     private function adapter(?PDO $pdo = null): SQLite

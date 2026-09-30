@@ -2575,7 +2575,7 @@ trait Documents
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $report = $this->getActiveLifecycleHooks() !== [];
+        $report = $this->getActiveLifecycleHooks(Event::DocumentUpdate) !== [];
         $changed = [];
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];

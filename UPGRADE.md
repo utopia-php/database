@@ -405,6 +405,11 @@ of a two-way relationship that the delete changed, after its own `document_delet
   than `$id` and `$collection`.
 - One-way peers, documents a cascade removed anywhere down its chain, and the deleted document itself are not
   reported. `deleteDocuments()`, a cascade's own deletes and a delete inside `silent()` report nothing.
+- Telling a cascade's survivors from what it removed takes a read per related collection. A delete makes those reads
+  only while an active lifecycle hook handles `document_update`: any hook that does not implement `Hook\Selective`,
+  or one whose `handles(Event::DocumentUpdate)` is `true` (for `Event\DispatcherHook`, a listener for
+  `Event\Document\Updated` or a PSR-14 dispatcher). Implement `Hook\Selective` on a hook that ignores
+  `document_update` to spare its deletes those reads.
 - They are read and written with permissions skipped and are not checked against the caller's read permission:
   treat them as privileged, like the documents `deleteDocuments()` and `upsertDocuments()` pass to `$onNext`.
 - They fire when the delete's own transaction returns, like `document_delete`, not when an outer transaction

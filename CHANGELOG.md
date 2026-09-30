@@ -170,10 +170,11 @@ have to make, with the 7.x and 8.0 forms side by side.
 - **Hooks.** `Database::addHook()` registers `Hook\Lifecycle` (side effects on events), `Hook\Decorator` (modifies
   the documents a read or write returns), `Hook\Transform` (rewrites SQL before it runs; `removeTransform()` removes
   one), `Hook\Write` (row writes, such as `Hook\Permissions`) and `Hook\Relationships`. A lifecycle hook that also
-  implements `Hook\Named` replaces the hook registered under the same name. `Event\DispatcherHook` is a lifecycle
-  hook with listeners per domain event class (`Event\Document\Created`, `Updated`, `Deleted`,
+  implements `Hook\Named` replaces the hook registered under the same name, and one that implements
+  `Hook\Selective` receives only the events its `handles()` accepts. `Event\DispatcherHook` is a selective
+  lifecycle hook with listeners per domain event class (`Event\Document\Created`, `Updated`, `Deleted`,
   `Event\Documents\Created`, `Updated`, `Deleted` for bulk writes with their count, and `Event\Collection\Created`,
-  `Deleted`).
+  `Deleted`); it handles an event only while a listener or a PSR-14 dispatcher can receive it.
 - **Typed models.** `Collection`, `Attribute`, `Index` and `Relationship`, with factories per type
   (`Attribute::string()`, `Index::key()`, `Relationship::oneToMany()`, ...) and one class per storable attribute type
   in `Utopia\Database\Attribute`. `Attribute::TYPES` lists the storable column types and `Attribute::availableTypes()`
@@ -290,7 +291,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `purgeCachedQueries()` also purges the `find()` query cache, and returns `false` when either purge fails.
 - `deleteDocument()` fires `document_update` for each document on the other side of a two-way relationship that the
   delete changed, as 7.4.0 does. When a hook throws, `document_delete` and every related `document_update` still
-  fire, and the first exception reaches the caller afterwards. See
+  fire, and the first exception reaches the caller afterwards. Finding the peers a cascade left costs a read per
+  related collection, which a delete skips unless an active lifecycle hook handles `document_update`. See
   [`document_update` for related documents a delete changed](UPGRADE.md#document_update-for-related-documents-a-delete-changed).
 
 ### Deprecated

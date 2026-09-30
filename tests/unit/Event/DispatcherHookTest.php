@@ -41,6 +41,28 @@ class DispatcherHookTest extends TestCase
         $this->hook = new DispatcherHook();
     }
 
+    public function testTheHookHandlesOnlyEventsItHasAListenerOrADispatcherFor(): void
+    {
+        $this->assertFalse($this->hook->handles(Event::DocumentUpdate));
+
+        $this->hook->on(DocumentUpdated::class, static function (): void {
+        });
+
+        $this->assertTrue($this->hook->handles(Event::DocumentUpdate));
+        $this->assertFalse($this->hook->handles(Event::DocumentDelete));
+        $this->assertFalse($this->hook->handles(Event::DocumentRead), 'An event with no domain event is never handled');
+
+        $dispatching = new DispatcherHook(new class () {
+            public function dispatch(object $event): object
+            {
+                return $event;
+            }
+        });
+        $this->assertTrue($dispatching->handles(Event::DocumentDelete));
+        $this->assertTrue($dispatching->handles(Event::CollectionCreate));
+        $this->assertFalse($dispatching->handles(Event::DocumentRead));
+    }
+
     public function testDocumentCreatedEvent(): void
     {
         $received = null;

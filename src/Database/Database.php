@@ -30,6 +30,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Named;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Hook\Selective;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Profiler\QueryProfiler;
 use Utopia\Database\State\Snapshot;
@@ -3134,7 +3135,7 @@ class Database
     {
         $propagates = $this->propagatesHookFailures($event);
 
-        foreach ($this->getActiveLifecycleHooks() as $hook) {
+        foreach ($this->getActiveLifecycleHooks($event) as $hook) {
             try {
                 $hook->handle($event, $data);
             } catch (Exception $exception) {
@@ -3153,7 +3154,7 @@ class Database
      */
     protected function triggerPropagatingHooks(Event $event, mixed $data = null): void
     {
-        foreach ($this->getActiveLifecycleHooks() as $hook) {
+        foreach ($this->getActiveLifecycleHooks($event) as $hook) {
             $hook->handle($event, $data);
         }
     }
@@ -3204,21 +3205,25 @@ class Database
     /**
      * @return array<Lifecycle>
      */
-    private function getActiveLifecycleHooks(): array
+    private function getActiveLifecycleHooks(Event $event): array
     {
-        if ($this->areEventsSilenced()) {
+        if ($this->lifecycleHooks === [] || $this->areEventsSilenced()) {
             return [];
         }
 
         $silenced = $this->silencedListeners()->get();
-        if ($silenced === []) {
-            return $this->lifecycleHooks;
+        $active = [];
+        foreach ($this->lifecycleHooks as $hook) {
+            if ($hook instanceof Named && isset($silenced[$hook->getName()])) {
+                continue;
+            }
+            if ($hook instanceof Selective && ! $hook->handles($event)) {
+                continue;
+            }
+            $active[] = $hook;
         }
 
-        return \array_filter(
-            $this->lifecycleHooks,
-            static fn (Lifecycle $hook): bool => ! $hook instanceof Named || ! isset($silenced[$hook->getName()]),
-        );
+        return $active;
     }
 
     /**

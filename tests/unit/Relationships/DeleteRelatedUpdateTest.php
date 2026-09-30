@@ -18,10 +18,14 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Event\DispatcherHook;
+use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
+use Utopia\Database\Event\Document\Updated as DocumentUpdated;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Profiler\QueryLog;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
@@ -103,6 +107,45 @@ final class DeleteRelatedUpdateTest extends TestCase
 
         $this->assertSame(['owner1'], $this->reported($recorder));
         $this->assertTrue($database->getDocument('child', 'child1')->isEmpty());
+    }
+
+    public function testACascadeReadsNoPeersWhenNoHookListensForRelatedUpdates(): void
+    {
+        $reads = [];
+        foreach (['no lifecycle hook' => null, 'a hook for deletes only' => DocumentDeleted::class, 'a hook for updates' => DocumentUpdated::class] as $case => $listened) {
+            $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
+            $this->relateParentToChildren($database, ForeignKeyAction::Cascade);
+            $database->createCollection(new Collection(id: 'owner', permissions: $this->collectionPermissions(), documentSecurity: true));
+            $database->createRelationship(Relationship::manyToOne(collection: 'parent', relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'owned', onDelete: ForeignKeyAction::SetNull));
+            $database->createDocument('owner', new Document(['$id' => 'owner1', '$permissions' => $this->documentPermissions()]));
+            $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => $this->documentPermissions()]));
+            $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $this->documentPermissions(), 'children' => ['child1'], 'owner' => 'owner1']));
+
+            $heard = [];
+            if ($listened !== null) {
+                $dispatcher = new DispatcherHook();
+                $dispatcher->on($listened, function (DocumentDeleted|DocumentUpdated $event) use (&$heard): void {
+                    $heard[] = $event instanceof DocumentUpdated ? $event->document->getId() : $event->documentId;
+                });
+                $database->addHook($dispatcher);
+            }
+
+            $database->enableProfiling();
+            $this->assertTrue($database->deleteDocument('parent', 'parent1'), $case);
+            $reads[$case] = \count(\array_filter(
+                $database->getProfiler()?->getLogs() ?? [],
+                static fn (QueryLog $log): bool => \str_starts_with(\ltrim($log->query), 'SELECT'),
+            ));
+
+            $this->assertSame(match ($listened) {
+                DocumentDeleted::class => ['parent1'],
+                DocumentUpdated::class => ['owner1'],
+                default => [],
+            }, $heard, $case);
+        }
+
+        $this->assertSame($reads['no lifecycle hook'], $reads['a hook for deletes only'], 'A hook that does not listen for related updates must not cost the delete the reads that find them');
+        $this->assertGreaterThan($reads['no lifecycle hook'], $reads['a hook for updates'], 'A hook that listens for them still gets the peers the cascade left');
     }
 
     /**

@@ -62,10 +62,10 @@ class Memory extends Adapter implements Feature\Relationships
     protected array $permissions = [];
 
     /**
-     * Inverted permission lookup: collectionKey → documentId → type → set<permissionString>.
+     * Inverted permission lookup: collectionKey → tenantBucket → documentId → type → set<permissionString>.
      * Maintained alongside `$permissions` to give O(|doc-perms|) deletion on writes.
      *
-     * @var array<string, array<string, array<string, array<string, true>>>>
+     * @var array<string, array<string, array<string, array<string, array<string, true>>>>>
      */
     protected array $permissionsByDocument = [];
 
@@ -754,8 +754,6 @@ class Memory extends Adapter implements Feature\Relationships
                 // Junction columns live on the junction collection, which is
                 // created with explicit attributes by the wrapper.
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -815,8 +813,6 @@ class Memory extends Adapter implements Feature\Relationships
                     }
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -863,8 +859,6 @@ class Memory extends Adapter implements Feature\Relationships
             case RelationType::ManyToMany:
                 // Junction collection is dropped by the wrapper via cleanupCollection.
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -1400,16 +1394,8 @@ class Memory extends Adapter implements Feature\Relationships
         // post-update, register the new binding.
         $allIndexes = \array_unique([...\array_keys($oldSignatures), ...\array_keys($newSignatures)]);
         foreach ($allIndexes as $indexId) {
-            $this->probeUniqueHash(
-                $key,
-                $indexId,
-                $newSignatures[$indexId] ?? null,
-                $oldSignatures[$indexId] ?? null,
-                $newKey,
-            );
-            // Old key removal: if the docKey changed, also drop any binding
-            // pointing at the old key (the probeUniqueHash above keys against
-            // $newKey, so a stale binding under $oldKey is left untouched).
+            // A rename moves the row to $newKey: release the binding the row
+            // holds under $oldKey first, or a value it keeps reads as taken.
             if ($oldKey !== $newKey) {
                 $oldHash = $oldSignatures[$indexId] ?? null;
                 if ($oldHash !== null
@@ -1420,6 +1406,13 @@ class Memory extends Adapter implements Feature\Relationships
                     });
                 }
             }
+            $this->probeUniqueHash(
+                $key,
+                $indexId,
+                $newSignatures[$indexId] ?? null,
+                $oldSignatures[$indexId] ?? null,
+                $newKey,
+            );
         }
 
         if (! $skipPermissions) {
@@ -1654,8 +1647,8 @@ class Memory extends Adapter implements Feature\Relationships
             }
         }
 
-        $tenant = $this->getTenant();
-        $this->removePermissionsForDocument($key, $id, $tenant, $this->sharedTables);
+        $storedId = $existing[Storage::UID] ?? $id;
+        $this->removePermissionsForDocument($key, \is_string($storedId) ? $storedId : $id, $this->getTenant(), $this->sharedTables);
 
         return true;
     }
@@ -2153,20 +2146,15 @@ class Memory extends Adapter implements Feature\Relationships
             'tenant' => $tenant,
         ];
         $this->permissions[$key][] = $entry;
-        $this->permissionsByDocument[$key][$document][$type][$clean] = true;
-        $bucket = $tenant === null ? '__null__' : (string) $tenant;
+        $bucket = $this->permissionBucket($tenant);
+        $this->permissionsByDocument[$key][$bucket][$document][$type][$clean] = true;
         $this->permissionsByPermission[$key][$type][$bucket][$clean][$document] = true;
 
         $flatIndex = \array_key_last($this->permissions[$key]);
         $this->journal(function () use ($key, $flatIndex, $document, $type, $clean, $bucket): void {
             unset($this->permissions[$key][$flatIndex]);
-            unset($this->permissionsByDocument[$key][$document][$type][$clean]);
-            if (empty($this->permissionsByDocument[$key][$document][$type])) {
-                unset($this->permissionsByDocument[$key][$document][$type]);
-                if (empty($this->permissionsByDocument[$key][$document])) {
-                    unset($this->permissionsByDocument[$key][$document]);
-                }
-            }
+            unset($this->permissionsByDocument[$key][$bucket][$document][$type][$clean]);
+            $this->pruneDocumentPermissions($key, $bucket, $document, $type);
             unset($this->permissionsByPermission[$key][$type][$bucket][$clean][$document]);
             if (empty($this->permissionsByPermission[$key][$type][$bucket][$clean])) {
                 unset($this->permissionsByPermission[$key][$type][$bucket][$clean]);
@@ -2186,16 +2174,18 @@ class Memory extends Adapter implements Feature\Relationships
      */
     protected function removePermissionsForDocument(string $key, string $documentId, int|string|null $tenantScope, bool $sharedTablesScope): array
     {
-        $byType = $this->permissionsByDocument[$key][$documentId] ?? null;
-        if ($byType === null) {
-            return [];
-        }
-
-        $removed = [];
-        foreach ($byType as $type => $set) {
-            foreach (\array_keys($set) as $permission) {
-                $removed[] = ['document' => $documentId, 'type' => (string) $type, 'permission' => (string) $permission];
+        $buckets = $sharedTablesScope
+            ? [$this->permissionBucket($tenantScope)]
+            : \array_keys($this->permissionsByDocument[$key] ?? []);
+        $indexed = false;
+        foreach ($buckets as $bucket) {
+            if (isset($this->permissionsByDocument[$key][$bucket][$documentId])) {
+                $indexed = true;
+                break;
             }
+        }
+        if (! $indexed) {
+            return [];
         }
 
         // Walk the flat list once, dropping matching entries while respecting
@@ -2213,7 +2203,7 @@ class Memory extends Adapter implements Feature\Relationships
             }
             $journalEntries[$index] = $entry;
             unset($this->permissions[$key][$index]);
-            $bucket = $entry['tenant'] === null ? '__null__' : (string) $entry['tenant'];
+            $bucket = $this->permissionBucket($entry['tenant']);
             unset($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']][$documentId]);
             if (empty($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']])) {
                 unset($this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']]);
@@ -2221,25 +2211,40 @@ class Memory extends Adapter implements Feature\Relationships
                     unset($this->permissionsByPermission[$key][$entry['type']][$bucket]);
                 }
             }
-            unset($this->permissionsByDocument[$key][$documentId][$entry['type']][$entry['permission']]);
-            if (empty($this->permissionsByDocument[$key][$documentId][$entry['type']])) {
-                unset($this->permissionsByDocument[$key][$documentId][$entry['type']]);
-            }
-        }
-        if (empty($this->permissionsByDocument[$key][$documentId] ?? [])) {
-            unset($this->permissionsByDocument[$key][$documentId]);
+            unset($this->permissionsByDocument[$key][$bucket][$documentId][$entry['type']][$entry['permission']]);
+            $this->pruneDocumentPermissions($key, $bucket, $documentId, $entry['type']);
         }
 
         $this->journal(function () use ($key, $journalEntries): void {
             foreach ($journalEntries as $index => $entry) {
                 $this->permissions[$key][$index] = $entry;
-                $this->permissionsByDocument[$key][$entry['document']][$entry['type']][$entry['permission']] = true;
-                $bucket = $entry['tenant'] === null ? '__null__' : (string) $entry['tenant'];
+                $bucket = $this->permissionBucket($entry['tenant']);
+                $this->permissionsByDocument[$key][$bucket][$entry['document']][$entry['type']][$entry['permission']] = true;
                 $this->permissionsByPermission[$key][$entry['type']][$bucket][$entry['permission']][$entry['document']] = true;
             }
         });
 
         return \array_values($journalEntries);
+    }
+
+    protected function permissionBucket(int|string|null $tenant): string
+    {
+        return $tenant === null ? '__null__' : (string) $tenant;
+    }
+
+    protected function pruneDocumentPermissions(string $key, string $bucket, string $documentId, string $type): void
+    {
+        if (! empty($this->permissionsByDocument[$key][$bucket][$documentId][$type])) {
+            return;
+        }
+        unset($this->permissionsByDocument[$key][$bucket][$documentId][$type]);
+        if (! empty($this->permissionsByDocument[$key][$bucket][$documentId])) {
+            return;
+        }
+        unset($this->permissionsByDocument[$key][$bucket][$documentId]);
+        if (empty($this->permissionsByDocument[$key][$bucket])) {
+            unset($this->permissionsByDocument[$key][$bucket]);
+        }
     }
 
     /**
@@ -2392,21 +2397,23 @@ class Memory extends Adapter implements Feature\Relationships
         $tenant = $tenantCheck ? $this->getTenant() : null;
         $allowNullTenant = $tenantCheck && $collectionId === Database::METADATA;
 
-        $allowSet = $this->buildPermissionAllowSet($key, $forPermission);
+        $allowSet = $this->buildPermissionAllowSet($key, $forPermission, $tenant);
+        $tenantlessAllowSet = $allowNullTenant ? $this->buildPermissionAllowSet($key, $forPermission, null) : null;
 
         $output = [];
         foreach ($documents as $row) {
+            $rowAllowSet = $allowSet;
             if ($tenantCheck) {
                 $rowTenant = $row[Storage::TENANT] ?? null;
                 if ($allowNullTenant && $rowTenant === null) {
-                    // visible
+                    $rowAllowSet = $tenantlessAllowSet;
                 } elseif ($rowTenant !== $tenant) {
                     continue;
                 }
             }
 
             $rowUid = $row[Storage::UID] ?? '';
-            if ($allowSet !== null && (! \is_string($rowUid) || ! isset($allowSet[$rowUid]))) {
+            if ($rowAllowSet !== null && (! \is_string($rowUid) || ! isset($rowAllowSet[$rowUid]))) {
                 continue;
             }
 
@@ -3061,7 +3068,7 @@ class Memory extends Adapter implements Feature\Relationships
      *
      * @return array<string, true>|null
      */
-    protected function buildPermissionAllowSet(string $key, string $forPermission): ?array
+    protected function buildPermissionAllowSet(string $key, string $forPermission, int|string|null $tenant): ?array
     {
         if (! $this->authorization->getStatus()) {
             return null;
@@ -3073,8 +3080,7 @@ class Memory extends Adapter implements Feature\Relationships
             return $allowed;
         }
 
-        $tenant = $this->getTenant();
-        $tenantBucket = $tenant === null ? '__null__' : (string) $tenant;
+        $tenantBucket = $this->permissionBucket($tenant);
         $buckets = [];
         if ($this->sharedTables) {
             if (isset($this->permissionsByPermission[$key][$forPermission][$tenantBucket])) {

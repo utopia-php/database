@@ -7,6 +7,7 @@ use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\Support\StderrCapture;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
@@ -17,11 +18,13 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Index;
+use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\Validator\Authorization;
 
@@ -171,6 +174,366 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertContains('owner', $this->attributeKeys($database, 'authors'));
         $this->assertNotContains('keeper', $this->attributeKeys($database, 'authors'));
         $this->assertSame($physical, $this->schemaIndexIds($database, 'books'), 'the physical index is back under its old name');
+    }
+
+    public function testRelationshipSchemaChangesNeedTheRelationshipsFeature(): void
+    {
+        $database = new Database($this->createStub(Adapter::class), new Cache(new None()));
+
+        foreach ([
+            static fn (): bool => $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors')),
+            static fn (): bool => $database->updateRelationship('books', 'author', newKey: 'writer'),
+            static fn (): bool => $database->deleteRelationship('books', 'author'),
+        ] as $change) {
+            try {
+                $change();
+                $this->fail('an adapter without relationships must refuse the change');
+            } catch (DatabaseException $error) {
+                $this->assertSame('Adapter does not support relationships', $error->getMessage());
+            }
+        }
+    }
+
+    public function testAnAdapterThatDoesNotCreateTheRelationshipFailsTheCreate(): void
+    {
+        $adapter = $this->memory([
+            'createRelationship' => static fn (): bool => false,
+            'deleteCollection' => static fn (string $id): never => throw new RuntimeException("cannot drop {$id}"),
+        ]);
+        $database = $this->database($adapter);
+
+        $error = null;
+        $log = StderrCapture::during(function () use ($database, &$error): void {
+            try {
+                $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+            } catch (DatabaseException $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame('Failed to create relationship', $error->getMessage());
+        $this->assertStringContainsString('Failed to cleanup junction collection', $log);
+        $this->assertNotContains('writers', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('works', $this->attributeKeys($database, 'authors'));
+    }
+
+    public function testARelationshipOnlyInTheSchemaIsAdopted(): void
+    {
+        $database = $this->database($this->memory([
+            'createRelationship' => static fn (): never => throw new DuplicateException('Relationship already exists in the schema'),
+        ]));
+
+        $this->assertTrue($database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books')));
+        $this->assertContains('author', $this->attributeKeys($database, 'books'));
+        $this->assertContains('books', $this->attributeKeys($database, 'authors'));
+
+        $database->createDocument('authors', new Document([Document::ID => 'ada', 'name' => 'Ada']));
+        $database->createDocument('books', new Document([Document::ID => 'notes', 'title' => 'Notes', 'author' => 'ada']));
+        $author = $database->getDocument('books', 'notes')->getAttribute('author');
+        $this->assertInstanceOf(Document::class, $author);
+        $this->assertSame('ada', $author->getId());
+    }
+
+    public function testAFailedDefinitionWriteRollsBackAndLogsTheFailedCleanups(): void
+    {
+        $adapter = $this->memory([
+            'deleteRelationship' => static fn (): never => throw new RuntimeException('cannot drop the relationship'),
+            'deleteCollection' => static fn (string $id): never => throw new RuntimeException("cannot drop {$id}"),
+        ]);
+        $database = $this->intercepting($adapter, update: static function (string $collection, string $id, Document $document): void {
+            if ($collection === Database::METADATA && $id === 'books' && \in_array('writers', self::keysOf($document), true)) {
+                throw new RuntimeException('the definition could not be written');
+            }
+        });
+
+        $error = null;
+        $log = StderrCapture::during(function () use ($database, &$error): void {
+            try {
+                $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+            } catch (DatabaseException $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertStringStartsWith('Failed to create relationship: ', $error->getMessage());
+        $this->assertStringContainsString("Failed to cleanup relationship 'writers': ", $log);
+        $this->assertStringContainsString('Failed to cleanup junction collection', $log);
+        $this->assertNotContains('writers', $this->attributeKeys($database, 'books'));
+    }
+
+    public function testAFailedIndexRollsBackAndLogsTheFailedIndexAndDefinitionCleanups(): void
+    {
+        $adapter = $this->memory([
+            'createIndex' => static fn (string $collection, Index $index): ?bool => $index->key === '_index_owner' ? throw new RuntimeException('cannot index the owner') : null,
+            'deleteIndex' => static fn (string $collection, string $id): never => throw new RuntimeException("cannot drop {$id}"),
+        ]);
+        $armed = false;
+        $database = $this->intercepting($adapter, update: static function (string $collection, string $id, Document $document) use (&$armed): void {
+            if ($armed && $collection === Database::METADATA && $id === 'books' && ! \in_array('library', self::keysOf($document), true)) {
+                throw new RuntimeException('the definitions could not be removed');
+            }
+        });
+        $armed = true;
+
+        $error = null;
+        $log = StderrCapture::during(function () use ($database, &$error): void {
+            try {
+                $database->createRelationship(Relationship::oneToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
+            } catch (DatabaseException $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame('Failed to create relationship indexes: cannot index the owner', $error->getMessage());
+        $this->assertStringContainsString("Failed to cleanup index '_index_library'", $log);
+        $this->assertStringContainsString("Failed to cleanup metadata for relationship 'library'", $log);
+    }
+
+    public function testAFailedIndexWhoseRelationshipCleanupFailsIsLogged(): void
+    {
+        $database = $this->database($this->memory([
+            'createIndex' => static fn (string $collection, Index $index): ?bool => $index->key === '_index_owner' ? throw new RuntimeException('cannot index the owner') : null,
+            'deleteRelationship' => static fn (): never => throw new RuntimeException('cannot drop the relationship'),
+        ]));
+
+        $error = null;
+        $log = StderrCapture::during(function () use ($database, &$error): void {
+            try {
+                $database->createRelationship(Relationship::oneToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'library', twoWayKey: 'owner'));
+            } catch (DatabaseException $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertInstanceOf(DatabaseException::class, $error);
+        $this->assertSame('Failed to create relationship indexes: cannot index the owner', $error->getMessage());
+        $this->assertStringContainsString("Failed to cleanup relationship 'library': ", $log);
+        $this->assertNotContains('library', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('owner', $this->attributeKeys($database, 'authors'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAnUpdateWithoutChangesIsAcceptedAndAnUnknownRelationshipIsNotFound(Closure $adapter): void
+    {
+        $database = $this->database($adapter());
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $before = $this->relationship($database, 'books', 'author');
+
+        $this->assertTrue($database->updateRelationship('books', 'author'));
+        $this->assertEquals($before, $this->relationship($database, 'books', 'author'));
+
+        try {
+            $database->updateRelationship('books', 'missing', newKey: 'other');
+            $this->fail('an unknown relationship cannot be updated');
+        } catch (NotFoundException $error) {
+            $this->assertSame('Relationship not found', $error->getMessage());
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testRenamingFromTheChildSideOfAOneToManyRenamesItsIndex(Closure $adapter): void
+    {
+        $database = $this->database($adapter());
+        $database->createRelationship(Relationship::oneToMany(collection: 'authors', relatedCollection: 'books', twoWay: true, key: 'books', twoWayKey: 'author'));
+        $database->createDocument('authors', new Document([Document::ID => 'ada', 'name' => 'Ada']));
+        $database->createDocument('books', new Document([Document::ID => 'notes', 'title' => 'Notes', 'author' => 'ada']));
+
+        $this->assertTrue($database->updateRelationship('books', 'author', newKey: 'writer'));
+
+        $this->assertSame(['writer'], $this->indexAttributes($database, 'books', '_index_writer'));
+        $this->assertNull($this->index($database, 'books', '_index_author'));
+        $this->assertSame(['notes'], \array_map(
+            static fn (Document $book): string => $book->getId(),
+            $database->find('books', [Query::equal('writer', ['ada'])]),
+        ));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testRenamingTheParentKeyFromTheChildSideOfAManyToOneRenamesItsIndex(Closure $adapter): void
+    {
+        $database = $this->database($adapter());
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        $this->assertTrue($database->updateRelationship('authors', 'books', newTwoWayKey: 'writer'));
+
+        $this->assertSame(['writer'], $this->indexAttributes($database, 'books', '_index_writer'));
+        $this->assertNull($this->index($database, 'books', '_index_author'));
+        $this->assertSame('writer', $this->relationship($database, 'authors', 'books')->twoWayKey);
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAnAdapterThatDoesNotUpdateTheRelationshipFailsTheUpdate(Closure $adapter): void
+    {
+        $database = $this->database($this->refusingUpdates($adapter()));
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        try {
+            $database->updateRelationship('books', 'author', newKey: 'writer');
+            $this->fail('an adapter that does not update the relationship must fail the update');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to update relationship 'author': Failed to update relationship", $error->getMessage());
+        }
+
+        $this->assertContains('author', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('writer', $this->attributeKeys($database, 'books'));
+    }
+
+    public function testARenameTheSchemaAlreadyAppliedIsCompleted(): void
+    {
+        $adapter = new class (new PDO('sqlite::memory:')) extends SQLite {
+            public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+            {
+                parent::updateRelationship($relationship, $newKey, $newTwoWayKey);
+
+                throw new RuntimeException('the connection dropped after the rename');
+            }
+        };
+        $database = $this->database($adapter);
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        $this->assertTrue($database->updateRelationship('books', 'author', newKey: 'writer'));
+
+        $this->assertContains('writer', $this->attributeKeys($database, 'books'));
+        $this->assertSame('writer', $this->relationship($database, 'authors', 'books')->twoWayKey);
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testAFailedJunctionIndexRenameRestoresTheJunctionDefinitions(Closure $adapter): void
+    {
+        $database = $this->database($adapter());
+        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $junction = $this->junction($database);
+        $database->deleteIndex($junction, '_index_writers');
+
+        try {
+            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $this->fail('a rename whose junction index is gone must fail');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to update relationship indexes for 'writers': Index not found", $error->getMessage());
+        }
+
+        $this->assertEqualsCanonicalizing(['writers', 'works'], $this->attributeKeys($database, $junction));
+        $this->assertContains('writers', $this->attributeKeys($database, 'books'));
+        $this->assertContains('works', $this->attributeKeys($database, 'authors'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testARelationshipWhoseColumnIsGoneIsStillDeleted(Closure $adapter): void
+    {
+        $inner = $adapter();
+        $database = $this->database($this->missingRelationships($inner));
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        $this->assertTrue($database->deleteRelationship('books', 'author'));
+
+        $this->assertNotContains('author', $this->attributeKeys($database, 'books'));
+        $this->assertNotContains('books', $this->attributeKeys($database, 'authors'));
+    }
+
+    public function testAnAdapterThatDoesNotDeleteTheRelationshipFailsTheDelete(): void
+    {
+        $database = $this->database($this->memory(['deleteRelationship' => static fn (): bool => false]));
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+
+        try {
+            $database->deleteRelationship('books', 'author');
+            $this->fail('an adapter that does not drop the relationship must fail the delete');
+        } catch (DatabaseException $error) {
+            $this->assertSame('Failed to delete relationship', $error->getMessage());
+        }
+
+        $this->assertContains('author', $this->attributeKeys($database, 'books'));
+    }
+
+    public function testAFailedDefinitionWriteOnDeleteKeepsItsErrorWhenTheRollbackFails(): void
+    {
+        $failure = new RuntimeException('the definitions could not be written');
+        $armed = false;
+        $adapter = $this->memory([
+            'createRelationship' => static function () use (&$armed): ?bool {
+                if ($armed) {
+                    throw new RuntimeException('the relationship could not be recreated');
+                }
+
+                return null;
+            },
+        ]);
+        $database = $this->intercepting($adapter, update: static function (string $collection, string $id, Document $document) use (&$armed, $failure): void {
+            if ($armed && $collection === Database::METADATA && $id === 'books' && ! \in_array('writers', self::keysOf($document), true)) {
+                throw $failure;
+            }
+        }, create: static function (string $collection) use (&$armed): void {
+            if ($armed && $collection === Database::METADATA) {
+                throw new RuntimeException('the junction definition could not be restored');
+            }
+        });
+        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $armed = true;
+
+        try {
+            $database->deleteRelationship('books', 'writers');
+            $this->fail('a failed definition write must fail the delete');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to persist metadata after retries for relationship deletion 'writers': the definitions could not be written", $error->getMessage());
+            $this->assertSame($failure, $error->getPrevious());
+        }
+
+        $armed = false;
+        $this->assertContains('writers', $this->attributeKeys($database, 'books'));
+    }
+
+    public function testAFailedDefinitionWriteOnDeleteKeepsItsErrorWhenTheIndexesCannotBeRestored(): void
+    {
+        $failure = new RuntimeException('the definitions could not be written');
+        $armed = false;
+        $adapter = $this->memory([
+            'createIndex' => static function (string $collection, Index $index) use (&$armed): ?bool {
+                if ($armed) {
+                    throw new RuntimeException('the index could not be restored');
+                }
+
+                return null;
+            },
+        ]);
+        $database = $this->intercepting($adapter, update: static function (string $collection, string $id, Document $document) use (&$armed, $failure): void {
+            if ($armed && $collection === Database::METADATA && $id === 'books' && ! \in_array('author', self::keysOf($document), true)) {
+                throw $failure;
+            }
+        });
+        $database->createRelationship(Relationship::manyToOne(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'author', twoWayKey: 'books'));
+        $armed = true;
+
+        try {
+            $database->deleteRelationship('books', 'author');
+            $this->fail('a failed definition write must fail the delete');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to persist metadata after retries for relationship deletion 'author': the definitions could not be written", $error->getMessage());
+            $this->assertSame($failure, $error->getPrevious());
+        }
+
+        $armed = false;
+        $this->assertContains('author', $this->attributeKeys($database, 'books'));
     }
 
     /**
@@ -372,5 +735,54 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertNotNull($index, "{$collection} has no index {$key}");
 
         return $index->attributes;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function keysOf(Document $document): array
+    {
+        /** @var array<Document|array<string, mixed>> $attributes */
+        $attributes = $document->getAttribute('attributes', []);
+        $keys = [];
+        foreach ($attributes as $attribute) {
+            $key = $attribute instanceof Document ? $attribute->getAttribute('key', $attribute->getId()) : ($attribute['key'] ?? $attribute[Document::ID] ?? '');
+            $keys[] = \is_string($key) ? $key : '';
+        }
+
+        return $keys;
+    }
+
+    private function junction(Database $database): string
+    {
+        return '_'.$database->getCollection('books')->getSequence().'_'.$database->getCollection('authors')->getSequence();
+    }
+
+    private function refusingUpdates(Adapter $adapter): Adapter
+    {
+        if ($adapter instanceof SQLite) {
+            return new class (new PDO('sqlite::memory:')) extends SQLite {
+                public function updateRelationship(Relationship $relationship, ?string $newKey = null, ?string $newTwoWayKey = null): bool
+                {
+                    return false;
+                }
+            };
+        }
+
+        return $this->memory(['updateRelationship' => static fn (): bool => false]);
+    }
+
+    private function missingRelationships(Adapter $adapter): Adapter
+    {
+        if ($adapter instanceof SQLite) {
+            return new class (new PDO('sqlite::memory:')) extends SQLite {
+                public function deleteRelationship(Relationship $relationship): bool
+                {
+                    throw new NotFoundException('Relationship not found in the schema');
+                }
+            };
+        }
+
+        return $this->memory(['deleteRelationship' => static fn (): never => throw new NotFoundException('Relationship not found in the schema')]);
     }
 }

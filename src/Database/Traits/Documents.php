@@ -4173,7 +4173,10 @@ trait Documents
             $this->validateSumAttribute($collection, $attribute, $queries, $joinedCollections);
         }
 
-        $attribute = $this->resolveSumAttribute($collection, $attribute, $queries);
+        if (! \str_contains($attribute, '.') && ! $this->declaresSumAttribute($collection, $attribute)) {
+            $joinedCollections ??= $this->resolveJoinedCollections($queries);
+            $attribute = $this->resolveSumAttribute($collection, $attribute, $queries, $joinedCollections);
+        }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
@@ -4204,39 +4207,69 @@ trait Documents
     }
 
     /**
-     * A bare attribute name reads the main collection's attribute when the main collection declares
-     * it, else the attribute of the one join whose collection declares it, as an aggregate in find()
-     * does. Any other name is returned as given, for the validator to accept or refuse.
+     * A bare name the main collection does not declare reads the attribute of the one aliased join whose
+     * collection declares it, as an aggregate in find() does. Any other name is returned as given, for the
+     * validator to accept or refuse.
      *
      * @param  array<Query>  $queries
+     * @param  array<string, Document>  $joinedCollections  The collection each join names, by its id
      *
      * @throws QueryException
      */
-    private function resolveSumAttribute(Document $collection, string $attribute, array $queries): string
+    private function resolveSumAttribute(Document $collection, string $attribute, array $queries, array $joinedCollections): string
+    {
+        try {
+            return $this->qualifyJoinedAttribute($collection, $attribute, $this->aliasedJoinCollections($queries, $joinedCollections));
+        } catch (QueryException $exception) {
+            throw new QueryException('Invalid query: '.$exception->getMessage(), previous: $exception);
+        }
+    }
+
+    /**
+     * The collection each join given an alias reads, by that alias.
+     *
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     * @return array<string, Document>
+     */
+    private function aliasedJoinCollections(array $queries, ?array $joinedCollections = null): array
+    {
+        $joins = \array_values(\array_filter(
+            $queries,
+            static fn (Query $query): bool => $query->getMethod()->isJoin() && $query->getJoinAlias() !== '',
+        ));
+
+        return $this->joinedCollectionsByAlias($joins, $joinedCollections);
+    }
+
+    /**
+     * `alias.name` for a bare name the main collection does not declare and exactly one of the joined collections
+     * declares as a non-relationship attribute; any other name as given.
+     *
+     * @param  array<string, Document>  $joinedCollections  The collection each join reads, by its alias
+     *
+     * @throws QueryException  when several joined collections declare the name
+     */
+    private function qualifyJoinedAttribute(Document $collection, string $attribute, array $joinedCollections): string
     {
         if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
             return $attribute;
         }
 
         $aliases = [];
-        foreach ($queries as $query) {
-            if (! $query->getMethod()->isJoin() || $query->getJoinAlias() === '') {
-                continue;
-            }
-
-            $joined = $this->silent(fn () => $this->getCollection($query->getAttribute()));
+        foreach ($joinedCollections as $alias => $joined) {
             /** @var array<Attribute|Document> $joinedAttributes */
             $joinedAttributes = $joined->getAttribute('attributes', []);
             foreach ($joinedAttributes as $declared) {
                 if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
-                    $aliases[] = $query->getJoinAlias();
+                    $aliases[] = $alias;
                     break;
                 }
             }
         }
 
         if (\count($aliases) > 1) {
-            throw new QueryException('Invalid query: Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+            throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
         }
 
         return $aliases === [] ? $attribute : $aliases[0].'.'.$attribute;
@@ -4277,12 +4310,9 @@ trait Documents
         $validator = new Aggregate($attributes, $this->adapter->supports(Capability::DefinedAttributes), $this->adapter->getSharedTables());
 
         if (\str_contains($attribute, '.') || ! $this->declaresSumAttribute($collection, $attribute)) {
-            $joinedCollections ??= $this->resolveJoinedCollections($queries);
             $joins = [];
-            foreach ($queries as $query) {
-                if ($query->getMethod()->isJoin() && $query->getJoinAlias() !== '') {
-                    $joins[] = JoinedCollection::of($query->getJoinAlias(), $joinedCollections[$query->getAttribute()] ?? new Document());
-                }
+            foreach ($this->aliasedJoinCollections($queries, $joinedCollections) as $alias => $joined) {
+                $joins[] = JoinedCollection::of($alias, $joined);
             }
             $validator->allowJoins($joins);
         }
@@ -4531,31 +4561,11 @@ trait Documents
     private function qualifyJoinedOrders(Document $collection, array $orderAttributes, Document $cursor, array $joinedCollections): array
     {
         foreach ($orderAttributes as $index => $attribute) {
-            if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
+            $qualified = $this->qualifyJoinedAttribute($collection, $attribute, $joinedCollections);
+            if ($qualified === $attribute) {
                 continue;
             }
 
-            $aliases = [];
-            foreach ($joinedCollections as $alias => $joined) {
-                /** @var array<Attribute|Document> $joinedAttributes */
-                $joinedAttributes = $joined->getAttribute('attributes', []);
-                foreach ($joinedAttributes as $declared) {
-                    if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
-                        $aliases[] = $alias;
-                        break;
-                    }
-                }
-            }
-
-            if (\count($aliases) > 1) {
-                throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
-            }
-
-            if ($aliases === []) {
-                continue;
-            }
-
-            $qualified = $aliases[0].'.'.$attribute;
             $orderAttributes[$index] = $qualified;
             if ($cursor->offsetExists($attribute) && ! $cursor->offsetExists($qualified)) {
                 $cursor = clone $cursor;

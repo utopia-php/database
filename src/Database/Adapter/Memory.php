@@ -103,8 +103,6 @@ class Memory extends Adapter implements Feature\Relationships
      */
     protected array $filterCache = [];
 
-    protected bool $supportForAttributes = true;
-
     public function __construct()
     {
         // No external resources to initialise
@@ -1933,9 +1931,7 @@ class Memory extends Adapter implements Feature\Relationships
 
     public function setSupportForAttributes(bool $support): bool
     {
-        $this->supportForAttributes = $support;
-
-        return $this->supportForAttributes;
+        return true;
     }
 
     public function getCountOfAttributes(Document $collection): int

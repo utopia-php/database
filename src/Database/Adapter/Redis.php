@@ -69,8 +69,6 @@ class Redis extends Adapter implements
      */
     private array $journalStack = [];
 
-    private bool $supportForAttributes = true;
-
     public function __construct(RedisClient $client)
     {
         $this->client = $client;
@@ -1529,9 +1527,7 @@ class Redis extends Adapter implements
 
     public function setSupportForAttributes(bool $support): bool
     {
-        $this->supportForAttributes = $support;
-
-        return $this->supportForAttributes;
+        return true;
     }
 
     #[\Override]

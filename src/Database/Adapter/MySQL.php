@@ -16,6 +16,7 @@ use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Storage;
+use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Builder\MySQL as MySQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Schema\ColumnType;
@@ -141,12 +142,24 @@ class MySQL extends MariaDB
      */
     private const int LARGE_JOIN = 5;
 
+    /**
+     * Inside an outer join's ON clause MySQL runs a semi-joined check by scanning its materialised
+     * rows once per outer row, so an outer-joined table's check always stays a subquery.
+     */
     #[\Override]
-    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins): PermissionFilter
+    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins, JoinType $joinType): PermissionFilter
     {
-        $hook = parent::newJoinPermissionHook($collection, $roles, $type, $documentColumn, $joins);
+        $hook = parent::newJoinPermissionHook($collection, $roles, $type, $documentColumn, $joins, $joinType);
 
-        return $joins >= self::LARGE_JOIN ? $hook->withoutSemiJoin() : $hook;
+        return $joins >= self::LARGE_JOIN || self::isOuterJoin($joinType) ? $hook->withoutSemiJoin() : $hook;
+    }
+
+    private static function isOuterJoin(JoinType $joinType): bool
+    {
+        return match ($joinType) {
+            JoinType::Left, JoinType::Right, JoinType::FullOuter => true,
+            default => false,
+        };
     }
 
     /**

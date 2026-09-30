@@ -137,7 +137,7 @@ final class JoinAliasQuotingTest extends TestCase
     public function testPermissionFilterQuotesItsDocumentColumn(string $quote): void
     {
         $this->assertSame(
-            $this->quoted('"Book"."_uid" IN (SELECT DISTINCT _document FROM "database"."namespace_books_perms" WHERE _permission IN (?) AND _type = ?)', $quote),
+            $this->quoted('"Book"."_uid" IN (SELECT _document FROM "database"."namespace_books_perms" WHERE _permission IN (?) AND _type = ?)', $quote),
             $this->permission(self::ALIAS, $quote)->filter(self::ALIAS)->expression,
         );
     }
@@ -159,7 +159,7 @@ final class JoinAliasQuotingTest extends TestCase
         $hook = new PermissionAllowNullUid($this->permission(self::SOURCE, $quote), self::SOURCE.'.'.Storage::UID, $quote);
 
         $this->assertSame(
-            $this->quoted('("Main"."_uid" IN (SELECT DISTINCT _document FROM "database"."namespace_books_perms" WHERE _permission IN (?) AND _type = ?) OR "Main"."_uid" IS NULL)', $quote),
+            $this->quoted('("Main"."_uid" IN (SELECT _document FROM "database"."namespace_books_perms" WHERE _permission IN (?) AND _type = ?) OR "Main"."_uid" IS NULL)', $quote),
             $hook->filter(self::SOURCE)->expression,
         );
     }

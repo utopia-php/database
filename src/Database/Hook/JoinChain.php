@@ -50,6 +50,14 @@ final readonly class JoinChain
         return new self($joins);
     }
 
+    /**
+     * How $alias is joined; a table the read does not join counts as joined inner.
+     */
+    public function type(string $alias): JoinType
+    {
+        return $this->joins[$alias] ?? JoinType::Inner;
+    }
+
     public function has(JoinType $type): bool
     {
         return \in_array($type, $this->joins, true);

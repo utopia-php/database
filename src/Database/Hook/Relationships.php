@@ -551,7 +551,6 @@ class Relationships implements Hook
                                 throw new DuplicateException('Document already has a related document');
                             }
 
-                            $this->writeStack[] = $relatedCollection->getId();
                             if ($related->isEmpty()) {
                                 if (! isset($value[Document::PERMISSIONS])) {
                                     $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
@@ -567,7 +566,6 @@ class Relationships implements Hook
                                     $value->setAttribute($twoWayKey, $document->getId())
                                 );
                             }
-                            \array_pop($this->writeStack);
 
                             $document->setAttribute($key, $related->getId());
                         } elseif ($value === null) {

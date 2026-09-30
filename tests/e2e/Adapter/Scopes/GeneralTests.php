@@ -1771,6 +1771,7 @@ trait GeneralTests
         $tenant = $database->getTenant();
 
         $tenantPerDocumentDatabase = 'tenantPerDocumentFloat_'.static::getTestToken();
+        $collection = 'floatTenants';
 
         if ($database->exists($tenantPerDocumentDatabase)) {
             $database->delete($tenantPerDocumentDatabase);
@@ -1784,16 +1785,16 @@ trait GeneralTests
             ->create();
 
         try {
-            $database->createCollection(new Collection(id: __FUNCTION__, permissions: [
+            $database->createCollection(new Collection(id: $collection, permissions: [
                 Permission::create(Role::any()),
                 Permission::read(Role::any()),
             ], documentSecurity: false));
-            $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
+            $database->createAttribute($collection, Attribute::string(key: 'name', size: 100));
 
             $database->setTenant(null)->setTenantPerDocument(true);
 
             try {
-                $database->createDocument(__FUNCTION__, new Document([
+                $database->createDocument($collection, new Document([
                     '$id' => 'floatTenant',
                     '$tenant' => 1.0,
                     'name' => 'Spiderman',
@@ -1806,7 +1807,7 @@ trait GeneralTests
             $stored = $database
                 ->setTenantPerDocument(false)
                 ->setTenant(1)
-                ->getDocument(__FUNCTION__, 'floatTenant');
+                ->getDocument($collection, 'floatTenant');
 
             $this->assertTrue($stored->isEmpty());
         } finally {

@@ -382,6 +382,16 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `Adapter::find()` with no limit and an offset returns the rows after the offset on every SQL engine instead of
   throwing (MariaDB, MySQL and SQLite rejected `OFFSET` without `LIMIT`; also in 7.x).
 - A failed rollback of a metadata write no longer replaces or mislabels the error that failed the write.
+- A failed `createCollection()` whose rollback also fails throws the metadata failure (message and previous
+  exception) instead of the rollback's error; the rollback failure is logged.
+- `createAttributes()` rolls back every column it created when a driver error (for example a lock timeout or a lost
+  connection on PostgreSQL) interrupts dropping one of them, and throws the metadata failure with that error
+  appended, instead of letting the driver error escape and leaving the remaining columns.
+- `renameIndex()` fails with `Failed to rename index '<old>' to '<new>'` and keeps the old key in the metadata when
+  the adapter renames nothing, instead of recording a rename that did not happen.
+- A failed `updateRelationship()` restores the definitions it had already written (parent, two-way child, junction
+  keys) and rethrows the original error. Its rollback reverses the column rename before renaming the indexes back,
+  so SQLite, Memory and MongoDB rebuild each index over the column it covers instead of losing it.
 - Type mismatch messages spell bigint `bigint`, as stored. Spatial attribute defaults are validated.
 - A stored value that newer validation rules reject no longer blocks `updateDocument()` of other attributes, and a
   stored `json` value with a non-string permission no longer makes `getDocument()`, `find()` or `updateDocument()`
@@ -613,6 +623,8 @@ not change anything for an upgrade from 7.x.
   - `updateDocuments()` with an `Operator` decodes the refetched batch once; `count()` and `sum()` on a missing
     collection throw `Exception\NotFound`; a case-only `$id` rename in `updateDocument()` is applied; and every
     internal metadata write runs Structure validation, as in 7.x.
+  - `deleteCollection(Database::METADATA)` succeeds again, as in 7.x: it purges every cached definition before it
+    drops the metadata table.
   - `Document::findAndReplace()` and `Document::findAndRemove()` match the subject as 7.3.x did again: without an
     array subject only the top-level key is matched, and a Document subject is searched inside instead of being
     replaced or removed whole.

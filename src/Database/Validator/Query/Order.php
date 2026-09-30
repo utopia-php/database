@@ -65,7 +65,9 @@ class Order extends Base
             $column = \substr($attribute, $dot + 1);
 
             if ($this->isJoinColumnReference($alias, $column)) {
-                return ! $this->supportForAttributes || $this->isJoinedColumn($alias, $column);
+                $join = $this->joinsByAlias[$alias] ?? null;
+
+                return ! $this->supportForAttributes || $join?->holdsColumn($column) === true || $this->isJoinedColumn($alias, $column);
             }
 
             // For relationships, just validate the top level.
@@ -86,6 +88,10 @@ class Order extends Base
 
         // Search for attribute in schema
         if ($this->supportForAttributes && ! isset($this->schema[$attribute])) {
+            if ($dot === false && $this->joins !== []) {
+                return $this->isJoinedAttribute($attribute);
+            }
+
             $this->message = 'Attribute not found in schema: '.$attribute;
 
             return false;

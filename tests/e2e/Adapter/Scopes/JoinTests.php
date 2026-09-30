@@ -11,6 +11,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -8095,5 +8096,451 @@ trait JoinTests
         )));
 
         $this->cleanupAggCollections($database, $collections);
+    }
+
+    public function testJoinedFiltersMatchWhatTheJoinedCollectionMatches(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $themes = 'jconv_themes';
+        $tickets = 'jconv_tickets';
+        $collections = [$themes, $tickets];
+        $this->cleanupAggCollections($database, $collections);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $themes, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($themes, Attribute::string(key: 'tags', size: 32, array: true));
+        $database->createAttribute($themes, Attribute::datetime(key: 'when'));
+        $database->createCollection(new Collection(id: $tickets, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($tickets, Attribute::string(key: 'theme', size: 64));
+        $database->createAttribute($tickets, Attribute::integer(key: 'amount'));
+
+        foreach ([
+            't1' => [['banana'], '2024-01-01T09:00:00.000+00:00'],
+            't2' => [['a', 'b'], '2024-01-01T07:00:00.000+00:00'],
+            't3' => [['b', 'c'], '2024-01-01T11:00:00.000+00:00'],
+        ] as $id => [$tags, $when]) {
+            $database->createDocument($themes, new Document(['$id' => $id, 'tags' => $tags, 'when' => $when]));
+        }
+        foreach (['k1' => ['t1', 1], 'k2' => ['t2', 10], 'k3' => ['t3', 100], 'k4' => ['missing', 1000]] as $id => [$theme, $amount]) {
+            $database->createDocument($tickets, new Document(['$id' => $id, 'theme' => $theme, 'amount' => $amount]));
+        }
+
+        $later = '2024-01-01T10:00:00.000+02:00';
+        $filters = [
+            'containsAny' => [Query::containsAny('th.tags', ['a']), Query::containsAny('tags', ['a']), ['k2']],
+            'containsAll' => [Query::containsAll('th.tags', ['a', 'b']), Query::containsAll('tags', ['a', 'b']), ['k2']],
+            'notContains' => [Query::notContains('th.tags', ['a']), Query::notContains('tags', ['a']), ['k1', 'k3']],
+            'greaterThan with an offset' => [Query::greaterThan('th.when', $later), Query::greaterThan('when', $later), ['k1', 'k3']],
+            'equal in UTC' => [Query::equal('th.when', ['2024-01-01T09:00:00.000+00:00']), Query::equal('when', ['2024-01-01T09:00:00.000+00:00']), ['k1']],
+            'equal with an offset' => [Query::equal('th.when', ['2024-01-01T11:00:00.000+02:00']), Query::equal('when', ['2024-01-01T11:00:00.000+02:00']), ['k1']],
+        ];
+        $amounts = ['k1' => 1, 'k2' => 10, 'k3' => 100, 'k4' => 1000];
+        $ids = static function (array $documents): array {
+            $ids = \array_map(static fn (Document $document): string => $document->getId(), $documents);
+            \sort($ids);
+
+            return $ids;
+        };
+        $themeOf = ['t1' => 'k1', 't2' => 'k2', 't3' => 'k3'];
+
+        foreach ($filters as $name => [$joined, $direct, $expected]) {
+            $this->assertSame($expected, \array_values(\array_map(
+                static fn (string $theme): string => $themeOf[$theme],
+                $ids($database->find($themes, [$direct])),
+            )), $name.': the same filter on the joined collection');
+
+            $join = Query::join($themes, 'theme', '$id', '=', 'th');
+            $this->assertSame($expected, $ids($database->find($tickets, [$join, $joined])), $name.': find()');
+            $this->assertSame(\count($expected), $database->count($tickets, [$join, $joined]), $name.': count()');
+            $this->assertEquals(
+                \array_sum(\array_map(static fn (string $ticket): int => $amounts[$ticket], $expected)),
+                $database->sum($tickets, 'amount', [$join, $joined]),
+                $name.': sum()',
+            );
+
+            if ($joined->getMethod() !== Method::ContainsAll) {
+                $onList = Query::join($themes, 'th', [Query::on('theme', '$id'), $joined]);
+                $this->assertSame($expected, $ids($database->find($tickets, [$onList])), $name.': find() with the filter in the ON list');
+                $this->assertSame(\count($expected), $database->count($tickets, [$onList]), $name.': count() with the filter in the ON list');
+            }
+        }
+
+        $grouped = $database->find($tickets, [
+            Query::join($themes, 'theme', '$id', '=', 'th'),
+            Query::count('*', 'total'),
+            Query::groupBy(['th.when']),
+            Query::having([Query::greaterThan('th.when', $later)]),
+        ]);
+        $this->assertCount(2, $grouped, 'having on a joined grouped datetime');
+
+        $this->cleanupAggCollections($database, $collections);
+    }
+
+    /**
+     * @return iterable<string, array{Method, list<string>}>
+     */
+    public static function joinCursorShapes(): iterable
+    {
+        $inner = ['a1/n1', 'a1/n2', 'a1/n3', 'a2/n4', 'a2/n6'];
+
+        yield 'inner join' => [Method::Join, $inner];
+        yield 'left join' => [Method::LeftJoin, [...$inner, 'a3/-']];
+        yield 'right join' => [Method::RightJoin, [...$inner, '-/n5']];
+        yield 'full outer join' => [Method::FullOuterJoin, [...$inner, 'a3/-', '-/n5']];
+    }
+
+    /**
+     * @param  list<string>  $rows
+     */
+    #[DataProvider('joinCursorShapes')]
+    public function testJoinCursorPagesEveryJoinedRowOnce(Method $join, array $rows): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+
+        foreach ([
+            'joined ascending' => [Query::orderAsc('n.score')],
+            'joined descending' => [Query::orderDesc('n.score')],
+            'main attribute' => [Query::orderAsc('score')],
+            'default order' => [],
+        ] as $label => $order) {
+            $queries = [$joinQuery, ...$order];
+            $all = \array_values($database->find($authors, [...$queries, Query::limit(100)]));
+            $keys = \array_map($this->joinCursorKey(...), $all);
+            $sorted = $keys;
+            \sort($sorted);
+            $expected = $rows;
+            \sort($expected);
+            $this->assertSame($expected, $sorted, "{$label}: the unpaged read returns each joined row once");
+
+            foreach ($all as $index => $row) {
+                $this->assertSame(\array_slice($keys, $index + 1), $this->joinCursorKeys($database, $authors, [...$queries, Query::cursorAfter($row)]), "{$label}: after {$keys[$index]}");
+                $this->assertSame(\array_slice($keys, 0, $index), $this->joinCursorKeys($database, $authors, [...$queries, Query::cursorBefore($row)]), "{$label}: before {$keys[$index]}");
+            }
+
+            $forward = [];
+            $cursor = null;
+            for ($page = 0; $page <= \count($all); $page++) {
+                $batch = $database->find($authors, [...$queries, Query::limit(2), ...($cursor === null ? [] : [Query::cursorAfter($cursor)])]);
+                \array_push($forward, ...\array_map($this->joinCursorKey(...), $batch));
+                if (\count($batch) < 2) {
+                    break;
+                }
+                $cursor = $batch[1];
+            }
+            $this->assertSame($keys, $forward, "{$label}: paging forward in pages of two");
+
+            $backward = [];
+            $cursor = $all[\count($all) - 1];
+            for ($page = 0; $page <= \count($all); $page++) {
+                $batch = $database->find($authors, [...$queries, Query::limit(2), Query::cursorBefore($cursor)]);
+                $backward = [...\array_map($this->joinCursorKey(...), $batch), ...$backward];
+                if (\count($batch) < 2) {
+                    break;
+                }
+                $cursor = $batch[0];
+            }
+            $this->assertSame(\array_slice($keys, 0, -1), $backward, "{$label}: paging backward in pages of two from the last row");
+
+            $this->assertSame([], $database->find($authors, [...$queries, Query::cursorAfter($all[\count($all) - 1])]), "{$label}: after the last row");
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+    }
+
+    public function testJoinCursorRefusesACursorThatDoesNotNameTheRow(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+        $join = Query::join($notes, '$id', 'author', '=', 'n');
+
+        $withoutValue = $database->find($authors, [$join, Query::orderAsc('n.score'), Query::limit(1)])[0];
+        $withoutValue->removeAttribute('n.score');
+        $otherShape = $database->find($authors, [Query::join($notes, '$id', 'author', '=', 'other'), Query::orderAsc('score'), Query::limit(1)])[0];
+
+        foreach ([
+            'a cursor without its joined order value' => [$withoutValue, [$join, Query::orderAsc('n.score')], 'n.score'],
+            'a cursor from another join shape' => [$otherShape, [$join, Query::orderAsc('score')], 'n.$id'],
+            'a document read without the join' => [$database->getDocument($authors, 'a1'), [$join, Query::orderAsc('score')], 'n.$id'],
+        ] as $label => [$cursor, $queries, $missing]) {
+            try {
+                $database->find($authors, [...$queries, Query::cursorAfter($cursor)]);
+                $this->fail("{$label} is refused");
+            } catch (OrderException $exception) {
+                $this->assertSame($missing, $exception->getAttribute(), $label);
+                $this->assertStringContainsString("Cursor has no value for order attribute '{$missing}'", $exception->getMessage(), $label);
+            }
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+    }
+
+    public function testJoinCursorPagesADistinctReadByItsOrderValues(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins) || ! $database->getAdapter()->supports(Capability::Aggregations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+
+        foreach ([
+            'distinct read' => [$notes, [Query::distinct(), Query::select(['label']), Query::orderAsc('label')], 'label', ['x', 'y', 'z']],
+            'distinct read over a join' => [$authors, [Query::join($notes, '$id', 'author', '=', 'n'), Query::distinct(), Query::select(['n.label']), Query::orderDesc('n.label')], 'n.label', ['y', 'x']],
+        ] as $label => [$collection, $queries, $attribute, $values]) {
+            $paged = [];
+            $cursor = null;
+            for ($page = 0; $page <= \count($values); $page++) {
+                $rows = $database->find($collection, [...$queries, Query::limit(1), ...($cursor === null ? [] : [Query::cursorAfter($cursor)])]);
+                if ($rows === []) {
+                    break;
+                }
+                $paged[] = $rows[0]->getAttribute($attribute);
+                $cursor = $rows[0];
+            }
+            $this->assertSame($values, $paged, $label);
+        }
+
+        $iterated = [];
+        foreach ($database->iterate($notes, [Query::distinct(), Query::select(['label']), Query::orderAsc('label'), Query::limit(1)]) as $row) {
+            $iterated[] = $row->getAttribute('label');
+            if (\count($iterated) > 3) {
+                break;
+            }
+        }
+        $this->assertSame(['x', 'y', 'z'], $iterated);
+
+        $queries = [Query::distinct(), Query::select(['label', 'score']), Query::orderAsc('label')];
+        try {
+            $database->find($notes, [...$queries, Query::cursorAfter($database->find($notes, [...$queries, Query::limit(1)])[0])]);
+            $this->fail('A distinct read whose order leaves a selected attribute out cannot be paged');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString("'score' is not ordered", $exception->getMessage());
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+    }
+
+    public function testJoinedGetDocumentPairsTheLowestSequenceJoinedRow(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+        $drafts = 'jcur_drafts';
+        $this->cleanupAggCollections($database, [$drafts]);
+        $database->createCollection(new Collection(
+            id: $drafts,
+            attributes: [Attribute::string(key: 'author', size: 16), Attribute::string(key: 'label', size: 16)],
+            indexes: [Index::key('author_label', ['author', 'label'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        foreach (['d-first' => 'z', 'd-second' => 'm', 'd-third' => 'a'] as $id => $label) {
+            $database->createDocument($drafts, new Document(['$id' => $id, 'author' => 'a1', 'label' => $label, '$permissions' => [Permission::read(Role::any())]]));
+        }
+
+        foreach ([Method::Join, Method::LeftJoin, Method::RightJoin, Method::FullOuterJoin] as $join) {
+            $document = $database->getDocument($authors, 'a1', [new Query($join, $drafts, ['$id', '=', 'author', 'd'])]);
+            $this->assertSame('d-first', $document->getAttribute('d.$id'), $join->value);
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes, $drafts]);
+    }
+
+    public function testCursorIterationBuildsEachBatchFromTheCallerQueries(): void
+    {
+        $database = static::getDatabase();
+        $items = 'jcur_items';
+        $this->cleanupAggCollections($database, [$items]);
+        $database->createCollection(new Collection(
+            id: $items,
+            attributes: [Attribute::string(key: 'name', size: 16)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        for ($number = 1; $number <= 10; $number++) {
+            $id = \sprintf('i%02d', $number);
+            $database->createDocument($items, new Document(['$id' => $id, 'name' => $id, '$permissions' => [Permission::read(Role::any())]]));
+        }
+
+        $all = ['i01', 'i02', 'i03', 'i04', 'i05', 'i06', 'i07', 'i08', 'i09', 'i10'];
+        foreach ([
+            'an offset applies once' => [[Query::offset(2)], \array_slice($all, 2)],
+            'a cursor starts the iteration, which then ends' => [[Query::cursorAfter($database->getDocument($items, 'i04'))], \array_slice($all, 4)],
+            'a limit caps the iteration' => [[Query::limit(4)], \array_slice($all, 0, 4)],
+            'a limit and an offset' => [[Query::offset(5), Query::limit(4)], \array_slice($all, 5, 4)],
+        ] as $label => [$queries, $expected]) {
+            foreach ([1, 3, 100] as $batchSize) {
+                $ids = [];
+                foreach ($database->cursor($items, $queries, $batchSize) as $item) {
+                    $ids[] = $item->getId();
+                    if (\count($ids) > 20) {
+                        break;
+                    }
+                }
+                $this->assertSame($expected, $ids, "{$label}, batches of {$batchSize}");
+            }
+        }
+
+        try {
+            $database->find($items, [Query::cursorAfter(new Document(['$collection' => $items, 'name' => 'i01']))]);
+            $this->fail('A read without joins still refuses a cursor document without an id');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('Invalid cursor', $exception->getMessage());
+        }
+
+        $this->cleanupAggCollections($database, [$items]);
+    }
+
+    /**
+     * @return array{string, string}
+     */
+    private function seedJoinCursorFixture(Database $database): array
+    {
+        $authors = 'jcur_authors';
+        $notes = 'jcur_notes';
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $authors,
+            attributes: [Attribute::string(key: 'name', size: 16), Attribute::integer(key: 'score')],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $notes,
+            attributes: [Attribute::string(key: 'author', size: 16), Attribute::integer(key: 'score'), Attribute::string(key: 'label', size: 16)],
+            permissions: $permissions,
+        ));
+
+        foreach (['a1' => 1, 'a2' => 2, 'a3' => 3] as $id => $score) {
+            $database->createDocument($authors, new Document(['$id' => $id, 'name' => $id, 'score' => $score, '$permissions' => [Permission::read(Role::any())]]));
+        }
+        foreach ([
+            'n1' => ['a1', 1, 'x'],
+            'n2' => ['a1', 1, 'x'],
+            'n3' => ['a1', 2, 'y'],
+            'n4' => ['a2', 1, 'y'],
+            'n5' => ['zz', 9, 'z'],
+            'n6' => ['a2', null, 'x'],
+        ] as $id => [$author, $score, $label]) {
+            $database->createDocument($notes, new Document(['$id' => $id, 'author' => $author, 'score' => $score, 'label' => $label, '$permissions' => [Permission::read(Role::any())]]));
+        }
+
+        return [$authors, $notes];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     * @return list<string>
+     */
+    private function joinCursorKeys(Database $database, string $collection, array $queries): array
+    {
+        return \array_values(\array_map($this->joinCursorKey(...), $database->find($collection, [...$queries, Query::limit(100)])));
+    }
+
+    private function joinCursorKey(Document $row): string
+    {
+        $joined = $row->getAttribute('n.$id');
+
+        return ($row->getId() === '' ? '-' : $row->getId()).'/'.(\is_string($joined) ? $joined : '-');
+    }
+
+    /**
+     * An order on a bare name only the join declares (`label`) pages like the qualified `n.label`:
+     * after and before every row, in pages of two both ways, through tied labels and the rows an
+     * outer join left without a note. A name two joins declare is refused.
+     *
+     * @param  list<string>  $rows
+     */
+    #[DataProvider('joinCursorShapes')]
+    public function testJoinCursorPagesAlongABareJoinedOrder(Method $join, array $rows): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+
+        foreach (['ascending' => true, 'descending' => false] as $label => $ascending) {
+            $queries = [$joinQuery, $ascending ? Query::orderAsc('label') : Query::orderDesc('label')];
+            $qualified = [$joinQuery, $ascending ? Query::orderAsc('n.label') : Query::orderDesc('n.label')];
+
+            $keys = $this->joinCursorKeys($database, $authors, $qualified);
+            $sorted = $keys;
+            \sort($sorted);
+            $expected = $rows;
+            \sort($expected);
+            $this->assertSame($expected, $sorted, "{$label}: the qualified read returns each joined row once");
+            $this->assertSame($keys, $this->joinCursorKeys($database, $authors, $queries), "{$label}: the bare name orders by the joined attribute");
+
+            $all = \array_values($database->find($authors, [...$queries, Query::limit(100)]));
+            foreach ($all as $index => $row) {
+                $this->assertSame(\array_slice($keys, $index + 1), $this->joinCursorKeys($database, $authors, [...$queries, Query::cursorAfter($row)]), "{$label}: after {$keys[$index]}");
+                $this->assertSame(\array_slice($keys, 0, $index), $this->joinCursorKeys($database, $authors, [...$queries, Query::cursorBefore($row)]), "{$label}: before {$keys[$index]}");
+            }
+
+            $forward = [];
+            $cursor = null;
+            for ($page = 0; $page <= \count($all); $page++) {
+                $batch = $database->find($authors, [...$queries, Query::limit(2), ...($cursor === null ? [] : [Query::cursorAfter($cursor)])]);
+                \array_push($forward, ...\array_map($this->joinCursorKey(...), $batch));
+                if (\count($batch) < 2) {
+                    break;
+                }
+                $cursor = $batch[1];
+            }
+            $this->assertSame($keys, $forward, "{$label}: paging forward in pages of two");
+
+            $backward = [];
+            $cursor = $all[\count($all) - 1];
+            for ($page = 0; $page <= \count($all); $page++) {
+                $batch = $database->find($authors, [...$queries, Query::limit(2), Query::cursorBefore($cursor)]);
+                $backward = [...\array_map($this->joinCursorKey(...), $batch), ...$backward];
+                if (\count($batch) < 2) {
+                    break;
+                }
+                $cursor = $batch[0];
+            }
+            $this->assertSame(\array_slice($keys, 0, -1), $backward, "{$label}: paging backward in pages of two from the last row");
+        }
+
+        $twice = [Query::leftJoin($notes, '$id', 'author', '=', 'n'), Query::leftJoin($notes, '$id', 'author', '=', 'm')];
+        $cursor = $database->find($authors, [...$twice, Query::orderAsc('n.label'), Query::limit(1)])[0];
+        try {
+            $database->find($authors, [...$twice, Query::orderAsc('label'), Query::cursorAfter($cursor)]);
+            $this->fail('A bare name two joins declare must be refused, not read from one of them');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('Attribute "label" is ambiguous across joins; qualify it with a join alias', $exception->getMessage());
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes]);
     }
 }

@@ -19,6 +19,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Helpers\ID;
@@ -4557,6 +4558,92 @@ trait RelationshipTests
         }
     }
 
+    public function testTwoWayOneToOneLinkByDocumentStoresTheBackReference(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $toys = ID::unique();
+        $parts = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        foreach ([$parents, $children, $toys, $parts] as $collection) {
+            $database->createCollection(new Collection(id: $collection, permissions: $permissions));
+        }
+        $database->createRelationship(Relationship::oneToOne(collection: $parents, relatedCollection: $children, twoWay: true, key: 'partner', twoWayKey: 'parent'));
+        $database->createRelationship(Relationship::oneToOne(collection: $children, relatedCollection: $toys, twoWay: true, key: 'toy', twoWayKey: 'owner'));
+        $database->createRelationship(Relationship::oneToOne(collection: $toys, relatedCollection: $parts, twoWay: true, key: 'part', twoWayKey: 'toy'));
+        $link = function (string $collection, string $id, string $key) use ($database): ?string {
+            $value = $database->skipRelationships(fn () => $database->getDocument($collection, $id))->getAttribute($key);
+
+            return $value instanceof Document ? $value->getId() : $value;
+        };
+
+        try {
+            foreach (['c1', 'c2', 'c3', 'c4', 'c5'] as $id) {
+                $database->createDocument($children, new Document(['$id' => $id]));
+            }
+            $database->createDocument($parents, new Document(['$id' => 'p1', 'partner' => 'c3']));
+            foreach (['p2', 'p3', 'p4', 'p5', 'p6'] as $id) {
+                $database->createDocument($parents, new Document(['$id' => $id]));
+            }
+
+            $database->updateDocument($parents, 'p2', new Document(['partner' => new Document(['$id' => 'c1'])]));
+            $this->assertSame('c1', $link($parents, 'p2', 'partner'));
+            $this->assertSame('p2', $link($children, 'c1', 'parent'));
+
+            $database->updateDocument($children, 'c2', new Document(['parent' => new Document(['$id' => 'p3'])]));
+            $this->assertSame('p3', $link($children, 'c2', 'parent'));
+            $this->assertSame('c2', $link($parents, 'p3', 'partner'));
+
+            $database->updateDocument($parents, 'p4', new Document(['partner' => 'c4']));
+            $this->assertSame('c4', $link($parents, 'p4', 'partner'));
+            $this->assertSame('p4', $link($children, 'c4', 'parent'));
+
+            try {
+                $database->updateDocument($parents, 'p5', new Document(['partner' => new Document(['$id' => 'c3'])]));
+                $this->fail('Linking a document that is already linked elsewhere was accepted');
+            } catch (DuplicateException $exception) {
+                $this->assertInstanceOf(DuplicateException::class, $exception);
+            }
+            $this->assertNull($link($parents, 'p5', 'partner'));
+            $this->assertSame('p1', $link($children, 'c3', 'parent'));
+            $this->assertSame('c3', $link($parents, 'p1', 'partner'));
+
+            $database->createDocument($parents, new Document([
+                '$id' => 'p8',
+                'partner' => ['$id' => 'c8', 'toy' => ['$id' => 't8', 'part' => ['$id' => 'x8']]],
+            ]));
+            $database->updateDocument($parents, 'p6', new Document([
+                'partner' => new Document(['$id' => 'c5', 'toy' => ['$id' => 't5', 'part' => ['$id' => 'x5']]]),
+            ]));
+            foreach (['created' => ['p8', 'c8', 't8', 'x8'], 'linked' => ['p6', 'c5', 't5', 'x5']] as $case => [$parent, $child, $toy, $part]) {
+                $this->assertSame($child, $link($parents, $parent, 'partner'), $case);
+                $this->assertSame($parent, $link($children, $child, 'parent'), $case);
+                $this->assertSame($toy, $link($children, $child, 'toy'), $case);
+                $this->assertSame($child, $link($toys, $toy, 'owner'), $case);
+                $this->assertNull($link($toys, $toy, 'part'), $case);
+                $this->assertTrue($database->getDocument($parts, $part)->isEmpty(), $case.': the level past the relation depth limit was written');
+            }
+        } finally {
+            foreach ([$parents, $children, $toys, $parts] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
     public function testLinkingARelatedDocumentThroughANestedUpdateWithoutUpdatePermissionIsRejected(): void
     {
         /** @var Database $database */
@@ -4675,6 +4762,81 @@ trait RelationshipTests
 
         $database->deleteCollection($parents);
         $database->deleteCollection($children);
+    }
+
+    public function testTwoWayOneToOneLinkChecksTheDocumentsOwnCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $children = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection(new Collection(id: $parents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $children, permissions: $permissions));
+        $database->createRelationship(Relationship::oneToOne(
+            collection: $parents,
+            relatedCollection: $children,
+            twoWay: true,
+            key: 'partner',
+            twoWayKey: 'parent',
+        ));
+        $link = fn (string $collection, string $id, string $key): ?string => $database->skipRelationships(
+            fn () => $database->getDocument($collection, $id)
+        )->getAttribute($key);
+
+        try {
+            foreach (['a', 'b', 'L', 'free'] as $id) {
+                $database->createDocument($children, new Document(['$id' => $id]));
+            }
+            $database->createDocument($parents, new Document(['$id' => 'x', 'partner' => 'L']));
+            $database->createDocument($parents, new Document(['$id' => 'a', 'partner' => 'b']));
+            $database->createDocument($parents, new Document(['$id' => 'c']));
+            $database->createDocument($parents, new Document(['$id' => 'd']));
+
+            $database->updateDocument($parents, 'c', new Document(['partner' => 'a']));
+            $this->assertSame('a', $link($parents, 'c', 'partner'));
+            $this->assertSame('c', $link($children, 'a', 'parent'));
+            $this->assertSame('a', $link($children, 'b', 'parent'));
+
+            $duplicates = [
+                'id' => fn () => $database->updateDocument($parents, 'd', new Document(['partner' => 'L'])),
+                'document' => fn () => $database->updateDocument($parents, 'd', new Document(['partner' => new Document(['$id' => 'L'])])),
+                'child side' => fn () => $database->updateDocument($children, 'free', new Document(['parent' => 'x'])),
+            ];
+            foreach ($duplicates as $case => $write) {
+                try {
+                    $write();
+                    $this->fail($case.': linking a document that is already linked elsewhere was accepted');
+                } catch (DuplicateException $exception) {
+                    $this->assertSame(DuplicateException::class, $exception::class, $case);
+                    $this->assertSame('Document already has a related document', $exception->getMessage(), $case);
+                }
+            }
+            $this->assertNull($link($parents, 'd', 'partner'));
+            $this->assertNull($link($children, 'free', 'parent'));
+            $this->assertSame('x', $link($children, 'L', 'parent'));
+
+            $database->updateDocument($parents, 'x', new Document(['partner' => null]));
+            $database->updateDocument($parents, 'd', new Document(['partner' => 'L']));
+            $this->assertNull($link($parents, 'x', 'partner'));
+            $this->assertSame('L', $link($parents, 'd', 'partner'));
+            $this->assertSame('d', $link($children, 'L', 'parent'));
+        } finally {
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+        }
     }
 
     /**
@@ -5021,5 +5183,161 @@ trait RelationshipTests
         \sort($ids);
 
         return $ids;
+    }
+
+    public function testNestedPathFilterThroughAOneToManyHopStaysWithinTheQueryValueLimit(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = 'nestedHopParents';
+        $children = 'nestedHopChildren';
+        $labels = 'nestedHopLabels';
+        $database->createCollection(new Collection(id: $parents, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $children, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $labels, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::oneToMany(collection: $parents, relatedCollection: $children, twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: $children, relatedCollection: $labels, twoWay: true, key: 'labels', twoWayKey: 'child', onDelete: ForeignKeyAction::SetNull));
+
+        foreach (\range(1, 4) as $number) {
+            $database->createDocument($parents, new Document(['$id' => "parent{$number}"]));
+            $database->createDocument($children, new Document(['$id' => "child{$number}", 'parent' => "parent{$number}"]));
+            $database->createDocument($labels, new Document(['$id' => "label{$number}", 'name' => $number === 4 ? 'other' : 'match', 'child' => "child{$number}"]));
+        }
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(2);
+
+        try {
+            $ids = \array_map(fn (Document $parent): string => $parent->getId(), $database->find($parents, [Query::equal('children.labels.name', ['match'])]));
+            \sort($ids);
+
+            $this->assertSame(['parent1', 'parent2', 'parent3'], $ids);
+        } finally {
+            $database->setMaxQueryValues($max);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+            $database->deleteCollection($labels);
+        }
+    }
+
+    public function testSelectingNestedAttributesThroughTheChildSideOfAManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $stores = 'nestedSelectStores';
+        $products = 'nestedSelectProducts';
+        $database->createCollection(new Collection(id: $stores, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $products, attributes: [Attribute::string(key: 'name', size: 64), Attribute::string(key: 'sku', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::manyToOne(collection: $products, relatedCollection: $stores, twoWay: true, key: 'store', twoWayKey: 'products', onDelete: ForeignKeyAction::SetNull));
+
+        try {
+            $database->createDocument($stores, new Document(['$id' => 'store1', 'name' => 'Store 1']));
+            foreach (['product1', 'product2'] as $id) {
+                $database->createDocument($products, new Document(['$id' => $id, 'name' => "Name {$id}", 'sku' => "sku-{$id}", 'store' => 'store1']));
+            }
+
+            $reads = [
+                'getDocument' => $database->getDocument($stores, 'store1', [Query::select(['*', 'products.name'])]),
+                'findOne' => $database->findOne($stores, [Query::select(['*', 'products.name'])]),
+            ];
+            foreach ($reads as $read => $store) {
+                $this->assertSame('Store 1', $store->getAttribute('name'), $read);
+                $ids = \array_map(fn (Document $product): string => $product->getId(), $store->getDocuments('products'));
+                \sort($ids);
+                $this->assertSame(['product1', 'product2'], $ids, $read);
+                foreach ($store->getDocuments('products') as $product) {
+                    $this->assertSame("Name {$product->getId()}", $product->getAttribute('name'), $read);
+                    $this->assertFalse($product->offsetExists('sku'), "{$read} must return only the selected attribute of {$product->getId()}");
+                    $this->assertFalse($product->offsetExists('store'), "{$read} must not return the back-reference of {$product->getId()}");
+                }
+            }
+
+            $store = $database->getDocument($stores, 'store1', [Query::select(['*', 'products.'])]);
+            $this->assertCount(2, $store->getDocuments('products'));
+            foreach ($store->getDocuments('products') as $product) {
+                $this->assertSame("sku-{$product->getId()}", $product->getAttribute('sku'), 'A trailing dot selects every attribute of the related documents');
+            }
+        } finally {
+            $database->deleteCollection($stores);
+            $database->deleteCollection($products);
+        }
+    }
+
+    public function testContainsAllOnRelationshipEdgeCases(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $projects = 'containsAllProjects';
+        $developers = 'containsAllDevelopers';
+        $database->createCollection(new Collection(id: $projects, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $developers, attributes: [Attribute::string(key: 'devName', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::manyToMany(collection: $projects, relatedCollection: $developers, twoWay: true, key: 'developers', twoWayKey: 'projects', onDelete: ForeignKeyAction::SetNull));
+
+        try {
+            foreach (['dev1' => 'Alice', 'dev2' => 'Bob', 'dev3' => 'Carol'] as $id => $name) {
+                $database->createDocument($developers, new Document(['$id' => $id, 'devName' => $name]));
+            }
+            $database->createDocument($projects, new Document(['$id' => 'project1', 'developers' => ['dev1', 'dev2']]));
+            $database->createDocument($projects, new Document(['$id' => 'project2', 'developers' => ['dev1', 'dev3']]));
+
+            $found = function (Query $query) use ($database, $projects): array {
+                $ids = \array_map(fn (Document $project): string => $project->getId(), $database->find($projects, [$query]));
+                \sort($ids);
+
+                return $ids;
+            };
+
+            $this->assertSame(['project1'], $found(Query::containsAll('developers.$id', ['dev2'])));
+            $this->assertSame(['project2'], $found(Query::containsAll('developers.$id', ['dev1', 'dev3'])));
+            $this->assertSame([], $found(Query::containsAll('developers.$id', ['dev1', 'nobody'])));
+            $this->assertSame([], $found(Query::containsAll('developers.$id', ['dev2', 'dev3'])));
+            $this->assertSame([], $found(Query::equal('developers.devName', ['Nobody'])));
+
+            if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+                try {
+                    $database->find($projects, [Query::equal('developers.unknownAttribute', ['x'])]);
+                    $this->fail('A filter on an unknown related attribute must be rejected');
+                } catch (QueryException $exception) {
+                    $this->assertStringContainsString('unknownAttribute', $exception->getMessage());
+                }
+            }
+        } finally {
+            $database->deleteCollection($projects);
+            $database->deleteCollection($developers);
+        }
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function relationshipCoveragePermissions(): array
+    {
+        return [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
     }
 }

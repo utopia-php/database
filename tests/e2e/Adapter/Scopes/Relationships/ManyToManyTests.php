@@ -9,6 +9,7 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure;
 use Utopia\Database\Helpers\ID;
@@ -2156,35 +2157,35 @@ trait ManyToManyTests
         // Seed data
         $database->createDocument('tags', new Document([
             '$id' => 'tag_eco',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'label' => 'Eco-Friendly',
         ]));
         $database->createDocument('tags', new Document([
             '$id' => 'tag_premium',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'label' => 'Premium',
         ]));
         $database->createDocument('tags', new Document([
             '$id' => 'tag_sale',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'label' => 'Sale',
         ]));
 
         $database->createDocument('products', new Document([
             '$id' => 'prod_a',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Product A',
             'tags' => ['tag_eco', 'tag_premium'],
         ]));
         $database->createDocument('products', new Document([
             '$id' => 'prod_b',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Product B',
             'tags' => ['tag_sale'],
         ]));
         $database->createDocument('products', new Document([
             '$id' => 'prod_c',
-            '$permissions' => [Permission::read(Role::any())],
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
             'title' => 'Product C',
             'tags' => ['tag_eco'],
         ]));
@@ -2259,5 +2260,229 @@ trait ManyToManyTests
         $database->deleteCollection('brands');
         $database->deleteCollection('products');
         $database->deleteCollection('tags');
+    }
+
+    public function testDeleteDocumentsWithASelectCascadesToChildren_ManyToMany(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parentCollection = 'm2m_select_cascade_parent';
+        $childCollection = 'm2m_select_cascade_child';
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: $parentCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(new Collection(id: $childCollection, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($parentCollection, Attribute::string(key: 'name', size: 64));
+        $database->createRelationship(Relationship::manyToMany(collection: $parentCollection, relatedCollection: $childCollection, twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade));
+
+        foreach (['1', '2'] as $suffix) {
+            $database->createDocument($childCollection, new Document(['$id' => "child{$suffix}"]));
+            $database->createDocument($parentCollection, new Document(['$id' => "parent{$suffix}", 'children' => ["child{$suffix}"]]));
+        }
+
+        $deleted = $database->deleteDocuments($parentCollection, [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+
+        $this->assertSame(1, $deleted);
+        $this->assertSame(['parent1'], \array_map(fn (Document $document) => $document->getId(), $database->find($parentCollection, [Query::orderAsc('$id')])));
+        $this->assertSame(['child1'], \array_map(fn (Document $document) => $document->getId(), $database->find($childCollection, [Query::orderAsc('$id')])), "The deleted parent's child must be deleted with it");
+
+        $database->deleteCollection($parentCollection);
+        $database->deleteCollection($childCollection);
+    }
+
+    public function testDeleteDocumentsWithASelectHonoursRestrict_ManyToMany(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class)) || ! $database->getAdapter()->supports(Capability::BatchOperations)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parentCollection = 'm2m_select_restrict_parent';
+        $childCollection = 'm2m_select_restrict_child';
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+
+        $database->createCollection(new Collection(id: $parentCollection, permissions: $permissions, documentSecurity: false));
+        $database->createCollection(new Collection(id: $childCollection, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($parentCollection, Attribute::string(key: 'name', size: 64));
+        $database->createRelationship(Relationship::manyToMany(collection: $parentCollection, relatedCollection: $childCollection, twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Restrict));
+
+        foreach (['1', '2'] as $suffix) {
+            $database->createDocument($childCollection, new Document(['$id' => "child{$suffix}"]));
+            $database->createDocument($parentCollection, new Document(['$id' => "parent{$suffix}", 'children' => ["child{$suffix}"]]));
+        }
+
+        try {
+            $database->deleteDocuments($parentCollection, [Query::equal('$id', ['parent2']), Query::select(['$id', 'name'])]);
+            $this->fail('Deleting a parent with a related document must be restricted');
+        } catch (RestrictedException $exception) {
+            $this->assertSame('Cannot delete document because it has at least one related document.', $exception->getMessage());
+        }
+
+        $this->assertSame(['parent1', 'parent2'], \array_map(fn (Document $document) => $document->getId(), $database->find($parentCollection, [Query::orderAsc('$id')])));
+        $this->assertSame(['child1', 'child2'], \array_map(fn (Document $document) => $document->getId(), $database->find($childCollection, [Query::orderAsc('$id')])));
+
+        $database->deleteCollection($parentCollection);
+        $database->deleteCollection($childCollection);
+    }
+
+    public function testLinkingAManyToManyDocumentNeedsUpdatePermission(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $grandparents = ID::unique();
+        $parents = ID::unique();
+        $tags = ID::unique();
+        $permissions = [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+        $database->createCollection(new Collection(id: $grandparents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $parents, permissions: $permissions));
+        $database->createCollection(new Collection(id: $tags, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createRelationship(Relationship::oneToOne(collection: $grandparents, relatedCollection: $parents, key: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::manyToMany(collection: $parents, relatedCollection: $tags, twoWay: true, key: 'tags', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        $database->createDocument($tags, new Document([
+            '$id' => 'readonly',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::user('tagAdmin'))],
+        ]));
+        $database->createDocument($parents, new Document(['$id' => 'parent1']));
+        $database->createDocument($grandparents, new Document(['$id' => 'grandparent1', 'parent' => 'parent1']));
+
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        $links = [
+            'an ID through an update' => fn () => $database->updateDocument($parents, 'parent1', new Document(['tags' => ['readonly']])),
+            'a document through an update' => fn () => $database->updateDocument($parents, 'parent1', new Document(['tags' => [new Document(['$id' => 'readonly'])]])),
+            'an ID through a nested update' => fn () => $database->updateDocument($grandparents, 'grandparent1', new Document([
+                'parent' => new Document(['$id' => 'parent1', 'tags' => ['readonly']]),
+            ])),
+            'an ID through a create' => fn () => $database->createDocument($parents, new Document(['$id' => 'parent2', 'tags' => ['readonly']])),
+            'a document through a create' => fn () => $database->createDocument($parents, new Document(['$id' => 'parent3', 'tags' => [new Document(['$id' => 'readonly'])]])),
+            'an ID through a nested create' => fn () => $database->createDocument($grandparents, new Document([
+                '$id' => 'grandparent2',
+                'parent' => new Document(['$id' => 'parent4', 'tags' => ['readonly']]),
+            ])),
+        ];
+
+        try {
+            foreach ($links as $link => $write) {
+                try {
+                    $write();
+                    $this->fail("Linking {$link} to a document the caller may not update must be rejected");
+                } catch (AuthorizationException $exception) {
+                    $this->assertSame('Missing "update" permission for role "user:tagAdmin". Only "["any"]" scopes are allowed and "["user:tagAdmin"]" was given.', $exception->getMessage(), $link);
+                }
+            }
+
+            $this->assertSame([], $database->getDocument($parents, 'parent1')->getAttribute('tags'));
+            $this->assertSame([], $database->getDocument($tags, 'readonly')->getAttribute('parents'));
+            $this->assertSame(['parent1'], \array_map(fn (Document $parent) => $parent->getId(), $database->find($parents)));
+
+            $authorization->addRole(Role::user('tagAdmin')->toString());
+
+            $database->updateDocument($parents, 'parent1', new Document(['tags' => ['readonly']]));
+
+            $this->assertSame(['readonly'], \array_map(fn (Document $tag) => $tag->getId(), $database->getDocument($parents, 'parent1')->getDocuments('tags')));
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+
+            $database->deleteCollection($grandparents);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($tags);
+        }
+    }
+
+    public function testKeepingOrUnlinkingAManyToManyDocumentNeedsNoUpdatePermission(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = ID::unique();
+        $tags = ID::unique();
+        $database->createCollection(new Collection(id: $parents, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ]));
+        $database->createCollection(new Collection(id: $tags, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]));
+        $database->createRelationship(Relationship::manyToMany(collection: $parents, relatedCollection: $tags, twoWay: true, key: 'tags', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        $database->createDocument($tags, new Document([
+            '$id' => 'readonly',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::user('keepTagAdmin'))],
+        ]));
+        $database->getAuthorization()->skip(fn () => $database->createDocument($parents, new Document(['$id' => 'parent1', 'tags' => ['readonly']])));
+
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            $database->updateDocument($parents, 'parent1', new Document(['name' => 'kept', 'tags' => ['readonly']]));
+            $this->assertSame(['readonly'], \array_map(fn (Document $tag) => $tag->getId(), $database->getDocument($parents, 'parent1')->getDocuments('tags')));
+
+            $database->updateDocument($parents, 'parent1', new Document(['tags' => []]));
+            $this->assertSame([], $database->getDocument($parents, 'parent1')->getAttribute('tags'));
+            $this->assertSame([], $database->getDocument($tags, 'readonly')->getAttribute('parents'));
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+
+            $database->deleteCollection($parents);
+            $database->deleteCollection($tags);
+        }
     }
 }

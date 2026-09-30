@@ -24,6 +24,7 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -10050,5 +10051,420 @@ trait DocumentTests
         } finally {
             $database->deleteCollection($collection);
         }
+    }
+
+    public function testFilteredCountAndSumIssueFlatStatements(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'flat_aggregates';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'category', size: 16),
+                Attribute::integer(key: 'price'),
+            ],
+            permissions: [Permission::create(Role::any())],
+            documentSecurity: true,
+        ));
+
+        try {
+            foreach ([
+                ['f1', 'a', 10, Role::any()],
+                ['f2', 'a', 20, Role::any()],
+                ['f3', 'a', 30, Role::user('flat_aggregates_other')],
+                ['f4', 'b', 40, Role::any()],
+                ['f5', 'a', 50, Role::any()],
+            ] as [$id, $category, $price, $reader]) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    '$permissions' => [Permission::read($reader)],
+                    'category' => $category,
+                    'price' => $price,
+                ]));
+            }
+
+            $filter = [Query::equal('category', ['a'])];
+            $table = $database->getNamespace().'_'.$collection;
+
+            [$count, $statements] = $this->statementsOn($database, $table, fn (): int => $database->count($collection, $filter));
+            $this->assertSame(3, $count);
+            $this->assertCount(1, $statements, \implode("\n", $statements));
+            $this->assertStringNotContainsString('table_count', $statements[0]);
+            $this->assertStringNotContainsString('FROM (SELECT', $statements[0]);
+
+            [$sum, $statements] = $this->statementsOn($database, $table, fn (): int|float => $database->sum($collection, 'price', $filter));
+            $this->assertEquals(80, $sum);
+            $this->assertCount(1, $statements, \implode("\n", $statements));
+            $this->assertStringNotContainsString('table_count', $statements[0]);
+            $this->assertStringNotContainsString('FROM (SELECT', $statements[0]);
+
+            [$bounded, $statements] = $this->statementsOn($database, $table, fn (): int => $database->count($collection, $filter, 2));
+            $this->assertSame(2, $bounded);
+            $this->assertCount(1, $statements);
+            $this->assertStringContainsString('table_count', $statements[0], 'a bound on the rows keeps the derived table');
+
+            $this->assertSame(0, $database->count($collection, [Query::equal('category', ['c'])]));
+            $this->assertEquals(0, $database->sum($collection, 'price', [Query::equal('category', ['c'])]));
+            $this->assertSame(4, $database->getAuthorization()->skip(fn (): int => $database->count($collection, $filter)));
+        } finally {
+            $database->getAuthorization()->skip(fn () => $database->deleteCollection($collection));
+        }
+    }
+
+    public function testUnaliasedBitwiseAggregatesOfAnEmptySetAreNull(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::BitwiseAggregates)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'bitwise_unaliased';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'category', size: 16),
+                Attribute::integer(key: 'flags'),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        try {
+            foreach ([['b1', 'a', 6], ['b2', 'a', 3]] as [$id, $category, $flags]) {
+                $database->createDocument($collection, new Document([
+                    '$id' => $id,
+                    '$permissions' => [Permission::read(Role::any())],
+                    'category' => $category,
+                    'flags' => $flags,
+                ]));
+            }
+
+            $aggregates = [
+                'bitAnd' => static fn (string $alias = ''): Query => Query::bitAnd('flags', $alias),
+                'bitOr' => static fn (string $alias = ''): Query => Query::bitOr('flags', $alias),
+                'bitXor' => static fn (string $alias = ''): Query => Query::bitXor('flags', $alias),
+            ];
+            foreach ($aggregates as $method => $aggregate) {
+                $empty = $database->find($collection, [Query::equal('category', ['none']), $aggregate()]);
+                $this->assertCount(1, $empty, $method);
+                $values = $empty[0]->getArrayCopy();
+                $this->assertNotSame([], $values, $method);
+                foreach ($values as $name => $value) {
+                    $this->assertStringStartsNotWith('$inputs:', (string) $name, $method);
+                    $this->assertNull($value, $method.': '.$name);
+                }
+
+                $filled = $database->find($collection, [Query::equal('category', ['a']), $aggregate(), $aggregate('named')]);
+                $this->assertCount(1, $filled, $method);
+                $values = $filled[0]->getArrayCopy();
+                $named = $values['named'] ?? null;
+                unset($values['named']);
+                $this->assertNotNull($named, $method);
+                $this->assertCount(1, $values, $method);
+                $this->assertEquals($named, \array_values($values)[0], $method.': the unaliased value is the aliased one');
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testProfiledReadsLogTheirValuesCollectionAndOperation(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Feature\RawQuery::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'profiled_reads';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'category', size: 16)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'p1',
+                '$permissions' => [Permission::read(Role::any())],
+                'category' => 'profiled_value',
+            ]));
+
+            $profiler = $database->enableProfiling()->getProfiler();
+            $this->assertNotNull($profiler);
+
+            try {
+                $profiler->reset();
+                $database->find($collection, [Query::equal('category', ['profiled_value'])]);
+                $database->count($collection, [Query::equal('category', ['profiled_value'])]);
+            } finally {
+                $database->disableProfiling();
+            }
+
+            $operations = [];
+            foreach ($profiler->getLogs() as $log) {
+                if ($log->collection !== $collection) {
+                    continue;
+                }
+                $this->assertContains('profiled_value', $log->bindings, $log->query);
+                $operations[] = $log->operation;
+            }
+
+            $this->assertSame(['document_find', 'document_count'], $operations);
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testSumResolvesABareNameOnlyAJoinDeclares(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $orders = 'sum_join_orders';
+        $items = 'sum_join_items';
+        $extras = 'sum_join_extras';
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $orders,
+            attributes: [Attribute::string(key: 'item', size: 16), Attribute::integer(key: 'quantity')],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $items,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price'), Attribute::integer(key: 'quantity')],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $extras,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price')],
+            permissions: $permissions,
+        ));
+
+        try {
+            foreach ([['o1', 'a', 1], ['o2', 'b', 2], ['o3', 'a', 3]] as [$id, $item, $quantity]) {
+                $database->createDocument($orders, new Document(['$id' => $id, '$permissions' => [], 'item' => $item, 'quantity' => $quantity]));
+            }
+            foreach ([['a', 10], ['b', 20]] as [$code, $price]) {
+                $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'price' => $price, 'quantity' => 100]));
+            }
+            $database->createDocument($extras, new Document(['$id' => 'a', '$permissions' => [], 'code' => 'a', 'price' => 100]));
+
+            $item = Query::join($items, 'item', 'code', '=', 'it');
+            $extra = Query::join($extras, 'item', 'code', '=', 'ex');
+
+            $this->assertEquals(40, $database->sum($orders, 'price', [$item]));
+            $this->assertEquals(40, $database->sum($orders, 'it.price', [$item]));
+            $this->assertEquals(20, $database->sum($orders, 'price', [$item, Query::equal('it.code', ['a'])]));
+            $this->assertEquals(6, $database->sum($orders, 'quantity', [$item]), 'the main collection declares quantity');
+            $this->assertEquals(200, $database->sum($orders, 'ex.price', [$item, $extra]));
+
+            try {
+                $database->sum($orders, 'price', [$item, $extra]);
+                $this->fail('a name two joins declare was summed');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias', $error->getMessage());
+            }
+
+            try {
+                $database->sum($orders, 'weight', [$item]);
+                $this->fail('a name no collection declares was summed');
+            } catch (QueryException $error) {
+                $this->assertSame('Invalid query: Attribute not found in schema: weight', $error->getMessage());
+            }
+        } finally {
+            foreach ([$orders, $items, $extras] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    public function testJoinedGroupSharingAMainGroupNameKeepsItsQualifiedName(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $orders = 'group_name_orders';
+        $items = 'group_name_items';
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $orders,
+            attributes: [Attribute::string(key: 'item', size: 16), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $items,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+
+        try {
+            foreach ([['o1', 'a', 'x'], ['o2', 'b', 'y'], ['o3', 'a', 'x']] as [$id, $item, $name]) {
+                $database->createDocument($orders, new Document(['$id' => $id, '$permissions' => [], 'item' => $item, 'name' => $name]));
+            }
+            foreach ([['a', 'apple'], ['b', 'banana']] as [$code, $name]) {
+                $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'name' => $name]));
+            }
+
+            $rows = static fn (array $documents): array => \array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents);
+
+            foreach (['join' => Query::join($items, 'item', 'code', '=', 'it'), 'full outer join' => Query::fullOuterJoin($items, 'item', 'code', '=', 'it')] as $case => $join) {
+                $this->assertEquals(
+                    [['orders' => 2, 'name' => 'x', 'it.name' => 'apple'], ['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
+                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['name', 'it.name']), Query::orderAsc('name')])),
+                    $case,
+                );
+                $this->assertEquals(
+                    [['orders' => 1, 'name' => 'y', 'it.name' => 'banana']],
+                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name', 'name']), Query::having([Query::equal('it.name', ['banana'])])])),
+                    $case.': a having on the qualified group',
+                );
+                $this->assertEquals(
+                    [['orders' => 2, 'name' => 'apple'], ['orders' => 1, 'name' => 'banana']],
+                    $rows($database->find($orders, [$join, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::orderAsc('it.name')])),
+                    $case.': a joined group alone keeps its bare name',
+                );
+            }
+        } finally {
+            foreach ([$orders, $items] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    public function testJoinWildcardSelectAndBareJoinedOrder(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $orders = 'joined_shape_orders';
+        $items = 'joined_shape_items';
+        $extras = 'joined_shape_extras';
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(
+            id: $orders,
+            attributes: [Attribute::string(key: 'item', size: 16), Attribute::integer(key: 'quantity'), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $items,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price'), Attribute::string(key: 'name', size: 16)],
+            permissions: $permissions,
+        ));
+        $database->createCollection(new Collection(
+            id: $extras,
+            attributes: [Attribute::string(key: 'code', size: 16), Attribute::integer(key: 'price')],
+            permissions: $permissions,
+        ));
+
+        try {
+            foreach ([['o1', 'a', 1, 'x'], ['o2', 'b', 2, 'y'], ['o3', 'a', 3, 'x']] as [$id, $item, $quantity, $name]) {
+                $database->createDocument($orders, new Document(['$id' => $id, '$permissions' => [], 'item' => $item, 'quantity' => $quantity, 'name' => $name]));
+            }
+            foreach ([['a', 10, 'apple'], ['b', 20, 'banana']] as [$code, $price, $name]) {
+                $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'price' => $price, 'name' => $name]));
+            }
+            $database->createDocument($extras, new Document(['$id' => 'a', '$permissions' => [], 'code' => 'a', 'price' => 100]));
+
+            $item = Query::join($items, 'item', 'code', '=', 'it');
+            $extra = Query::join($extras, 'item', 'code', '=', 'ex');
+            $ids = static fn (array $documents): array => \array_map(static fn (Document $document): string => $document->getId(), $documents);
+
+            $rows = $database->find($orders, [$item, Query::select(['name', 'it.*']), Query::orderAsc('$id')]);
+            $this->assertSame(['o1', 'o2', 'o3'], $ids($rows));
+            $this->assertSame('y', $rows[1]->getAttribute('name'));
+            $this->assertSame('banana', $rows[1]->getAttribute('it.name'));
+            $this->assertEquals(20, $rows[1]->getAttribute('it.price'));
+            $this->assertSame('b', $rows[1]->getAttribute('it.$id'));
+            $this->assertNull($rows[1]->getAttribute('quantity'));
+
+            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('price'), Query::orderAsc('$id')])));
+            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [Query::fullOuterJoin($items, 'item', 'code', '=', 'it'), Query::orderDesc('price'), Query::orderAsc('$id')])));
+            $this->assertSame(['o2', 'o1', 'o3'], $ids($database->find($orders, [$item, Query::orderDesc('name'), Query::orderAsc('$id')])), 'a name the main collection declares reads the main table');
+            $this->assertEquals(
+                [['orders' => 1, 'code' => 'b'], ['orders' => 2, 'code' => 'a']],
+                \array_map(static fn (Document $row): array => $row->getArrayCopy(), $database->find($orders, [$item, Query::count('*', 'orders'), Query::groupBy(['code']), Query::orderDesc('code')])),
+            );
+
+            foreach ([
+                'Invalid query: Attribute "price" is ambiguous across joins; qualify it with a join alias' => [$item, $extra, Query::orderAsc('price')],
+                'Invalid query: Attribute not found in schema: weight' => [$item, Query::orderAsc('weight')],
+                'Invalid query: Cannot select "it.*": an aggregation query can only select the attributes it groups by' => [$item, Query::count('*', 'orders'), Query::groupBy(['it.name']), Query::select(['it.*'])],
+                'Invalid query: Attribute not found in schema: zz' => [$item, Query::select(['name', 'zz.*'])],
+            ] as $message => $queries) {
+                try {
+                    $database->find($orders, $queries);
+                    $this->fail('accepted: '.$message);
+                } catch (QueryException $error) {
+                    $this->assertSame($message, $error->getMessage());
+                }
+            }
+        } finally {
+            foreach ([$orders, $items, $extras] as $collection) {
+                $database->deleteCollection($collection);
+            }
+        }
+    }
+
+    /**
+     * Run $read with the profiler on; return its result and the statements it ran on $table.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $read
+     * @return array{T, list<string>}
+     */
+    private function statementsOn(Database $database, string $table, callable $read): array
+    {
+        $profiler = $database->enableProfiling()->getProfiler();
+        $this->assertNotNull($profiler);
+
+        try {
+            $profiler->reset();
+            $result = $read();
+        } finally {
+            $database->disableProfiling();
+        }
+
+        $statements = [];
+        foreach ($profiler->getLogs() as $log) {
+            if (\str_contains($log->query, $table) && ! \str_contains($log->query, '_metadata')) {
+                $statements[] = $log->query;
+            }
+        }
+
+        return [$result, $statements];
     }
 }

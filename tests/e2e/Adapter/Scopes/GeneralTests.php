@@ -1607,7 +1607,7 @@ trait GeneralTests
                         ? 'SELECT pg_terminate_backend(pg_backend_pid())'
                         : 'KILL '.$database->getConnectionId();
                     try {
-                        $database->rawQuery($end);
+                        $database->getAuthorization()->skip(fn (): array => $database->rawQuery($end));
                     } catch (Throwable) {
                         // The server ends the session that runs the statement, so the statement itself may fail.
                     }

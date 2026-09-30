@@ -25,7 +25,9 @@ class Cursor extends Base
     /**
      * Is valid.
      *
-     * Returns true if method is cursorBefore or cursorAfter and value is not null
+     * Returns true if method is cursorBefore or cursorAfter and its value is a valid document id or a document
+     * holding one. A document without an id is a row a join or a distinct read returned; the read decides whether
+     * its values name a row.
      *
      * Otherwise, returns false
      *
@@ -43,6 +45,10 @@ class Cursor extends Base
             $cursor = $value->getValue();
 
             if ($cursor instanceof Document) {
+                if ($cursor->getId() === '') {
+                    return true;
+                }
+
                 $cursor = $cursor->getId();
             }
 

@@ -13,8 +13,8 @@ use Utopia\Database\Validator\Query\Select;
 use Utopia\Query\Schema\ColumnType;
 
 /**
- * Validates queries for single document retrieval: selections of the document's attributes, and
- * joins whose conditions meet the filter rules a listing applies to them.
+ * Validates queries for single document retrieval: selections of the document's attributes, and,
+ * unless turned off, joins whose conditions meet the filter rules a listing applies to them.
  */
 class Document extends Queries
 {
@@ -28,6 +28,7 @@ class Document extends Queries
     /**
      * @param  array<BaseDocument>  $attributes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
+     * @param  bool  $supportForJoins  Whether join queries are accepted
      *
      * @throws Exception
      */
@@ -40,6 +41,7 @@ class Document extends Queries
         private readonly DateTime $maxAllowedDate = new DateTime('9999-12-31'),
         private readonly bool $supportUnsignedBigInt = true,
         bool $sharedTables = false,
+        bool $supportForJoins = true,
     ) {
         $attributes[] = new BaseDocument([
             BaseDocument::ID => BaseDocument::ID,
@@ -68,10 +70,11 @@ class Document extends Queries
 
         $this->attributes = $attributes;
 
-        $validators = [
-            new Select($attributes, $supportForAttributes, $sharedTables),
-            new Join($attributes, $supportForAttributes),
-        ];
+        $validators = [new Select($attributes, $supportForAttributes, $sharedTables)];
+
+        if ($supportForJoins) {
+            $validators[] = new Join($attributes, $supportForAttributes);
+        }
 
         parent::__construct($validators);
     }

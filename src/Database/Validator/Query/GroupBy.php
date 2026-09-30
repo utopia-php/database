@@ -18,6 +18,13 @@ class GroupBy extends Base
     protected array $schema = [];
 
     /**
+     * Every attribute of the collection, and whether it holds a column.
+     *
+     * @var array<string, bool>
+     */
+    protected array $columns = [];
+
+    /**
      * @param  array<Document>  $attributes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
      */
@@ -32,6 +39,7 @@ class GroupBy extends Base
         }
 
         $this->schema += self::internalColumns($sharedTables);
+        $this->columns = JoinedCollection::columns($attributes);
     }
 
     public function getMethodType(): string
@@ -61,6 +69,12 @@ class GroupBy extends Base
                 && ! isset($this->schema[$column])
                 && ! $this->isJoinedAttribute($column)
             ) {
+                return false;
+            }
+
+            if (($this->columns[$column] ?? true) === false) {
+                $this->message = 'Cannot group by virtual relationship attribute: '.$column;
+
                 return false;
             }
         }

@@ -41,6 +41,7 @@ use Utopia\Database\Query;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
+use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
@@ -48,10 +49,13 @@ use Utopia\Database\Validator\Permissions;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
 use Utopia\Database\Validator\Query\Aggregate;
+use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Database\Validator\Query\JoinedCollection;
 use Utopia\Database\Validator\Structure;
+use Utopia\Database\Validator\UID;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use WeakMap;
@@ -402,11 +406,14 @@ trait Documents
 
         $this->checkQueryTypes($queries);
 
+        $joinedCollections = null;
+
         if ($this->validate) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
+            $supportForJoins = $this->adapter->supports(Capability::Joins);
             $validator = $joinedCollections === []
-                ? new DocumentValidator($attributes, $supportForAttributes, sharedTables: $this->adapter->getSharedTables())
+                ? new DocumentValidator($attributes, $supportForAttributes, sharedTables: $this->adapter->getSharedTables(), supportForJoins: $supportForJoins)
                 : new DocumentValidator(
                     attributes: $attributes,
                     supportForAttributes: $supportForAttributes,
@@ -416,6 +423,7 @@ trait Documents
                     maxAllowedDate: $this->adapter->getMaxDateTime(),
                     supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
                     sharedTables: $this->adapter->getSharedTables(),
+                    supportForJoins: $supportForJoins,
                 );
             $validator->setJoinedCollections($joinedCollections);
             if (! $validator->isValid($queries)) {
@@ -438,9 +446,20 @@ trait Documents
             throw new QueryException('Join queries are not supported by this adapter');
         }
 
+        $this->assertJoinCount($joins);
+
+        $joinedCollections ??= $this->resolveJoinedCollections($joins);
         $joinDocumentSecurity = [];
+        $joinedByAlias = [];
         if (! empty($joins)) {
-            $joinDocumentSecurity = $this->authorizeJoins($joins, PermissionType::Read);
+            $joinDocumentSecurity = $this->authorizeJoins($joins, PermissionType::Read, $joinedCollections);
+            $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollections);
+            $queries = $this->convertQueries($collection, $queries, $joinedByAlias);
+        }
+
+        $outerJoinIds = $this->outerJoinIdSelections($selects, $joins, $joinedByAlias);
+        if ($outerJoinIds !== []) {
+            $queries[] = Query::select($outerJoinIds);
         }
 
         $selections = $this->validateSelections($collection, $selects);
@@ -536,7 +555,7 @@ trait Documents
             && $collectionGranted;
 
         $getDocument = fn () => $this->adapter->getDocument(
-            $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted || $collection->getId() === self::METADATA), $joins),
+            $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted || $collection->getId() === self::METADATA), $joins, $joinedCollections),
             $id,
             $queries,
             $forUpdate
@@ -599,7 +618,10 @@ trait Documents
         $document = $this->casting($collection, $document);
         $document = $this->decode($collection, $document, $selections);
         if (! empty($joins)) {
-            $document = $this->decodeJoins($document, $this->joinedCollectionsByAlias($joins));
+            $document = $this->decodeJoins($document, $joinedByAlias);
+            foreach ($outerJoinIds as $outerJoinId) {
+                $document->removeAttribute($outerJoinId);
+            }
         }
 
         // Skip relationship population if we're in batch mode (relationships will be populated later)
@@ -1428,19 +1450,18 @@ trait Documents
 
             $document = $this->castingBefore($collection, $document);
 
-            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate));
+            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $old->getId(), $document, $skipPermissionsUpdate));
 
             $document = $this->castingAfter($collection, $document);
 
-            $this->purgeCachedDocumentInternal($collection->getId(), $id);
+            $purgedIds = \array_values(\array_unique([$id, $old->getId(), $document->getId()]));
 
-            if ($document->getId() !== $id) {
-                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            foreach ($purgedIds as $purgedId) {
+                $this->purgeCachedDocumentInternal($collection->getId(), $purgedId);
             }
 
-            $this->queueDocumentPurge($collection->getId(), $id);
-            if ($document->getId() !== $id) {
-                $this->queueDocumentPurge($collection->getId(), $document->getId());
+            foreach ($purgedIds as $purgedId) {
+                $this->queueDocumentPurge($collection->getId(), $purgedId);
             }
 
             if ($hasOperators) {
@@ -1565,6 +1586,7 @@ trait Documents
         $updatedAt = $updates->getUpdatedAt();
         $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
 
+        $decodedUpdates = clone $updates;
         $updates = $this->encode(
             $collection,
             $updates,
@@ -1597,6 +1619,9 @@ trait Documents
             $adapterData[$key] = $value;
         }
         $selections = $this->validateSelections($collection, $grouped['selections']);
+        $decodedKeys = $selections === []
+            ? []
+            : \array_values(\array_unique([...$selections, ...\array_map(\strval(...), \array_keys($adapterData))]));
         $adapterUpdates = $this->castingBefore($collection, new Document($adapterData));
 
         $originalLimit = $limit;
@@ -1633,8 +1658,9 @@ trait Documents
             sort($currentPermissions);
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $adapterUpdates, &$batch, $currentPermissions) {
-                foreach ($batch as $index => $document) {
+            $found = $batch;
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+                foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
                     if ($updates->offsetExists(Document::PERMISSIONS)) {
@@ -1652,7 +1678,7 @@ trait Documents
                     $document->setAttribute(Document::SKIP_PERMISSIONS_UPDATE, $skipPermissionsUpdate);
 
                     $updateData = [];
-                    foreach ($updates->getArrayCopy() as $key => $value) {
+                    foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
                         $updateData[$key] = $value instanceof Operator ? clone $value : $value;
                     }
                     $new = new Document(\array_merge($document->getArrayCopy(), $updateData));
@@ -1662,9 +1688,6 @@ trait Documents
                         $this->silent(fn () => $hook->afterDocumentUpdate($collection, $document, $new));
                     }
 
-                    $document = $new;
-
-                    // Check if document was updated after the request timestamp
                     try {
                         $oldUpdatedAt = new PhpDateTime($document->getUpdatedAt() ?? 'now');
                     } catch (Exception $e) {
@@ -1674,6 +1697,8 @@ trait Documents
                     if (! is_null($this->timestamp) && $oldUpdatedAt > $this->timestamp) {
                         throw new ConflictException('Document was updated after the request timestamp');
                     }
+
+                    $document = $new;
 
                     $encoded = $this->encode($collection, $document);
                     $batch[$index] = $this->castingBefore($collection, $encoded);
@@ -1705,7 +1730,7 @@ trait Documents
             $batch = \array_map(
                 fn (Document $doc) => $hasOperators
                     ? $this->castingAfter($collection, $doc)
-                    : $this->decode($collection, $this->castingAfter($collection, $doc), $selections),
+                    : $this->decode($collection, $this->castingAfter($collection, $doc), $decodedKeys),
                 $batch
             );
 
@@ -3556,8 +3581,11 @@ trait Documents
 
         $this->checkQueryTypes($queries);
 
+        $joinedCollectionsById = null;
+
         if ($this->validate) {
-            $this->validateDocumentsQueries($collection, $queries);
+            $joinedCollectionsById = $this->resolveJoinedCollections($queries);
+            $this->validateDocumentsQueries($collection, $queries, $joinedCollectionsById);
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -3614,9 +3642,19 @@ trait Documents
             throw new QueryException('Join queries are not supported by this adapter');
         }
 
+        $this->assertJoinCount($joins);
+
+        $joinedCollectionsById ??= $this->resolveJoinedCollections($joins);
         $joinDocumentSecurity = [];
         if (! empty($joins)) {
-            $joinDocumentSecurity = $this->authorizeJoins($joins, $forPermission);
+            $joinDocumentSecurity = $this->authorizeJoins($joins, $forPermission, $joinedCollectionsById);
+        }
+
+        $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
+        $joinedCollections = $isAggregation ? [] : $joinedByAlias;
+
+        if ($joinedCollections !== [] && $cursor !== null) {
+            [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($collection, $orderAttributes, $cursor, $joinedCollections);
         }
 
         if (! $isAggregation && ! $distinct) {
@@ -3643,12 +3681,28 @@ trait Documents
             // a batch that shares one timestamp newest-inserted first.
             if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
                 $leadingAttribute = $orderAttributes[0] ?? null;
-                $leadingOrderType = $orderTypes[0] ?? \Utopia\Query\OrderDirection::Asc;
+                $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
 
                 $orderAttributes[] = Document::SEQUENCE;
                 $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
                     ? $leadingOrderType
-                    : \Utopia\Query\OrderDirection::Asc;
+                    : OrderDirection::Asc;
+            }
+
+            $aliases = \array_keys($joinedCollections);
+            if ((! $vectorSearch || ! empty($cursor)) && \count($aliases) === \count($joins)) {
+                foreach (\array_values($joins) as $position => $join) {
+                    $alias = $aliases[$position];
+                    $joinedId = $alias.'.'.Document::ID;
+                    if (
+                        ! $this->joinMatchesAtMostOneRow($join, $alias)
+                        && ! \in_array($joinedId, $orderAttributes, true)
+                        && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)
+                    ) {
+                        $orderAttributes[] = $joinedId;
+                        $orderTypes[] = OrderDirection::Asc;
+                    }
+                }
             }
         }
 
@@ -3657,12 +3711,26 @@ trait Documents
                 throw new QueryException('Cursor pagination is not supported with aggregation queries');
             }
 
-            foreach ($orderAttributes as $order) {
-                if ($this->cursorOrderValue($cursor, $order) === null) {
-                    throw new OrderException(
-                        message: "Order attribute '{$order}' is empty",
-                        attribute: $order
-                    );
+            if ($joins === [] && ! $distinct && $this->validate && $cursor->getId() === '') {
+                throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->getMaxUIDLength()))->getDescription());
+            }
+
+            if ($distinct) {
+                $this->assertDistinctCursorOrder($selects, $orderAttributes);
+            }
+
+            if ($joins !== [] || $distinct) {
+                $this->assertCursorHasOrderValues($cursor, $orderAttributes);
+            }
+
+            if ($joins === []) {
+                foreach ($orderAttributes as $order) {
+                    if ($cursor->getAttribute($order) === null) {
+                        throw new OrderException(
+                            message: "Order attribute '{$order}' is empty",
+                            attribute: $order
+                        );
+                    }
                 }
             }
         }
@@ -3671,33 +3739,22 @@ trait Documents
             throw new DatabaseException('cursor Document must be from the same Collection.');
         }
 
-        $joinedCollections = $isAggregation ? [] : $this->joinedCollectionsByAlias($joins);
-
         if (! empty($cursor)) {
-            $cursor = $this->encode($collection, $cursor);
+            $cursor = $this->encode($collection, clone $cursor);
             $cursor = $this->castingBefore($collection, $cursor);
             $cursor = $this->encodeJoins($cursor, $joinedCollections);
             $cursor = $cursor->getArrayCopy();
-            foreach ($orderAttributes as $order) {
-                if (\array_key_exists($order, $cursor) && $cursor[$order] !== null) {
-                    continue;
-                }
-                $bare = $this->bareOrderAttribute($order);
-                if ($bare !== $order && \array_key_exists($bare, $cursor) && $cursor[$bare] !== null) {
-                    $cursor[$order] = $cursor[$bare];
-                }
-            }
         } else {
             $cursor = [];
         }
 
+        $outerJoinIds = $distinct ? [] : $this->outerJoinIdSelections($selects, $joins, $joinedCollections);
+
         /** @var array<Query> $queries */
         $queries = \array_merge(
             $selects,
-            $this->convertQueries($collection, $filters),
-            $aggregations,
-            $having,
-            $joins,
+            $outerJoinIds === [] ? [] : [Query::select($outerJoinIds)],
+            $this->convertQueries($collection, \array_merge($filters, $aggregations, $having, $joins), $joinedByAlias),
         );
 
         if (! empty($groupByAttrs)) {
@@ -3790,7 +3847,7 @@ trait Documents
             }
 
             if (! isset($results)) {
-                $adapterCollection = $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins);
+                $adapterCollection = $this->withJoinAttributes($this->withJoinAuthorization($collection, $joinDocumentSecurity, $collectionGranted), $joins, $joinedCollectionsById);
 
                 $find = fn (): array => $this->adapter->find(
                     $adapterCollection,
@@ -3842,6 +3899,9 @@ trait Documents
             $node = $this->decode($collection, $node, $selections);
             if ($joinedCollections !== []) {
                 $node = $this->decodeJoins($node, $joinedCollections);
+                foreach ($outerJoinIds as $outerJoinId) {
+                    $node->removeAttribute($outerJoinId);
+                }
             }
 
             // Convert to custom document type if mapped
@@ -3870,16 +3930,21 @@ trait Documents
     }
 
     /**
-     * Execute a raw query bypassing the query builder.
+     * Execute a raw query bypassing the query builder. The statement runs as written, with no
+     * permission or tenant scope, so like from() and execute() it runs only while authorization is
+     * disabled: inside getAuthorization()->skip().
      *
      * @param string $query The raw query string
      * @param array<mixed> $bindings Parameter bindings
      * @return array<Document>
      *
+     * @throws AuthorizationException While authorization is enabled
      * @throws DatabaseException
      */
     public function rawQuery(string $query, array $bindings = []): array
     {
+        $this->requireSkippedAuthorization();
+
         if (! $this->adapter->hasFeature(Feature\RawQuery::class)) {
             throw new DatabaseException('Raw queries are not supported by this adapter');
         }
@@ -4014,8 +4079,11 @@ trait Documents
 
         $this->checkQueryTypes($queries);
 
+        $joinedCollections = null;
+
         if ($this->validate) {
-            $this->validateDocumentsQueries($collection, $queries);
+            $joinedCollections = $this->resolveJoinedCollections($queries);
+            $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
         }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
@@ -4031,7 +4099,7 @@ trait Documents
             fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted);
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted, $joinedCollections);
         if ($prepared === null) {
             return 0;
         }
@@ -4074,10 +4142,15 @@ trait Documents
 
         $this->checkQueryTypes($queries);
 
+        $joinedCollections = null;
+
         if ($this->validate) {
-            $this->validateDocumentsQueries($collection, $queries);
-            $this->validateSumAttribute($collection, $attribute, $queries);
+            $joinedCollections = $this->resolveJoinedCollections($queries);
+            $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
+            $this->validateSumAttribute($collection, $attribute, $queries, $joinedCollections);
         }
+
+        $attribute = $this->resolveSumAttribute($collection, $attribute, $queries);
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
@@ -4092,7 +4165,7 @@ trait Documents
             fn (Attribute|Document $attribute) => Attribute::isRelationship($attribute)
         );
 
-        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted);
+        $prepared = $this->prepareFilterJoinQueries($collection, $queries, $relationships, $collectionGranted, $joinedCollections);
         if ($prepared === null) {
             return 0;
         }
@@ -4108,24 +4181,84 @@ trait Documents
     }
 
     /**
-     * sum() adds up what a sum aggregate adds up: a numeric attribute that is not an array, of the
-     * main collection or, under a join alias, of the collection that join reads.
+     * A bare attribute name reads the main collection's attribute when the main collection declares
+     * it, else the attribute of the one join whose collection declares it, as an aggregate in find()
+     * does. Any other name is returned as given, for the validator to accept or refuse.
      *
      * @param  array<Query>  $queries
      *
      * @throws QueryException
      */
-    private function validateSumAttribute(Document $collection, string $attribute, array $queries): void
+    private function resolveSumAttribute(Document $collection, string $attribute, array $queries): string
+    {
+        if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
+            return $attribute;
+        }
+
+        $aliases = [];
+        foreach ($queries as $query) {
+            if (! $query->getMethod()->isJoin() || $query->getJoinAlias() === '') {
+                continue;
+            }
+
+            $joined = $this->silent(fn () => $this->getCollection($query->getAttribute()));
+            /** @var array<Attribute|Document> $joinedAttributes */
+            $joinedAttributes = $joined->getAttribute('attributes', []);
+            foreach ($joinedAttributes as $declared) {
+                if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
+                    $aliases[] = $query->getJoinAlias();
+                    break;
+                }
+            }
+        }
+
+        if (\count($aliases) > 1) {
+            throw new QueryException('Invalid query: Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+        }
+
+        return $aliases === [] ? $attribute : $aliases[0].'.'.$attribute;
+    }
+
+    private function declaresSumAttribute(Document $collection, string $attribute): bool
+    {
+        foreach (self::internalAttributes() as $internal) {
+            if ($internal->key === $attribute) {
+                return true;
+            }
+        }
+
+        /** @var array<Attribute|Document> $attributes */
+        $attributes = $collection->getAttribute('attributes', []);
+        foreach ($attributes as $declared) {
+            if ($declared->getId() === $attribute) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * sum() adds up what a sum aggregate adds up: a numeric attribute that is not an array, of the
+     * main collection or, under a join alias, of the collection that join reads.
+     *
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     *
+     * @throws QueryException
+     */
+    private function validateSumAttribute(Document $collection, string $attribute, array $queries, ?array $joinedCollections = null): void
     {
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
         $validator = new Aggregate($attributes, $this->adapter->supports(Capability::DefinedAttributes), $this->adapter->getSharedTables());
 
-        if (\str_contains($attribute, '.')) {
+        if (\str_contains($attribute, '.') || ! $this->declaresSumAttribute($collection, $attribute)) {
+            $joinedCollections ??= $this->resolveJoinedCollections($queries);
             $joins = [];
             foreach ($queries as $query) {
                 if ($query->getMethod()->isJoin() && $query->getJoinAlias() !== '') {
-                    $joins[] = JoinedCollection::of($query->getJoinAlias(), $this->silent(fn () => $this->getCollection($query->getAttribute())));
+                    $joins[] = JoinedCollection::of($query->getJoinAlias(), $joinedCollections[$query->getAttribute()] ?? new Document());
                 }
             }
             $validator->allowJoins($joins);
@@ -4137,36 +4270,56 @@ trait Documents
     }
 
     /**
+     * Yield each document matching the queries, read in batches of $batchSize. A limit in the queries caps the
+     * iteration, and an offset or a cursorAfter in them positions the first batch only.
+     *
      * @param  array<Query>  $queries
      * @return Generator<int, Document>
+     *
+     * @throws DatabaseException
      */
     public function cursor(string $collection, array $queries = [], int $batchSize = 100): Generator
     {
-        $lastDocument = null;
+        $grouped = Query::groupForDatabase($queries);
+        $remaining = $grouped['limit'];
+        $offset = $grouped['offset'];
+        $cursor = $grouped['cursor'];
 
-        while (true) {
-            $batchQueries = $queries;
-            $batchQueries[] = Query::limit($batchSize);
+        if ($cursor !== null && $grouped['cursorDirection'] === CursorDirection::Before) {
+            throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
+        }
 
-            if ($lastDocument !== null) {
-                $batchQueries[] = Query::cursorAfter($lastDocument);
+        $queries = \array_values(\array_filter(
+            $queries,
+            static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
+        ));
+
+        while ($remaining === null || $remaining > 0) {
+            $size = $remaining === null ? $batchSize : \min($batchSize, $remaining);
+            $page = [Query::limit($size)];
+            if ($offset !== null) {
+                $page[] = Query::offset($offset);
+            }
+            if ($cursor !== null) {
+                $page[] = Query::cursorAfter($cursor);
             }
 
-            $documents = $this->find($collection, $batchQueries);
-
-            if ($documents === []) {
-                break;
-            }
+            $documents = $this->find($collection, [...$page, ...$queries]);
 
             foreach ($documents as $document) {
                 yield $document;
             }
 
-            $lastDocument = \end($documents);
-
-            if (\count($documents) < $batchSize) {
-                break;
+            $last = \end($documents);
+            if ($last === false || \count($documents) < $size) {
+                return;
             }
+
+            if ($remaining !== null) {
+                $remaining -= \count($documents);
+            }
+            $offset = null;
+            $cursor = $last;
         }
     }
 
@@ -4181,39 +4334,142 @@ trait Documents
         return $this->find($collection, $queries);
     }
 
-    private function cursorOrderValue(Document $cursor, string $order): mixed
+    /**
+     * An inner or left join on the joined `$id` pairs each row it joins onto with at most one joined row, so the rows
+     * of the read are told apart without the joined id, and ordering by it would only cost the engine a sort.
+     */
+    private function joinMatchesAtMostOneRow(Query $join, string $alias): bool
     {
-        $value = $cursor->getAttribute($order);
-        if ($value !== null) {
-            return $value;
+        if (! \in_array($join->getMethod(), [Method::Join, Method::LeftJoin], true) || $join->isNestedJoin()) {
+            return false;
         }
 
-        $bare = $this->bareOrderAttribute($order);
-        if ($bare === $order) {
-            return null;
+        [$left, $operator, $right] = \array_pad($join->getValues(), 3, null);
+        if ($operator !== '=' || ! \is_string($left) || ! \is_string($right)) {
+            return false;
         }
 
-        return $cursor->getAttribute($bare);
+        return ($right === Document::ID || $right === $alias.'.'.Document::ID) && ! \str_starts_with($left, $alias.'.');
     }
 
-    private function bareOrderAttribute(string $order): string
+    /**
+     * A distinct row has no id: only its order values tell it from the next one, so the order has to name every
+     * attribute the read selects.
+     *
+     * @param  array<Query>  $selects
+     * @param  array<string>  $orderAttributes
+     *
+     * @throws QueryException
+     */
+    private function assertDistinctCursorOrder(array $selects, array $orderAttributes): void
     {
-        $dot = \strrpos($order, '.');
-        if ($dot === false) {
-            return $order;
+        $selected = [];
+        foreach ($selects as $select) {
+            foreach ($select->getValues() as $value) {
+                if (\is_string($value)) {
+                    $selected[] = $value;
+                }
+            }
         }
 
-        return \substr($order, $dot + 1);
+        foreach ($selected as $attribute) {
+            if (\str_ends_with($attribute, '*')) {
+                $selected = [];
+                break;
+            }
+        }
+
+        if ($selected === [] || $orderAttributes === []) {
+            throw new QueryException('A cursor on a distinct() read pages along its orders, so the read needs a select() of named attributes and an order on each of them');
+        }
+
+        foreach ($selected as $attribute) {
+            if (! \in_array($attribute, $orderAttributes, true)) {
+                throw new QueryException("A cursor on a distinct() read pages along its orders, so the read must order by every selected attribute, and '{$attribute}' is not ordered");
+            }
+        }
+    }
+
+    /**
+     * A cursor on a bare order name only one join declares carries the value under `alias.name`, the
+     * name the adapter orders by (SQL::qualifyJoinedOrders()), so the order is qualified here, before
+     * the tie keys and the cursor checks read it. A cursor value under the bare name follows it. A
+     * name several joins declare is refused rather than read from one of them.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<string, Document>  $joinedCollections
+     * @return array{array<string>, Document}
+     *
+     * @throws QueryException
+     */
+    private function qualifyJoinedOrders(Document $collection, array $orderAttributes, Document $cursor, array $joinedCollections): array
+    {
+        foreach ($orderAttributes as $index => $attribute) {
+            if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
+                continue;
+            }
+
+            $aliases = [];
+            foreach ($joinedCollections as $alias => $joined) {
+                /** @var array<Attribute|Document> $joinedAttributes */
+                $joinedAttributes = $joined->getAttribute('attributes', []);
+                foreach ($joinedAttributes as $declared) {
+                    if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
+                        $aliases[] = $alias;
+                        break;
+                    }
+                }
+            }
+
+            if (\count($aliases) > 1) {
+                throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+            }
+
+            if ($aliases === []) {
+                continue;
+            }
+
+            $qualified = $aliases[0].'.'.$attribute;
+            $orderAttributes[$index] = $qualified;
+            if ($cursor->offsetExists($attribute) && ! $cursor->offsetExists($qualified)) {
+                $cursor = clone $cursor;
+                $cursor->setAttribute($qualified, $cursor->getAttribute($attribute));
+            }
+        }
+
+        return [$orderAttributes, $cursor];
+    }
+
+    /**
+     * A cursor names the row it was read from by the values of the read's order, each under the name the read orders
+     * by. A value it lacks is never taken from an attribute of the same name elsewhere in the document.
+     *
+     * @param  array<string>  $orderAttributes
+     *
+     * @throws OrderException
+     */
+    private function assertCursorHasOrderValues(Document $cursor, array $orderAttributes): void
+    {
+        $values = $cursor->getArrayCopy();
+        foreach ($orderAttributes as $order) {
+            if (! \array_key_exists($order, $values)) {
+                throw new OrderException(
+                    message: "Cursor has no value for order attribute '{$order}'. Use a row this read returned as the cursor, and select '{$order}' when the read selects attributes.",
+                    attribute: $order,
+                );
+            }
+        }
     }
 
     /**
      * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      *
      * @throws QueryException
      */
-    private function validateDocumentsQueries(Document $collection, array $queries): void
+    private function validateDocumentsQueries(Document $collection, array $queries, ?array $joinedCollections = null): void
     {
-        $joinedCollections = $this->resolveJoinedCollections($queries);
+        $joinedCollections ??= $this->resolveJoinedCollections($queries);
         $validator = $this->getDocumentsValidator($collection, $joinedCollections);
 
         if ($joinedCollections !== []) {
@@ -4226,10 +4482,11 @@ trait Documents
     }
 
     /**
-     * The collections the join queries name, each once.
+     * The collections the join queries name, each loaded once, by the id the join names it with. A
+     * read resolves them once and hands them to validation, authorization, the adapter and decoding.
      *
      * @param  array<Query>  $queries
-     * @return list<Document>
+     * @return array<string, Document>
      *
      * @throws QueryException
      */
@@ -4255,12 +4512,13 @@ trait Documents
             $collections[$id] = $collection;
         }
 
-        return \array_values($collections);
+        return $collections;
     }
 
     /**
      * @param  array<Query>  $queries
      * @param  array<Document>  $relationships
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      * @return array{0: Document, 1: array<Query>, 2: bool}|null
      */
     private function prepareFilterJoinQueries(
@@ -4268,6 +4526,7 @@ trait Documents
         array $queries,
         array $relationships,
         bool $collectionGranted,
+        ?array $joinedCollections = null,
     ): ?array {
         $grouped = Query::groupForDatabase($queries);
         $filters = $grouped['filters'];
@@ -4278,16 +4537,20 @@ trait Documents
                 throw new QueryException('Join queries are not supported by this adapter');
             }
 
+            $this->assertJoinCount($joins);
+
+            $joinedCollections ??= $this->resolveJoinedCollections($joins);
             $collection = $this->withJoinAuthorization(
                 $collection,
-                $this->authorizeJoins($joins, PermissionType::Read),
+                $this->authorizeJoins($joins, PermissionType::Read, $joinedCollections),
                 $collectionGranted,
             );
         }
 
-        $queries = \array_merge(
-            $this->convertQueries($collection, $filters),
-            $joins,
+        $queries = $this->convertQueries(
+            $collection,
+            \array_merge($filters, $joins),
+            $this->joinedCollectionsByAlias($joins, $joinedCollections),
         );
 
         $convertedQueries = $this->relationshipHook !== null
@@ -4302,6 +4565,22 @@ trait Documents
     }
 
     /**
+     * The join cap the Join validator enforces holds without validation too: every join is one
+     * more table the engine plans and the permission filters check.
+     *
+     * @param  array<Query>  $joins
+     *
+     * @throws QueryException
+     */
+    private function assertJoinCount(array $joins): void
+    {
+        $validator = new JoinValidator();
+        if (! $validator->isValidCount(\count($joins))) {
+            throw new QueryException($validator->getDescription());
+        }
+    }
+
+    /**
      * Set on the collection handed to the adapter for a join read when the caller
      * holds the collection-level permission, so its rows are not filtered per document.
      */
@@ -4313,16 +4592,26 @@ trait Documents
     public const string JOIN_DOCUMENT_SECURITY = 'joinDocumentSecurity';
 
     /**
+     * Each joined collection is authorized once, however many joins read it.
+     *
      * @param  array<Query>  $joins
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      * @return array<string, bool>
      */
-    private function authorizeJoins(array $joins, PermissionType $forPermission): array
+    private function authorizeJoins(array $joins, PermissionType $forPermission, ?array $joinedCollections = null): array
     {
+        $joinedCollections ??= $this->resolveJoinedCollections($joins);
         $joinDocumentSecurity = [];
+        $authorized = [];
 
         foreach ($joins as $joinQuery) {
             $joinCollectionId = $joinQuery->getAttribute();
-            $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
+            if (isset($authorized[$joinCollectionId])) {
+                continue;
+            }
+            $authorized[$joinCollectionId] = true;
+
+            $joinCollection = $joinedCollections[$joinCollectionId] ?? new Document();
 
             if ($joinCollection->isEmpty()) {
                 throw new QueryException("Joined collection '{$joinCollectionId}' not found");
@@ -4388,12 +4677,15 @@ trait Documents
      * join does not populate related documents.
      *
      * @param  array<Query>  $joins
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      */
-    private function withJoinAttributes(Document $collection, array $joins): Document
+    private function withJoinAttributes(Document $collection, array $joins, ?array $joinedCollections = null): Document
     {
         if ($joins === []) {
             return $collection;
         }
+
+        $joinedCollections ??= $this->resolveJoinedCollections($joins);
 
         $joinAttributes = [];
         foreach ($joins as $join) {
@@ -4402,7 +4694,7 @@ trait Documents
                 continue;
             }
 
-            $joinCollection = $this->silent(fn () => $this->getCollection($joinCollectionId));
+            $joinCollection = $joinedCollections[$joinCollectionId] ?? new Document();
             /** @var array<Attribute|Document> $attributes */
             $attributes = $joinCollection->getAttribute('attributes', []);
             $keys = [];
@@ -4422,13 +4714,19 @@ trait Documents
 
     /**
      * The collection each join reads, by the alias its values come back under: the alias the join
-     * declares, or the one generated for it. Each collection is loaded once.
+     * declares, or the one generated for it.
      *
      * @param  array<Query>  $joins
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
      * @return array<string, Document>
      */
-    private function joinedCollectionsByAlias(array $joins): array
+    private function joinedCollectionsByAlias(array $joins, ?array $joinedCollections = null): array
     {
+        if ($joins === []) {
+            return [];
+        }
+
+        $joinedCollections ??= $this->resolveJoinedCollections($joins);
         $taken = [];
         foreach ($joins as $join) {
             $alias = $join->getJoinAlias();
@@ -4437,26 +4735,70 @@ trait Documents
             }
         }
 
-        $loaded = [];
         $collections = [];
         foreach (\array_values($joins) as $position => $join) {
             $alias = $join->getJoinAlias();
-            // The adapter returns an undeclared join's values under the alias SQL::generateJoinAlias()
-            // gives it; this must name it the same way.
             if ($alias === '') {
-                $number = $position;
-                do {
-                    $alias = 'j'.$number++;
-                } while (isset($taken[$alias]));
-                $taken[$alias] = true;
+                $alias = Storage::joinAlias($position, $taken);
             }
 
-            $id = $join->getAttribute();
-            $loaded[$id] ??= $this->silent(fn () => $this->getCollection($id));
-            $collections[$alias] = $loaded[$id];
+            $collections[$alias] = $joinedCollections[$join->getAttribute()] ?? new Document();
         }
 
         return $collections;
+    }
+
+    /**
+     * The `alias.$id` of each join whose attributes a select names without it, when an outer join
+     * can leave a joined row unmatched: the joined `$id` is what tells an unmatched row from a
+     * matched one when the row is decoded, so it is selected for that and left out of the result.
+     *
+     * @param  array<Query>  $selects
+     * @param  array<Query>  $joins
+     * @param  array<string, Document>  $joinedCollections  The collection each join alias reads
+     * @return list<string>
+     */
+    private function outerJoinIdSelections(array $selects, array $joins, array $joinedCollections): array
+    {
+        if ($selects === [] || $joinedCollections === []) {
+            return [];
+        }
+
+        $outer = false;
+        foreach ($joins as $join) {
+            if (\in_array($join->getMethod(), [Method::LeftJoin, Method::RightJoin, Method::FullOuterJoin], true)) {
+                $outer = true;
+                break;
+            }
+        }
+        if (! $outer) {
+            return [];
+        }
+
+        $selectedAliases = [];
+        foreach ($selects as $select) {
+            foreach ($select->getValues() as $value) {
+                if (! \is_string($value)) {
+                    continue;
+                }
+                if ($value === '*') {
+                    return [];
+                }
+                $dot = \strpos($value, '.');
+                if ($dot !== false) {
+                    $selectedAliases[\substr($value, 0, $dot)][\substr($value, $dot + 1)] = true;
+                }
+            }
+        }
+
+        $ids = [];
+        foreach ($selectedAliases as $alias => $attributes) {
+            if (isset($joinedCollections[$alias]) && ! isset($attributes[Document::ID])) {
+                $ids[] = $alias.'.'.Document::ID;
+            }
+        }
+
+        return $ids;
     }
 
     /**

@@ -141,8 +141,17 @@ class Select extends Base
                 $alias = \substr($attribute, 0, $dot);
                 $column = \substr($attribute, $dot + 1);
 
+                if ($column === '*' && isset($this->joinAliases[$alias])) {
+                    if ($this->isAggregation()) {
+                        return $this->rejectUngrouped($attribute);
+                    }
+
+                    continue;
+                }
+
                 if ($this->isJoinColumnReference($alias, $column)) {
-                    if ($this->supportForAttributes && ! $this->isJoinedColumn($alias, $column)) {
+                    $join = $this->joinsByAlias[$alias] ?? null;
+                    if ($this->supportForAttributes && $join?->holdsColumn($column) !== true && ! $this->isJoinedColumn($alias, $column)) {
                         return false;
                     }
 

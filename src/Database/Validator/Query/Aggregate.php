@@ -38,6 +38,25 @@ class Aggregate extends Base
         Method::BitXor,
     ];
 
+    private const array EXTREMUM_METHODS = [
+        Method::Min,
+        Method::Max,
+    ];
+
+    /**
+     * Types whose values some engine cannot compare for min() and max(): PostgreSQL stores them as
+     * BOOLEAN, JSONB, GEOMETRY and VECTOR, for which it has neither.
+     */
+    private const array UNORDERED_TYPES = [
+        ColumnType::Boolean,
+        ColumnType::Json,
+        ColumnType::Object,
+        ColumnType::Point,
+        ColumnType::Linestring,
+        ColumnType::Polygon,
+        ColumnType::Vector,
+    ];
+
     /**
      * @var array<string, true>
      */
@@ -49,6 +68,20 @@ class Aggregate extends Base
      * @var array<string, ColumnType>
      */
     protected array $numeric = [];
+
+    /**
+     * The attributes whose values min() and max() cannot order: arrays and the unordered types.
+     *
+     * @var array<string, true>
+     */
+    protected array $unordered = [];
+
+    /**
+     * Every attribute of the collection, and whether it holds a column.
+     *
+     * @var array<string, bool>
+     */
+    protected array $columns = [];
 
     /**
      * How many aggregates of the query set carry each alias.
@@ -81,6 +114,14 @@ class Aggregate extends Base
         $this->schema += self::internalColumns($sharedTables);
 
         $this->numeric = self::numericTypes($attributes);
+        $this->columns = JoinedCollection::columns($attributes);
+
+        foreach ($attributes as $attribute) {
+            $key = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
+            if (\is_string($key) && ! self::isOrdered($attribute->getAttribute('type'), (bool) $attribute->getAttribute('array', false))) {
+                $this->unordered[$key] = true;
+            }
+        }
     }
 
     /**
@@ -147,7 +188,13 @@ class Aggregate extends Base
             return false;
         }
 
-        if (! $this->isValidOperand($query)) {
+        if (($this->columns[$attribute] ?? true) === false) {
+            $this->message = 'Cannot aggregate virtual relationship attribute: '.$attribute;
+
+            return false;
+        }
+
+        if (! $this->isValidOperand($query) || ! $this->isValidExtremum($query)) {
             return false;
         }
 
@@ -225,6 +272,54 @@ class Aggregate extends Base
         }
 
         return true;
+    }
+
+    /**
+     * min() and max() need values the engine can order, as the collection the attribute resolves to
+     * declares them. An attribute with no known definition has no type to check here.
+     */
+    private function isValidExtremum(Query $query): bool
+    {
+        $method = $query->getMethod();
+        $attribute = $query->getAttribute();
+
+        if (! \in_array($method, self::EXTREMUM_METHODS, true)) {
+            return true;
+        }
+
+        if (isset($this->schema[$attribute])) {
+            $ordered = ! isset($this->unordered[$attribute]);
+        } else {
+            $join = $this->joinOf($attribute);
+            $dot = \strpos($attribute, '.');
+            $column = $dot === false ? $attribute : \substr($attribute, $dot + 1);
+            $definition = $join?->schema[$column] ?? null;
+
+            if ($definition === null) {
+                return true;
+            }
+
+            $ordered = self::isOrdered($definition['type'] ?? null, (bool) ($definition['array'] ?? false));
+        }
+
+        if (! $ordered) {
+            $this->message = 'Aggregate '.$method->value.' requires an attribute whose values are ordered, not an array, object, boolean, spatial or vector one: '.$attribute;
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static function isOrdered(mixed $type, bool $array): bool
+    {
+        if ($array) {
+            return false;
+        }
+
+        $type = $type instanceof ColumnType || \is_string($type) ? Attribute::tryNormalizeType($type) : null;
+
+        return ! \in_array($type, self::UNORDERED_TYPES, true);
     }
 
     /**

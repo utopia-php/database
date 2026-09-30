@@ -93,14 +93,22 @@ class QueryShapeAggregateTest extends TestCase
         ]), $validator->getDescription());
     }
 
-    public function testCountAndExtremaKeepAcceptingEveryAttribute(): void
+    public function testCountAcceptsEveryAttributeAndExtremaEveryOrderedOne(): void
     {
         $validator = $this->validator();
 
         foreach (['count', 'countDistinct', 'min', 'max'] as $method) {
-            foreach (['name', 'active', 'created', 'rating', '$id'] as $attribute) {
+            foreach (['name', 'created', 'rating', '$id'] as $attribute) {
                 $this->assertTrue($validator->isValid([$this->aggregate($method, $attribute)]), $validator->getDescription());
             }
+        }
+
+        foreach (['count', 'countDistinct'] as $method) {
+            $this->assertTrue($validator->isValid([$this->aggregate($method, 'active')]), $validator->getDescription());
+        }
+
+        foreach (['min', 'max'] as $method) {
+            $this->assertFalse($validator->isValid([$this->aggregate($method, 'active')]), $method.' of a boolean');
         }
     }
 

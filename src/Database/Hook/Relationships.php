@@ -136,6 +136,21 @@ class Relationships implements Hook
         return $adapter instanceof Pool && ! $adapter->inTransaction();
     }
 
+    /**
+     * @param  array<string>  $ids
+     * @param  Closure(array<string>): array<Document>  $read
+     * @return array<Document>
+     */
+    private function readByIds(array $ids, Closure $read): array
+    {
+        $documents = [];
+        foreach (\array_chunk($ids, $this->relationQueryChunkSize()) as $chunk) {
+            \array_push($documents, ...$read($chunk));
+        }
+
+        return $documents;
+    }
+
     private function coerceToDocument(Document $document, string $key, mixed $value): mixed
     {
         if (\is_array($value) && ! \array_is_list($value)) {
@@ -522,10 +537,7 @@ class Relationships implements Hook
                                 $oldValueDoc = $oldValue instanceof Document ? $oldValue : null;
                                 if (
                                     $oldValueDoc?->getId() !== $value
-                                    && ! ($this->db->skipRelationships(fn () => $this->db->findOne($relatedCollection->getId(), [
-                                        Query::select([Document::ID]),
-                                        Query::equal($twoWayKey, [$value]),
-                                    ]))->isEmpty())
+                                    && $this->isLinkedElsewhere($collection, $key, $value, $document)
                                 ) {
                                     throw new DuplicateException('Document already has a related document');
                                 }
@@ -543,15 +555,11 @@ class Relationships implements Hook
                             $oldValueDoc2 = $oldValue instanceof Document ? $oldValue : null;
                             if (
                                 $oldValueDoc2?->getId() !== $value->getId()
-                                && ! ($this->db->skipRelationships(fn () => $this->db->findOne($relatedCollection->getId(), [
-                                    Query::select([Document::ID]),
-                                    Query::equal($twoWayKey, [$value->getId()]),
-                                ]))->isEmpty())
+                                && $this->isLinkedElsewhere($collection, $key, $value->getId(), $document)
                             ) {
                                 throw new DuplicateException('Document already has a related document');
                             }
 
-                            $this->writeStack[] = $relatedCollection->getId();
                             if ($related->isEmpty()) {
                                 if (! isset($value[Document::PERMISSIONS])) {
                                     $value->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
@@ -567,7 +575,6 @@ class Relationships implements Hook
                                     $value->setAttribute($twoWayKey, $document->getId())
                                 );
                             }
-                            \array_pop($this->writeStack);
 
                             $document->setAttribute($key, $related->getId());
                         } elseif ($value === null) {
@@ -785,14 +792,26 @@ class Relationships implements Hook
 
                         foreach ($value as $relation) {
                             if (\is_string($relation)) {
-                                if (\in_array($relation, $oldIds) || $this->db->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])])->isEmpty()) {
+                                if (\in_array($relation, $oldIds)) {
                                     continue;
                                 }
+
+                                $related = $this->db->getDocument($relatedCollection->getId(), $relation, [Query::select([Document::ID])]);
+
+                                if ($related->isEmpty()) {
+                                    continue;
+                                }
+
+                                $this->authorizeLink($relatedCollection, $related);
                             } elseif ($relation instanceof Document) {
                                 $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId(), [Query::select([Document::ID])]);
 
+                                if (! $related->isEmpty() && ! \in_array($relation->getId(), $oldIds)) {
+                                    $this->authorizeLink($relatedCollection, $related);
+                                }
+
                                 if ($related->isEmpty()) {
-                                    if (! isset($value[Document::PERMISSIONS])) {
+                                    if (! isset($relation[Document::PERMISSIONS])) {
                                         $relation->setAttribute(Document::PERMISSIONS, $document->getAttribute(Document::PERMISSIONS));
                                     }
                                     $related = $this->db->createDocument(
@@ -900,7 +919,7 @@ class Relationships implements Hook
 
             switch ($onDelete) {
                 case ForeignKeyAction::Restrict:
-                    $this->deleteRestrict($relatedCollection, $document, $value, $relationType, $twoWay, $twoWayKey, $side);
+                    $this->deleteRestrict($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
                     $unwritten = true;
                     break;
                 case ForeignKeyAction::SetNull:
@@ -954,7 +973,7 @@ class Relationships implements Hook
                             break 2;
                         }
                     }
-                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $value, $relationType, $twoWayKey, $side, $relationship);
+                    $this->deleteCascade($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side, $relationship);
                     break;
             }
 
@@ -1453,6 +1472,10 @@ class Relationships implements Hook
 
         $related = $this->db->getDocument($relatedCollection->getId(), $relation->getId());
 
+        if ($relationType === RelationType::ManyToMany && ! $related->isEmpty()) {
+            $this->authorizeLink($relatedCollection, $related);
+        }
+
         if ($related->isEmpty()) {
             if (! isset($relation[Document::PERMISSIONS])) {
                 $relation->setAttribute(Document::PERMISSIONS, $document->getPermissions());
@@ -1521,6 +1544,10 @@ class Relationships implements Hook
                 }
                 break;
             case RelationType::ManyToMany:
+                if (! $related->isEmpty()) {
+                    $this->authorizeLink($relatedCollection, $related);
+                }
+
                 $this->db->purgeCachedDocument($relatedCollection->getId(), $relationId);
 
                 $junction = $this->getJunctionCollection($collection, $relatedCollection, $side);
@@ -1543,6 +1570,15 @@ class Relationships implements Hook
         return $side === RelationSide::Parent
             ? '_'.$collection->getSequence().'_'.$relatedCollection->getSequence()
             : '_'.$relatedCollection->getSequence().'_'.$collection->getSequence();
+    }
+
+    private function isLinkedElsewhere(Document $collection, string $key, string $relatedId, Document $document): bool
+    {
+        return ! $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->findOne($collection->getId(), [
+            Query::select([Document::ID]),
+            Query::equal($key, [$relatedId]),
+            Query::notEqual(Document::ID, $document->getId()),
+        ])))->isEmpty();
     }
 
     /**
@@ -1980,22 +2016,19 @@ class Relationships implements Hook
     }
 
     private function deleteRestrict(
+        Document $collection,
         Document $relatedCollection,
         Document $document,
-        mixed $value,
+        string $key,
         RelationType $relationType,
         bool $twoWay,
         string $twoWayKey,
         RelationSide $side
     ): void {
-        if ($value instanceof Document && $value->isEmpty()) {
-            $value = null;
-        }
-
         if (
-            ! empty($value)
-            && $relationType !== RelationType::ManyToOne
+            $relationType !== RelationType::ManyToOne
             && $side === RelationSide::Parent
+            && $this->hasRelatedDocument($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side)
         ) {
             throw new RestrictedException('Cannot delete document because it has at least one related document.');
         }
@@ -2038,6 +2071,109 @@ class Relationships implements Hook
                 throw new RestrictedException('Cannot delete document because it has at least one related document.');
             }
         }
+    }
+
+    private function hasRelatedDocument(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): bool
+    {
+        $authorization = $this->db->getAuthorization();
+
+        if ($relationType === RelationType::OneToMany) {
+            return ! $authorization->skip(fn () => $this->db->findOne($relatedCollection->getId(), [
+                Query::select([Document::ID]),
+                Query::equal($twoWayKey, [$document->getId()]),
+            ]))->isEmpty();
+        }
+
+        $relatedIds = $this->findRelatedIds($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
+
+        foreach (\array_chunk($relatedIds, $this->relationQueryChunkSize()) as $chunk) {
+            $related = $authorization->skip(fn () => $this->db->findOne($relatedCollection->getId(), [
+                Query::select([Document::ID]),
+                Query::equal(Document::ID, $chunk),
+            ]));
+
+            if (! $related->isEmpty()) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The IDs of the documents on the other side of the relationship that a delete of $document
+     * reaches, read from storage with permissions and relationships skipped. The relationship
+     * value on $document cannot be used: it holds only what the caller could read, and nothing
+     * at all when deleteDocuments() read the batch with a select.
+     *
+     * One-to-one and many-to-many IDs come from a stored reference, so the document they name
+     * may already be gone.
+     *
+     * @return list<string>
+     */
+    private function findRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side): array
+    {
+        return match ($relationType) {
+            RelationType::OneToOne => $side === RelationSide::Parent || $twoWay
+                ? $this->findStoredRelatedIds($collection, $document, $key)
+                : [],
+            RelationType::OneToMany => $side === RelationSide::Parent
+                ? $this->findReferencingIds($relatedCollection, $document, $twoWayKey)
+                : [],
+            RelationType::ManyToOne => $side === RelationSide::Child
+                ? $this->findReferencingIds($relatedCollection, $document, $twoWayKey)
+                : [],
+            RelationType::ManyToMany => $this->findJunctionRelatedIds($collection, $relatedCollection, $document, $key, $twoWayKey, $side),
+        };
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findStoredRelatedIds(Document $collection, Document $document, string $key): array
+    {
+        $stored = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(
+            fn () => $this->db->getDocument($collection->getId(), $document->getId(), forUpdate: true)
+        ));
+        $relatedId = $stored->getAttribute($key);
+
+        return \is_string($relatedId) && $relatedId !== '' ? [$relatedId] : [];
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findReferencingIds(Document $relatedCollection, Document $document, string $twoWayKey): array
+    {
+        return \array_values(\array_map(
+            fn (Document $related) => $related->getId(),
+            $this->findReferencingDocuments($relatedCollection, $document, $twoWayKey),
+        ));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function findJunctionRelatedIds(Document $collection, Document $relatedCollection, Document $document, string $key, string $twoWayKey, RelationSide $side): array
+    {
+        $junctions = $this->db->getAuthorization()->skip(fn () => $this->db->skipRelationships(fn () => $this->db->find(
+            $this->getJunctionCollection($collection, $relatedCollection, $side),
+            [
+                Query::select([$key]),
+                Query::equal($twoWayKey, [$document->getId()]),
+                Query::limit(PHP_INT_MAX),
+            ],
+        )));
+
+        $relatedIds = [];
+        foreach ($junctions as $junction) {
+            $relatedId = $junction->getAttribute($key);
+            if (\is_string($relatedId) && $relatedId !== '') {
+                $relatedIds[] = $relatedId;
+            }
+        }
+
+        return \array_values(\array_unique($relatedIds));
     }
 
     /**
@@ -2158,41 +2294,17 @@ class Relationships implements Hook
         return [];
     }
 
-    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, mixed $value, RelationType $relationType, string $twoWayKey, RelationSide $side, Document $relationship): void
+    private function deleteCascade(Document $collection, Document $relatedCollection, Document $document, string $key, RelationType $relationType, bool $twoWay, string $twoWayKey, RelationSide $side, Document $relationship): void
     {
         switch ($relationType) {
             case RelationType::OneToOne:
-                $deleteId = ($value instanceof Document) ? $value->getId() : (\is_string($value) ? $value : null);
-                if ($deleteId !== null) {
-                    $this->cascade($relationship, fn () => $this->db->deleteDocument(
-                        $relatedCollection->getId(),
-                        $deleteId
-                    ));
-                }
-                break;
             case RelationType::OneToMany:
-                if ($side === RelationSide::Child || empty($value)) {
-                    break;
-                }
-
-                /** @var array<Document> $value */
-                $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relationIds));
-
-                break;
             case RelationType::ManyToOne:
-                if ($side === RelationSide::Parent) {
-                    break;
+                $relatedIds = $this->findRelatedIds($collection, $relatedCollection, $document, $key, $relationType, $twoWay, $twoWayKey, $side);
+
+                if ($relatedIds !== []) {
+                    $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relatedIds));
                 }
-
-                $value = $this->db->find($relatedCollection->getId(), [
-                    Query::select([Document::ID]),
-                    Query::equal($twoWayKey, [$document->getId()]),
-                    Query::limit(PHP_INT_MAX),
-                ]);
-
-                $relationIds = \array_map(fn (Document $relation) => $relation->getId(), $value);
-                $this->cascade($relationship, fn () => $this->deleteRelatedDocuments($relatedCollection->getId(), $relationIds));
 
                 break;
             case RelationType::ManyToMany:
@@ -2313,18 +2425,31 @@ class Relationships implements Hook
             return;
         }
 
-        if (! $authorization->isValid(new Input(PermissionType::Update, [
-            ...$collection->getUpdate(),
-            ...($collection->getAttribute('documentSecurity', false) ? $related->getUpdate() : []),
-        ]))) {
-            throw new AuthorizationException($authorization->getDescription());
-        }
+        $this->authorizeLink($collection, $related);
 
         $this->db->skipRelationships(fn () => $this->db->updateDocument(
             $collection->getId(),
             $id,
             new Document([$twoWayKey => $documentId]),
         ));
+    }
+
+    /**
+     * Linking an existing document to another one needs update permission on it, whichever
+     * relationship type holds the link.
+     *
+     * @throws AuthorizationException
+     */
+    private function authorizeLink(Document $collection, Document $related): void
+    {
+        $authorization = $this->db->getAuthorization();
+
+        if (! $authorization->isValid(new Input(PermissionType::Update, [
+            ...$collection->getUpdate(),
+            ...($collection->getAttribute('documentSecurity', false) ? $related->getUpdate() : []),
+        ]))) {
+            throw new AuthorizationException($authorization->getDescription());
+        }
     }
 
     private function notReferencing(string $twoWayKey, string $documentId): Query
@@ -2452,11 +2577,10 @@ class Relationships implements Hook
                         $toCollectionDoc = $this->db->silent(fn () => $this->db->getCollection($linkToCollection));
                         $junction = $this->getJunctionCollection($fromCollectionDoc, $toCollectionDoc, $side);
 
-                        /** @var array<Document> $junctionDocs */
-                        $junctionDocs = $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find($junction, [
-                            Query::equal($linkKey, $matchingIds),
+                        $junctionDocs = $this->readByIds($matchingIds, fn (array $chunk): array => $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find($junction, [
+                            Query::equal($linkKey, $chunk),
                             Query::limit(PHP_INT_MAX),
-                        ])));
+                        ]))));
 
                         /** @var array<string> $parentIds */
                         $parentIds = [];
@@ -2468,15 +2592,13 @@ class Relationships implements Hook
                             }
                         }
                     } else {
-                        /** @var array<Document> $childDocs */
-                        $childDocs = $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find(
+                        $childDocs = $this->readByIds($matchingIds, fn (array $chunk): array => $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find(
                             $linkToCollection,
                             [
-                                Query::equal(Document::ID, $matchingIds),
-                                Query::select([Document::ID, $linkTwoWayKey]),
+                                Query::equal(Document::ID, $chunk),
                                 Query::limit(PHP_INT_MAX),
                             ]
-                        )));
+                        ))));
 
                         /** @var array<string> $parentIds */
                         $parentIds = [];
@@ -2503,15 +2625,14 @@ class Relationships implements Hook
                     }
                     $matchingIds = $parentIds;
                 } else {
-                    /** @var array<Document> $parentDocs */
-                    $parentDocs = $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find(
+                    $parentDocs = $this->readByIds($matchingIds, fn (array $chunk): array => $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find(
                         $linkFromCollection,
                         [
-                            Query::equal($linkKey, $matchingIds),
+                            Query::equal($linkKey, $chunk),
                             Query::select([Document::ID]),
                             Query::limit(PHP_INT_MAX),
                         ]
-                    )));
+                    ))));
                     $matchingIds = \array_map(fn (Document $doc) => $doc->getId(), $parentDocs);
                 }
 
@@ -2549,20 +2670,19 @@ class Relationships implements Hook
             }
         }
 
+        $pathIds = null;
+
         if ($hasNestedPaths) {
-            $matchingIds = $this->processNestedRelationshipPath(
+            $pathIds = $this->processNestedRelationshipPath(
                 $relatedCollection,
                 $relatedQueries
             );
 
-            if ($matchingIds === null || empty($matchingIds)) {
+            if ($pathIds === null || empty($pathIds)) {
                 return null;
             }
 
-            $relatedQueries = \array_values(\array_merge(
-                \array_filter($relatedQueries, fn (Query $q) => ! \str_contains($q->getAttribute(), '.')),
-                [Query::equal(Document::ID, $matchingIds)]
-            ));
+            $relatedQueries = \array_values(\array_filter($relatedQueries, fn (Query $q) => ! \str_contains($q->getAttribute(), '.')));
         }
 
         $needsParentResolution = (
@@ -2572,14 +2692,10 @@ class Relationships implements Hook
         );
 
         if ($relationType === RelationType::ManyToMany && $needsParentResolution && $collection !== null) {
-            /** @var array<Document> $matchingDocs */
-            $matchingDocs = $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find(
-                $relatedCollection,
-                \array_merge($relatedQueries, [
-                    Query::select([Document::ID]),
-                    Query::limit(PHP_INT_MAX),
-                ])
-            )));
+            $matchingDocs = $this->findRelated($relatedCollection, $relatedQueries, $pathIds, [
+                Query::select([Document::ID]),
+                Query::limit(PHP_INT_MAX),
+            ]);
 
             $matchingIds = \array_map(fn (Document $doc) => $doc->getId(), $matchingDocs);
 
@@ -2591,11 +2707,10 @@ class Relationships implements Hook
             $relatedCollectionDoc = $this->db->silent(fn () => $this->db->getCollection($relatedCollection));
             $junction = $this->getJunctionCollection($collection, $relatedCollectionDoc, $side);
 
-            /** @var array<Document> $junctionDocs */
-            $junctionDocs = $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find($junction, [
-                Query::equal($relationshipKey, $matchingIds),
+            $junctionDocs = $this->readByIds($matchingIds, fn (array $chunk): array => $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find($junction, [
+                Query::equal($relationshipKey, $chunk),
                 Query::limit(PHP_INT_MAX),
-            ])));
+            ]))));
 
             /** @var array<string> $parentIds */
             $parentIds = [];
@@ -2609,13 +2724,7 @@ class Relationships implements Hook
 
             return empty($parentIds) ? null : ['attribute' => Document::ID, 'ids' => $parentIds];
         } elseif ($needsParentResolution) {
-            /** @var array<Document> $matchingDocs */
-            $matchingDocs = $this->db->silent(fn () => $this->db->find(
-                $relatedCollection,
-                \array_merge($relatedQueries, [
-                    Query::limit(PHP_INT_MAX),
-                ])
-            ));
+            $matchingDocs = $this->findRelated($relatedCollection, $relatedQueries, $pathIds, [Query::limit(PHP_INT_MAX)]);
 
             /** @var array<string> $parentIds */
             $parentIds = [];
@@ -2644,19 +2753,36 @@ class Relationships implements Hook
 
             return empty($parentIds) ? null : ['attribute' => Document::ID, 'ids' => $parentIds];
         } else {
-            /** @var array<Document> $matchingDocs */
-            $matchingDocs = $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find(
-                $relatedCollection,
-                \array_merge($relatedQueries, [
-                    Query::select([Document::ID]),
-                    Query::limit(PHP_INT_MAX),
-                ])
-            )));
+            $matchingDocs = $this->findRelated($relatedCollection, $relatedQueries, $pathIds, [
+                Query::select([Document::ID]),
+                Query::limit(PHP_INT_MAX),
+            ]);
 
             /** @var array<string> $matchingIds */
             $matchingIds = \array_map(fn (Document $doc) => $doc->getId(), $matchingDocs);
 
             return empty($matchingIds) ? null : ['attribute' => $relationshipKey, 'ids' => $matchingIds];
         }
+    }
+
+    /**
+     * Read the related documents matching $relatedQueries, limited to $pathIds when a nested path resolved them,
+     * without populating their relationships.
+     *
+     * @param  array<Query>  $relatedQueries
+     * @param  array<string>|null  $pathIds
+     * @param  array<Query>  $queries
+     * @return array<Document>
+     */
+    private function findRelated(string $relatedCollection, array $relatedQueries, ?array $pathIds, array $queries): array
+    {
+        if ($pathIds === null) {
+            return $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find($relatedCollection, \array_merge($relatedQueries, $queries))));
+        }
+
+        return $this->readByIds($pathIds, fn (array $chunk): array => $this->db->silent(fn () => $this->db->skipRelationships(fn () => $this->db->find(
+            $relatedCollection,
+            \array_merge($relatedQueries, [Query::equal(Document::ID, $chunk)], $queries)
+        ))));
     }
 }

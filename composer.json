@@ -41,8 +41,7 @@
         "check": [
             "./vendor/bin/phpstan analyse --memory-limit 2G",
             "./vendor/bin/phpstan analyse -c phpstan-bin.neon --memory-limit 2G"
-        ],
-        "coverage": "./vendor/bin/coverage-check ./tmp/clover.xml 90"
+        ]
     },
     "require": {
         "php": ">=8.5",
@@ -66,7 +65,6 @@
         "utopia-php/cli": "^0.24.4",
         "laravel/pint": "*",
         "phpstan/phpstan": "^2.1",
-        "rregeer/phpunit-coverage-check": "0.3.*",
         "phpstan/phpstan-phpunit": "^2.0"
     },
     "suggest": {

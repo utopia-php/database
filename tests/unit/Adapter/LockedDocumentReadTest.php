@@ -58,21 +58,35 @@ final class LockedDocumentReadTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{Closure(PDO): SQL, string, int|null, string}>
+     */
+    public static function sharedReads(): iterable
+    {
+        $mariadb = static fn (PDO $pdo): SQL => new MariaDB($pdo);
+        $postgres = static fn (PDO $pdo): SQL => new Postgres($pdo);
+
+        yield 'mariadb' => [$mariadb, 'books', 3, 'SELECT * FROM `database`.`namespace_books` AS `table_main` WHERE `_uid` = :_uid AND `table_main`._tenant IN (:_tenant)'];
+        yield 'mariadb metadata' => [$mariadb, '_metadata', 3, 'SELECT * FROM `database`.`namespace__metadata` AS `table_main` WHERE `_uid` = :_uid AND (`table_main`._tenant IN (:_tenant) OR `table_main`._tenant IS NULL)'];
+        yield 'mariadb without a tenant' => [$mariadb, 'books', null, 'SELECT * FROM `database`.`namespace_books` AS `table_main` WHERE `_uid` = :_uid AND `table_main`._tenant IN (:_tenant)'];
+        yield 'postgres' => [$postgres, 'books', 3, 'SELECT * FROM "database"."namespace_books" AS "table_main" WHERE "_uid" = :_uid AND "table_main"._tenant IN (:_tenant)'];
+        yield 'postgres metadata' => [$postgres, '_metadata', 3, 'SELECT * FROM "database"."namespace__metadata" AS "table_main" WHERE "_uid" = :_uid AND ("table_main"._tenant IN (:_tenant) OR "table_main"._tenant IS NULL)'];
+    }
+
+    /**
      * @param  Closure(PDO): SQL  $make
      */
-    #[DataProvider('adapters')]
-    public function testALockedReadOfASharedTableKeepsTheTenantFilter(Closure $make, string $select): void
+    #[DataProvider('sharedReads')]
+    public function testASharedTableReadKeepsTheTenantFilter(Closure $make, string $collection, ?int $tenant, string $select): void
     {
         $adapter = $this->adapter($make);
         $adapter->setSharedTables(true);
-        $adapter->setTenant(3);
+        $adapter->setTenant($tenant);
 
-        $adapter->getDocument(new Collection(id: 'books'), 'dune', forUpdate: true);
+        $adapter->getDocument(new Collection(id: $collection), 'dune', forUpdate: true);
+        $adapter->getDocument(new Collection(id: $collection), 'dune');
 
-        $this->assertCount(1, $this->statements);
-        $this->assertStringNotContainsString($select, $this->statements[0]);
-        $this->assertStringContainsString('_tenant', $this->statements[0]);
-        $this->assertStringEndsWith('FOR UPDATE', $this->statements[0]);
+        $this->assertSame([$select.' FOR UPDATE', $select], $this->statements);
+        $this->assertSame([[':_uid', 'dune'], [':_tenant', $tenant], [':_uid', 'dune'], [':_tenant', $tenant]], $this->bindings);
     }
 
     /**

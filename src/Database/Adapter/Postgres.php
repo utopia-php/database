@@ -56,6 +56,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 {
     public const MAX_IDENTIFIER_NAME = 63;
 
+    private const string QUOTED_IDENTIFIER = '/["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}][\s\x{A0}\x{202F}]*([^"\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]+?)[\s\x{A0}\x{202F}]*["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]/u';
+
+    private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/';
+
     /**
      * Get the list of capabilities supported by the PostgreSQL adapter.
      *
@@ -1627,8 +1631,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return new LimitException('Datetime field overflow', $e->getCode(), $e);
         }
 
-        // Unknown table
         if ($e->getCode() === '42P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            if ($this->isUndefinedAlias($e->getMessage())) {
+                return new QueryException('Query references an undefined table or alias', $e->getCode(), $e);
+            }
+
             return new NotFoundException('Collection not found', $e->getCode(), $e);
         }
 
@@ -1663,6 +1670,30 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         return $e;
+    }
+
+    /**
+     * Whether a 42P01 names something other than a table of this namespace, whatever the server's
+     * language. A statement names a missing table with its schema and a DROP without one, but only a
+     * statement reports a position, so an unqualified name followed by one is an alias.
+     */
+    protected function isUndefinedAlias(string $message): bool
+    {
+        $message = \rtrim($message);
+        $firstLine = \explode("\n", $message, 2)[0];
+        if (\preg_match(self::QUOTED_IDENTIFIER, $firstLine, $matches) !== 1) {
+            return false;
+        }
+
+        $name = $matches[1];
+        $separator = \strrpos($name, '.');
+        $relation = $separator === false ? $name : \substr($name, $separator + 1);
+
+        if (! \str_starts_with($relation, $this->getNamespace().'_') && \preg_match(self::HASHED_IDENTIFIER, $relation) !== 1) {
+            return true;
+        }
+
+        return $separator === false && \str_contains($message, "\n");
     }
 
     /**

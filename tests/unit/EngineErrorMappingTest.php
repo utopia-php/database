@@ -18,6 +18,7 @@ use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
 final class EngineErrorMappingTest extends TestCase
@@ -75,6 +76,40 @@ final class EngineErrorMappingTest extends TestCase
     public function testLockConflictsMissingTablesAndBadCharactersAreMapped(Closure $map, PDOException $error, string $expected, string $message): void
     {
         $this->assertMapped($map, $error, $expected, $message);
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: class-string<Throwable>, 2: string}>
+     */
+    public static function undefinedTableProvider(): array
+    {
+        $line = "\nLINE 1: SELECT \"main\".\"_uid\" FROM \"utopiaTests\".\"engine_orders\" AS \"main\" WHERE \"mian\".\"_uid\" = \$1\n                                                                          ^";
+        $hashed = \md5('engine_'.\str_repeat('a', 70));
+
+        return [
+            'a statement on a missing table' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  relation "utopiaTests.engine_orders" does not exist'.$line, NotFoundException::class, 'Collection not found'],
+            'a statement on a missing permissions table' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  relation "utopiaTests.engine_orders_perms" does not exist'.$line, NotFoundException::class, 'Collection not found'],
+            'a statement on a missing table with a hashed name' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  relation "utopiaTests.'.$hashed.'_perms" does not exist'.$line, NotFoundException::class, 'Collection not found'],
+            'a DDL statement on a missing table' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  relation "utopiaTests.engine_orders" does not exist', NotFoundException::class, 'Collection not found'],
+            'a DROP of a missing table' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  table "engine_orders" does not exist', NotFoundException::class, 'Collection not found'],
+            'a DROP of a missing table with a hashed name' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  table "'.$hashed.'" does not exist', NotFoundException::class, 'Collection not found'],
+            'a missing table in German' => ["SQLSTATE[42P01]: Undefined table: 7 FEHLER:  Relation \u{BB}utopiaTests.engine_orders\u{AB} existiert nicht".$line, NotFoundException::class, 'Collection not found'],
+            'a missing table in French' => ["SQLSTATE[42P01]: Undefined table: 7 ERREUR:  la relation \u{AB}\u{A0}utopiaTests.engine_orders\u{A0}\u{BB} n'existe pas".$line, NotFoundException::class, 'Collection not found'],
+            'an undeclared alias' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  missing FROM-clause entry for table "mian"'.$line, QueryException::class, 'Query references an undefined table or alias'],
+            'an undeclared alias in German' => ["SQLSTATE[42P01]: Undefined table: 7 FEHLER:  fehlender Eintrag in FROM-Klausel f\u{FC}r Tabelle \u{BB}mian\u{AB}".$line, QueryException::class, 'Query references an undefined table or alias'],
+            'a table referenced by name instead of its alias' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  invalid reference to FROM-clause entry for table "engine_orders"'.$line."\nHINT:  Perhaps you meant to reference the table alias \"main\".", QueryException::class, 'Query references an undefined table or alias'],
+            'a relation outside the namespace' => ['SQLSTATE[42P01]: Undefined table: 7 ERROR:  relation "utopiaTests.other_orders" does not exist'.$line, QueryException::class, 'Query references an undefined table or alias'],
+            'a message that names nothing' => ['SQLSTATE[42P01]: Undefined table: 7', NotFoundException::class, 'Collection not found'],
+        ];
+    }
+
+    /**
+     * @param  class-string<Throwable>  $expected
+     */
+    #[DataProvider('undefinedTableProvider')]
+    public function testPostgresUndefinedTableIsNotFoundOnlyForACollectionTable(string $message, string $expected, string $mapped): void
+    {
+        $this->assertMapped(self::postgres(), self::engineError('42P01', 7, $message), $expected, $mapped);
     }
 
     public function testSQLiteDoesNotTreatTheMySQLTimeoutCodeAsATimeout(): void

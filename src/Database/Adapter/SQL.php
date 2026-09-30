@@ -651,7 +651,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      *
      * @throws DatabaseException
      */
-    protected function isRenamed(string $collection, string $old, string $new): bool
+    #[\Override]
+    public function isRenamed(string $collection, string $old, string $new): bool
     {
         $old = $this->filter($old);
         $new = $this->filter($new);

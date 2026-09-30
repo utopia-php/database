@@ -1010,6 +1010,7 @@ trait Attributes
         }
 
         $updated = false;
+        $adopted = false;
 
         if ($altering) {
             /** @var array<Document> $indexes */
@@ -1084,6 +1085,10 @@ trait Attributes
                 formatOptions: $formatOptions ?? [],
                 filters: $filters ?? [],
             );
+            $adopted = $this->getSharedTables()
+                && $newKey !== null
+                && $newKey !== $id
+                && $this->adapter->isRenamed($collection, $id, $newKey);
             $updated = $this->adapter->updateAttribute($collection, $updateAttrModel, $newKey);
 
             if (! $updated) {
@@ -1114,7 +1119,7 @@ trait Attributes
                 $rollbackAttrModel,
                 $originalKey
             ),
-            shouldRollback: $updated,
+            shouldRollback: $updated && ! $adopted,
             operationDescription: "attribute update '{$id}'",
             silentRollback: true
         );
@@ -1353,9 +1358,11 @@ trait Attributes
             $index->setAttribute('attributes', $indexAttributes);
         }
 
+        $adopted = $this->getSharedTables() && $this->adapter->isRenamed($collection->getId(), $old, $new);
+
         $renamed = false;
         try {
-            $renamed = $this->adapter->renameAttribute($collection->getId(), $old, $new);
+            $renamed = $adopted || $this->adapter->renameAttribute($collection->getId(), $old, $new);
             if (! $renamed) {
                 throw new DatabaseException('Failed to rename attribute');
             }
@@ -1371,7 +1378,7 @@ trait Attributes
         $this->updateMetadata(
             collection: $collection,
             rollbackOperation: fn () => $this->adapter->renameAttribute($collection->getId(), $new, $old),
-            shouldRollback: $renamed,
+            shouldRollback: $renamed && ! $adopted,
             operationDescription: "attribute rename '{$old}' to '{$new}'"
         );
 

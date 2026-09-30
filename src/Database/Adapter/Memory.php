@@ -685,6 +685,16 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    #[\Override]
+    public function isRenamed(string $collection, string $old, string $new): bool
+    {
+        $attributes = $this->data[$this->key($collection)]['attributes'] ?? [];
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        return $old !== $new && ! isset($attributes[$old]) && isset($attributes[$new]);
+    }
+
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
         $key = $this->key($collection);

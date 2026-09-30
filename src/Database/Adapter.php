@@ -774,6 +774,17 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     abstract public function renameAttribute(string $collection, string $old, string $new): bool;
 
     /**
+     * Whether a rename of the attribute already ran. Under shared tables the first tenant of a
+     * collection id renames the column every tenant shares and a later tenant finds it renamed,
+     * so its own rename runs no DDL and must not undo one. An engine that renames each tenant's
+     * own data never finds one.
+     */
+    public function isRenamed(string $collection, string $old, string $new): bool
+    {
+        return false;
+    }
+
+    /**
      * @param  array<string, string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      */

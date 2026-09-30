@@ -3,13 +3,11 @@
 namespace Tests\Unit;
 
 use Closure;
-use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionProperty;
 use stdClass;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoCache;
@@ -380,8 +378,13 @@ final class EngineErrorMappingTest extends TestCase
 
     private static function engineError(string $state, int $code, string $message): PDOException
     {
-        $error = new PDOException($message);
-        (new ReflectionProperty(Exception::class, 'code'))->setValue($error, $state);
+        $error = new class ($message, $state) extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $error->errorInfo = [$state, $code, $message];
 
         return $error;

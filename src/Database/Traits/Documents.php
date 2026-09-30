@@ -1417,19 +1417,18 @@ trait Documents
 
             $document = $this->castingBefore($collection, $document);
 
-            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $id, $document, $skipPermissionsUpdate));
+            $this->authorization->skip(fn () => $this->adapter->updateDocument($collection, $old->getId(), $document, $skipPermissionsUpdate));
 
             $document = $this->castingAfter($collection, $document);
 
-            $this->purgeCachedDocumentInternal($collection->getId(), $id);
+            $purgedIds = \array_values(\array_unique([$id, $old->getId(), $document->getId()]));
 
-            if ($document->getId() !== $id) {
-                $this->purgeCachedDocumentInternal($collection->getId(), $document->getId());
+            foreach ($purgedIds as $purgedId) {
+                $this->purgeCachedDocumentInternal($collection->getId(), $purgedId);
             }
 
-            $this->queueDocumentPurge($collection->getId(), $id);
-            if ($document->getId() !== $id) {
-                $this->queueDocumentPurge($collection->getId(), $document->getId());
+            foreach ($purgedIds as $purgedId) {
+                $this->queueDocumentPurge($collection->getId(), $purgedId);
             }
 
             if ($hasOperators) {

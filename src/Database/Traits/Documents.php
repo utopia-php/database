@@ -220,6 +220,13 @@ trait Documents
         return $attribute !== null && ! $attribute->array && Attribute::isIntegerType($attribute->type);
     }
 
+    private function assertIntegerChange(int|float|string $value): void
+    {
+        if ((! \is_int($value) && ! \is_string($value)) || ! BigInt::isIntegerString((string) $value)) {
+            throw new TypeException('Change value must be an integer.');
+        }
+    }
+
     private function integerBound(int|float|string $bound, string $name): int|string
     {
         if (\is_int($bound)) {
@@ -2296,8 +2303,11 @@ trait Documents
             $numericAttribute = $matchedAttr;
         }
 
-        if ($max !== null && $this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $max = $this->integerBound($max, 'Max');
+        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+            $this->assertIntegerChange($value);
+            if ($max !== null) {
+                $max = $this->integerBound($max, 'Max');
+            }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA
@@ -2423,8 +2433,11 @@ trait Documents
             $numericAttribute = $matchedDecAttr;
         }
 
-        if ($min !== null && $this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
-            $min = $this->integerBound($min, 'Min');
+        if ($this->isDeclaredInteger($numericAttribute ?? $this->declaredAttribute($collection, $attribute))) {
+            $this->assertIntegerChange($value);
+            if ($min !== null) {
+                $min = $this->integerBound($min, 'Min');
+            }
         }
 
         $cacheTarget = $collection->getId() === self::METADATA

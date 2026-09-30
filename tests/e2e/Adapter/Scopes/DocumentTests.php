@@ -9737,4 +9737,40 @@ trait DocumentTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testIncreaseAndDecreaseRefuseAFractionalChangeValueOnAnInteger(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = 'fractional_change_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::integer(key: 'count', required: true));
+        $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 100]));
+
+        try {
+            try {
+                $database->increaseDocumentAttribute($collection, 'counter', 'count', 1.5);
+                $this->fail('A fractional increase of an integer attribute was accepted');
+            } catch (TypeException $error) {
+                $this->assertSame('Change value must be an integer.', $error->getMessage());
+            }
+
+            try {
+                $database->decreaseDocumentAttribute($collection, 'counter', 'count', 0.5);
+                $this->fail('A fractional decrease of an integer attribute was accepted');
+            } catch (TypeException $error) {
+                $this->assertSame('Change value must be an integer.', $error->getMessage());
+            }
+
+            $this->assertSame(100, $database->getDocument($collection, 'counter')->getAttribute('count'));
+            $this->assertSame(102, $database->increaseDocumentAttribute($collection, 'counter', 'count', 2)->getAttribute('count'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

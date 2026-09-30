@@ -1363,29 +1363,10 @@ trait Attributes
             if (! $renamed) {
                 throw new DatabaseException('Failed to rename attribute');
             }
+        } catch (DuplicateException $e) {
+            throw $e;
         } catch (Throwable $e) {
-            // Check if the rename already happened in schema (orphan from prior
-            // partial failure where rename succeeded but metadata update failed).
-            // We verified $new doesn't exist in metadata (above), so if $new
-            // exists in schema, it must be from a prior rename.
-            if ($this->adapter->hasFeature(Feature\SchemaAttributes::class)) {
-                $schemaAttributes = $this->getSchemaAttributes($collection->getId());
-                $filteredNew = $this->adapter->filter($new);
-                $newExistsInSchema = false;
-                foreach ($schemaAttributes as $schemaAttr) {
-                    if (\strtolower($schemaAttr->getId()) === \strtolower($filteredNew)) {
-                        $newExistsInSchema = true;
-                        break;
-                    }
-                }
-                if ($newExistsInSchema) {
-                    $renamed = true;
-                } else {
-                    throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
-                }
-            } else {
-                throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
-            }
+            throw new DatabaseException("Failed to rename attribute '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
         }
 
         $collection->setAttribute('attributes', $attributes);

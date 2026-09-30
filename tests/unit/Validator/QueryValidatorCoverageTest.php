@@ -9,6 +9,7 @@ use Utopia\Database\Query;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\IndexedQueries;
+use Utopia\Database\Validator\Queries;
 use Utopia\Database\Validator\Query\Filter;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
@@ -157,6 +158,22 @@ final class QueryValidatorCoverageTest extends TestCase
         $this->assertTrue($withFulltext->isValid([$search]), $withFulltext->getDescription());
         $this->assertFalse($withFulltext->isValid(['{"method":"search"']));
         $this->assertStringStartsWith('Invalid query: ', $withFulltext->getDescription());
+    }
+
+    public function testStringChildrenOfALogicalQueryAreParsedAndAnUnparseableOneIsRejected(): void
+    {
+        $validator = new Queries([$this->filter()]);
+        $child = '{"method":"equal","attribute":"embedding","values":[[1,2,3]]}';
+
+        $this->assertFalse($validator->isValid([new Query(Method::Or, '', [$child, '{"method":"equal"'])]));
+        $this->assertStringStartsWith('Invalid query: ', $validator->getDescription());
+        $this->assertStringNotContainsString('can only contain filter queries', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([new Query(Method::And, '', [$child, 5])]));
+        $this->assertSame('Invalid query: nested query must be a string', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid([new Query(Method::Or, '', [$child, $child])]));
+        $this->assertStringContainsString('Or queries can only contain filter queries', $validator->getDescription());
     }
 
     private function filter(bool $supportForAttributes = true): Filter

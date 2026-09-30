@@ -42,13 +42,22 @@ $database->addHook(new Permissions());
 $database->addHook(new Relationships($database));
 ```
 
-- `Hook\Permissions` writes the permission rows that the SQL adapters (MariaDB, MySQL, PostgreSQL and SQLite)
-  check document-level permissions against. Without it, a SQL adapter stores no permission rows, so `find()`,
-  `count()` and `sum()` never return a document that only its document-level permissions make readable. MongoDB,
-  Memory and Redis keep permissions with the document and do not need it.
-- `Hook\Relationships` populates related documents on reads and runs nested writes, cascades and the relationship
-  permission checks. Without it, a read returns a relationship attribute's stored value (the related document's id)
-  instead of the related document, and a nested related document cannot be written. `Database::getRelationshipHook()`
+- `Hook\Permissions` writes, moves and deletes the rows of each collection's permissions table (`_perms`) when a
+  document's `$permissions` change. What depends on those rows differs by engine:
+  - MariaDB, MySQL and SQLite check document-level permissions in `find()`, `count()` and `sum()` against these
+    rows. Without the hook they write no new rows and neither revoke nor delete existing ones, so these reads keep
+    following the rows written before (for example by 7.x): a permission removed with `updateDocument()` still makes
+    the document readable through `find()` while `getDocument()` refuses it, a deleted document's rows stay, and a
+    document created again with the same id is readable by the roles the deleted one granted. A document whose
+    permissions were written without the hook is returned by `find()` only through a collection-level permission.
+  - PostgreSQL checks the `_permissions` column of the document's own row, as in 7.x, so its reads follow the
+    current `$permissions` with or without the hook. The hook still maintains the `_perms` rows there.
+  - MongoDB, Memory and Redis keep permissions with the document and do not need it.
+- `Hook\Relationships` populates related documents on reads and runs nested writes, the `onDelete` rules
+  (`Cascade`, `SetNull`, `Restrict`) and the relationship permission checks. Without it, a read returns a
+  relationship attribute's stored value (the related document's id) instead of the related document, a nested
+  related document cannot be written, and deleting a document leaves the documents related to it unchanged: no
+  cascade runs, no key is set to null and `Restrict` does not block the delete. `Database::getRelationshipHook()`
   returns the registered hook.
 
 ## Constants are now enums

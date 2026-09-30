@@ -1131,66 +1131,54 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     protected function resolveFulltextTableById(string $collection, string $id, array $candidates): ?string
     {
+        $table = $this->getFulltextTablesByIndexId($collection)[$this->filter($id)] ?? null;
+
+        return \in_array($table, $candidates, true) ? $table : null;
+    }
+
+    /**
+     * @return array<string, string> The FTS5 table of each fulltext index in the stored metadata, by index id
+     */
+    private function getFulltextTablesByIndexId(string $collection): array
+    {
         try {
-            $metadataCollection = new Document([Document::ID => Database::METADATA]);
-            $collectionDoc = $this->getDocument($metadataCollection, $collection);
+            $metadata = $this->getDocument(new Document([Document::ID => Database::METADATA]), $collection);
         } catch (NotFoundException) {
             // Metadata not yet seeded (collection drop during bootstrap).
-            // Anything else surfaces — masking PDO errors here would silently
-            // fall through to the single-candidate drop path and tear down
-            // the wrong table.
-            return null;
+            return [];
         }
 
-        if ($collectionDoc->isEmpty()) {
-            return null;
+        $indexes = $metadata->getAttribute('indexes', []);
+        if (\is_string($indexes)) {
+            $indexes = \json_decode($indexes, true);
         }
-
-        $indexes = $collectionDoc->getAttribute('indexes', []);
-        $filteredId = $this->filter($id);
-
         if (! \is_array($indexes)) {
-            return null;
+            return [];
         }
 
+        $tables = [];
         foreach ($indexes as $index) {
-            $indexId = $index instanceof Document
-                ? $index->getId()
-                : (\is_array($index) ? ($index[Document::ID] ?? null) : null);
-
-            if (! \is_scalar($indexId)) {
-                continue;
-            }
-            if ($this->filter((string) $indexId) !== $filteredId) {
-                continue;
-            }
-
-            $type = $index instanceof Document
-                ? $index->getAttribute('type')
-                : (\is_array($index) ? ($index['type'] ?? null) : null);
-
-            if ($type !== IndexType::Fulltext->value) {
-                return null;
-            }
-
             if ($index instanceof Document) {
-                $attributes = $index->getAttribute('attributes', []);
-            } else {
-                $attributes = $index['attributes'] ?? [];
+                $index = $index->getArrayCopy();
+            }
+            if (! \is_array($index) || ($index['type'] ?? null) !== IndexType::Fulltext->value) {
+                continue;
             }
 
-            /** @var array<mixed> $attributesArr */
-            $attributesArr = \is_array($attributes) ? $attributes : [];
-            $internal = \array_map(
-                fn (mixed $a): string => \is_string($a) ? $this->getInternalKeyForAttribute($a) : '',
-                $attributesArr
-            );
-            $candidate = $this->getFulltextTableName($collection, $internal);
+            $id = $index[Document::ID] ?? $index['key'] ?? null;
+            $attributes = $index['attributes'] ?? [];
+            if (! \is_scalar($id) || ! \is_array($attributes)) {
+                continue;
+            }
 
-            return \in_array($candidate, $candidates, true) ? $candidate : null;
+            $internal = \array_map(
+                fn (mixed $attribute): string => \is_string($attribute) ? $this->getInternalKeyForAttribute($attribute) : '',
+                $attributes,
+            );
+            $tables[$this->filter((string) $id)] = $this->getFulltextTableName($collection, $internal);
         }
 
-        return null;
+        return $tables;
     }
 
     /**
@@ -1271,13 +1259,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
             $this->execute($stmt);
 
-            $statment = $this->prepare('SELECT last_insert_rowid() AS id', event: Event::DocumentCreate);
-            $this->execute($statment);
-            $last = $statment->fetch();
+            $document[Document::SEQUENCE] = $this->getPDO()->lastInsertId();
 
-            if (\is_array($last)) {
-                /** @var array<string, mixed> $last */
-                $document[Document::SEQUENCE] = $last['id'] ?? null;
+            if (empty($document[Document::SEQUENCE])) {
+                throw new DatabaseException('Error creating document empty "'.Document::SEQUENCE.'"');
             }
 
             $ctx = $this->buildWriteContext($name);
@@ -1725,10 +1710,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      * Compile a Search/NotSearch query into FTS5 SQL with positional bindings.
      * Falls back to a LIKE expression when no FTS5 table covers the attribute.
      *
+     * @param  list<array{table: string, alias: string}>  $joins
      * @return array{expression: string, bindings: list<mixed>}|null
      */
     #[\Override]
-    protected function compileAdapterFilter(Query $query, string $collection, string $alias): ?array
+    protected function compileAdapterFilter(Query $query, string $collection, string $alias, array $joins = []): ?array
     {
         $method = $query->getMethod();
         if ($method !== Method::Search && $method !== Method::NotSearch) {
@@ -1752,7 +1738,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             ];
         }
 
-        $ftsTable = $this->findFulltextTableForAttribute($collection, $rawAttribute);
+        $ftsTable = $this->findSearchFulltextTable($rawAttribute, $collection, $joins);
 
         if ($ftsTable === null) {
             $likeExpr = "{$quotedAlias}.{$quotedAttribute} LIKE ? ESCAPE '\\'";
@@ -2786,7 +2772,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     public function getSchemaIndexes(string $collection): array
     {
-        $table = "{$this->getNamespace()}_{$this->filter($collection)}";
+        $filtered = $this->filter($collection);
+        $table = "{$this->getNamespace()}_{$filtered}";
+        $own = "{$this->getNamespace()}_{$this->getTenantSegment()}_{$filtered}_";
+        $anyTenant = '/^'.\preg_quote($this->getNamespace(), '/').'_[A-Za-z0-9_-]*?_'.\preg_quote($filtered, '/').'_(.+)$/';
 
         $stmt = $this->prepare("PRAGMA index_list(`{$table}`)", event: Event::CollectionRead);
         $this->execute($stmt);
@@ -2800,6 +2789,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
             $name = \is_scalar($index['name'] ?? null) ? (string) $index['name'] : '';
             $unique = ! empty($index['unique']);
+
+            $owned = \str_starts_with($name, $own);
+            $id = match (true) {
+                $owned => \substr($name, \strlen($own)),
+                \preg_match($anyTenant, $name, $matches) === 1 => $matches[1],
+                default => $name,
+            };
+            if (! $owned && isset($results[$id])) {
+                continue;
+            }
 
             $colStmt = $this->prepare("PRAGMA index_info(`{$name}`)", event: Event::CollectionRead);
             $this->execute($colStmt);
@@ -2825,15 +2824,16 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 $lengths[] = null;
             }
 
-            $results[] = new Document([
-                Document::ID => $name,
-                'indexName' => $name,
+            $results[$id] = new Document([
+                Document::ID => $id,
+                'indexName' => $id,
                 'indexType' => 'BTREE',
                 'nonUnique' => $unique ? 0 : 1,
                 'columns' => $columns,
                 'lengths' => $lengths,
             ]);
         }
+        $results = \array_values($results);
 
         // PRAGMA index_list misses FTS5 vtables.
         foreach ($this->getFulltextSchemaIndexes($collection) as $entry) {
@@ -2865,40 +2865,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             return [];
         }
 
-        $hashToId = [];
-        try {
-            $metadataCollection = new Document([Document::ID => Database::METADATA]);
-            $collectionDoc = $this->getDocument($metadataCollection, $collection);
-            if (! $collectionDoc->isEmpty()) {
-                $indexes = $collectionDoc->getAttribute('indexes', []);
-                if (\is_array($indexes)) {
-                    foreach ($indexes as $index) {
-                        if ($index instanceof Document) {
-                            $indexId = $index->getId();
-                            $type = $index->getAttribute('type');
-                            $attributes = $index->getAttribute('attributes', []);
-                        } elseif (\is_array($index)) {
-                            $indexId = $index[Document::ID] ?? null;
-                            $type = $index['type'] ?? null;
-                            $attributes = $index['attributes'] ?? [];
-                        } else {
-                            continue;
-                        }
-
-                        if (! \is_scalar($indexId) || $type !== IndexType::Fulltext->value) {
-                            continue;
-                        }
-
-                        $internal = \array_map(
-                            fn (mixed $a): string => \is_string($a) ? $this->getInternalKeyForAttribute($a) : '',
-                            \is_array($attributes) ? $attributes : []
-                        );
-                        $hashToId[$this->getFulltextTableName($collection, $internal)] = $this->filter((string) $indexId);
-                    }
-                }
-            }
-        } catch (\Throwable) {
-        }
+        $hashToId = \array_flip($this->getFulltextTablesByIndexId($collection));
 
         $entries = [];
         foreach ($tables as $ftsTable) {
@@ -3078,6 +3045,26 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
 
         return $result;
+    }
+
+    /**
+     * @param  list<array{table: string, alias: string}>  $joins
+     */
+    private function findSearchFulltextTable(string $attribute, string $collection, array $joins): ?string
+    {
+        $dot = \strpos($attribute, '.');
+        if ($dot === false) {
+            return $this->findFulltextTableForAttribute($collection, $attribute);
+        }
+
+        $prefix = \substr($attribute, 0, $dot);
+        foreach ($joins as $join) {
+            if ($join['alias'] === $prefix) {
+                return $this->findFulltextTableForAttribute($join['table'], \substr($attribute, $dot + 1));
+            }
+        }
+
+        return null;
     }
 
     /**

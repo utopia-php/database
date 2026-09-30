@@ -8022,4 +8022,78 @@ trait JoinTests
             $this->cleanupAggCollections($database, [$collection]);
         }
     }
+
+    public function testSqliteJoinedSearchUsesTheJoinedFulltextIndex(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter() instanceof SQLite) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authors = 'sqlite_search_authors';
+        $posts = 'sqlite_search_posts';
+        $collections = [$authors, $posts];
+        $this->cleanupAggCollections($database, $collections);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $authors, permissions: $permissions));
+        $database->createAttribute($authors, Attribute::string(key: 'name', size: 64, required: true));
+        $database->createCollection(new Collection(id: $posts, permissions: $permissions));
+        $database->createAttribute($posts, Attribute::string(key: 'authorId', size: 64, required: true));
+        $database->createAttribute($posts, Attribute::string(key: 'body', size: 256, required: true));
+        $database->createIndex($posts, Index::fullText(key: 'body_fulltext', attributes: ['body']));
+
+        $bodies = [
+            'brown' => 'the quick brown fox',
+            'lazy' => 'a lazy dog sleeps',
+            'foxes' => 'foxes run at night',
+            'phrase' => 'quick fox',
+        ];
+        foreach ($bodies as $author => $body) {
+            $database->createDocument($authors, new Document(['$id' => $author, 'name' => $author]));
+            $database->createDocument($posts, new Document(['$id' => 'post_'.$author, 'authorId' => $author, 'body' => $body]));
+        }
+
+        $join = Query::join($posts, '$id', 'authorId', '=', 'post');
+        /**
+         * @param  array<mixed>  $ids
+         * @return array<mixed>
+         */
+        $sorted = static function (array $ids): array {
+            \sort($ids);
+
+            return $ids;
+        };
+
+        foreach (['quick fox', '"quick fox"', 'lazy'] as $term) {
+            $matching = $sorted(\array_map(
+                static fn (Document $post): mixed => $post->getAttribute('authorId'),
+                $database->find($posts, [Query::search('body', $term)]),
+            ));
+            $this->assertNotSame([], $matching, $term);
+
+            $found = $sorted(\array_map(
+                static fn (Document $author): string => $author->getId(),
+                $database->find($authors, [$join, Query::search('post.body', $term)]),
+            ));
+            $this->assertSame($matching, $found, $term);
+            $this->assertSame(\count($matching), $database->count($authors, [$join, Query::search('post.body', $term)]), $term);
+
+            $complement = $sorted(\array_values(\array_diff(\array_keys($bodies), $matching)));
+            $found = $sorted(\array_map(
+                static fn (Document $author): string => $author->getId(),
+                $database->find($authors, [$join, Query::notSearch('post.body', $term)]),
+            ));
+            $this->assertSame($complement, $found, $term);
+        }
+
+        $this->assertSame(['brown', 'foxes', 'phrase'], $sorted(\array_map(
+            static fn (Document $author): string => $author->getId(),
+            $database->find($authors, [$join, Query::search('post.body', 'quick fox')]),
+        )));
+
+        $this->cleanupAggCollections($database, $collections);
+    }
 }

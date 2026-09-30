@@ -70,6 +70,32 @@ final class SQLiteLikeEscapeTest extends TestCase
         $this->assertSame(\count($expected), $database->count(self::COLLECTION, [$query]));
     }
 
+    /**
+     * @return iterable<string, array{string, list<string>}>
+     */
+    public static function unindexedSearches(): iterable
+    {
+        yield 'one backslash' => ['e\\f', ['e\\f']];
+        yield 'two backslashes' => ['e\\\\f', ['e\\\\f']];
+        yield 'an underscore' => ['a_b', ['a_b']];
+    }
+
+    /**
+     * @param  list<string>  $expected
+     */
+    #[DataProvider('unindexedSearches')]
+    public function testSearchFallbackMatchesALiteralBackslash(string $term, array $expected): void
+    {
+        $database = $this->database();
+
+        $names = $database->skipValidation(fn (): array => \array_map(
+            fn (Document $document): mixed => $document->getAttribute('name'),
+            $database->find(self::COLLECTION, [Query::search('name', $term)]),
+        ));
+
+        $this->assertSame($expected, $names);
+    }
+
     private function database(): Database
     {
         $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()));

@@ -6,6 +6,7 @@ use PDOException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Tests\Unit\Support\StderrCapture;
+use TypeError;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
@@ -34,6 +35,8 @@ final class CreateAttributesRollbackTest extends TestCase
     private array $dropped = [];
 
     private bool $driverErrors = false;
+
+    private ?TypeError $dropError = null;
 
     public function testCleanupErrorsForEveryColumnThatCouldNotBeDroppedFollowTheMetadataError(): void
     {
@@ -112,6 +115,25 @@ final class CreateAttributesRollbackTest extends TestCase
         $this->assertSame([], $this->storedKeys($database));
     }
 
+    public function testAnErrorWhileDroppingAColumnEscapesTheRollbackUnchanged(): void
+    {
+        $database = $this->database();
+        $this->lockedColumns = ['nick'];
+        $this->dropError = new TypeError('deleteAttribute(): Argument #2 ($id) must be of type string');
+        $this->metadataFailure = new RuntimeException('metadata store is read-only');
+
+        $thrown = null;
+        StderrCapture::during(function () use ($database, &$thrown): void {
+            try {
+                $database->createAttributes(self::COLLECTION, $this->attributes('nick', 'title'));
+            } catch (\Throwable $error) {
+                $thrown = $error;
+            }
+        });
+
+        $this->assertSame($this->dropError, $thrown, 'a programming error in the rollback is not folded into the metadata failure');
+    }
+
     /**
      * @return list<Attribute>
      */
@@ -146,9 +168,9 @@ final class CreateAttributesRollbackTest extends TestCase
         $metadataFailure = fn (): ?RuntimeException => $this->metadataFailure;
         $drop = function (string $id): void {
             if (\in_array($id, $this->lockedColumns, true)) {
-                throw $this->driverErrors
+                throw $this->dropError ?? ($this->driverErrors
                     ? new PDOException("SQLSTATE[55P03]: lock not available on '{$id}'")
-                    : new DatabaseException("Column '{$id}' is locked");
+                    : new DatabaseException("Column '{$id}' is locked"));
             }
 
             $this->dropped[] = $id;

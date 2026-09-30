@@ -386,7 +386,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   exception) instead of the rollback's error; the rollback failure is logged.
 - `createAttributes()` rolls back every column it created when a driver error (for example a lock timeout or a lost
   connection on PostgreSQL) interrupts dropping one of them, and throws the metadata failure with that error
-  appended, instead of letting the driver error escape and leaving the remaining columns.
+  appended, instead of letting the driver error escape and leaving the remaining columns. A PHP `Error` (for
+  example a `TypeError`) raised while dropping a column is rethrown unchanged instead of being collected.
 - `renameIndex()` fails with `Failed to rename index '<old>' to '<new>'` and keeps the old key in the metadata when
   the adapter renames nothing, instead of recording a rename that did not happen.
 - A failed `updateRelationship()` restores the definitions it had already written (parent, two-way child, junction

@@ -3,7 +3,6 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
-use PHPUnit\Framework\Attributes\Depends;
 use Tests\E2E\Adapter\Support\EventRecorder;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoneCache;
@@ -1262,23 +1261,44 @@ trait CollectionTests
         $this->assertNotNull($document->getSequence());
     }
 
-    #[Depends('testCreatedAtUpdatedAt')]
     public function testCreatedAtUpdatedAtAssert(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();
+        $collection = $this->initCreatedAtAssertFixture();
 
-        $document = $database->getDocument($this->getCreatedAtCollection(), 'uid123');
+        $document = $database->getDocument($collection, 'uid123');
         $this->assertEquals(true, ! $document->isEmpty());
         sleep(1);
         $document->setAttribute('title', 'new title');
-        $database->updateDocument($this->getCreatedAtCollection(), 'uid123', $document);
-        $document = $database->getDocument($this->getCreatedAtCollection(), 'uid123');
+        $database->updateDocument($collection, 'uid123', $document);
+        $document = $database->getDocument($collection, 'uid123');
 
         $this->assertGreaterThan($document->getCreatedAt(), $document->getUpdatedAt());
         $this->expectException(DuplicateException::class);
 
-        $database->createCollection(new Collection(id: $this->getCreatedAtCollection()));
+        $database->createCollection(new Collection(id: $collection));
+    }
+
+    private function initCreatedAtAssertFixture(): string
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = ID::unique();
+
+        $database->createCollection(new Collection(id: $collection));
+        $database->createAttribute($collection, Attribute::string(key: 'title', size: 100));
+        $database->createDocument($collection, new Document([
+            '$id' => ID::custom('uid123'),
+            '$permissions' => [
+                Permission::read(Role::any()),
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+        ]));
+
+        return $collection;
     }
 
     public function testTransformations(): void

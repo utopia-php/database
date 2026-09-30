@@ -5,7 +5,6 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use PDO;
 use PDOException;
-use PHPUnit\Framework\Attributes\Depends;
 use Throwable;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
@@ -7140,7 +7139,6 @@ trait DocumentTests
         }
     }
 
-    #[Depends('testFindCheckPermissions')]
     public function testForeach(): void
     {
         $this->initMoviesFixture();

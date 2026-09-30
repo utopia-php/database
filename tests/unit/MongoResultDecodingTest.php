@@ -3,6 +3,8 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Document;
 use Utopia\Query\Schema\ColumnType;
@@ -124,19 +126,8 @@ final class MongoResultDecodingTest extends TestCase
 
     public function testProjectionSkipsInternalAttributes(): void
     {
-        $adapter = new class () extends Mongo {
-            public function __construct()
-            {
-            }
-
-            /**
-             * @param  array<string>  $selections
-             */
-            public function project(array $selections): mixed
-            {
-                return $this->getAttributeProjection($selections);
-            }
-        };
+        $adapter = (new ReflectionClass(Mongo::class))->newInstanceWithoutConstructor();
+        $project = new ReflectionMethod(Mongo::class, 'getAttributeProjection');
 
         $this->assertSame([
             'name' => 1,
@@ -145,6 +136,6 @@ final class MongoResultDecodingTest extends TestCase
             '_createdAt' => 1,
             '_updatedAt' => 1,
             '_permissions' => 1,
-        ], $adapter->project(['name', '$id', '$createdAt']));
+        ], $project->invoke($adapter, ['name', '$id', '$createdAt']));
     }
 }

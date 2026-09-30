@@ -10,6 +10,7 @@ use Redis;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\MySQL;
@@ -18,7 +19,6 @@ use Utopia\Database\Adapter\Redis as RedisAdapter;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
-use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
@@ -89,7 +89,7 @@ final class PowerNumericTextTest extends TestCase
         $updated = $database->updateDocument('items', 'first', new Document(['count' => Operator::power('2', '50')]));
         $this->assertSame(9, $updated->getAttribute('count'));
 
-        if ($database->getAdapter()->supports(Capability::Upserts)) {
+        if ($database->getAdapter()->hasFeature(Feature\Upserts::class)) {
             $database->upsertDocument('items', new Document(['$id' => 'created', 'count' => Operator::power('2')]));
             $this->assertSame(16, $database->getDocument('items', 'created')->getAttribute('count'));
         }

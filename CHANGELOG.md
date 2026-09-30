@@ -239,7 +239,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   `withRequestTimestamp()`, `skipDuplicates()` and `Authorization::withRoles()` are scoped to the calling coroutine
   and the coroutines it starts; sibling coroutines sharing the handle or the `Authorization` no longer see them. The
   plain setters (`setStatus()`, `enable()`, `disable()`, `reset()`, `setTenant()`, ...) still change the shared
-  value, except inside such a scope, where the change lasts until the scope ends.
+  value, except inside such a scope, including one the coroutine inherited from the coroutine that started it: there
+  the change applies to the calling coroutine and the coroutines it starts, and lasts until the scope ends.
 - Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine
   and outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
 - Linking an existing many-to-many related document needs update permission on it, as one-to-one, one-to-many and
@@ -301,6 +302,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 ### Removed
 
 - `Database::on()`, `Database::before()`, `Mirror::on()` and `Adapter::before()`.
+- The protected `Adapter\Pool::$pinnedAdapter` property. A subclass reads the connection the calling coroutine's
+  transaction pinned through `pin()`. See [Pools and profiling](UPGRADE.md#pools-and-profiling).
 - The `Database::VAR_*`, `INDEX_*`, `ORDER_*`, `PERMISSION_*`, `RELATION_*`, `CURSOR_*` and `EVENT_*` constants, the
   `Query::TYPE_*` constants (except `TYPE_ELEM_MATCH`), the `Operator::TYPE_*` constants and the
   `Document::SET_TYPE_*` constants, replaced by enums. See [Constants are now enums](UPGRADE.md#constants-are-now-enums).
@@ -346,6 +349,15 @@ have to make, with the 7.x and 8.0 forms side by side.
 - A nested one-to-one write that throws no longer leaves an entry on the relationship write stack. Before, every
   later write on the same `Database` treated its nested relationships as one level deeper and dropped the deepest
   ones without an error.
+- Coroutines sharing a `Database` keep their own relationship write and cascade stacks (also in 7.x). Before, a
+  coroutine in the middle of a nested relationship write made another coroutine's nested writes look deeper, so their
+  deepest related documents were dropped without an error, and a coroutine in the middle of a cascading delete could
+  stop another coroutine's cascade, leaving its related documents behind.
+- `Adapter\Pool` pins a transaction's connection for the coroutine that opened the transaction and the coroutines it
+  starts (also in 7.x). Before, every coroutine sharing the handle ran its statements on that connection while the
+  transaction was open, so they were committed or rolled back with it and their own `withTransaction()` became a
+  savepoint in it. Each call on the pinned connection also runs under its own coroutine's tenant; before, two
+  coroutines with different `withTenant()` scopes overwrote each other's tenant on it.
 - A filter on a nested relationship path (for example `Query::equal('children.tags.name', [...])`) no longer throws
   `Exception\Query` when a step of the path matches more documents than `getMaxQueryValues()`: each step reads its
   matches in chunks within the limit. A path that passes through the parent side of a one-to-many or the child side
@@ -620,6 +632,12 @@ not change anything for an upgrade from 7.x.
   - Scoped toggles (`skipFilters()`, `skipValidation()`, `withPreserveDates()`, `withPreserveSequence()`,
     `withTenant()`, `withRequestTimestamp()`, `skipDuplicates()`) no longer reach other coroutines sharing a handle,
     and overlapping scopes in different coroutines no longer leave the handle on another scope's value.
+  - A setter called in a coroutine started inside a scope (`addRole()`, `removeRole()` or `cleanRoles()` inside
+    `withRoles()`, `disable()` or `reset()` inside `skip()`, `setTenant()` inside `withTenant()`, and the setters of
+    the other scoped toggles) changes only what that coroutine and the coroutines it starts see, until the scope
+    ends. Before, it changed the shared value: the coroutine that called it did not see the change, every other
+    coroutine sharing the handle did, and the change outlived the scope, so a `disable()` inside `skip()` left
+    authorization off and an `addRole()` inside `withRoles()` gave every caller the scope's roles.
 - **Hooks and events:**
   - Every document write fires `document_purge` again, once per purged document.
   - `silent($callback, $listeners)` no longer silences every hook.

@@ -16,6 +16,7 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Relationship;
+use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Pools\Pool as UtopiaPool;
 use Utopia\Query\CursorDirection;
@@ -34,10 +35,10 @@ class Pool extends Adapter
     protected UtopiaPool $pool;
 
     /**
-     * When a transaction is active, all delegate calls are routed through
-     * this pinned adapter to ensure they run on the same connection.
+     * @var Value<Adapter|null>|null The connection a coroutine's open transaction runs on, which that coroutine and
+     *                               the coroutines it starts use for every call until the transaction ends
      */
-    protected ?Adapter $pinnedAdapter = null;
+    private ?Value $pinned = null;
 
     /**
      * Whether borrowed adapters should require attributes to be defined in metadata.
@@ -94,11 +95,14 @@ class Pool extends Adapter
      */
     protected function borrowAndInvoke(string $method, array $args, ?string $feature = null): mixed
     {
-        if ($this->pinnedAdapter !== null) {
-            $adapter = $this->pinnedAdapter;
-            $this->syncBorrowedAdapter($adapter);
+        $pinned = $this->pin();
+        if ($pinned !== null) {
+            $this->syncBorrowedAdapter($pinned);
 
-            return $this->invokeDelegated($adapter, $method, $args, $feature);
+            return $pinned->withTenant(
+                $this->getTenant(),
+                fn (): mixed => $this->invokeDelegated($pinned, $method, $args, $feature),
+            );
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($method, $args, $feature) {
@@ -340,14 +344,27 @@ class Pool extends Adapter
     }
 
     /**
-     * Which connection this handle currently has pinned, if any. Read through a
-     * seam rather than off the property, because a handle that pins per
-     * coroutine keeps its pins somewhere else and would otherwise never be
-     * asked.
+     * Which connection the calling coroutine's transaction, or the transaction of
+     * the coroutine that started it, has pinned, if any. Read through a seam, so a
+     * subclass that keeps its pins somewhere else is asked too.
      */
     protected function pin(): ?Adapter
     {
-        return $this->pinnedAdapter;
+        return $this->pinned?->get();
+    }
+
+    /**
+     * @return Value<Adapter|null>
+     */
+    private function pinned(): Value
+    {
+        if ($this->pinned === null) {
+            /** @var Value<Adapter|null> $pinned */
+            $pinned = new Value(null);
+            $this->pinned = $pinned;
+        }
+
+        return $this->pinned;
     }
 
     /**
@@ -394,7 +411,7 @@ class Pool extends Adapter
 
     public function inTransaction(): bool
     {
-        return $this->pinnedAdapter?->inTransaction() ?? parent::inTransaction();
+        return $this->pin()?->inTransaction() ?? parent::inTransaction();
     }
 
     public function getHostname(): string
@@ -407,7 +424,9 @@ class Pool extends Adapter
     /**
      * Pin a single connection from the pool for the entire transaction lifecycle.
      * This prevents startTransaction(), the callback, and commitTransaction()
-     * from running on different connections.
+     * from running on different connections. The pin belongs to the calling
+     * coroutine and the coroutines it starts; other coroutines sharing the handle
+     * borrow connections of their own and run outside the transaction.
      *
      * @template T
      *
@@ -418,25 +437,25 @@ class Pool extends Adapter
      */
     public function withTransaction(callable $callback): mixed
     {
-        // If already inside a transaction, reuse the pinned adapter
-        // so nested withTransaction calls use the same connection
-        if ($this->pinnedAdapter !== null) {
-            return $this->pinnedAdapter->withTransaction($callback);
+        $pinned = $this->pin();
+        if ($pinned !== null) {
+            return $pinned->withTransaction($callback);
         }
 
         return $this->pool->use(function (Adapter $adapter) use ($callback) {
             try {
                 $this->syncBorrowedAdapter($adapter);
 
-                $this->pinnedAdapter = $adapter;
-                if ($this->skipDuplicates) {
-                    return $adapter->skipDuplicates(
-                        fn () => $adapter->withTransaction($callback)
-                    );
-                }
-                return $adapter->withTransaction($callback);
+                return $this->pinned()->with($adapter, function () use ($adapter, $callback): mixed {
+                    if ($this->skipDuplicates) {
+                        return $adapter->skipDuplicates(
+                            fn () => $adapter->withTransaction($callback)
+                        );
+                    }
+
+                    return $adapter->withTransaction($callback);
+                });
             } finally {
-                $this->pinnedAdapter = null;
                 $this->releaseBorrowedAdapter($adapter);
             }
         });

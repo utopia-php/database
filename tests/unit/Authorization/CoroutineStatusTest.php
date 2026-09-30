@@ -7,7 +7,9 @@ use PHPUnit\Framework\TestCase;
 use Swoole\Coroutine;
 use Swoole\Coroutine\Channel;
 use Swoole\Runtime;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Database\Validator\Authorization\Input;
 
 use function Swoole\Coroutine\run;
 
@@ -158,6 +160,84 @@ final class CoroutineStatusTest extends TestCase
         });
 
         $this->assertSame(['enabled' => true, 'reset' => true, 'after' => false], $seen);
+    }
+
+    public function testResetInACoroutineStartedInsideASkipRestoresTheCheckForThatCoroutineOnly(): void
+    {
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->skip(function () use (&$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, $done): void {
+                    $this->authorization->reset();
+                    $seen['child'] = $this->authorization->getStatus();
+                    $seen['childValid'] = $this->authorization->isValid(new Input(PermissionType::Read, ['user:x']));
+                    $done->push(true);
+                });
+
+                $done->pop();
+                $seen['parent'] = $this->authorization->getStatus();
+            });
+
+            $seen['after'] = $this->authorization->getStatus();
+        });
+
+        $this->assertSame(['child' => true, 'childValid' => false, 'parent' => false, 'after' => true], $seen);
+    }
+
+    public function testDisableInACoroutineStartedInsideASkipEndsWithTheSkip(): void
+    {
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->skip(function (): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use ($done): void {
+                    $this->authorization->reset();
+                    $this->authorization->disable();
+                    $done->push(true);
+                });
+
+                $done->pop();
+            });
+
+            $seen['after'] = $this->authorization->getStatus();
+
+            Coroutine::create(function () use (&$seen): void {
+                $seen['unrelated'] = $this->authorization->getStatus();
+            });
+        });
+
+        $this->assertSame(['after' => true, 'unrelated' => true], $seen);
+        $this->assertTrue($this->authorization->getStatus());
+    }
+
+    public function testEnableInACoroutineStartedInsideWithStatusStaysInThatCoroutine(): void
+    {
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->disable();
+            $this->authorization->withStatus(false, function () use (&$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, $done): void {
+                    $this->authorization->enable();
+                    $seen['child'] = $this->authorization->getStatus();
+                    $done->push(true);
+                });
+
+                $done->pop();
+                $seen['parent'] = $this->authorization->getStatus();
+            });
+
+            $seen['after'] = $this->authorization->getStatus();
+        });
+
+        $this->assertSame(['child' => true, 'parent' => false, 'after' => false], $seen);
     }
 
     public function testACloneStartsFromTheCurrentStatusAndKeepsItsOwn(): void

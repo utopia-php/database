@@ -3,30 +3,31 @@
 namespace Utopia\Database\State;
 
 use Swoole\Coroutine;
-use Swoole\Coroutine\Context;
-use WeakMap;
 
 /**
  * A handle-wide value that a callback can override for its own duration.
  *
  * An override belongs to the coroutine that opened it: that coroutine and the coroutines it starts see it, its
- * siblings and its parent do not. A read takes the current coroutine's innermost override, else the nearest
- * ancestor's, else the handle-wide value. A write changes the current coroutine's innermost override when it has
- * one, else the handle-wide value. Outside a coroutine, overrides form one stack that every coroutine sees as its
- * outermost ancestor.
+ * siblings and its parent do not. Outside a coroutine, overrides form one stack that every coroutine sees as its
+ * outermost ancestor. A read takes the current coroutine's innermost override, else the nearest ancestor's, else the
+ * handle-wide value.
+ *
+ * A write inside an override changes what the writing coroutine, and the coroutines it starts after, see until that
+ * override ends: the override itself when the writer opened it, else the writer's own view of it. A write outside
+ * every override changes the handle-wide value.
  *
  * @template T
  */
 final class Value
 {
-    private const string CONTEXT = 'utopia.database.state';
+    private const int OUTSIDE = -1;
 
     private static ?bool $coroutines = null;
 
     /**
-     * @var list<T>
+     * @var array<int, Scope<T>> The innermost open override of each coroutine that has one, by coroutine id
      */
-    private array $overrides = [];
+    private array $scopes = [];
 
     private int $open = 0;
 
@@ -35,6 +36,7 @@ final class Value
      */
     public function __construct(private mixed $value)
     {
+        self::$coroutines ??= \extension_loaded('swoole');
     }
 
     /**
@@ -46,22 +48,23 @@ final class Value
             return $this->value;
         }
 
-        $coroutine = self::coroutine();
-        while ($coroutine > 0) {
-            $overrides = $this->overridesOf($coroutine);
-            if ($overrides !== []) {
-                return $overrides[\count($overrides) - 1];
+        $reader = self::$coroutines ? Coroutine::getCid() : self::OUTSIDE;
+        $coroutine = $reader;
+        while (! isset($this->scopes[$coroutine])) {
+            if ($coroutine === self::OUTSIDE) {
+                return $this->value;
             }
 
             $parent = Coroutine::getPcid($coroutine);
-            $coroutine = \is_int($parent) ? $parent : -1;
+            $coroutine = $parent === false ? self::OUTSIDE : $parent;
         }
 
-        if ($this->overrides !== []) {
-            return $this->overrides[\count($this->overrides) - 1];
+        $scope = $this->scopes[$coroutine];
+        if ($scope->writes === [] || $coroutine === $reader) {
+            return $scope->value;
         }
 
-        return $this->value;
+        return self::inherited($scope, $reader);
     }
 
     /**
@@ -69,24 +72,38 @@ final class Value
      */
     public function set(mixed $value): void
     {
-        $coroutine = self::coroutine();
-        if ($coroutine > 0) {
-            $overrides = $this->overridesOf($coroutine);
-            if ($overrides !== []) {
-                \array_pop($overrides);
-                $overrides[] = $value;
-                $this->store($coroutine, $overrides);
-
-                return;
-            }
-        } elseif ($this->overrides !== []) {
-            \array_pop($this->overrides);
-            $this->overrides[] = $value;
+        if ($this->open === 0) {
+            $this->value = $value;
 
             return;
         }
 
-        $this->value = $value;
+        $writer = self::coroutine();
+        $coroutine = $writer;
+        while (! isset($this->scopes[$coroutine])) {
+            if ($coroutine === self::OUTSIDE) {
+                $this->value = $value;
+
+                return;
+            }
+
+            $coroutine = self::parent($coroutine);
+        }
+
+        $scope = $this->scopes[$coroutine];
+        if ($coroutine === $writer) {
+            $scope->value = $value;
+
+            return;
+        }
+
+        if (! \array_key_exists($writer, $scope->writes)) {
+            Coroutine::defer(static function () use ($scope, $writer): void {
+                unset($scope->writes[$writer]);
+            });
+        }
+
+        $scope->writes[$writer] = $value;
     }
 
     /**
@@ -101,14 +118,8 @@ final class Value
     public function with(mixed $value, callable $callback): mixed
     {
         $coroutine = self::coroutine();
-        if ($coroutine > 0) {
-            $overrides = $this->overridesOf($coroutine);
-            $overrides[] = $value;
-            $this->store($coroutine, $overrides);
-        } else {
-            $this->overrides[] = $value;
-        }
-
+        $scope = new Scope($coroutine, $value, $this->scopes[$coroutine] ?? null);
+        $this->scopes[$coroutine] = $scope;
         $this->open++;
 
         try {
@@ -116,78 +127,41 @@ final class Value
         } finally {
             $this->open--;
 
-            if ($coroutine > 0) {
-                $overrides = $this->overridesOf($coroutine);
-                \array_pop($overrides);
-                $this->store($coroutine, $overrides);
+            if ($scope->outer === null) {
+                unset($this->scopes[$coroutine]);
             } else {
-                \array_pop($this->overrides);
+                $this->scopes[$coroutine] = $scope->outer;
             }
         }
     }
 
     /**
-     * @return list<T>
+     * The value the reader sees through an override it inherited: the nearest write by the reader or an ancestor
+     * below the override's owner, else the override's value.
+     *
+     * @param  Scope<T>  $scope
+     * @return T
      */
-    private function overridesOf(int $coroutine): array
+    private static function inherited(Scope $scope, int $reader): mixed
     {
-        /** @var list<T> $overrides */
-        $overrides = self::scopes($coroutine)[$this] ?? [];
-
-        return $overrides;
-    }
-
-    /**
-     * @param  list<T>  $overrides
-     */
-    private function store(int $coroutine, array $overrides): void
-    {
-        $scopes = self::scopes($coroutine, create: $overrides !== []);
-        if ($scopes === null) {
-            return;
+        for ($coroutine = $reader; $coroutine !== $scope->coroutine; $coroutine = self::parent($coroutine)) {
+            if (\array_key_exists($coroutine, $scope->writes)) {
+                return $scope->writes[$coroutine];
+            }
         }
 
-        if ($overrides === []) {
-            unset($scopes[$this]);
-        } else {
-            $scopes[$this] = $overrides;
-        }
+        return $scope->value;
     }
 
     private static function coroutine(): int
     {
-        self::$coroutines ??= \extension_loaded('swoole');
-        if (! self::$coroutines) {
-            return -1;
-        }
-
-        $coroutine = Coroutine::getCid();
-
-        return \is_int($coroutine) ? $coroutine : -1;
+        return self::$coroutines ? Coroutine::getCid() : self::OUTSIDE;
     }
 
-    /**
-     * @return WeakMap<object, mixed>|null
-     */
-    private static function scopes(int $coroutine, bool $create = false): ?WeakMap
+    private static function parent(int $coroutine): int
     {
-        $context = Coroutine::getContext($coroutine);
-        if (! $context instanceof Context) {
-            return null;
-        }
+        $parent = Coroutine::getPcid($coroutine);
 
-        $scopes = $context[self::CONTEXT] ?? null;
-        if ($scopes instanceof WeakMap) {
-            return $scopes;
-        }
-
-        if (! $create) {
-            return null;
-        }
-
-        $scopes = new WeakMap();
-        $context[self::CONTEXT] = $scopes;
-
-        return $scopes;
+        return $parent === false ? self::OUTSIDE : $parent;
     }
 }

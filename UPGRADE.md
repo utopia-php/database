@@ -561,8 +561,11 @@ or the `Authorization` do not see them:
 
 The plain setters (`Authorization::setStatus()`, `enable()`, `disable()`, `reset()`, `addRole()`, `removeRole()` and
 `cleanRoles()`, and `setTenant()`, `enableValidation()`, `disableValidation()`, `enableFilters()`,
-`disableFilters()`, `setPreserveDates()` and `setPreserveSequence()`) still change the shared value, or, inside such a
-scope, the scope's value until it ends.
+`disableFilters()`, `setPreserveDates()` and `setPreserveSequence()`) still change the shared value when the calling
+coroutine is outside every such scope. Inside one, whether the calling coroutine opened it or inherited it from the
+coroutine that started it, a setter changes only what the calling coroutine and the coroutines it starts see, and
+only until the scope ends. When the scope ends, the value is what it was before the scope, as in 7.x, and a change
+made by a coroutine started inside the scope never reaches the other coroutines sharing the handle.
 
 To run work started in another coroutine under the caller's state, take `$snapshot = $database->snapshot()` in the
 caller and run the work inside `$database->withSnapshot($snapshot, $callback)`. A snapshot carries the authorization
@@ -572,6 +575,10 @@ preserve-sequence and skip-duplicates toggles, and the request timestamp. `Hook\
 
 Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine and
 outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
+
+Each coroutine sharing a handle tracks its own relationship writes and cascading deletes, so a nested write or a
+cascade in one coroutine never cuts another coroutine's short. On `Adapter\Pool`, a transaction belongs to the
+coroutine that opened it and the coroutines it starts; see [Pools and profiling](#pools-and-profiling).
 
 ## Errors
 
@@ -1376,6 +1383,13 @@ takes precedence over a global filter of the same name (`Database::addFilter()`)
   first time and are then answered without one, for every handle built over the same `Utopia\Pools\Pool`.
   `supports(Capability::DefinedAttributes)` is the exception: it reports the schema mode of the connection that
   answers, so it always asks one. `Database::enableLocks()` reaches every borrowed connection.
+- **Transactions behind a `Pool`.** `withTransaction()` pins one connection for the coroutine that calls it and the
+  coroutines it starts. Other coroutines sharing the handle borrow connections of their own and run outside the
+  transaction; in 7.x their statements ran on the pinned connection, inside the transaction, and their own
+  `withTransaction()` became a savepoint in it. A coroutine started inside the transaction shares the pinned
+  connection, so it must not run a statement while its parent runs one. Every call on the pinned connection runs
+  under the calling coroutine's tenant. The protected `Pool::$pinnedAdapter` property is removed: a subclass reads
+  the pinned connection through `pin()`, and can override it.
 - **Read/write splitting (`Adapter\ReadWritePool`).** Reads go to the read pool and writes to the write pool. After
   a write returns, or a `withTransaction()` block finishes, reads stay on the write pool for the sticky window
   (`setStickyDuration()`, default 5000 ms; `setSticky(false)` turns it off), so a caller reads its own writes.

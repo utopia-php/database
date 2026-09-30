@@ -119,7 +119,7 @@ final class MongoAdapterPathsTest extends TestCase
     public function testANonNumericPowerExponentIsRefused(): void
     {
         try {
-            $this->adapter()->updateDocument(new Document(['$id' => 'books']), 'first', new Document(['price' => Operator::power('2')]), true);
+            $this->adapter()->updateDocument(new Document(['$id' => 'books']), 'first', new Document(['price' => Operator::power('two')]), true);
             $this->fail('A non-numeric power exponent must be refused');
         } catch (DatabaseException $exception) {
             $this->assertSame('Invalid numeric operand for operator power', $exception->getMessage());

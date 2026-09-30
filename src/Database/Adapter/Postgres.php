@@ -18,6 +18,7 @@ use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -60,6 +61,17 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     private const string QUOTED_IDENTIFIER = '/["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}][\s\x{A0}\x{202F}]*([^"\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]+?)[\s\x{A0}\x{202F}]*["\x{AB}\x{BB}\x{201C}\x{201D}\x{201E}\x{300C}\x{300D}]/u';
 
     private const string HASHED_IDENTIFIER = '/^[0-9a-f]{32}(?:_[A-Za-z0-9_-]+)?$/';
+
+    /**
+     * The catalog's format_type() spellings mapped onto getSQLType()'s.
+     *
+     * @var array<string, string>
+     */
+    private const array CATALOG_TYPE_SPELLINGS = [
+        'CHARACTER VARYING' => 'VARCHAR',
+        ' WITHOUT TIME ZONE' => '',
+        ', ' => ',',
+    ];
 
     /**
      * Get the list of capabilities supported by the PostgreSQL adapter.
@@ -288,8 +300,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 $indexAttributes = $index->attributes;
                 $indexAttributesWithType = [];
                 foreach ($indexAttributes as $indexAttribute) {
+                    $baseAttribute = \explode('.', $indexAttribute, 2)[0];
                     foreach ($attributes as $attribute) {
-                        if ($attribute->key === $indexAttribute) {
+                        if ($attribute->key === $baseAttribute) {
                             $indexAttributesWithType[$indexAttribute] = $attribute->type->value;
                         }
                     }
@@ -327,6 +340,27 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         return true;
+    }
+
+    /**
+     * Refresh the planner statistics of a collection's table and its permissions table.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+        $schema = $this->createSchemaBuilder();
+
+        $main = $schema->analyzeTable($this->getSQLTableRaw($name));
+        $permissions = $schema->analyzeTable($this->getSQLTableRaw(Storage::permissionsTable($name)));
+
+        try {
+            return $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionUpdate);
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
     }
 
     /**
@@ -425,6 +459,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             }
         }
 
+        $this->refuseSharedColumnsOfAnotherType($collection, [$attribute]);
+
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
@@ -438,6 +474,64 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * @param  array<Attribute>  $attributes
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        $this->refuseSharedColumnsOfAnotherType($collection, $attributes);
+
+        return parent::createAttributes($collection, $attributes);
+    }
+
+    /**
+     * @param  array<Attribute>  $attributes
+     *
+     * @throws MismatchException
+     * @throws DatabaseException
+     */
+    private function refuseSharedColumnsOfAnotherType(string $collection, array $attributes): void
+    {
+        if (! $this->sharedTables) {
+            return;
+        }
+
+        $statement = $this->prepareStatement(
+            'SELECT a.attname, format_type(a.atttypid, a.atttypmod) FROM pg_attribute a WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped',
+            Event::CollectionRead,
+        );
+        $statement->bindValue(1, $this->getSQLTable($this->filter($collection)));
+
+        try {
+            $this->execute($statement);
+            /** @var array<string, string> $columns */
+            $columns = $statement->fetchAll(PDO::FETCH_KEY_PAIR);
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        foreach ($attributes as $attribute) {
+            $existing = $columns[$this->filter($attribute->key)] ?? null;
+            if ($existing === null) {
+                continue;
+            }
+
+            $requested = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+            if (self::canonicalColumnType($existing) !== self::canonicalColumnType($requested)) {
+                throw new MismatchException('Attribute exists in the shared table with another type');
+            }
+        }
+    }
+
+    private static function canonicalColumnType(string $type): string
+    {
+        return \strtr(\strtoupper($type), self::CATALOG_TYPE_SPELLINGS);
     }
 
     /**
@@ -487,7 +581,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $tableRaw = $this->getSQLTableRaw($name);
 
         if ($sqlType == 'TIMESTAMP(3)') {
-            $result = $schema->alterColumnType($tableRaw, $id, 'TIMESTAMP(3)', "TO_TIMESTAMP(\"{$id}\", 'YYYY-MM-DD HH24:MI:SS.MS')");
+            $result = $schema->alterColumnType($tableRaw, $id, 'TIMESTAMP(3)', $this->quote($id).'::TIMESTAMP(3)');
         } else {
             $result = $schema->alterColumnType($tableRaw, $id, $sqlType);
         }
@@ -1446,7 +1540,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         return match ($type) {
             ColumnType::Id => 'BIGINT',
-            ColumnType::String => $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
+            ColumnType::String => $size <= 0 || $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
             ColumnType::Varchar => "VARCHAR({$size})",
             ColumnType::Text,
             ColumnType::MediumText,

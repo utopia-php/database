@@ -580,6 +580,27 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
+     * Record planner statistics (sqlite_stat1) for a collection's table and its permissions table.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function analyzeCollection(string $collection): bool
+    {
+        $name = $this->filter($collection);
+
+        try {
+            foreach ([$name, Storage::permissionsTable($name)] as $table) {
+                $this->executeStatement('ANALYZE '.$this->getSQLTable($table), Event::CollectionUpdate);
+            }
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return true;
+    }
+
+    /**
      * Get Collection Size of raw data
      *
      * @throws DatabaseException

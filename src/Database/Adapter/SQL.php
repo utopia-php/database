@@ -3225,7 +3225,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     protected function getSpatialSQLType(string $type, bool $required): string
     {
-        $srid = Database::DEFAULT_SRID;
+        $srid = $this->getSpatialColumnSrid();
+        $modifier = $srid === null ? '' : "({$srid})";
         $nullability = '';
 
         if (! $this->supports(Capability::SpatialIndexNull)) {
@@ -3237,9 +3238,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return match ($type) {
-            ColumnType::Point->value => "POINT($srid)$nullability",
-            ColumnType::Linestring->value => "LINESTRING($srid)$nullability",
-            ColumnType::Polygon->value => "POLYGON($srid)$nullability",
+            ColumnType::Point->value => "POINT{$modifier}{$nullability}",
+            ColumnType::Linestring->value => "LINESTRING{$modifier}{$nullability}",
+            ColumnType::Polygon->value => "POLYGON{$modifier}{$nullability}",
             default => '',
         };
     }

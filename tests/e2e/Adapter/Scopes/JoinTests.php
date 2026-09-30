@@ -7955,4 +7955,87 @@ trait JoinTests
 
         $this->cleanupAggCollections($database, $collections);
     }
+
+    public function testJoinedFiltersMatchWhatTheJoinedCollectionMatches(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+            return;
+        }
+
+        $themes = 'jconv_themes';
+        $tickets = 'jconv_tickets';
+        $collections = [$themes, $tickets];
+        $this->cleanupAggCollections($database, $collections);
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: $themes, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($themes, Attribute::string(key: 'tags', size: 32, array: true));
+        $database->createAttribute($themes, Attribute::datetime(key: 'when'));
+        $database->createCollection(new Collection(id: $tickets, permissions: $permissions, documentSecurity: false));
+        $database->createAttribute($tickets, Attribute::string(key: 'theme', size: 64));
+        $database->createAttribute($tickets, Attribute::integer(key: 'amount'));
+
+        foreach ([
+            't1' => [['banana'], '2024-01-01T09:00:00.000+00:00'],
+            't2' => [['a', 'b'], '2024-01-01T07:00:00.000+00:00'],
+            't3' => [['b', 'c'], '2024-01-01T11:00:00.000+00:00'],
+        ] as $id => [$tags, $when]) {
+            $database->createDocument($themes, new Document(['$id' => $id, 'tags' => $tags, 'when' => $when]));
+        }
+        foreach (['k1' => ['t1', 1], 'k2' => ['t2', 10], 'k3' => ['t3', 100], 'k4' => ['missing', 1000]] as $id => [$theme, $amount]) {
+            $database->createDocument($tickets, new Document(['$id' => $id, 'theme' => $theme, 'amount' => $amount]));
+        }
+
+        $later = '2024-01-01T10:00:00.000+02:00';
+        $filters = [
+            'containsAny' => [Query::containsAny('th.tags', ['a']), Query::containsAny('tags', ['a']), ['k2']],
+            'containsAll' => [Query::containsAll('th.tags', ['a', 'b']), Query::containsAll('tags', ['a', 'b']), ['k2']],
+            'notContains' => [Query::notContains('th.tags', ['a']), Query::notContains('tags', ['a']), ['k1', 'k3']],
+            'greaterThan with an offset' => [Query::greaterThan('th.when', $later), Query::greaterThan('when', $later), ['k1', 'k3']],
+            'equal in UTC' => [Query::equal('th.when', ['2024-01-01T09:00:00.000+00:00']), Query::equal('when', ['2024-01-01T09:00:00.000+00:00']), ['k1']],
+            'equal with an offset' => [Query::equal('th.when', ['2024-01-01T11:00:00.000+02:00']), Query::equal('when', ['2024-01-01T11:00:00.000+02:00']), ['k1']],
+        ];
+        $amounts = ['k1' => 1, 'k2' => 10, 'k3' => 100, 'k4' => 1000];
+        $ids = static function (array $documents): array {
+            $ids = \array_map(static fn (Document $document): string => $document->getId(), $documents);
+            \sort($ids);
+
+            return $ids;
+        };
+        $themeOf = ['t1' => 'k1', 't2' => 'k2', 't3' => 'k3'];
+
+        foreach ($filters as $name => [$joined, $direct, $expected]) {
+            $this->assertSame($expected, \array_values(\array_map(
+                static fn (string $theme): string => $themeOf[$theme],
+                $ids($database->find($themes, [$direct])),
+            )), $name.': the same filter on the joined collection');
+
+            $join = Query::join($themes, 'theme', '$id', '=', 'th');
+            $this->assertSame($expected, $ids($database->find($tickets, [$join, $joined])), $name.': find()');
+            $this->assertSame(\count($expected), $database->count($tickets, [$join, $joined]), $name.': count()');
+            $this->assertEquals(
+                \array_sum(\array_map(static fn (string $ticket): int => $amounts[$ticket], $expected)),
+                $database->sum($tickets, 'amount', [$join, $joined]),
+                $name.': sum()',
+            );
+
+            if ($joined->getMethod() !== Method::ContainsAll) {
+                $onList = Query::join($themes, 'th', [Query::on('theme', '$id'), $joined]);
+                $this->assertSame($expected, $ids($database->find($tickets, [$onList])), $name.': find() with the filter in the ON list');
+                $this->assertSame(\count($expected), $database->count($tickets, [$onList]), $name.': count() with the filter in the ON list');
+            }
+        }
+
+        $grouped = $database->find($tickets, [
+            Query::join($themes, 'theme', '$id', '=', 'th'),
+            Query::count('*', 'total'),
+            Query::groupBy(['th.when']),
+            Query::having([Query::greaterThan('th.when', $later)]),
+        ]);
+        $this->assertCount(2, $grouped, 'having on a joined grouped datetime');
+
+        $this->cleanupAggCollections($database, $collections);
+    }
 }

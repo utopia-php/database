@@ -4105,7 +4105,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $method = $query->getMethod();
             $joinAlias = $query->getJoinAlias();
             if ($joinAlias === '') {
-                $joinAlias = $this->generateJoinAlias($joinIndex, $takenAliases);
+                $joinAlias = Storage::joinAlias($joinIndex, $takenAliases);
             }
             $joinIndex++;
 
@@ -4166,20 +4166,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return $declared;
-    }
-
-    /**
-     * @param  array<string, true>  $takenAliases  Lower-cased aliases already in use
-     */
-    private function generateJoinAlias(int $joinIndex, array &$takenAliases): string
-    {
-        do {
-            $alias = 'j'.$joinIndex++;
-        } while (isset($takenAliases[$alias]));
-
-        $takenAliases[$alias] = true;
-
-        return $alias;
     }
 
     /**

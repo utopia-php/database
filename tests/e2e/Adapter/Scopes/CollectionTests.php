@@ -1923,4 +1923,45 @@ trait CollectionTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testIndexOnAnObjectPathAttribute(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof Postgres || ! $adapter->supports(Capability::Objects)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'objectPathIndex';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::object(key: 'data'), Attribute::string(key: 'status', size: 32)],
+            indexes: [Index::key(key: 'countryfirst', attributes: ['data.country', 'status'], orders: [Order::Desc, null])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        try {
+            $rows = $adapter->rawQuery(
+                'SELECT indexdef FROM pg_indexes WHERE schemaname = ? AND tablename = ? AND indexname LIKE ?',
+                [$database->getDatabase(), $database->getNamespace().'_'.$collection, '%\_countryfirst'],
+            );
+            $this->assertCount(1, $rows);
+            $definition = $rows[0]->getAttribute('indexdef');
+            $this->assertIsString($definition);
+            $this->assertStringContainsString("((data ->> 'country'::text)) DESC, status)", $definition);
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'nz',
+                'data' => ['country' => 'NZ'],
+                'status' => 'active',
+            ]));
+            $this->assertSame(['country' => 'NZ'], $database->getDocument($collection, 'nz')->getAttribute('data'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

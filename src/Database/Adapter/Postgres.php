@@ -302,8 +302,9 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
                 $indexAttributes = $index->attributes;
                 $indexAttributesWithType = [];
                 foreach ($indexAttributes as $indexAttribute) {
+                    $baseAttribute = \explode('.', $indexAttribute, 2)[0];
                     foreach ($attributes as $attribute) {
-                        if ($attribute->key === $indexAttribute) {
+                        if ($attribute->key === $baseAttribute) {
                             $indexAttributesWithType[$indexAttribute] = $attribute->type->value;
                         }
                     }

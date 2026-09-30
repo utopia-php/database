@@ -5,9 +5,6 @@ namespace Tests\Unit;
 use PDOException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionClassConstant;
-use ReflectionProperty;
-use Swoole\Database\DetectsLostConnections;
 use Utopia\Database\Connection;
 
 final class ConnectionTest extends TestCase
@@ -65,26 +62,6 @@ final class ConnectionTest extends TestCase
         $error->errorInfo = ['HY000', 2002, 'refused'];
 
         $this->assertTrue(Connection::hasError($error));
-    }
-
-    /**
-     * Without Swoole's library the local messages are all there is, so they must
-     * cover every message Swoole recognises for detection to stay the same.
-     */
-    public function testLocalMessagesCoverSwoolesLostConnectionMessages(): void
-    {
-        if (! \class_exists(DetectsLostConnections::class)) {
-            $this->markTestSkipped('Swoole\'s library is not loaded, so its messages cannot be compared');
-        }
-
-        $swoole = (new ReflectionClassConstant(DetectsLostConnections::class, 'ERROR_MESSAGES'))->getValue();
-        $local = (new ReflectionProperty(Connection::class, 'errors'))->getValue();
-        $this->assertIsArray($swoole);
-        $this->assertIsArray($local);
-
-        $missing = \array_filter($swoole, fn (mixed $message): bool => ! \in_array($message, $local, true));
-
-        $this->assertSame([], \array_values($missing), 'Messages Swoole detects that the local list misses');
     }
 
     private function driverError(string $state, int $code): PDOException

@@ -12,7 +12,6 @@ PHP database abstraction library with a unified API across MariaDB 10.5, MySQL 8
 | `composer lint` | Check formatting (Pint, PSR-12) |
 | `composer format` | Auto-format code |
 | `composer check` | Static analysis (PHPStan, max level, 2GB) |
-| `composer coverage` | Check test coverage (90% minimum required) |
 
 Run a single test:
 ```bash

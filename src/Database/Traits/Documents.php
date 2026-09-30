@@ -1553,6 +1553,7 @@ trait Documents
         $updatedAt = $updates->getUpdatedAt();
         $updates[Document::UPDATED_AT] = ($updatedAt === null || ! $this->preserveDates) ? DateTime::now() : $updatedAt;
 
+        $decodedUpdates = clone $updates;
         $updates = $this->encode(
             $collection,
             $updates,
@@ -1625,7 +1626,7 @@ trait Documents
 
             $cacheTarget = $collection->getId() === self::METADATA ? $batch : $collection->getId();
             $found = $batch;
-            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $adapterUpdates, &$batch, $found, $currentPermissions) {
+            $this->withMutation(Event::DocumentsUpdate, $cacheTarget, function () use ($collection, $updates, $decodedUpdates, $adapterUpdates, &$batch, $found, $currentPermissions) {
                 foreach ($found as $index => $document) {
                     $skipPermissionsUpdate = true;
 
@@ -1644,7 +1645,7 @@ trait Documents
                     $document->setAttribute(Document::SKIP_PERMISSIONS_UPDATE, $skipPermissionsUpdate);
 
                     $updateData = [];
-                    foreach ($updates->getArrayCopy() as $key => $value) {
+                    foreach ($decodedUpdates->getArrayCopy() as $key => $value) {
                         $updateData[$key] = $value instanceof Operator ? clone $value : $value;
                     }
                     $new = new Document(\array_merge($document->getArrayCopy(), $updateData));

@@ -4,6 +4,7 @@ namespace Tests\Unit\Documents;
 
 use DateTime;
 use PDO;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Utopia\Cache\Adapter\None;
@@ -169,6 +170,43 @@ final class DocumentWriteMinorsTest extends TestCase
         $stored = $database->getDocument(self::COLLECTION, 'first');
         $this->assertSame('alpha', $stored->getAttribute('secret'));
         $this->assertSame(2, $stored->getAttribute('counter'));
+    }
+
+    /**
+     * @return array<string, array{list<Query>}>
+     */
+    public static function bulkUpdateSelections(): array
+    {
+        return [
+            'without a select' => [[]],
+            'with a select that leaves the updated attribute out' => [[Query::select(['counter'])]],
+        ];
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('bulkUpdateSelections')]
+    public function testBulkUpdateHandsOnNextUpdatedValuesDecodedOnce(array $queries): void
+    {
+        $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
+        $database->createDocument(self::COLLECTION, new Document(['$id' => 'first', 'counter' => 1, 'secret' => 'alpha']));
+        /** @var list<Document> $handed */
+        $handed = [];
+
+        $database->updateDocuments(
+            self::COLLECTION,
+            new Document(['secret' => 'gamma']),
+            $queries,
+            onNext: function (Document $document) use (&$handed): void {
+                $handed[] = $document;
+            },
+        );
+
+        $this->assertCount(1, $handed);
+        $this->assertSame('gamma', $handed[0]->getAttribute('secret'));
+        $this->assertSame(1, $handed[0]->getAttribute('counter'));
+        $this->assertSame('gamma', $database->getDocument(self::COLLECTION, 'first')->getAttribute('secret'));
     }
 
     /**

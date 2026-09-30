@@ -233,23 +233,7 @@ trait Documents
 
     private function integerBound(int|float|string $bound, string $name): int|string
     {
-        if (\is_int($bound)) {
-            return $bound;
-        }
-
-        if (\is_float($bound)) {
-            if (! \is_finite($bound) || \floor($bound) !== $bound) {
-                throw new TypeException($name.' must be an integer.');
-            }
-
-            return BigInt::toNative(\sprintf('%.0f', $bound));
-        }
-
-        if (! BigInt::isIntegerString($bound)) {
-            throw new TypeException($name.' must be an integer.');
-        }
-
-        return $bound;
+        return BigInt::integralValue($bound) ?? throw new TypeException($name.' must be an integer.');
     }
 
     /**

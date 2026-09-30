@@ -41,8 +41,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   every adapter.
 - `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` refuse a fractional change value or a fractional
   `max`/`min` on an integer attribute with `Exception\Type`, and the numeric operators refuse a fractional limit on
-  an integer attribute with `Exception\Structure`, before anything is written. See
-  [Documents](UPGRADE.md#documents).
+  an integer attribute with `Exception\Structure`, before anything is written. Both accept the same whole-number
+  forms (for example `5`, `'5'`, `'5.0'` and `5.0`). See [Documents](UPGRADE.md#documents).
 - Scopes such as `Authorization::skip()`, `silent()`, `skipRelationships()`, `withTenant()` and the other scoped
   toggles apply to the calling coroutine and the coroutines it starts, not to other coroutines sharing the handle.
   See [Coroutines](UPGRADE.md#coroutines).

@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
@@ -279,5 +280,70 @@ class IndexModelTest extends TestCase
         $this->assertSame('idx_body', $index->key);
         $this->assertSame(IndexType::Fulltext, $index->type);
         $this->assertSame(['body'], $index->attributes);
+    }
+
+    public function testTypeStoredAsAnEnumReadsBack(): void
+    {
+        $index = Index::key(key: 'titleIndex', attributes: ['title']);
+        $index->setAttribute('type', IndexType::Unique);
+
+        $this->assertSame(IndexType::Unique, $index->type);
+    }
+
+    public function testMagicGetFallsBackToTheStoredValue(): void
+    {
+        $index = Index::key(key: 'titleIndex', attributes: ['title']);
+        $index->setAttribute('status', 'available');
+
+        $this->assertSame('available', $index->status);
+        $this->assertNull($index->missing);
+    }
+
+    public function testNonArrayAttributesAndLengthsReadAsEmptyArrays(): void
+    {
+        $index = Index::key(key: 'titleIndex', attributes: ['title'], lengths: [16]);
+        $index->setAttribute('attributes', 'title');
+        $index->setAttribute('lengths', 16);
+
+        $this->assertSame([], $index->attributes);
+        $this->assertSame([], $index->lengths);
+    }
+
+    public function testPropertyAssignmentWritesTheStoredIndex(): void
+    {
+        $index = Index::key(key: 'titleIndex', attributes: ['title']);
+
+        $index->key = 'renamed';
+        $index->type = IndexType::Unique;
+        $index->attributes = ['title', 'author'];
+        $index->ttl = 3600;
+        $index->status = 'available';
+
+        $this->assertSame('renamed', $index->getId());
+        $this->assertSame('renamed', $index->getAttribute('key'));
+        $this->assertSame('renamed', $index->toDocument()->getId());
+        $this->assertSame(IndexType::Unique->value, $index['type']);
+        $this->assertSame(IndexType::Unique, $index->type);
+        $this->assertSame(['title', 'author'], $index->getAttribute('attributes'));
+        $this->assertSame(['title', 'author'], $index->attributes);
+        $this->assertSame(3600, $index->getAttribute('ttl'));
+        $this->assertSame(3600, $index->ttl);
+        $this->assertSame('available', $index->getAttribute('status'));
+    }
+
+    public function testFromArrayRejectsAnOrderThatIsNeitherAStringNorAnOrder(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Index order must be Order or null');
+
+        Index::fromArray(['key' => 'titleIndex', 'type' => IndexType::Key->value, 'attributes' => ['title'], 'orders' => [1]]);
+    }
+
+    public function testFromDocumentRejectsAnOrderThatIsNeitherAStringNorAnOrder(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Index order must be Order or null');
+
+        Index::fromDocument(new Document(['key' => 'titleIndex', 'type' => IndexType::Key->value, 'attributes' => ['title'], 'orders' => [1]]));
     }
 }

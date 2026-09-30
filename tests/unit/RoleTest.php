@@ -2,6 +2,8 @@
 
 namespace Tests\Unit;
 
+use Exception;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Role;
@@ -136,5 +138,25 @@ class RoleTest extends TestCase
 
         $role = Role::team(ID::custom('123'), '456');
         $this->assertEquals('team:123/456', $role->toString());
+    }
+
+    #[DataProvider('malformedDimensions')]
+    public function testParseRejectsMalformedDimensions(string $role, string $message): void
+    {
+        $this->expectException(Exception::class);
+        $this->expectExceptionMessage($message);
+
+        Role::parse($role);
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function malformedDimensions(): iterable
+    {
+        yield 'two dimensions' => ['team/a/b', 'Only one dimension can be provided'];
+        yield 'an empty dimension' => ['team/', 'Dimension must not be empty'];
+        yield 'two dimensions after an identifier' => ['team:abc/x/y', 'Only one dimension can be provided'];
+        yield 'an empty dimension after an identifier' => ['team:abc/', 'Dimension must not be empty'];
     }
 }

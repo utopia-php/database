@@ -4,6 +4,7 @@ namespace Utopia\Database\Hook;
 
 use Closure;
 use InvalidArgumentException;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Hook\Filter;
@@ -19,6 +20,8 @@ use Utopia\Query\Hook\Join\Filter as JoinFilter;
 class PermissionFilter implements Filter, JoinFilter
 {
     private const string IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/';
+
+    private const string QUOTED_IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
 
     private const string NO_SEMIJOIN = '/*+ NO_SEMIJOIN() */ ';
 
@@ -59,7 +62,7 @@ class PermissionFilter implements Filter, JoinFilter
      *
      * @param string $table The base table name being queried
      * @return Condition A condition with an IN subquery against the permissions table
-     * @throws InvalidArgumentException If the permissions table name is invalid
+     * @throws DatabaseException If the permissions table name is invalid
      */
     public function filter(string $table): Condition
     {
@@ -70,8 +73,8 @@ class PermissionFilter implements Filter, JoinFilter
         /** @var string $permTable */
         $permTable = ($this->permissionsTable)($table);
 
-        if (! \preg_match(self::IDENTIFIER_PATTERN, $permTable)) {
-            throw new InvalidArgumentException('Invalid permissions table name: '.$permTable);
+        if (! \preg_match(self::QUOTED_IDENTIFIER_PATTERN, $permTable)) {
+            throw new DatabaseException('Invalid permissions table name: '.$permTable);
         }
 
         $quotedPermTable = AllowNullColumn::quote($permTable, $this->quoteChar);

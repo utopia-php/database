@@ -1964,4 +1964,107 @@ trait PermissionTests
             $documents,
         ));
     }
+
+    public function testNoRolesReadsNoDocumentOfADocumentSecurityCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $collection = 'perm_no_roles_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'amount', required: true));
+
+        $authorization->skip(function () use ($database, $collection): void {
+            $database->createDocument($collection, new Document([
+                '$id' => 'public',
+                '$permissions' => [Permission::read(Role::any())],
+                'amount' => 10,
+            ]));
+            $database->createDocument($collection, new Document([
+                '$id' => 'private',
+                '$permissions' => [Permission::read(Role::user('owner'))],
+                'amount' => 20,
+            ]));
+        });
+
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+
+        try {
+            $found = $database->find($collection);
+            $count = $database->count($collection);
+            $public = $database->getDocument($collection, 'public');
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+
+        $this->assertSame([], $this->documentIds($found));
+        $this->assertSame(0, $count);
+        $this->assertTrue($public->isEmpty());
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testDocumentSecurityReadsWorkUnderADigitLeadingDatabaseAndNamespace(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $roles = $authorization->getRoles();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $digitLeadingDatabase = '1db_'.static::getTestToken();
+
+        if ($database->exists($digitLeadingDatabase)) {
+            $database->delete($digitLeadingDatabase);
+        }
+
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::any()->toString());
+
+        try {
+            $database
+                ->setDatabase($digitLeadingDatabase)
+                ->setNamespace('1ns'.uniqid())
+                ->create();
+
+            $collection = 'perm_digit_leading';
+            $database->createCollection(new Collection(id: $collection, permissions: [
+                Permission::create(Role::any()),
+            ], documentSecurity: true));
+            $database->createAttribute($collection, Attribute::string(key: 'title', size: 64));
+
+            $database->createDocument($collection, new Document([
+                '$id' => 'public',
+                '$permissions' => [Permission::read(Role::any())],
+                'title' => 'Readable',
+            ]));
+            $database->createDocument($collection, new Document([
+                '$id' => 'private',
+                '$permissions' => [Permission::read(Role::user('owner'))],
+                'title' => 'Hidden',
+            ]));
+
+            $this->assertSame(['public'], $this->documentIds($database->find($collection)));
+            $this->assertSame(1, $database->count($collection));
+            $this->assertSame('public', $database->getDocument($collection, 'public')->getId());
+            $this->assertTrue($database->getDocument($collection, 'private')->isEmpty());
+
+            $database->delete($digitLeadingDatabase);
+        } finally {
+            $database
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+    }
 }

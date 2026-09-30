@@ -1754,4 +1754,68 @@ trait GeneralTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testTenantPerDocumentRejectsATenantThatIsNotAnIntegerOrString(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Schemas)) {
+            $this->markTestSkipped('Tenant per document needs a schema to hold the shared table');
+        }
+
+        $sharedTables = $database->getSharedTables();
+        $tenantPerDocument = $database->getTenantPerDocument();
+        $namespace = $database->getNamespace();
+        $schema = $database->getDatabase();
+        $tenant = $database->getTenant();
+
+        $tenantPerDocumentDatabase = 'tenantPerDocumentFloat_'.static::getTestToken();
+
+        if ($database->exists($tenantPerDocumentDatabase)) {
+            $database->delete($tenantPerDocumentDatabase);
+        }
+
+        $database
+            ->setDatabase($tenantPerDocumentDatabase)
+            ->setNamespace('')
+            ->setSharedTables(true)
+            ->setTenant(null)
+            ->create();
+
+        try {
+            $database->createCollection(new Collection(id: __FUNCTION__, permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ], documentSecurity: false));
+            $database->createAttribute(__FUNCTION__, Attribute::string(key: 'name', size: 100));
+
+            $database->setTenant(null)->setTenantPerDocument(true);
+
+            try {
+                $database->createDocument(__FUNCTION__, new Document([
+                    '$id' => 'floatTenant',
+                    '$tenant' => 1.0,
+                    'name' => 'Spiderman',
+                ]));
+                $this->fail('A tenant that is neither an integer nor a string was accepted');
+            } catch (DatabaseException $error) {
+                $this->assertSame('Missing tenant. Tenant must be set when tenant per document is enabled.', $error->getMessage());
+            }
+
+            $stored = $database
+                ->setTenantPerDocument(false)
+                ->setTenant(1)
+                ->getDocument(__FUNCTION__, 'floatTenant');
+
+            $this->assertTrue($stored->isEmpty());
+        } finally {
+            $database
+                ->setSharedTables($sharedTables)
+                ->setTenantPerDocument($tenantPerDocument)
+                ->setTenant($tenant)
+                ->setNamespace($namespace)
+                ->setDatabase($schema);
+        }
+    }
 }

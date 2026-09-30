@@ -3,12 +3,13 @@
 namespace Utopia\Database\Hook;
 
 use InvalidArgumentException;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Hook\Filter;
 
 final readonly class AllowNullColumn implements Filter
 {
-    private const IDENTIFIER_PATTERN = '/^[a-zA-Z_][a-zA-Z0-9_.\-]*$/';
+    private const IDENTIFIER_PATTERN = '/^[a-zA-Z0-9_\-][a-zA-Z0-9_.\-]*$/';
 
     public function __construct(
         private Filter $filter,
@@ -28,7 +29,7 @@ final readonly class AllowNullColumn implements Filter
     public static function wrap(Condition $condition, string $column, string $quoteChar = '`'): Condition
     {
         if (! \preg_match(self::IDENTIFIER_PATTERN, $column)) {
-            throw new InvalidArgumentException('Invalid column name: '.$column);
+            throw new DatabaseException('Invalid column name: '.$column);
         }
 
         return new Condition(

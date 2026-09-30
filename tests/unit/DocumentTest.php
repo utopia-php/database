@@ -2,7 +2,9 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use stdClass;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
@@ -758,5 +760,183 @@ class DocumentTest extends TestCase
 
         $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
         $this->assertSame(['any'], $document->getRead());
+    }
+
+    public function testFindAndReplaceInPlainArrayChildren(): void
+    {
+        $document = new Document([
+            'children' => [
+                ['name' => 'x'],
+                ['name' => 'y'],
+            ],
+        ]);
+
+        $this->assertTrue($document->findAndReplace('name', 'x', ['name' => '1'], 'children'));
+        $this->assertSame([['name' => '1'], ['name' => 'y']], $document->getAttribute('children'));
+
+        $this->assertFalse($document->findAndReplace('name', 'missing', ['name' => '2'], 'children'));
+        $this->assertSame([['name' => '1'], ['name' => 'y']], $document->getAttribute('children'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    #[DataProvider('malformedRows')]
+    public function testFromRowRejectsANonStringIdAndNonArrayPermissions(array $row, string $message): void
+    {
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage($message);
+
+        Document::fromRow($row);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function malformedRows(): iterable
+    {
+        yield 'an integer $id' => [[Document::ID => 5], '$id must be of type string'];
+        yield 'a string $permissions' => [[Document::PERMISSIONS => 'read("any")'], '$permissions must be of type array'];
+    }
+
+    #[DataProvider('tenantsOfAnotherType')]
+    public function testATenantOfAnotherTypeReadsAsNoTenant(mixed $tenant): void
+    {
+        $document = new Document([Document::TENANT => $tenant]);
+
+        $this->assertNull($document->getTenant());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function tenantsOfAnotherType(): iterable
+    {
+        yield 'a float' => [1.0];
+        yield 'a boolean' => [true];
+        yield 'an array' => [[1]];
+        yield 'an object' => [new stdClass()];
+    }
+
+    public function testGetDocumentsWrapsArrayItemsAndSkipsScalars(): void
+    {
+        $first = new Document(['name' => 'first']);
+        $document = new Document([
+            'items' => [$first, ['name' => 'x', 0 => 'y'], 'scalar', null],
+            'text' => 'not a list',
+        ]);
+
+        $documents = $document->getDocuments('items');
+
+        $this->assertCount(2, $documents);
+        $this->assertSame($first, $documents[0]);
+        $this->assertSame(['name' => 'x'], $documents[1]->getArrayCopy());
+        $this->assertSame([], $document->getDocuments('missing'));
+        $this->assertSame([], $document->getDocuments('text'));
+    }
+
+    #[DataProvider('valuesThatAreNotADocument')]
+    public function testGetDocumentReturnsAnEmptyDocumentForAValueThatIsNotOne(mixed $value): void
+    {
+        $document = new Document(['value' => $value]);
+
+        $this->assertTrue($document->getDocument('value')->isEmpty());
+        $this->assertTrue($document->getDocument('missing')->isEmpty());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function valuesThatAreNotADocument(): iterable
+    {
+        yield 'null' => [null];
+        yield 'an empty array' => [[]];
+        yield 'a list' => [['a', 'b']];
+        yield 'a string' => ['x'];
+    }
+
+    public function testGetDocumentWrapsTheStringKeysOfAnAssociativeArray(): void
+    {
+        $child = new Document(['name' => 'child']);
+        $document = new Document([
+            'map' => ['name' => 'x', 0 => 'y'],
+            'child' => $child,
+        ]);
+
+        $this->assertSame(['name' => 'x'], $document->getDocument('map')->getArrayCopy());
+        $this->assertSame($child, $document->getDocument('child'));
+    }
+
+    public function testFindAndRemoveRemovesAPlainArrayItemFromASubject(): void
+    {
+        $document = new Document([
+            'items' => [
+                ['name' => 'x'],
+                ['name' => 'y'],
+            ],
+        ]);
+
+        $this->assertTrue($document->findAndRemove('name', 'x', 'items'));
+        $this->assertSame([1 => ['name' => 'y']], $document->getAttribute('items'));
+
+        $this->assertFalse($document->findAndRemove('name', 'missing', 'items'));
+        $this->assertSame([1 => ['name' => 'y']], $document->getAttribute('items'));
+    }
+
+    public function testFindAndReplaceWithoutSubjectPrefersTheTopLevelKey(): void
+    {
+        $document = new Document([
+            'meta' => ['title' => 'x'],
+            'title' => 'x',
+        ]);
+
+        $this->assertTrue($document->findAndReplace('title', 'x', 'y'));
+        $this->assertSame('y', $document->getAttribute('title'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
+    }
+
+    public function testFindAndReplaceWithoutSubjectIgnoresNestedMatches(): void
+    {
+        $document = new Document(['meta' => ['title' => 'x']]);
+
+        $this->assertFalse($document->findAndReplace('title', 'x', 'y'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
+    }
+
+    public function testFindAndReplaceWithADocumentSubjectReplacesInsideIt(): void
+    {
+        $document = new Document(['child' => new Document(['$id' => 'c', 'name' => 'x'])]);
+
+        $this->assertTrue($document->findAndReplace('name', 'x', 'y', 'child'));
+        $this->assertSame('y', $document->getDocument('child')->getAttribute('name'));
+    }
+
+    public function testFindAndRemoveWithoutSubjectPrefersTheTopLevelKey(): void
+    {
+        $document = new Document([
+            'meta' => ['title' => 'x'],
+            'title' => 'x',
+        ]);
+
+        $this->assertTrue($document->findAndRemove('title', 'x'));
+        $this->assertFalse($document->isSet('title'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
+    }
+
+    public function testFindAndRemoveWithADocumentSubjectRemovesInsideIt(): void
+    {
+        $document = new Document(['child' => new Document(['$id' => 'c', 'name' => 'x'])]);
+
+        $this->assertTrue($document->findAndRemove('name', 'x', 'child'));
+        $this->assertFalse($document->getDocument('child')->isSet('name'));
+        $this->assertSame('c', $document->getDocument('child')->getId());
+    }
+
+    public function testFindAndRemoveWithoutSubjectIgnoresNestedMatches(): void
+    {
+        $document = new Document(['meta' => ['title' => 'x']]);
+
+        $this->assertFalse($document->findAndRemove('title', 'x'));
+        $this->assertSame(['title' => 'x'], $document->getAttribute('meta'));
     }
 }

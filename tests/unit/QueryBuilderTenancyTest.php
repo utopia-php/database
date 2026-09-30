@@ -16,6 +16,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -331,6 +332,69 @@ final class QueryBuilderTenancyTest extends TestCase
             "DELETE FROM {$authors} WHERE {$tenant($raw(self::AUTHORS))}",
             $adapter->getBuilder(self::AUTHORS)->delete()->query,
         );
+    }
+
+    #[DataProvider('dialects')]
+    public function testADigitLeadingDatabaseAndJoinAliasAreQuotedInTheTenantConditions(SQL $adapter, string $quote): void
+    {
+        $adapter->setDatabase('1db');
+        $adapter->setNamespace('capture');
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $raw = fn (string $collection): string => $this->rawTable($adapter, $collection);
+        $quoted = static fn (string $identifier): string => \implode('.', \array_map(
+            static fn (string $part): string => $quote.$part.$quote,
+            \explode('.', $identifier),
+        ));
+        $authors = $quoted($raw(self::AUTHORS));
+
+        $sql = $adapter->getBuilder(self::AUTHORS)
+            ->rightJoin($raw(self::REVIEWS), $raw(self::AUTHORS).'.authorId', '9x.authorId', '=', '9x')
+            ->select([$raw(self::AUTHORS).'.name'])
+            ->build()
+            ->query;
+
+        $tenant = static fn (string $table): string => "{$quoted($table)}._tenant IN (?)";
+        $missing = static fn (string $table): string => "({$tenant($table)} OR {$quoted($table.'.'.Storage::UID)} IS NULL)";
+        $this->assertStringStartsWith("SELECT {$authors}.{$quote}name{$quote} FROM {$authors}", $sql);
+        $this->assertStringContainsString("{$quote}1db{$quote}.", $sql);
+        $this->assertStringContainsString($tenant('9x'), $sql);
+        $this->assertStringEndsWith(" WHERE {$missing($raw(self::AUTHORS))} AND {$missing('9x')}", $sql);
+    }
+
+    #[DataProvider('dialects')]
+    public function testAnEmptyDatabaseIsRefusedWithALibraryException(SQL $adapter, string $quote): void
+    {
+        $adapter->setDatabase('');
+        $adapter->setNamespace('capture');
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $builder = $adapter->getBuilder(self::AUTHORS)
+            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'Review.authorId', '=', 'Review');
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid column name: '.$this->rawTable($adapter, self::AUTHORS).'._uid');
+
+        $builder->build();
+    }
+
+    #[DataProvider('dialects')]
+    public function testARawJoinAliasWithASpaceIsRefusedWithALibraryException(SQL $adapter, string $quote): void
+    {
+        $adapter->setDatabase('builder');
+        $adapter->setNamespace('capture');
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $builder = $adapter->getBuilder(self::AUTHORS)
+            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'x y.authorId', '=', 'x y');
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid column name: x y._uid');
+
+        $builder->build();
     }
 
     /**

@@ -597,9 +597,8 @@ class Document extends ArrayObject
      */
     public function find(string $key, $find, string $subject = ''): mixed
     {
-        $subjectData = !empty($subject) ? ($this[$subject] ?? null) : null;
         /** @var array<mixed>|self $resolved */
-        $resolved = (empty($subjectData)) ? $this : $subjectData;
+        $resolved = $this->resolveSubject($subject);
 
         if (is_array($resolved)) {
             foreach ($resolved as $i => $value) {
@@ -631,7 +630,9 @@ class Document extends ArrayObject
      */
     public function findAndReplace(string $key, $find, $replace, string $subject = ''): bool
     {
-        if (!empty($subject) && isset($this[$subject]) && \is_array($this[$subject])) {
+        $target = $this->resolveSubject($subject);
+
+        if (\is_array($target)) {
             /** @var array<mixed> $subjectArray */
             $subjectArray = &$this[$subject];
             foreach ($subjectArray as $i => &$value) {
@@ -647,25 +648,13 @@ class Document extends ArrayObject
             return false;
         }
 
-        /** @var self $resolved */
-        $resolved = $this;
-        foreach ($resolved as $i => $value) {
-            if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
-                $resolved[$i] = $replace;
-                return true;
-            }
-            if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
-                $resolved[$i] = $replace;
-                return true;
-            }
+        if (! $target instanceof self || ! isset($target[$key]) || $target[$key] !== $find) {
+            return false;
         }
 
-        if (isset($resolved[$key]) && $resolved[$key] === $find) {
-            $resolved[$key] = $replace;
-            return true;
-        }
+        $target[$key] = $replace;
 
-        return false;
+        return true;
     }
 
     /**
@@ -677,7 +666,9 @@ class Document extends ArrayObject
      */
     public function findAndRemove(string $key, $find, string $subject = ''): bool
     {
-        if (!empty($subject) && isset($this[$subject]) && \is_array($this[$subject])) {
+        $target = $this->resolveSubject($subject);
+
+        if (\is_array($target)) {
             /** @var array<mixed> $subjectArray */
             $subjectArray = &$this[$subject];
             foreach ($subjectArray as $i => &$value) {
@@ -693,25 +684,20 @@ class Document extends ArrayObject
             return false;
         }
 
-        /** @var self $resolved */
-        $resolved = $this;
-        foreach ($resolved as $i => $value) {
-            if (\is_array($value) && isset($value[$key]) && $value[$key] === $find) {
-                unset($resolved[$i]);
-                return true;
-            }
-            if ($value instanceof self && isset($value[$key]) && $value[$key] === $find) {
-                unset($resolved[$i]);
-                return true;
-            }
+        if (! $target instanceof self || ! isset($target[$key]) || $target[$key] !== $find) {
+            return false;
         }
 
-        if (isset($resolved[$key]) && $resolved[$key] === $find) {
-            unset($resolved[$key]);
-            return true;
-        }
+        unset($target[$key]);
 
-        return false;
+        return true;
+    }
+
+    private function resolveSubject(string $subject): mixed
+    {
+        $value = $subject !== '' ? ($this[$subject] ?? null) : null;
+
+        return empty($value) ? $this : $value;
     }
 
     /**

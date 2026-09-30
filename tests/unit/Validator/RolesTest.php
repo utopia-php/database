@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Validator;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Role;
@@ -86,5 +87,51 @@ class RolesTest extends TestCase
         $object = new Roles();
         $this->assertTrue($object->isValid(['label:123']));
         $this->assertFalse($object->isValid(['label:not-alphanumeric']));
+    }
+
+    #[DataProvider('unparseableRoles')]
+    public function test_unparseable_role(string $role, string $message): void
+    {
+        $object = new Roles();
+
+        $this->assertFalse($object->isValid([$role]));
+        $this->assertSame($message, $object->getDescription());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function unparseableRoles(): iterable
+    {
+        yield 'an empty dimension' => ['users/', 'Dimension must not be empty'];
+        yield 'two dimensions' => ['users/verified/extra', 'Only one dimension can be provided'];
+    }
+
+    #[DataProvider('misplacedIdsAndDimensions')]
+    public function test_misplaced_id_or_dimension(string $role, string $message): void
+    {
+        $object = new Roles();
+
+        $this->assertFalse($object->isValid([$role]));
+        $this->assertSame($message, $object->getDescription());
+    }
+
+    /**
+     * @return iterable<string, array{string, string}>
+     */
+    public static function misplacedIdsAndDimensions(): iterable
+    {
+        yield 'an ID on any' => ['any:abc', 'Role "any" can not have an ID value.'];
+        yield 'a dimension on any' => ['any/verified', 'Role "any" can not have a dimension value.'];
+        yield 'a dimension on guests' => ['guests/verified', 'Role "guests" can not have a dimension value.'];
+        yield 'a dimension outside the options of users' => ['users/foo', 'Role "users" dimension value is invalid. Must be one of: verified, unverified.'];
+    }
+
+    public function test_dimension_among_the_options(): void
+    {
+        $object = new Roles();
+
+        $this->assertTrue($object->isValid(['users/verified']));
+        $this->assertTrue($object->isValid(['user:abc/unverified']));
     }
 }

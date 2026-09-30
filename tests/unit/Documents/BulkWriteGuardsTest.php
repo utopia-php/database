@@ -104,8 +104,8 @@ final class BulkWriteGuardsTest extends TestCase
         $database->createDocuments(self::COLLECTION, [$this->task('a', 1)]);
         $this->corruptUpdateTime($database, 'a');
 
-        $this->assertRefused(DatabaseException::class, null, fn (): int => $database->skipValidation(
-            fn (): int => $database->withPreserveDates(
+        $this->assertRefused(DatabaseException::class, null, fn (): mixed => $database->skipValidation(
+            fn (): mixed => $database->withPreserveDates(
                 fn (): int => $database->updateDocuments(self::COLLECTION, new Document(['rank' => 2, Document::UPDATED_AT => 'not-a-date'])),
             ),
         ));
@@ -177,11 +177,11 @@ final class BulkWriteGuardsTest extends TestCase
     public function testIteratingWithoutALimitPagesTwentyFiveDocumentsAtATime(): void
     {
         $limits = [];
-        $database = new class (new Memory(), new Cache(new None()), $limits) extends Database {
-            /**
-             * @param  list<int|null>  $limits
-             */
-            public function __construct(Adapter $adapter, Cache $cache, private array &$limits)
+        $record = static function (?int $limit) use (&$limits): void {
+            $limits[] = $limit;
+        };
+        $database = new class (new Memory(), new Cache(new None()), $record) extends Database {
+            public function __construct(Adapter $adapter, Cache $cache, private readonly \Closure $record)
             {
                 parent::__construct($adapter, $cache);
             }
@@ -191,11 +191,12 @@ final class BulkWriteGuardsTest extends TestCase
                 if ($collection === 'tasks') {
                     $limit = null;
                     foreach ($queries as $query) {
-                        if ($query->getMethod() === Method::Limit) {
-                            $limit = $query->getValue();
+                        $value = $query->getValue();
+                        if ($query->getMethod() === Method::Limit && \is_int($value)) {
+                            $limit = $value;
                         }
                     }
-                    $this->limits[] = $limit;
+                    ($this->record)($limit);
                 }
 
                 return parent::find($collection, $queries, $forPermission);

@@ -147,7 +147,7 @@ final class WithCacheTest extends TestCase
      */
     private function cached(Database $database, callable $callback): mixed
     {
-        return $database->withCache(self::KEY, function () use ($callback): mixed {
+        return $database->withCache(self::KEY, function () use ($callback) {
             $this->calls++;
 
             return $callback();

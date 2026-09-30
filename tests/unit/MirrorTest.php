@@ -415,7 +415,7 @@ class MirrorTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{Closure(Mirror, Closure(): mixed): mixed, Closure(Database): mixed, mixed, mixed}>
+     * @return iterable<string, array{Closure(Mirror, Closure(): mixed): mixed, Closure(Database): mixed, mixed, mixed, mixed}>
      */
     public static function scopedSetters(): iterable
     {
@@ -424,29 +424,34 @@ class MirrorTest extends TestCase
             static fn (Database $database): mixed => $database->getPreserveDates(),
             true,
             false,
+            true,
         ];
         yield 'withPreserveSequence' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withPreserveSequence($callback),
             static fn (Database $database): mixed => $database->getPreserveSequence(),
             true,
             false,
+            true,
         ];
         yield 'withTenant' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->withTenant(7, $callback),
             static fn (Database $database): mixed => $database->getTenant(),
             7,
             null,
+            7,
         ];
         yield 'skipRelationships' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationships($callback),
             static fn (Database $database): mixed => $database->getRelationshipHook()?->isEnabled(),
             false,
             true,
+            true,
         ];
         yield 'skipRelationshipsExistCheck' => [
             static fn (Mirror $mirror, Closure $callback): mixed => $mirror->skipRelationshipsExistCheck($callback),
             static fn (Database $database): mixed => $database->getRelationshipHook()?->shouldCheckExist(),
             false,
+            true,
             true,
         ];
     }
@@ -456,7 +461,7 @@ class MirrorTest extends TestCase
      * @param  Closure(Database): mixed  $read
      */
     #[DataProvider('scopedSetters')]
-    public function testScopedSetterAppliesToTheSourceOnce(Closure $scope, Closure $read, mixed $inside, mixed $outside): void
+    public function testScopedSetterAppliesToTheSourceOnce(Closure $scope, Closure $read, mixed $inside, mixed $outside, mixed $destinationInside): void
     {
         [$mirror, $source, $destination] = $this->pair();
         $mirror->addHook(new Relationships($mirror));
@@ -467,7 +472,7 @@ class MirrorTest extends TestCase
             $observed[] = \array_map($read, $databases);
         });
 
-        $this->assertSame([[$inside, $inside, $outside]], $observed);
+        $this->assertSame([[$inside, $inside, $destinationInside]], $observed);
         $this->assertSame(\array_fill(0, 3, $outside), \array_map($read, $databases));
     }
 

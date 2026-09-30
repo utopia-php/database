@@ -88,8 +88,9 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     private const REGEXP_PATTERN_CACHE_LIMIT = 256;
 
     /**
-     * Per-collection attribute → FTS5 table memo. Populated in one pass
-     * so multi-attribute SEARCH batches don't issue PRAGMA per attribute.
+     * Attribute → FTS5 table memo per FTS table prefix, which names the
+     * tenant under sharedTables. Populated in one pass so multi-attribute
+     * SEARCH batches don't issue PRAGMA per attribute.
      *
      * @var array<string, array<string, ?string>>
      */
@@ -650,7 +651,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         $this->execute($this->prepare($sql, event: Event::CollectionDelete));
 
-        unset($this->ftsTableCache[$id]);
+        unset($this->ftsTableCache[$this->getFulltextTablePrefix($id)]);
 
         return true;
     }
@@ -895,7 +896,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             throw $e;
         }
 
-        unset($this->ftsTableCache[$collection]);
+        unset($this->ftsTableCache[$this->getFulltextTablePrefix($collection)]);
 
         return true;
     }
@@ -1112,7 +1113,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             throw $e;
         }
 
-        unset($this->ftsTableCache[$collection]);
+        unset($this->ftsTableCache[$this->getFulltextTablePrefix($collection)]);
 
         return true;
     }
@@ -3073,11 +3074,12 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
         $attribute = $this->filter($this->getInternalKeyForAttribute($attribute));
 
-        if (!\array_key_exists($collection, $this->ftsTableCache)) {
-            $this->ftsTableCache[$collection] = $this->buildFulltextAttributeMap($collection);
+        $prefix = $this->getFulltextTablePrefix($collection);
+        if (!\array_key_exists($prefix, $this->ftsTableCache)) {
+            $this->ftsTableCache[$prefix] = $this->buildFulltextAttributeMap($collection);
         }
 
-        return $this->ftsTableCache[$collection][$attribute] ?? null;
+        return $this->ftsTableCache[$prefix][$attribute] ?? null;
     }
 
     /**

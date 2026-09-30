@@ -314,26 +314,82 @@ class Database
     /** @var array<int, array<string, string>> Pending document-cache tombstones by coroutine id. */
     protected array $documentCacheMutations = [];
 
-    protected ?NativeDateTime $timestamp = null;
+    /** @var Value<NativeDateTime|null>|null */
+    private ?Value $requestTimestamp = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $filtering = null;
+
+    /** @var Value<array<string, bool>|null>|null */
+    private ?Value $filterExclusions = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $validation = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $datePreservation = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $sequencePreservation = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $duplicateSkipping = null;
+
+    protected ?NativeDateTime $timestamp {
+        get => $this->requestTimestamp()->get();
+        set {
+            $this->requestTimestamp()->set($value);
+        }
+    }
 
     protected ?Relationships $relationshipHook = null;
 
-    protected bool $filter = true;
+    protected bool $filter {
+        get => $this->filtering()->get();
+        set {
+            $this->filtering()->set($value);
+        }
+    }
 
     /**
      * @var array<string, bool>|null
      */
-    protected ?array $disabledFilters = [];
+    protected ?array $disabledFilters {
+        get => $this->filterExclusions()->get();
+        set {
+            $this->filterExclusions()->set($value);
+        }
+    }
 
-    protected bool $validate = true;
+    protected bool $validate {
+        get => $this->validation()->get();
+        set {
+            $this->validation()->set($value);
+        }
+    }
 
     protected bool $dropUnknownAttributes = false;
 
-    protected bool $preserveDates = false;
+    protected bool $preserveDates {
+        get => $this->datePreservation()->get();
+        set {
+            $this->datePreservation()->set($value);
+        }
+    }
 
-    protected bool $preserveSequence = false;
+    protected bool $preserveSequence {
+        get => $this->sequencePreservation()->get();
+        set {
+            $this->sequencePreservation()->set($value);
+        }
+    }
 
-    protected bool $skipDuplicates = false;
+    protected bool $skipDuplicates {
+        get => $this->duplicateSkipping()->get();
+        set {
+            $this->duplicateSkipping()->set($value);
+        }
+    }
 
     protected int $maxQueryValues = 5000;
 
@@ -987,7 +1043,7 @@ class Database
     /**
      * With Tenant
      *
-     * Execute a callback with a specific tenant
+     * Execute a callback with a specific tenant. Scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
      *
@@ -996,14 +1052,7 @@ class Database
      */
     public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
-        $previous = $this->adapter->getTenant();
-        $this->adapter->setTenant($tenant);
-
-        try {
-            return $callback();
-        } finally {
-            $this->adapter->setTenant($previous);
-        }
+        return $this->adapter->withTenant($tenant, $callback);
     }
 
     /**
@@ -1130,24 +1179,19 @@ class Database
 
     /**
      * Execute a callback with date preservation enabled, restoring the previous state afterward.
+     * Scoped to the calling coroutine and the coroutines it starts.
      *
      * @param callable $callback The callback to execute.
      * @return mixed The callback's return value.
      */
     public function withPreserveDates(callable $callback): mixed
     {
-        $previous = $this->preserveDates;
-        $this->preserveDates = true;
-
-        try {
-            return $callback();
-        } finally {
-            $this->preserveDates = $previous;
-        }
+        return $this->datePreservation()->with(true, $callback);
     }
 
     /**
      * Execute a callback with skipDuplicates enabled, restoring the previous state afterward.
+     * Scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
      * @param callable(): T $callback
@@ -1155,14 +1199,7 @@ class Database
      */
     public function skipDuplicates(callable $callback): mixed
     {
-        $previous = $this->skipDuplicates;
-        $this->skipDuplicates = true;
-
-        try {
-            return $callback();
-        } finally {
-            $this->skipDuplicates = $previous;
-        }
+        return $this->duplicateSkipping()->with(true, $callback);
     }
 
     /**
@@ -1190,20 +1227,14 @@ class Database
 
     /**
      * Execute a callback with sequence preservation enabled, restoring the previous state afterward.
+     * Scoped to the calling coroutine and the coroutines it starts.
      *
      * @param callable $callback The callback to execute.
      * @return mixed The callback's return value.
      */
     public function withPreserveSequence(callable $callback): mixed
     {
-        $previous = $this->preserveSequence;
-        $this->preserveSequence = true;
-
-        try {
-            return $callback();
-        } finally {
-            $this->preserveSequence = $previous;
-        }
+        return $this->sequencePreservation()->with(true, $callback);
     }
 
     /**
@@ -1397,7 +1428,7 @@ class Database
     /**
      * Skip Validation
      *
-     * Execute a callback without validation
+     * Execute a callback without validation. Scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
      *
@@ -1406,14 +1437,7 @@ class Database
      */
     public function skipValidation(callable $callback): mixed
     {
-        $initial = $this->validate;
-        $this->validate = false;
-
-        try {
-            return $callback();
-        } finally {
-            $this->validate = $initial;
-        }
+        return $this->validation()->with(false, $callback);
     }
 
     /**
@@ -1583,18 +1607,27 @@ class Database
     }
 
     /**
-     * Capture the authorization, relationship and silence state the calling coroutine sees, so work started
-     * elsewhere can run under it with withSnapshot().
+     * Capture the authorization status and roles, relationship, silence, tenant and toggle state the calling
+     * coroutine sees, so work started elsewhere can run under it with withSnapshot().
      */
     public function snapshot(): Snapshot
     {
         return new Snapshot(
             authorization: $this->authorization->getStatus(),
+            roles: $this->authorization->getRoles(),
             relationships: $this->relationshipHook?->isEnabled() ?? true,
             existCheck: $this->relationshipHook?->shouldCheckExist() ?? true,
             population: $this->relationshipHook?->isInBatchPopulation() ?? false,
             silenced: $this->areEventsSilenced(),
             silencedListeners: $this->silencedListeners()->get(),
+            tenant: $this->adapter->getTenant(),
+            filters: $this->filter,
+            disabledFilters: $this->disabledFilters,
+            validation: $this->validate,
+            preserveDates: $this->preserveDates,
+            preserveSequence: $this->preserveSequence,
+            skipDuplicates: $this->skipDuplicates,
+            requestTimestamp: $this->timestamp,
         );
     }
 
@@ -1612,13 +1645,105 @@ class Database
         $hook = $this->relationshipHook;
         $scoped = fn () => $this->silenced()->with(
             $snapshot->silenced,
-            fn () => $this->silencedListeners()->with($snapshot->silencedListeners, $callback),
+            fn () => $this->silencedListeners()->with(
+                $snapshot->silencedListeners,
+                fn () => $this->withToggles($snapshot, $callback),
+            ),
         );
 
-        return $this->authorization->withStatus(
-            $snapshot->authorization,
+        $authorized = fn () => $this->authorization->withRoles(
+            $snapshot->roles,
             $hook === null ? $scoped : fn () => $hook->withSnapshot($snapshot, $scoped),
         );
+
+        return $this->authorization->withStatus($snapshot->authorization, $authorized);
+    }
+
+    /**
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    private function withToggles(Snapshot $snapshot, callable $callback): mixed
+    {
+        $timestamped = fn (): mixed => $this->requestTimestamp()->with($snapshot->requestTimestamp, $callback);
+        $deduplicated = fn (): mixed => $this->duplicateSkipping()->with($snapshot->skipDuplicates, $timestamped);
+        $sequenced = fn (): mixed => $this->sequencePreservation()->with($snapshot->preserveSequence, $deduplicated);
+        $dated = fn (): mixed => $this->datePreservation()->with($snapshot->preserveDates, $sequenced);
+        $validated = fn (): mixed => $this->validation()->with($snapshot->validation, $dated);
+        $excluded = fn (): mixed => $this->filterExclusions()->with($snapshot->disabledFilters, $validated);
+        $filtered = fn (): mixed => $this->filtering()->with($snapshot->filters, $excluded);
+
+        return $this->adapter->withTenant($snapshot->tenant, $filtered);
+    }
+
+    /**
+     * @return Value<NativeDateTime|null>
+     */
+    private function requestTimestamp(): Value
+    {
+        if ($this->requestTimestamp === null) {
+            /** @var Value<NativeDateTime|null> $requestTimestamp */
+            $requestTimestamp = new Value(null);
+            $this->requestTimestamp = $requestTimestamp;
+        }
+
+        return $this->requestTimestamp;
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function filtering(): Value
+    {
+        return $this->filtering ??= new Value(true);
+    }
+
+    /**
+     * @return Value<array<string, bool>|null>
+     */
+    private function filterExclusions(): Value
+    {
+        if ($this->filterExclusions === null) {
+            /** @var Value<array<string, bool>|null> $filterExclusions */
+            $filterExclusions = new Value([]);
+            $this->filterExclusions = $filterExclusions;
+        }
+
+        return $this->filterExclusions;
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function validation(): Value
+    {
+        return $this->validation ??= new Value(true);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function datePreservation(): Value
+    {
+        return $this->datePreservation ??= new Value(false);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function sequencePreservation(): Value
+    {
+        return $this->sequencePreservation ??= new Value(false);
+    }
+
+    /**
+     * @return Value<bool>
+     */
+    private function duplicateSkipping(): Value
+    {
+        return $this->duplicateSkipping ??= new Value(false);
     }
 
     private function getEventContext(): int
@@ -1693,7 +1818,8 @@ class Database
     /**
      * Skip filters
      *
-     * Execute a callback without filters
+     * Execute a callback without filters, or without the named ones.
+     * Scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
      *
@@ -1704,30 +1830,13 @@ class Database
     public function skipFilters(callable $callback, ?array $filters = null): mixed
     {
         if (empty($filters)) {
-            $initial = $this->filter;
-            $this->disableFilters();
-
-            try {
-                return $callback();
-            } finally {
-                $this->filter = $initial;
-            }
+            return $this->filtering()->with(false, $callback);
         }
 
-        $previous = $this->filter;
-        $previousDisabled = $this->disabledFilters;
-        $disabled = [];
-        foreach ($filters as $name) {
-            $disabled[$name] = true;
-        }
-        $this->disabledFilters = $disabled;
-
-        try {
-            return $callback();
-        } finally {
-            $this->filter = $previous;
-            $this->disabledFilters = $previousDisabled;
-        }
+        return $this->filtering()->with(
+            $this->filter,
+            fn (): mixed => $this->filterExclusions()->with(\array_fill_keys($filters, true), $callback),
+        );
     }
 
     /**
@@ -2268,7 +2377,8 @@ class Database
     }
 
     /**
-     * Executes $callback with $timestamp set to $requestTimestamp
+     * Executes $callback with $timestamp set to $requestTimestamp.
+     * Scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
      *
@@ -2277,15 +2387,7 @@ class Database
      */
     public function withRequestTimestamp(?NativeDateTime $requestTimestamp, callable $callback): mixed
     {
-        $previous = $this->timestamp;
-        $this->timestamp = $requestTimestamp;
-        try {
-            $result = $callback();
-        } finally {
-            $this->timestamp = $previous;
-        }
-
-        return $result;
+        return $this->requestTimestamp()->with($requestTimestamp, $callback);
     }
 
     /**

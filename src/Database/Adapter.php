@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Hook\Transform;
 use Utopia\Database\Hook\Write;
 use Utopia\Database\Profiler\QueryProfiler;
+use Utopia\Database\State\Value;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
@@ -35,7 +36,18 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     protected bool $sharedTables = false;
 
-    protected int|string|null $tenant = null;
+    /** @var Value<int|string|null>|null */
+    private ?Value $scopedTenant = null;
+
+    /** @var Value<bool>|null */
+    private ?Value $duplicateSkipping = null;
+
+    protected int|string|null $tenant {
+        get => $this->scopedTenant()->get();
+        set {
+            $this->scopedTenant()->set($value);
+        }
+    }
 
     protected bool $tenantPerDocument = false;
 
@@ -50,7 +62,12 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
 
     protected bool $alterLocks = false;
 
-    protected bool $skipDuplicates = false;
+    protected bool $skipDuplicates {
+        get => $this->duplicateSkipping()->get();
+        set {
+            $this->duplicateSkipping()->set($value);
+        }
+    }
 
     /**
      * @var array<string, mixed>
@@ -272,11 +289,39 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     public function getTenant(): int|string|null
     {
-        if (\is_string($this->tenant) && \ctype_digit($this->tenant)) {
-            return (int) $this->tenant;
+        $tenant = $this->tenant;
+        if (\is_string($tenant) && \ctype_digit($tenant)) {
+            return (int) $tenant;
         }
 
-        return $this->tenant;
+        return $tenant;
+    }
+
+    /**
+     * Run the callback with the tenant set for the calling coroutine and the coroutines it starts.
+     *
+     * @template T
+     *
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withTenant(int|string|null $tenant, callable $callback): mixed
+    {
+        return $this->scopedTenant()->with($tenant, $callback);
+    }
+
+    /**
+     * @return Value<int|string|null>
+     */
+    private function scopedTenant(): Value
+    {
+        if ($this->scopedTenant === null) {
+            /** @var Value<int|string|null> $scopedTenant */
+            $scopedTenant = new Value(null);
+            $this->scopedTenant = $scopedTenant;
+        }
+
+        return $this->scopedTenant;
     }
 
     /**
@@ -599,7 +644,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     /**
      * Run a callback with skipDuplicates enabled.
      * Duplicate key errors during createDocuments() will be silently skipped
-     * instead of thrown. Nestable — saves and restores previous state.
+     * instead of thrown. Nestable, and scoped to the calling coroutine and the coroutines it starts.
      *
      * @template T
      * @param callable(): T $callback
@@ -607,14 +652,15 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     public function skipDuplicates(callable $callback): mixed
     {
-        $previous = $this->skipDuplicates;
-        $this->skipDuplicates = true;
+        return $this->duplicateSkipping()->with(true, $callback);
+    }
 
-        try {
-            return $callback();
-        } finally {
-            $this->skipDuplicates = $previous;
-        }
+    /**
+     * @return Value<bool>
+     */
+    private function duplicateSkipping(): Value
+    {
+        return $this->duplicateSkipping ??= new Value(false);
     }
 
     /**

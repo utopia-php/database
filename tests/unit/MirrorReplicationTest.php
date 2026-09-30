@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use Closure;
+use DateTime;
 use PDO;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
@@ -20,9 +21,13 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Schema\IndexType;
 
 use function Swoole\Coroutine\run;
 
@@ -280,6 +285,193 @@ final class MirrorReplicationTest extends TestCase
         $this->assertSame(0, $mirror->countPendingReplications());
     }
 
+    public function testReplicationRunsUnderTheCallersRolesAfterTheCallerChangedThem(): void
+    {
+        $this->authorization->skip(fn (): Document => $this->mirror->createDocument(self::SECRETS, new Document([
+            Document::ID => 'owned',
+            'title' => 'owned',
+            Document::PERMISSIONS => [Permission::read(Role::user('alice')), Permission::delete(Role::user('alice'))],
+        ])));
+        $this->writes = [];
+        $this->delays = [self::DELETED => 0.02];
+
+        $this->inCoroutine(function (): void {
+            $this->authorization->addRole(Role::user('alice')->toString());
+            $this->mirror->deleteDocument(self::SECRETS, 'owned');
+            $this->authorization->cleanRoles();
+            $this->authorization->addRole(Role::any()->toString());
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['owned', self::DELETED]], $this->titlesWritten());
+        $this->assertSame([Role::any()->toString()], $this->authorization->getRoles());
+    }
+
+    public function testAReplicationDoesNotChangeTheCallersRoles(): void
+    {
+        $this->delays = [self::DELETED => 0.01];
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->addRole(Role::user('bob')->toString());
+            $this->mirror->deleteDocument(self::NOTES, 'public');
+            $seen['whileQueued'] = $this->authorization->getRoles();
+            Coroutine::sleep(0.03);
+            $seen['afterReplication'] = $this->authorization->getRoles();
+        });
+
+        $roles = [Role::any()->toString(), Role::user('bob')->toString()];
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['whileQueued' => $roles, 'afterReplication' => $roles], $seen);
+    }
+
+    public function testConcurrentReplicationsDoNotShareTheDestinationsSkipDuplicates(): void
+    {
+        $this->authorization->skip(fn (): Document => $this->destination->createDocument(self::NOTES, new Document([
+            Document::ID => 'second',
+            'title' => 'only on the destination',
+        ])));
+        $this->writes = [];
+        $this->delays = ['skipping' => 0.03];
+
+        $this->inCoroutine(function (): void {
+            $this->mirror->skipDuplicates(fn (): int => $this->mirror->createDocuments(self::NOTES, [
+                new Document([Document::ID => 'first', 'title' => 'skipping']),
+            ]));
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'second', 'title' => 'duplicate'])]);
+        });
+
+        $this->assertCount(1, $this->errors);
+        $this->assertSame('createDocuments', $this->errors[0][0]);
+        $this->assertStringContainsString('already exists', $this->errors[0][1]);
+        $this->assertSame([['first', 'skipping']], $this->titlesWritten());
+        $this->assertSame('only on the destination', $this->destination->getDocument(self::NOTES, 'second')->getAttribute('title'));
+    }
+
+    public function testOverlappingReplicationsLeaveTheDestinationsPreserveDatesSetting(): void
+    {
+        $this->delays = ['early' => 0.01, 'late' => 0.03];
+
+        $this->inCoroutine(function (): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'early'])]);
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'second', 'title' => 'late'])]);
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['first', 'early'], ['second', 'late']], $this->titlesWritten());
+        $this->assertFalse($this->destination->getPreserveDates());
+    }
+
+    public function testAReplicationDoesNotRecheckTheCallersRequestTimestampOnTheDestination(): void
+    {
+        \usleep(5000);
+        $requestTimestamp = new DateTime();
+        \usleep(5000);
+        $this->destination->updateDocument(self::NOTES, 'public', new Document(['views' => 2]));
+        $this->writes = [];
+
+        $this->inCoroutine(function () use ($requestTimestamp): void {
+            $this->mirror->withRequestTimestamp(
+                $requestTimestamp,
+                fn (): int => $this->mirror->upsertDocuments(self::NOTES, [new Document([Document::ID => 'public', 'title' => 'v1'])]),
+            );
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['public', 'v1']], $this->titlesWritten());
+    }
+
+    public function testSynchronousAndAsynchronousReplicationsUseTheCallersTenant(): void
+    {
+        $destination = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()));
+        $mirror = new Mirror(new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None())), $destination);
+        $mirror
+            ->setAuthorization(new Authorization())
+            ->setDatabase('mirror')
+            ->setNamespace('tenants_'.\uniqid())
+            ->setSharedTables(true)
+            ->setTenant(1)
+            ->create();
+        $mirror->onError(function (string $action, Throwable $error): void {
+            $this->errors[] = [$action, $error->getMessage()];
+        });
+        foreach ([1, 2] as $tenant) {
+            $mirror->setTenant($tenant);
+            $mirror->createCollection(new Collection(
+                id: self::NOTES,
+                attributes: [Attribute::string(key: 'title', size: 64)],
+                permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            ));
+        }
+        $mirror->setTenant(1);
+
+        $mirror->withTenant(2, fn (): Document => $mirror->createDocument(self::NOTES, new Document([Document::ID => 'synchronous', 'title' => 'synchronous'])));
+        $this->inCoroutine(function () use ($mirror): void {
+            $mirror->withTenant(2, fn (): int => $mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'asynchronous', 'title' => 'asynchronous'])]));
+        });
+
+        $idsUnder = static fn (int $tenant): array => \array_map(
+            static fn (Document $document): string => $document->getId(),
+            $destination->withTenant($tenant, static fn (): array => $destination->find(self::NOTES, [Query::orderAsc(Document::ID)])),
+        );
+        $this->assertSame([], $this->errors);
+        $this->assertSame([1 => [], 2 => ['asynchronous', 'synchronous']], [1 => $idsUnder(1), 2 => $idsUnder(2)]);
+        $this->assertSame(1, $destination->getTenant());
+    }
+
+    /**
+     * @return iterable<string, array{Closure(Mirror): mixed}>
+     */
+    public static function schemaChanges(): iterable
+    {
+        yield 'deleteAttribute' => [static fn (Mirror $mirror): bool => $mirror->deleteAttribute(self::NOTES, 'views')];
+        yield 'renameAttribute' => [static fn (Mirror $mirror): bool => $mirror->renameAttribute(self::NOTES, 'views', 'count')];
+        yield 'deleteCollection' => [static fn (Mirror $mirror): bool => $mirror->deleteCollection(self::NOTES)];
+        yield 'updateCollection' => [static fn (Mirror $mirror): Document => $mirror->updateCollection(self::NOTES, [Permission::create(Role::any())], false)];
+        yield 'createIndex' => [static fn (Mirror $mirror): bool => $mirror->createIndex(self::NOTES, new Index(key: 'views_index', type: IndexType::Key, attributes: ['views']))];
+        yield 'updateAttributeRequired' => [static fn (Mirror $mirror): Document => $mirror->updateAttributeRequired(self::NOTES, 'title', false)];
+        yield 'createRelationship' => [static fn (Mirror $mirror): bool => $mirror->createRelationship(new Relationship(
+            collection: self::SECRETS,
+            relatedCollection: self::NOTES,
+            type: RelationType::ManyToOne,
+            key: 'note',
+        ))];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $change
+     */
+    #[DataProvider('schemaChanges')]
+    public function testASchemaChangeWaitsForTheQueuedReplicationsOfItsCollection(Closure $change): void
+    {
+        $this->delays = ['v0' => 0.03];
+
+        $this->inCoroutine(function () use ($change): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'v0', 'views' => 1])]);
+            $change($this->mirror);
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['first', 'v0'], $this->titlesWritten()[0] ?? null, 'The queued write reaches the destination before the schema change');
+    }
+
+    public function testASchemaChangeDoesNotWaitForAnotherCollectionsReplications(): void
+    {
+        $this->authorization->skip(fn (): bool => $this->mirror->createAttribute(self::SECRETS, Attribute::integer(key: 'extra')));
+        $this->delays = ['slow' => 0.05];
+        $writesBeforeTheChangeReturned = null;
+
+        $this->inCoroutine(function () use (&$writesBeforeTheChangeReturned): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'slow'])]);
+            $this->mirror->deleteAttribute(self::SECRETS, 'extra');
+            $writesBeforeTheChangeReturned = $this->writesOf('first');
+        });
+
+        $this->assertSame([], $writesBeforeTheChangeReturned);
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['first', 'slow']], $this->writesOf('first'));
+    }
+
     /**
      * @return list<array{string, string}>
      */
@@ -288,6 +480,17 @@ final class MirrorReplicationTest extends TestCase
         return \array_values(\array_filter(
             $this->titlesWrittenAndLocked(),
             static fn (array $write): bool => $write[1] !== self::LOCKED,
+        ));
+    }
+
+    /**
+     * @return list<array{string, string}>
+     */
+    private function writesOf(string $id): array
+    {
+        return \array_values(\array_filter(
+            $this->titlesWritten(),
+            static fn (array $write): bool => $write[0] === $id,
         ));
     }
 

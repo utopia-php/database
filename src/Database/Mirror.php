@@ -412,8 +412,7 @@ class Mirror extends Database
     }
 
     /**
-     * The source's and destination's scopes enclose the mirror's own: Database::skipFilters()
-     * disables through disableFilters(), which reaches them, but restores only the mirror's flag.
+     * Opens the scope on the mirror, its source and its destination.
      *
      * {@inheritdoc}
      */
@@ -532,30 +531,43 @@ class Mirror extends Database
     }
 
     /**
-     * Writes through the mirror run on the source, so the scope opens there too. The destination
-     * keeps its own state: a replicated write can still be running on it after the scope closes.
+     * Opens the scope on the mirror, its source and its destination, so the writes the mirror replicates before
+     * returning use the tenant too; the replications it queues carry it (see replicate()).
      *
      * {@inheritdoc}
      */
     public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
-        return parent::withTenant($tenant, fn (): mixed => $this->source->withTenant($tenant, $callback));
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withTenant($tenant, $callback);
+
+        return parent::withTenant($tenant, fn (): mixed => $this->source->withTenant($tenant, $scoped));
     }
 
     /**
+     * Opens the scope on the mirror, its source and its destination.
+     *
      * {@inheritdoc}
      */
     public function withPreserveDates(callable $callback): mixed
     {
-        return parent::withPreserveDates(fn (): mixed => $this->source->withPreserveDates($callback));
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveDates($callback);
+
+        return parent::withPreserveDates(fn (): mixed => $this->source->withPreserveDates($scoped));
     }
 
     /**
+     * Opens the scope on the mirror, its source and its destination.
+     *
      * {@inheritdoc}
      */
     public function withPreserveSequence(callable $callback): mixed
     {
-        return parent::withPreserveSequence(fn (): mixed => $this->source->withPreserveSequence($callback));
+        $destination = $this->destination;
+        $scoped = $destination === null ? $callback : fn (): mixed => $destination->withPreserveSequence($callback);
+
+        return parent::withPreserveSequence(fn (): mixed => $this->source->withPreserveSequence($scoped));
     }
 
     /**
@@ -630,7 +642,8 @@ class Mirror extends Database
     }
 
     /**
-     * Scoped to the mirror and its source, like withTenant(), so the callback runs once.
+     * Scoped to the mirror and its source only: the source checks the timestamp, and the destination applies
+     * what the source accepted.
      *
      * {@inheritdoc}
      */
@@ -681,6 +694,8 @@ class Mirror extends Database
      */
     public function delete(?string $database = null): bool
     {
+        $this->awaitEveryReplication();
+
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -764,6 +779,8 @@ class Mirror extends Database
             return $result;
         }
 
+        $this->awaitReplications($id);
+
         try {
             $filtered = $result;
             foreach ($this->writeFilters as $filter) {
@@ -798,6 +815,8 @@ class Mirror extends Database
             return $result;
         }
 
+        $this->awaitReplications($id);
+
         try {
             $this->destination->deleteCollection($id);
 
@@ -825,6 +844,8 @@ class Mirror extends Database
         if ($this->destination === null) {
             return $result;
         }
+
+        $this->awaitReplications($collection);
 
         try {
             // Round-trip through Document is required: Filter interface accepts/returns Document,
@@ -865,6 +886,8 @@ class Mirror extends Database
         if ($this->destination === null) {
             return $result;
         }
+
+        $this->awaitReplications($collection);
 
         try {
             $filteredAttributes = [];
@@ -928,6 +951,8 @@ class Mirror extends Database
             return $document;
         }
 
+        $this->awaitReplications($collection);
+
         try {
             $filtered = $document;
             foreach ($this->writeFilters as $filter) {
@@ -978,6 +1003,8 @@ class Mirror extends Database
             return $result;
         }
 
+        $this->awaitReplications($collection);
+
         try {
             foreach ($this->writeFilters as $filter) {
                 $filter->beforeDeleteAttribute(
@@ -1006,6 +1033,8 @@ class Mirror extends Database
         if ($this->destination === null) {
             return $result;
         }
+
+        $this->awaitReplications($collection);
 
         try {
             // Round-trip through Document is required: Filter interface accepts/returns Document,
@@ -1046,6 +1075,8 @@ class Mirror extends Database
         if ($this->destination === null) {
             return $result;
         }
+
+        $this->awaitReplications($collection);
 
         try {
             $this->destination->deleteIndex($collection, $id);
@@ -1545,6 +1576,8 @@ class Mirror extends Database
      */
     public function updateAttributeRequired(string $collection, string $id, bool $required): Document
     {
+        $this->awaitReplications($collection);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1555,6 +1588,8 @@ class Mirror extends Database
      */
     public function updateAttributeFormat(string $collection, string $id, string $format): Document
     {
+        $this->awaitReplications($collection);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1565,6 +1600,8 @@ class Mirror extends Database
      */
     public function updateAttributeFormatOptions(string $collection, string $id, array $formatOptions): Document
     {
+        $this->awaitReplications($collection);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, [$collection, $id, $formatOptions]);
         return $result;
@@ -1575,6 +1612,8 @@ class Mirror extends Database
      */
     public function updateAttributeFilters(string $collection, string $id, array $filters): Document
     {
+        $this->awaitReplications($collection);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1585,6 +1624,8 @@ class Mirror extends Database
      */
     public function updateAttributeDefault(string $collection, string $id, mixed $default = null): Document
     {
+        $this->awaitReplications($collection);
+
         /** @var Document $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1595,6 +1636,8 @@ class Mirror extends Database
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
+        $this->awaitReplications($collection);
+
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1605,6 +1648,9 @@ class Mirror extends Database
      */
     public function createRelationship(Relationship $relationship): bool
     {
+        $this->awaitReplications($relationship->collection);
+        $this->awaitReplications($relationship->relatedCollection);
+
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, [$relationship]);
         return $result;
@@ -1621,6 +1667,8 @@ class Mirror extends Database
         ?bool $twoWay = null,
         ?ForeignKeyAction $onDelete = null
     ): bool {
+        $this->awaitReplications($collection);
+
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1631,6 +1679,8 @@ class Mirror extends Database
      */
     public function deleteRelationship(string $collection, string $id): bool
     {
+        $this->awaitReplications($collection);
+
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1641,6 +1691,8 @@ class Mirror extends Database
      */
     public function renameIndex(string $collection, string $old, string $new): bool
     {
+        $this->awaitReplications($collection);
+
         /** @var bool $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
@@ -1742,8 +1794,9 @@ class Mirror extends Database
     }
 
     /**
-     * Applies a write to the destination under the authorization, relationship and silence state the caller has at
-     * the time of the call, and reports a failure through onError(). Inside a coroutine the write runs in a coroutine
+     * Applies a write to the destination under the authorization, relationship, silence, tenant and toggle state the
+     * caller has at the time of the call, without its request timestamp (the source checked it), and reports a
+     * failure through onError(). Inside a coroutine the write runs in a coroutine
      * of its own, once every earlier replication that can reach the same documents has finished; outside one it runs
      * before this returns, since a task that yields outside a scheduler never resumes.
      *
@@ -1760,7 +1813,10 @@ class Mirror extends Database
         $snapshot = $this->source->snapshot();
         $apply = function () use ($action, $destination, $snapshot, $write): void {
             try {
-                $destination->withSnapshot($snapshot, $write);
+                $destination->withSnapshot(
+                    $snapshot,
+                    fn (): mixed => $destination->withRequestTimestamp(null, $write),
+                );
             } catch (Throwable $error) {
                 $this->logError($action, $error);
             }
@@ -1790,15 +1846,23 @@ class Mirror extends Database
     }
 
     /**
-     * Waits until every queued replication that can reach these documents has finished, so a write the caller
-     * replicates itself reaches the destination after them.
+     * Waits until every queued replication that can reach these documents has finished, so a write or schema
+     * change the caller replicates itself reaches the destination after them.
      *
-     * @param  array<string>  $documentIds
+     * @param  array<string>|null  $documentIds  The documents the caller's change reaches, or null for the whole collection
      */
-    private function awaitReplications(string $collection, array $documentIds): void
+    private function awaitReplications(string $collection, ?array $documentIds = null): void
     {
         foreach ($this->replicationsBefore($collection, $documentIds) as $replication) {
             $replication->pop();
+        }
+    }
+
+    private function awaitEveryReplication(): void
+    {
+        $collections = \array_keys($this->documentReplications + $this->collectionReplications);
+        foreach ($collections as $collection) {
+            $this->awaitReplications((string) $collection);
         }
     }
 

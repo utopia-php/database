@@ -285,6 +285,20 @@ final class BigIntegerTest extends TestCase
         }
     }
 
+    public function testMemoryKeepsTheStoredValueWhenABoundedPowerOverflows(): void
+    {
+        $adapter = self::memoryOperators();
+
+        $this->assertSame(10.0, $adapter->apply(10.0, Operator::power(400, 1000)));
+
+        try {
+            $adapter->apply(10.0, Operator::power(400));
+            $this->fail('An unbounded power that overflows must throw');
+        } catch (LimitException $exception) {
+            $this->assertSame('Value out of range', $exception->getMessage());
+        }
+    }
+
     private static function memoryOperators(): Memory
     {
         return new class () extends Memory {

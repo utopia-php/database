@@ -454,11 +454,55 @@ $database->removeTransform(Label::class);
 
 ## Caches
 
-- **Cache key names changed: do not share a cache between 7.x and 8.0 processes.** Document cache keys now include
-  the database name (`{cacheName}-cache-{hostname}:{database}:{namespace}:{tenant}:collection:{collection}`), and
-  purging a document advances a per-collection epoch instead of deleting the old key. During a rolling upgrade, a
-  write handled by a 7.x process purges only the old keys, so an 8.0 process can serve a stale cached document until
-  the cache TTL. After the last 7.x process has stopped, flush the cache, or deploy without overlap.
+- **Cache key names changed: do not share a cache between 7.x and 8.0 processes.** A document is cached in one hash
+  per document, as in 7.x, but the key now includes the database name
+  (`{cacheName}-cache-{hostname}:{database}:{namespace}:{tenant}:collection:{collection}:{id}`; 7.x used
+  `{cacheName}-cache-{hostname}:{namespace}:{tenant}:collection:{collection}:{id}`), with one field per selection
+  whose value records the collection epoch it was filled under. 7.x and 8.0 keys are disjoint, so neither version
+  reads or invalidates the other's entries. During a rolling upgrade on one cache this holds in both directions: a
+  7.x process keeps serving documents, permissions and collection definitions that an 8.0 process has changed, and
+  an 8.0 process keeps serving what a 7.x process has changed (a revoked permission included), until the entry
+  expires after the cache TTL (`Database::TTL`, 24 hours). Deploy without overlap, or run one side without a cache
+  during the overlap (for example with `Utopia\Cache\Adapter\None`), and flush the cache once the last 7.x process
+  has stopped.
+- **Invalidation.** A single-document write (`createDocument()`, `updateDocument()`, `increaseDocumentAttribute()`,
+  `decreaseDocumentAttribute()`, `deleteDocument()`) and `purgeCachedDocument()` purge only that document, inside the
+  transaction and again after the outermost commit or rollback; other cached documents of the collection stay cached.
+  Batch writes and schema changes retire the collection's cached documents at once. If the purge after a commit fails,
+  the write throws with the data committed, and the collection's cached documents are retired instead.
+- **Transactions.** Inside `withTransaction()` a read uses the cache only for documents the transaction has not
+  written; it never fills the cache. A transaction started on the adapter directly reads uncached (see
+  [Known limitations](#known-limitations)).
+- **Read replicas.** With `ReadWritePool`, reads served by a replica are not cached; only reads the pool sends to the
+  primary (in a transaction or within the sticky window after a write) fill the document and query caches.
+- **Collection definitions carry the document-cache epoch.** A cached collection definition holds, per tenant, the
+  epoch its collection's documents are cached under, so a cached `getDocument()` costs two cache round trips (the
+  definition and the document) and `getCollection()`, `find()`, `count()` and `sum()` one before their query, as in
+  7.x. Batch writes and schema changes purge the collection's definition when they retire its documents, so the
+  first read afterwards also reads the definition from the database once.
+- Use a cache adapter with generations (`Utopia\Cache\Feature\Leasable`) for the document cache too: without them a
+  read that overlaps a write can cache the previous row until the next write or the TTL.
+- **Query cache layout.** `find()` results are cached in one hash per collection scope, one field per query and role
+  context, whose value records the epoch it was filled under. An invalidation clears the hash, so the number of keys
+  no longer grows with writes; on Redis a collection scope keeps one key holding its generation. All of a
+  collection's results share one key: under Redis Cluster they live on one slot, and an invalidation rejects every
+  in-flight fill of that collection. On a cache without fields (Memory, Filesystem) a collection scope holds one
+  result at a time.
+- **Abandoned writes.** A write that blocks a collection's cache and never finishes its invalidation (a worker killed
+  mid-transaction) no longer keeps that cache off until a flush. For the document cache the limit is
+  `$database->setCacheWriterTimeout($seconds)`, for the query cache `new QueryCache($cache, $cacheName,
+  writerTimeout: $seconds)`, both 3600 seconds by default. Reads resume once the unfinished write is older than the
+  timeout, and the next write re-enables the cache once every other unfinished write is older than the timeout. A
+  transaction that runs longer than the timeout is treated as abandoned: raise it above your longest transaction,
+  and use the same value in every process (the shortest one applies).
+- **Keys left by 8.0 pre-releases.** On Redis, keys matching `*#owner:*`, document entries whose key ends in
+  `:<hash>#<epoch>` and query-cache keys matching `*:qcache:*#active:*` are no longer read and can be deleted. On
+  Redis a purged document keeps one key holding its generation, with no expiry: the key count grows with the number
+  of document ids ever written, not with the number of writes.
+- `purgeCachedCollection()` also invalidates the collection's cached `find()` results, and
+  `purgeCachedCollection('_metadata')` reads the collection list and purges each cached definition.
+- With a query cache installed, a cache error in `find()` logs a warning and reads the database, as `getDocument()`
+  does.
 - **`purgeCachedQueries()` also purges the `find()` query cache.**
   `Database::purgeCachedQueries($collection, $namespace = null)` rotates the `withCache()` region under
   `getQueryCacheKey()` as in 7.x. When a query cache is installed with `setQueryCache()`, it now also invalidates the

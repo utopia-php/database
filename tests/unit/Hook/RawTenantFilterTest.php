@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Hook;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Exception\Query as QueryException;
@@ -160,6 +161,25 @@ final class RawTenantFilterTest extends TestCase
             '("appwrite"."ns_authors"._tenant IN (?) OR "appwrite"."ns_authors"."_uid" IS NULL) AND "Review"._tenant IN (?) AND ("Book"._tenant IN (?) OR "Book"."_uid" IS NULL)',
             $filter->outerJoin('Review', JoinType::Right)->expression,
         );
+    }
+
+    public function testADigitLeadingOuterJoinAliasIsRefused(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid column name: 9x._uid');
+
+        $this->filter()->filterJoin('9x', JoinType::Right);
+    }
+
+    public function testADigitLeadingMainTableIsRefusedAfterAnOuterJoin(): void
+    {
+        $filter = new RawTenantFilter(self::TENANT, '1db.ns_authors', false, '`');
+        $filter->filterJoin('Review', JoinType::Right);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid column name: 1db.ns_authors._uid');
+
+        $filter->filter('1db.ns_authors');
     }
 
     private function filter(): RawTenantFilter

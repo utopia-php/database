@@ -5961,7 +5961,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         /** @var array<mixed> $arrVal */
         $arrVal = is_array($value) ? $value : [];
 
-        return match ($method) {
+        $result = match ($method) {
             OperatorType::Increment => $numVal + $numOp,
             OperatorType::Decrement => $numVal - $numOp,
             OperatorType::Multiply => $numVal * $numOp,
@@ -5988,7 +5988,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             OperatorType::ArrayUnique => array_values(array_unique(self::stringifyList($arrVal))),
             OperatorType::ArrayIntersect => array_values(array_intersect(self::stringifyList($arrVal), self::stringifyList($values))),
             OperatorType::ArrayDiff => array_values(array_diff(self::stringifyList($arrVal), self::stringifyList($values))),
-            OperatorType::ArrayFilter => $arrVal,
+            OperatorType::ArrayFilter => self::filterArray($arrVal, $values[0] ?? null, $values[1] ?? null),
             OperatorType::StringConcat => (\is_scalar($value) ? (string) $value : '') . (count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : ''),
             OperatorType::StringReplace => str_replace(count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : '', count($values) > 1 && \is_scalar($values[1]) ? (string) $values[1] : '', \is_scalar($value) ? (string) $value : ''),
             OperatorType::Toggle => ! ($value ?? false),
@@ -5996,6 +5996,42 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             OperatorType::DateSubDays => self::shiftDays($value, \is_numeric($firstValue) ? -(int) $firstValue : 0),
             OperatorType::DateSetNow => DateTime::now(),
         };
+
+        return self::keepWithinBound($method, $numVal, $result, $values[1] ?? null);
+    }
+
+    private static function keepWithinBound(OperatorType $method, int|float $current, mixed $result, mixed $bound): mixed
+    {
+        if (! \is_numeric($bound) || (! \is_int($result) && ! \is_float($result))) {
+            return $result;
+        }
+
+        $crossed = match ($method) {
+            OperatorType::Increment, OperatorType::Multiply, OperatorType::Power => \is_nan((float) $result) || $result > $bound + 0,
+            OperatorType::Decrement, OperatorType::Divide => $result < $bound + 0,
+            default => false,
+        };
+
+        return $crossed ? $current : $result;
+    }
+
+    /**
+     * @param  array<mixed>  $items
+     * @return list<mixed>
+     */
+    private static function filterArray(array $items, mixed $condition, mixed $compare): array
+    {
+        return \array_values(\array_filter($items, static fn (mixed $item): bool => match ($condition) {
+            Method::Equal->value => $item == $compare,
+            Method::NotEqual->value => $item != $compare,
+            Method::GreaterThan->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 > $compare + 0,
+            Method::GreaterThanEqual->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 >= $compare + 0,
+            Method::LessThan->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 < $compare + 0,
+            Method::LessThanEqual->value => \is_numeric($compare) && \is_numeric($item) && $item + 0 <= $compare + 0,
+            Method::IsNull->value => $item === null,
+            Method::IsNotNull->value => $item !== null,
+            default => true,
+        }));
     }
 
     private static function shiftDays(mixed $value, int $days): mixed

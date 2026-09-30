@@ -10,7 +10,13 @@ use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\IndexedQueries;
 use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Query\Aggregate;
+use Utopia\Database\Validator\Query\Base;
+use Utopia\Database\Validator\Query\Distinct;
 use Utopia\Database\Validator\Query\Filter;
+use Utopia\Database\Validator\Query\GroupBy;
+use Utopia\Database\Validator\Query\Having;
+use Utopia\Database\Validator\Query\Join;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -174,6 +180,41 @@ final class QueryValidatorCoverageTest extends TestCase
 
         $this->assertFalse($validator->isValid([new Query(Method::Or, '', [$child, $child])]));
         $this->assertStringContainsString('Or queries can only contain filter queries', $validator->getDescription());
+    }
+
+    /**
+     * @return array<string, array{\Closure(): Base, mixed}>
+     */
+    public static function validatorsGivenANonQuery(): array
+    {
+        $validators = [
+            'aggregate' => static fn (): Base => new Aggregate(),
+            'distinct' => static fn (): Base => new Distinct(),
+            'group by' => static fn (): Base => new GroupBy(),
+            'having' => static fn (): Base => new Having(),
+            'join' => static fn (): Base => new Join(),
+        ];
+
+        $cases = [];
+        foreach ($validators as $name => $validator) {
+            $cases["{$name} given a string"] = [$validator, 'limit(1)'];
+            $cases["{$name} given an array"] = [$validator, ['method' => 'limit', 'values' => [1]]];
+            $cases["{$name} given null"] = [$validator, null];
+        }
+
+        return $cases;
+    }
+
+    /**
+     * @param  \Closure(): Base  $validator
+     */
+    #[DataProvider('validatorsGivenANonQuery')]
+    public function testAQueryMethodValidatorGivenANonQueryRefusesIt(\Closure $validator, mixed $value): void
+    {
+        $instance = $validator();
+
+        $this->assertFalse($instance->isValid($value));
+        $this->assertSame('Value must be a Query', $instance->getDescription());
     }
 
     private function filter(bool $supportForAttributes = true): Filter

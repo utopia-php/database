@@ -2127,12 +2127,13 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             case OperatorType::ArrayRemove:
                 $bindKey = "op_{$bindIndex}";
                 $bindIndex++;
+                $removed = \is_float($values[0] ?? null) ? "CAST(:$bindKey AS REAL)" : ":$bindKey";
 
                 // SQLite: remove specific value from array
                 return "{$quotedColumn} = (
                     SELECT json_group_array(value)
                     FROM json_each(IFNULL({$quotedColumn}, '[]'))
-                    WHERE value != :$bindKey
+                    WHERE value != {$removed}
                 )";
 
             case OperatorType::ArrayInsert:

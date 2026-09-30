@@ -5691,7 +5691,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 if (is_array($value)) {
                     $value = json_encode($value);
                 }
-                $stmt->bindValue(':'.$bindKey, $value, PDO::PARAM_STR);
+                $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
                 $bindIndex++;
                 break;
 

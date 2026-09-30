@@ -510,6 +510,10 @@ trait Collections
         /** @var array<Index> $currentIndexes */
         $currentIndexes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('indexes', []);
 
+        if ($id === self::METADATA) {
+            $this->purgeCachedCollection($id);
+        }
+
         $schemaDeleted = false;
         try {
             $this->adapter->deleteCollection($id);
@@ -538,7 +542,9 @@ trait Collections
             }
         }
 
-        $this->purgeCachedCollection($id);
+        if ($id !== self::METADATA) {
+            $this->purgeCachedCollection($id);
+        }
 
         if ($deleted) {
             $this->triggerHooks(Event::CollectionDelete, $collection);

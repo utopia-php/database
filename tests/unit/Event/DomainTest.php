@@ -10,6 +10,9 @@ use Utopia\Database\Event\Collection\Deleted as CollectionDeleted;
 use Utopia\Database\Event\Document\Created as DocumentCreated;
 use Utopia\Database\Event\Document\Deleted as DocumentDeleted;
 use Utopia\Database\Event\Document\Updated as DocumentUpdated;
+use Utopia\Database\Event\Documents\Created as DocumentsCreated;
+use Utopia\Database\Event\Documents\Deleted as DocumentsDeleted;
+use Utopia\Database\Event\Documents\Updated as DocumentsUpdated;
 use Utopia\Database\Event\Domain;
 
 class DomainTest extends TestCase
@@ -54,24 +57,24 @@ class DomainTest extends TestCase
         $this->assertEquals(Event::DocumentCreate, $event->event);
     }
 
-    public function testDocumentUpdatedCarriesDocumentAndPrevious(): void
+    public function testDocumentUpdatedCarriesDocument(): void
     {
         $doc = new Document(['$id' => 'doc1', 'name' => 'Bob']);
-        $prev = new Document(['$id' => 'doc1', 'name' => 'Alice']);
-        $event = new DocumentUpdated('users', $doc, $prev);
-
-        $this->assertSame($doc, $event->document);
-        $this->assertSame($prev, $event->previous);
-        $this->assertEquals(Event::DocumentUpdate, $event->event);
-    }
-
-    public function testDocumentUpdatedWithNullPrevious(): void
-    {
-        $doc = new Document(['$id' => 'doc1']);
         $event = new DocumentUpdated('users', $doc);
 
         $this->assertSame($doc, $event->document);
-        $this->assertNull($event->previous);
+        $this->assertEquals(Event::DocumentUpdate, $event->event);
+    }
+
+    public function testBulkEventsCarryTheirCollectionCountAndEvent(): void
+    {
+        $created = new DocumentsCreated('users', 3);
+        $updated = new DocumentsUpdated('users', 2);
+        $deleted = new DocumentsDeleted('users', 0);
+
+        $this->assertSame(['users', 3, Event::DocumentsCreate], [$created->collection, $created->count, $created->event]);
+        $this->assertSame(['users', 2, Event::DocumentsUpdate], [$updated->collection, $updated->count, $updated->event]);
+        $this->assertSame(['users', 0, Event::DocumentsDelete], [$deleted->collection, $deleted->count, $deleted->event]);
     }
 
     public function testDocumentDeletedCarriesDocumentId(): void

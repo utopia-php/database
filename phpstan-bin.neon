@@ -2,12 +2,9 @@ includes:
     - vendor/phpstan/phpstan-phpunit/extension.neon
 
 parameters:
-    level: 0
+    level: 5
     paths:
         - bin
-    excludePaths:
-        # Resolves inside the runtime image, not on a host checkout.
-        - bin/cli.php
     scanFiles:
         - stubs/Swoole/Database/DetectsLostConnections.stub.php
         - stubs/Swoole/Database/PDOConfig.stub.php

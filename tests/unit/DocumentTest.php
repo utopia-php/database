@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Structure as StructureException;
@@ -774,5 +775,26 @@ class DocumentTest extends TestCase
 
         $this->assertFalse($document->findAndReplace('name', 'missing', ['name' => '2'], 'children'));
         $this->assertSame([['name' => '1'], ['name' => 'y']], $document->getAttribute('children'));
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     */
+    #[DataProvider('malformedRows')]
+    public function testFromRowRejectsANonStringIdAndNonArrayPermissions(array $row, string $message): void
+    {
+        $this->expectException(StructureException::class);
+        $this->expectExceptionMessage($message);
+
+        Document::fromRow($row);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>, string}>
+     */
+    public static function malformedRows(): iterable
+    {
+        yield 'an integer $id' => [[Document::ID => 5], '$id must be of type string'];
+        yield 'a string $permissions' => [[Document::PERMISSIONS => 'read("any")'], '$permissions must be of type array'];
     }
 }

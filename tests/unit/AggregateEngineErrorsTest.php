@@ -144,7 +144,7 @@ final class AggregateEngineErrorsTest extends TestCase
     }
 
     /**
-     * @return array<string, array{0: SQL, 1: PDOException, 2: class-string<Throwable>, 3: string}>
+     * @return array<string, array{0: class-string<SQL>, 1: PDOException, 2: class-string<Throwable>, 3: string}>
      */
     public static function mappedEngineErrorProvider(): array
     {

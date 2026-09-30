@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Attribute\Integer;
@@ -442,5 +443,69 @@ class AttributeModelTest extends TestCase
             'formatOptions' => [],
             'filters' => [],
         ];
+    }
+
+    public function testMagicGetFallsBackToTheStoredValue(): void
+    {
+        $attribute = Attribute::string(key: 'title');
+        $attribute->setAttribute('twoWayKey', 'x');
+
+        $this->assertSame('x', $attribute->twoWayKey);
+        $this->assertNull($attribute->missing);
+    }
+
+    public function testNonArrayFormatOptionsAndFiltersReadAsEmptyArrays(): void
+    {
+        $attribute = Attribute::string(key: 'title');
+        $attribute->setAttribute('formatOptions', 'x');
+        $attribute->setAttribute('filters', 'x');
+
+        $this->assertSame([], $attribute->formatOptions);
+        $this->assertSame([], $attribute->filters);
+    }
+
+    #[DataProvider('assignableProperties')]
+    public function testPropertyAssignmentWritesTheStoredAttribute(string $name, mixed $value): void
+    {
+        $attribute = Attribute::string(key: 'title');
+
+        $attribute->{$name} = $value;
+
+        $this->assertSame($value, $attribute->getAttribute($name));
+        $this->assertSame($value, $attribute->{$name});
+    }
+
+    /**
+     * @return iterable<string, array{string, mixed}>
+     */
+    public static function assignableProperties(): iterable
+    {
+        yield 'key' => ['key', 'renamed'];
+        yield 'size' => ['size', 128];
+        yield 'required' => ['required', true];
+        yield 'default' => ['default', 'fallback'];
+        yield 'signed' => ['signed', false];
+        yield 'array' => ['array', true];
+        yield 'formatOptions' => ['formatOptions', ['min' => 1]];
+        yield 'filters' => ['filters', ['json']];
+        yield 'status' => ['status', 'available'];
+        yield 'options' => ['options', ['relationType' => 'oneToOne']];
+        yield 'a custom name' => ['twoWayKey', 'reverse'];
+    }
+
+    public function testAssigningTheKeyAlsoRenamesTheId(): void
+    {
+        $attribute = Attribute::string(key: 'title');
+
+        $attribute->key = 'renamed';
+
+        $this->assertSame('renamed', $attribute->getId());
+        $this->assertSame('renamed', $attribute->toDocument()->getId());
+    }
+
+    public function testIsRelationshipReadsAnEnumTypedDocument(): void
+    {
+        $this->assertTrue(Attribute::isRelationship(new Document(['type' => ColumnType::Relationship])));
+        $this->assertFalse(Attribute::isRelationship(new Document(['type' => ColumnType::String])));
     }
 }

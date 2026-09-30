@@ -3,11 +3,13 @@
 namespace Tests\Unit\Adapter;
 
 use PDO;
+use PDOException;
 use PHPUnit\Framework\TestCase;
 use Throwable;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Index;
 
 final class SQLiteCreateCollectionCleanupTest extends TestCase
@@ -38,7 +40,11 @@ final class SQLiteCreateCollectionCleanupTest extends TestCase
         }
 
         $this->assertNotNull($failure, 'A declared index on a missing column must fail the collection');
-        $this->assertStringContainsString('missing', $failure->getMessage());
+        $this->assertInstanceOf(NotFoundException::class, $failure);
+        $this->assertSame('Attribute not found', $failure->getMessage());
+        $previous = $failure->getPrevious();
+        $this->assertInstanceOf(PDOException::class, $previous);
+        $this->assertStringContainsString('missing', $previous->getMessage());
         $this->assertSame([], $this->tables());
 
         $this->assertTrue($this->adapter->createCollection('books', [Attribute::string('title', size: 64)], [

@@ -144,6 +144,16 @@ final class DatabaseGuardsTest extends TestCase
         $this->assertNull($database->getRelationshipHook());
     }
 
+    public function testRawQueryIsRefusedWithoutRawQueries(): void
+    {
+        $database = $this->database(new Memory());
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Raw queries are not supported by this adapter');
+
+        $database->getAuthorization()->skip(fn (): array => $database->rawQuery('SELECT 1'));
+    }
+
     private function database(Adapter $adapter): Database
     {
         $database = new Database($adapter, new Cache(new None()));

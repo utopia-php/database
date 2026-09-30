@@ -10,9 +10,13 @@ use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Index;
 use Utopia\Query\Builder\Statement;
+use Utopia\Query\Schema\IndexType;
 
 final class DatabaseGuardsTest extends TestCase
 {
@@ -98,6 +102,29 @@ final class DatabaseGuardsTest extends TestCase
         $this->expectExceptionMessage('Adapter does not support connection ids');
 
         $database->getConnectionId();
+    }
+
+    public function testSchemaIntrospectionWithoutTheFeatureListsNothing(): void
+    {
+        $database = $this->database(new Memory());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'introspected',
+            attributes: [Attribute::string(key: 'name', size: 32)],
+            indexes: [new Index(key: 'byName', type: IndexType::Key, attributes: ['name'])],
+        ));
+
+        $this->assertSame([], $database->getSchemaAttributes('introspected'));
+        $this->assertSame([], $database->getSchemaIndexes('introspected'));
+    }
+
+    public function testDropUnknownAttributesGetterFollowsTheSetter(): void
+    {
+        $database = $this->database(new Memory());
+
+        $this->assertFalse($database->getDropUnknownAttributes());
+        $this->assertTrue($database->setDropUnknownAttributes(true)->getDropUnknownAttributes());
+        $this->assertFalse($database->setDropUnknownAttributes(false)->getDropUnknownAttributes());
     }
 
     private function database(Adapter $adapter): Database

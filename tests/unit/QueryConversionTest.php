@@ -107,6 +107,47 @@ final class QueryConversionTest extends TestCase
         $this->assertSame($type, $converted->getAttributeType());
     }
 
+    /**
+     * @param  \Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testConvertQueryMatchesConvertQueries(\Closure $adapter): void
+    {
+        $database = $this->eventsDatabase($adapter());
+        $collection = $database->getCollection(self::COLLECTION);
+
+        foreach ([
+            static fn (): Query => Query::equal('occurredAt', ['2026-09-30 10:00:00']),
+            static fn (): Query => Query::containsAny('tags', ['a']),
+            static fn (): Query => Query::equal(Document::CREATED_AT, ['2026-09-30 10:00:00']),
+        ] as $build) {
+            $single = $database->convertQuery($collection, $build());
+            [$listed] = $database->convertQueries($collection, [$build()]);
+
+            $this->assertNotSame('', $single->getAttributeType(), $single->getAttribute());
+            $this->assertSame($listed->getAttributeType(), $single->getAttributeType(), $single->getAttribute());
+            $this->assertSame($listed->onArray(), $single->onArray(), $single->getAttribute());
+            $this->assertSame($listed->getValues(), $single->getValues(), $single->getAttribute());
+        }
+
+        $this->assertTrue($database->convertQuery($collection, Query::containsAny('tags', ['a']))->onArray());
+
+        if ($database->getAdapter()->supports(Capability::Objects)) {
+            $database->createAttribute(self::COLLECTION, Attribute::object(key: 'meta'));
+            $withObject = $database->getCollection(self::COLLECTION);
+            $this->assertSame(
+                ColumnType::Object->value,
+                $database->convertQuery($withObject, Query::equal('meta.level', ['x']))->getAttributeType(),
+                'a path into an object attribute converts as an object query',
+            );
+        }
+        $this->assertNotSame(
+            ['2026-09-30 10:00:00'],
+            $database->convertQuery($collection, Query::equal('occurredAt', ['2026-09-30 10:00:00']))->getValues(),
+            'a datetime value is converted to the storage format',
+        );
+    }
+
     private function eventsDatabase(Adapter $adapter): Database
     {
         $database = $this->database($adapter);

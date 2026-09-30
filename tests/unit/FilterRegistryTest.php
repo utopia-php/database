@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory as DatabaseMemory;
@@ -245,5 +246,58 @@ class FilterRegistryTest extends TestCase
             $this->assertSame($failure->getCode(), $error->getCode());
             $this->assertSame($failure, $error->getPrevious());
         }
+    }
+
+    /**
+     * @return array<string, array{callable, callable}>
+     */
+    public static function nonClosureCallables(): array
+    {
+        $first = new class () {
+            public function transform(mixed $value): mixed
+            {
+                return $value;
+            }
+        };
+        $second = new class () {
+            public function transform(mixed $value): mixed
+            {
+                return $value;
+            }
+        };
+
+        return [
+            'string callables' => ['trim', 'strtolower'],
+            'static array callables' => [[self::class, 'identity'], [self::class, 'passthrough']],
+            'instance array callables' => [[$first, 'transform'], [$second, 'transform']],
+        ];
+    }
+
+    #[DataProvider('nonClosureCallables')]
+    public function testReplacingANonClosureFilterStopsStaleEntriesBeingServed(callable $original, callable $replacement): void
+    {
+        Database::addFilter('replaceable', $original, $original);
+        $this->assertSame('cached', $this->read());
+
+        $this->writeBehindTheCache('fresh');
+        $this->assertSame('cached', $this->read(), 'read should still be served from cache');
+
+        Database::addFilter('replaceable', $replacement, $replacement);
+
+        $this->assertSame(
+            'fresh',
+            $this->read(),
+            'a filter replaced by another callable under the same name must not keep serving the previous entry',
+        );
+    }
+
+    public static function identity(mixed $value): mixed
+    {
+        return $value;
+    }
+
+    public static function passthrough(mixed $value): mixed
+    {
+        return $value;
     }
 }

@@ -5991,10 +5991,28 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             OperatorType::StringConcat => (\is_scalar($value) ? (string) $value : '') . (count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : ''),
             OperatorType::StringReplace => str_replace(count($values) > 0 && \is_scalar($values[0]) ? (string) $values[0] : '', count($values) > 1 && \is_scalar($values[1]) ? (string) $values[1] : '', \is_scalar($value) ? (string) $value : ''),
             OperatorType::Toggle => ! ($value ?? false),
-            OperatorType::DateAddDays,
-            OperatorType::DateSubDays => $value,
+            OperatorType::DateAddDays => self::shiftDays($value, \is_numeric($firstValue) ? (int) $firstValue : 0),
+            OperatorType::DateSubDays => self::shiftDays($value, \is_numeric($firstValue) ? -(int) $firstValue : 0),
             OperatorType::DateSetNow => DateTime::now(),
         };
+    }
+
+    private static function shiftDays(mixed $value, int $days): mixed
+    {
+        if (! \is_string($value) || $value === '') {
+            return $value;
+        }
+
+        try {
+            $date = new \DateTime($value);
+        } catch (Throwable) {
+            return $value;
+        }
+
+        $date->setTimezone(new \DateTimeZone(\date_default_timezone_get()));
+        $date->modify(\sprintf('%+d days', $days));
+
+        return DateTime::format($date);
     }
 
     /**

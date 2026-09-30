@@ -21,7 +21,7 @@ docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/u
 
 ## Stack
 
-- PHP 8.4+, Docker Compose for test databases
+- PHP 8.5+, Docker Compose for test databases
 - ParaTest (parallel PHPUnit), Pint (PSR-12), PHPStan (max level)
 - Test databases: MariaDB 10.11, MySQL 8.0.43, PostgreSQL 16, SQLite, MongoDB 8.0.14
 - Redis 8.2.1 for caching tests
@@ -31,7 +31,7 @@ docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/u
 - **src/Database/** -- core library (PSR-4 namespace `Utopia\Database\`)
   - `Database.php` -- main API class (uses trait composition for organization)
   - `Adapter.php` -- base adapter class all engines extend
-  - `Adapter/` -- engine implementations: MariaDB, MySQL, Postgres, SQLite, Mongo, Pool, ReadWritePool
+  - `Adapter/` -- engine implementations: MariaDB, MySQL, Postgres, SQLite, Mongo, Memory, Redis, Pool, ReadWritePool
   - `Adapter/SQL.php` -- shared SQL adapter base (MariaDB, MySQL, Postgres, SQLite extend this)
   - `Adapter/Feature/` -- capability interfaces for adapter features
   - `Document.php` -- JSON document model (extends ArrayObject)
@@ -40,14 +40,14 @@ docker compose exec tests vendor/bin/phpunit --configuration phpunit.xml tests/u
   - `Attribute.php` -- attribute type definitions
   - `Index.php` -- index management
   - `Relationship.php` -- relationship definitions
-  - `Traits/` -- Database.php composition: Async, Attributes, Collections, Databases, Documents, Entities, Indexes, Relationships, Transactions
-  - `Hook/` -- event hooks and interceptors: Lifecycle, Permissions, Relationships, TenantFilter, Transform, Read, Write, WriteContext, Interceptor, Decorator, PermissionFilter, Mongo/PermissionFilter, Mongo/TenantFilter, Tenancy
-  - `Event/` -- Domain, DispatcherHook, plus Collection/{Created,Deleted} and Document/{Created,Deleted,Updated}
-  - `ORM/` -- EntityManager, EntityMapper, EntityMetadata, EntityState, IdentityMap, MetadataFactory, UnitOfWork, ColumnMapping, EmbeddableMapping, RelationshipMapping, plus `Mapping/` (Entity, Column, Id, HasMany, HasOne, BelongsTo, Embedded, Permissions, Tenant, Pre/{Persist,Remove,Update}, Post/{Persist,Remove,Update}, etc.)
-  - `Schema/` -- Introspector, Diff, Change, ChangeType, DiffResult
-  - `Validator/` -- input validators (19 top-level + subdirectories)
+  - `Traits/` -- Database.php composition: Attributes, Collections, Databases, Documents, Indexes, Relationships, Transactions
+  - `Hook/` -- event hooks and interceptors: Lifecycle, Named, Decorator, Transform, Read, Write, WriteContext, Interceptor, Permissions, Relationships, Tenancy, PermissionFilter, TenantFilter, the join and raw-builder filters, Mongo/PermissionFilter, Mongo/TenantFilter
+  - `Event/` -- Domain, DispatcherHook, plus Collection/{Created,Deleted}, Document/{Created,Deleted,Updated} and Documents/{Created,Deleted,Updated}
+  - `Cache/` -- `find()` query cache (QueryCache, Invalidator) and cache bookkeeping
+  - `State/` -- per-coroutine state (Value) and Snapshot
+  - `Validator/` -- input validators (21 top-level + Authorization/, Queries/, Query/)
   - `Helpers/` -- ID, Permission, Role utilities
-  - `Exception/` -- 18 exception types (Authorization, Duplicate, Limit, Query, Timeout, etc.)
+  - `Exception/` -- 20 exception types (Authorization, Duplicate, Limit, Query, Timeout, etc.)
 
 - **tests/unit/** -- unit tests for validators, helpers, etc.
 - **tests/e2e/Adapter/** -- E2E tests against real databases
@@ -69,7 +69,7 @@ $database->setDocumentType('users', User::class);
 $user = $database->getDocument('users', 'id123'); // Returns User instance
 ```
 
-**Trait composition:** `Database.php` splits its API across 9 traits in `Traits/` for organization. Each trait groups related operations (documents, attributes, indexes, entities, etc.).
+**Trait composition:** `Database.php` splits its API across 7 traits in `Traits/` for organization. Each trait groups related operations (documents, attributes, indexes, etc.).
 
 **Connection pooling:** `Pool` adapter wraps multiple connections. `ReadWritePool` distributes reads and writes to separate pools.
 
@@ -89,8 +89,8 @@ composer build && composer start   # Start all databases
 ```
 
 Services (activated via Docker Compose profiles):
-- `mariadb` (port 3306), `mysql` (port 3307), `postgres` (port 5432), `mongo` (port 27017)
-- `redis` (port 6379) for caching
+- `mariadb` (host port 8703), `mysql` (8706), `postgres` (8701), `mongo` (9706)
+- `redis` (8708) for caching
 - Mirror variants for replication tests
 - `adminer` (port 8700, debug profile) for database UI
 

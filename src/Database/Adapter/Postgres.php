@@ -37,6 +37,7 @@ use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -1480,6 +1481,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             'NULL' => PDO::PARAM_NULL,
             default => throw new DatabaseException('Unknown PDO Type for '.\gettype($value)),
         };
+    }
+
+    protected function getNullOrder(): OrderDirection
+    {
+        return OrderDirection::Desc;
     }
 
     /**

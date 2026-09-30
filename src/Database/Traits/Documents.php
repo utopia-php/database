@@ -52,8 +52,10 @@ use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Database\Validator\Query\JoinedCollection;
 use Utopia\Database\Validator\Structure;
+use Utopia\Database\Validator\UID;
 use Utopia\Query\CursorDirection;
 use Utopia\Query\Method;
+use Utopia\Query\OrderDirection;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use WeakMap;
@@ -3630,6 +3632,9 @@ trait Documents
             $joinDocumentSecurity = $this->authorizeJoins($joins, $forPermission, $joinedCollectionsById);
         }
 
+        $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
+        $joinedCollections = $isAggregation ? [] : $joinedByAlias;
+
         if (! $isAggregation && ! $distinct) {
             $uniqueOrderBy = false;
             foreach ($orderAttributes as $order) {
@@ -3654,12 +3659,28 @@ trait Documents
             // a batch that shares one timestamp newest-inserted first.
             if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
                 $leadingAttribute = $orderAttributes[0] ?? null;
-                $leadingOrderType = $orderTypes[0] ?? \Utopia\Query\OrderDirection::Asc;
+                $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
 
                 $orderAttributes[] = Document::SEQUENCE;
                 $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
                     ? $leadingOrderType
-                    : \Utopia\Query\OrderDirection::Asc;
+                    : OrderDirection::Asc;
+            }
+
+            $aliases = \array_keys($joinedCollections);
+            if ((! $vectorSearch || ! empty($cursor)) && \count($aliases) === \count($joins)) {
+                foreach (\array_values($joins) as $position => $join) {
+                    $alias = $aliases[$position];
+                    $joinedId = $alias.'.'.Document::ID;
+                    if (
+                        ! $this->joinMatchesAtMostOneRow($join, $alias)
+                        && ! \in_array($joinedId, $orderAttributes, true)
+                        && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)
+                    ) {
+                        $orderAttributes[] = $joinedId;
+                        $orderTypes[] = OrderDirection::Asc;
+                    }
+                }
             }
         }
 
@@ -3668,12 +3689,26 @@ trait Documents
                 throw new QueryException('Cursor pagination is not supported with aggregation queries');
             }
 
-            foreach ($orderAttributes as $order) {
-                if ($this->cursorOrderValue($cursor, $order) === null) {
-                    throw new OrderException(
-                        message: "Order attribute '{$order}' is empty",
-                        attribute: $order
-                    );
+            if ($joins === [] && ! $distinct && $this->validate && $cursor->getId() === '') {
+                throw new QueryException('Invalid query: Invalid cursor: '.(new UID($this->adapter->getMaxUIDLength()))->getDescription());
+            }
+
+            if ($distinct) {
+                $this->assertDistinctCursorOrder($selects, $orderAttributes);
+            }
+
+            if ($joins !== [] || $distinct) {
+                $this->assertCursorHasOrderValues($cursor, $orderAttributes);
+            }
+
+            if ($joins === []) {
+                foreach ($orderAttributes as $order) {
+                    if ($cursor->getAttribute($order) === null) {
+                        throw new OrderException(
+                            message: "Order attribute '{$order}' is empty",
+                            attribute: $order
+                        );
+                    }
                 }
             }
         }
@@ -3682,23 +3717,11 @@ trait Documents
             throw new DatabaseException('cursor Document must be from the same Collection.');
         }
 
-        $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
-        $joinedCollections = $isAggregation ? [] : $joinedByAlias;
-
         if (! empty($cursor)) {
             $cursor = $this->encode($collection, $cursor);
             $cursor = $this->castingBefore($collection, $cursor);
             $cursor = $this->encodeJoins($cursor, $joinedCollections);
             $cursor = $cursor->getArrayCopy();
-            foreach ($orderAttributes as $order) {
-                if (\array_key_exists($order, $cursor) && $cursor[$order] !== null) {
-                    continue;
-                }
-                $bare = $this->bareOrderAttribute($order);
-                if ($bare !== $order && \array_key_exists($bare, $cursor) && $cursor[$bare] !== null) {
-                    $cursor[$order] = $cursor[$bare];
-                }
-            }
         } else {
             $cursor = [];
         }
@@ -4225,36 +4248,56 @@ trait Documents
     }
 
     /**
+     * Yield each document matching the queries, read in batches of $batchSize. A limit in the queries caps the
+     * iteration, and an offset or a cursorAfter in them positions the first batch only.
+     *
      * @param  array<Query>  $queries
      * @return Generator<int, Document>
+     *
+     * @throws DatabaseException
      */
     public function cursor(string $collection, array $queries = [], int $batchSize = 100): Generator
     {
-        $lastDocument = null;
+        $grouped = Query::groupForDatabase($queries);
+        $remaining = $grouped['limit'];
+        $offset = $grouped['offset'];
+        $cursor = $grouped['cursor'];
 
-        while (true) {
-            $batchQueries = $queries;
-            $batchQueries[] = Query::limit($batchSize);
+        if ($cursor !== null && $grouped['cursorDirection'] === CursorDirection::Before) {
+            throw new DatabaseException('Cursor '.CursorDirection::Before->value.' not supported in this method.');
+        }
 
-            if ($lastDocument !== null) {
-                $batchQueries[] = Query::cursorAfter($lastDocument);
+        $queries = \array_values(\array_filter(
+            $queries,
+            static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
+        ));
+
+        while ($remaining === null || $remaining > 0) {
+            $size = $remaining === null ? $batchSize : \min($batchSize, $remaining);
+            $page = [Query::limit($size)];
+            if ($offset !== null) {
+                $page[] = Query::offset($offset);
+            }
+            if ($cursor !== null) {
+                $page[] = Query::cursorAfter($cursor);
             }
 
-            $documents = $this->find($collection, $batchQueries);
-
-            if ($documents === []) {
-                break;
-            }
+            $documents = $this->find($collection, [...$page, ...$queries]);
 
             foreach ($documents as $document) {
                 yield $document;
             }
 
-            $lastDocument = \end($documents);
-
-            if (\count($documents) < $batchSize) {
-                break;
+            $last = \end($documents);
+            if ($last === false || \count($documents) < $size) {
+                return;
             }
+
+            if ($remaining !== null) {
+                $remaining -= \count($documents);
+            }
+            $offset = null;
+            $cursor = $last;
         }
     }
 
@@ -4269,29 +4312,81 @@ trait Documents
         return $this->find($collection, $queries);
     }
 
-    private function cursorOrderValue(Document $cursor, string $order): mixed
+    /**
+     * An inner or left join on the joined `$id` pairs each row it joins onto with at most one joined row, so the rows
+     * of the read are told apart without the joined id, and ordering by it would only cost the engine a sort.
+     */
+    private function joinMatchesAtMostOneRow(Query $join, string $alias): bool
     {
-        $value = $cursor->getAttribute($order);
-        if ($value !== null) {
-            return $value;
+        if (! \in_array($join->getMethod(), [Method::Join, Method::LeftJoin], true) || $join->isNestedJoin()) {
+            return false;
         }
 
-        $bare = $this->bareOrderAttribute($order);
-        if ($bare === $order) {
-            return null;
+        [$left, $operator, $right] = \array_pad($join->getValues(), 3, null);
+        if ($operator !== '=' || ! \is_string($left) || ! \is_string($right)) {
+            return false;
         }
 
-        return $cursor->getAttribute($bare);
+        return ($right === Document::ID || $right === $alias.'.'.Document::ID) && ! \str_starts_with($left, $alias.'.');
     }
 
-    private function bareOrderAttribute(string $order): string
+    /**
+     * A distinct row has no id: only its order values tell it from the next one, so the order has to name every
+     * attribute the read selects.
+     *
+     * @param  array<Query>  $selects
+     * @param  array<string>  $orderAttributes
+     *
+     * @throws QueryException
+     */
+    private function assertDistinctCursorOrder(array $selects, array $orderAttributes): void
     {
-        $dot = \strrpos($order, '.');
-        if ($dot === false) {
-            return $order;
+        $selected = [];
+        foreach ($selects as $select) {
+            foreach ($select->getValues() as $value) {
+                if (\is_string($value)) {
+                    $selected[] = $value;
+                }
+            }
         }
 
-        return \substr($order, $dot + 1);
+        foreach ($selected as $attribute) {
+            if (\str_ends_with($attribute, '*')) {
+                $selected = [];
+                break;
+            }
+        }
+
+        if ($selected === [] || $orderAttributes === []) {
+            throw new QueryException('A cursor on a distinct() read pages along its orders, so the read needs a select() of named attributes and an order on each of them');
+        }
+
+        foreach ($selected as $attribute) {
+            if (! \in_array($attribute, $orderAttributes, true)) {
+                throw new QueryException("A cursor on a distinct() read pages along its orders, so the read must order by every selected attribute, and '{$attribute}' is not ordered");
+            }
+        }
+    }
+
+    /**
+     * A cursor names the row it was read from by the values of the read's order, each under the name the read orders
+     * by. A value it lacks is never taken from an attribute of the same name elsewhere in the document.
+     *
+     * @param  array<string>  $orderAttributes
+     *
+     * @throws OrderException
+     */
+    private function assertCursorHasOrderValues(Document $cursor, array $orderAttributes): void
+    {
+        $values = $cursor->getArrayCopy();
+        foreach ($orderAttributes as $order) {
+            if (! \array_key_exists($order, $values)) {
+                throw new OrderException(
+                    message: "Cursor has no value for order attribute '{$order}'. Use a row this read returned as the cursor, and select '{$order}' when the read selects attributes.",
+                    attribute: $order,
+                );
+            }
+        }
     }
 
     /**

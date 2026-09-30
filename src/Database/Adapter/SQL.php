@@ -84,6 +84,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
     /**
+     * MariaDB, MySQL and SQLite accept OFFSET only after a LIMIT; this one bounds nothing on any engine.
+     */
+    private const int UNBOUNDED_LIMIT = PHP_INT_MAX;
+
+    /**
      * No aggregate alias can start with `$`, so a projected column never shares a result name with an
      * aggregate.
      */
@@ -695,74 +700,27 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $joinTablePrefixes = $this->remapJoinQueries($queries);
             $queries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
 
-            $hasPreservingOuterJoin = false;
-            foreach ($queries as $query) {
-                $method = $query->getMethod();
-                if ($method === Method::RightJoin || $method === Method::FullOuterJoin) {
-                    $hasPreservingOuterJoin = true;
-                    break;
-                }
+            $builder = $this->newBuilder($name, $alias, $this->keepsUnmatchedRows($queries));
+            $this->configureFindBuilder(
+                $builder,
+                $collectionDoc,
+                $queries,
+                $joinTablePrefixes,
+                false,
+                false,
+                [],
+                $name,
+                $alias,
+                $roles,
+                PermissionType::Read,
+            );
+            $builder->filter([BaseQuery::equal($alias.'.'.Storage::UID, [$id])]);
+
+            $joinAliases = \array_column($joinTablePrefixes, 'alias');
+            foreach ($joinAliases as $joinAlias) {
+                $builder->sortAsc($this->qualifyOrderAttribute($joinAlias.'.'.Document::SEQUENCE, $joinAliases));
             }
-
-            if ($this->needsFullOuterJoinEmulation($this->createBuilder(), $queries)) {
-                $uid = $alias.'.'.Storage::UID;
-                $leftQueries = $this->rewriteFullOuterJoins($queries, Method::LeftJoin);
-                $leftQueries[] = BaseQuery::equal($uid, [$id]);
-                $rightQueries = $this->rewriteFullOuterJoins($queries, Method::RightJoin);
-                $rightQueries[] = BaseQuery::isNull($uid);
-                $rightQueries[] = BaseQuery::equal($uid, [$id]);
-
-                $left = $this->newBuilder($name, $alias, false);
-                $this->configureFindBuilder(
-                    $left,
-                    $collectionDoc,
-                    $leftQueries,
-                    $joinTablePrefixes,
-                    false,
-                    false,
-                    [],
-                    $name,
-                    $alias,
-                    $roles,
-                    PermissionType::Read,
-                );
-
-                $right = $this->newBuilder($name, $alias, true);
-                $this->configureFindBuilder(
-                    $right,
-                    $collectionDoc,
-                    $rightQueries,
-                    $joinTablePrefixes,
-                    false,
-                    false,
-                    [],
-                    $name,
-                    $alias,
-                    $roles,
-                    PermissionType::Read,
-                );
-
-                $left->unionAll($right);
-                $this->applyFindPage($left, [], [], 1, null, afterUnion: true);
-                $builder = $left;
-            } else {
-                $builder = $this->newBuilder($name, $alias, $hasPreservingOuterJoin);
-                $this->configureFindBuilder(
-                    $builder,
-                    $collectionDoc,
-                    $queries,
-                    $joinTablePrefixes,
-                    false,
-                    false,
-                    [],
-                    $name,
-                    $alias,
-                    $roles,
-                    PermissionType::Read,
-                );
-                $builder->filter([BaseQuery::equal($alias.'.'.Storage::UID, [$id])]);
-                $builder->limit(1);
-            }
+            $builder->limit(1);
         } else {
             $builder = $this->newBuilder($name, $alias);
 
@@ -1286,8 +1244,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $internalOrder = $this->quote($this->getInternalKeyForAttribute(Document::SEQUENCE));
             $tableExpr = $this->getSQLTable($name);
             $aliasQuoted = $this->quote($alias);
-            $limitClause = $limit !== null ? " LIMIT {$limit}" : '';
-            $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($limit !== null ? ' OFFSET 0' : '');
+            $pageLimit = $limit ?? ($offset !== null && $offset > 0 ? self::UNBOUNDED_LIMIT : null);
+            $limitClause = $pageLimit !== null ? " LIMIT {$pageLimit}" : '';
+            $offsetClause = $offset !== null && $offset > 0 ? " OFFSET {$offset}" : ($pageLimit !== null ? ' OFFSET 0' : '');
 
             $sql = "SELECT * FROM {$tableExpr} AS {$aliasQuoted} ORDER BY {$internalOrder} ASC{$limitClause}{$offsetClause}";
             $stmt = null;
@@ -1459,6 +1418,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $cursor,
                 $cursorDirection,
                 $resolveInternalKey,
+                nullable: true,
             );
 
             $right = $this->newBuilder($name, $alias, true);
@@ -1491,6 +1451,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $cursor,
                 $cursorDirection,
                 $resolveInternalKey,
+                nullable: true,
             );
 
             if ($hasDistinct) {
@@ -1546,6 +1507,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $cursorDirection,
                     $alias,
                     $resolveInternalKey,
+                    nullable: $hasJoins,
                 );
                 $builder->whereRaw($vectorCursor['expression'], $vectorCursor['bindings']);
             }
@@ -1558,6 +1520,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $cursor,
                     $cursorDirection,
                     $resolveInternalKey,
+                    nullable: $hasJoins,
                 );
             }
 
@@ -5211,6 +5174,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * With $nullable, a cursor value may be null and each comparison keeps the engine's own null placement: an
+     * equal prefix on null is IS NULL, and nulls come after every value in a direction that sorts them last.
+     *
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string, mixed>  $cursor
@@ -5223,6 +5189,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         array $cursor,
         CursorDirection $cursorDirection,
         callable $resolveInternalKey,
+        bool $nullable = false,
     ): void {
         if ($cursor === []) {
             return;
@@ -5246,7 +5213,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             $internalAttr = $resolveInternalKey($originalAttribute);
 
-            if (count($orderAttributes) === 1 && $i === 0 && $originalAttribute === Document::SEQUENCE) {
+            if (! $nullable && count($orderAttributes) === 1 && $i === 0 && $originalAttribute === Document::SEQUENCE) {
                 /** @var bool|float|int|string $cursorVal */
                 $cursorVal = $cursor[$originalAttribute];
                 if ($direction === OrderDirection::Desc) {
@@ -5262,17 +5229,32 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             for ($j = 0; $j < $i; $j++) {
                 $prevOriginal = $orderAttributes[$j];
                 $prevAttr = $resolveInternalKey($prevOriginal);
+                if ($nullable && $cursor[$prevOriginal] === null) {
+                    $andConditions[] = BaseQuery::isNull($prevAttr);
+
+                    continue;
+                }
                 /** @var array<array<mixed>|bool|float|int|string|null> $prevCursorVals */
                 $prevCursorVals = [$cursor[$prevOriginal]];
                 $andConditions[] = BaseQuery::equal($prevAttr, $prevCursorVals);
             }
 
-            /** @var bool|float|int|string $cursorAttrVal */
-            $cursorAttrVal = $cursor[$originalAttribute];
-            if ($direction === OrderDirection::Desc) {
-                $andConditions[] = BaseQuery::lessThan($internalAttr, $cursorAttrVal);
+            if ($nullable) {
+                /** @var bool|float|int|string|null $nullableValue */
+                $nullableValue = $cursor[$originalAttribute];
+                $comparison = $this->nullableCursorComparison($internalAttr, $nullableValue, $direction);
+                if ($comparison === null) {
+                    continue;
+                }
+                $andConditions[] = $comparison;
             } else {
-                $andConditions[] = BaseQuery::greaterThan($internalAttr, $cursorAttrVal);
+                /** @var bool|float|int|string $cursorAttrVal */
+                $cursorAttrVal = $cursor[$originalAttribute];
+                if ($direction === OrderDirection::Desc) {
+                    $andConditions[] = BaseQuery::lessThan($internalAttr, $cursorAttrVal);
+                } else {
+                    $andConditions[] = BaseQuery::greaterThan($internalAttr, $cursorAttrVal);
+                }
             }
 
             if (count($andConditions) === 1) {
@@ -5294,6 +5276,27 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * The rows after a cursor value in one order position, or null when no row can follow it there: a null the
+     * direction sorts last is followed only by rows tied on it, which a later position decides.
+     *
+     * @param  bool|float|int|string|null  $value
+     */
+    private function nullableCursorComparison(string $attribute, mixed $value, OrderDirection $direction): ?BaseQuery
+    {
+        $nullsFirst = $direction === $this->getNullOrder();
+
+        if ($value === null) {
+            return $nullsFirst ? BaseQuery::isNotNull($attribute) : null;
+        }
+
+        $comparison = $direction === OrderDirection::Desc
+            ? BaseQuery::lessThan($attribute, $value)
+            : BaseQuery::greaterThan($attribute, $value);
+
+        return $nullsFirst ? $comparison : BaseQuery::or([$comparison, BaseQuery::isNull($attribute)]);
+    }
+
+    /**
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<string>  $joinAliases
@@ -5308,6 +5311,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         bool $afterUnion = false,
         array $joinAliases = [],
     ): void {
+        if ($limit === null && $offset !== null) {
+            $limit = self::UNBOUNDED_LIMIT;
+        }
+
         if ($afterUnion) {
             $quote = $this->getIdentifierQuoteChar();
             $builder->afterBuild(function (Statement $result) use (
@@ -6306,6 +6313,14 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * The direction in which this engine sorts null before every other value.
+     */
+    protected function getNullOrder(): OrderDirection
+    {
+        return OrderDirection::Asc;
+    }
+
+    /**
      * Get vector distance ORDER BY expression with positional bindings.
      *
      * Returns null when vectors are unsupported. Subclasses that support vectors
@@ -6336,6 +6351,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         CursorDirection $cursorDirection,
         string $alias,
         callable $resolveInternalKey,
+        bool $nullable = false,
     ): array {
         $distance = \json_encode($distance, JSON_THROW_ON_ERROR);
         $distanceOperator = $cursorDirection === CursorDirection::Before ? '<' : '>';
@@ -6361,6 +6377,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 }
 
                 $previousColumn = $this->quoteOrderColumn($resolveInternalKey($previousAttribute), $alias);
+                if ($nullable && $cursor[$previousAttribute] === null) {
+                    $parts[] = "{$previousColumn} IS NULL";
+
+                    continue;
+                }
                 $parts[] = "{$previousColumn} = ?";
                 $clauseBindings[] = $cursor[$previousAttribute];
             }
@@ -6373,8 +6394,18 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             }
             $operator = $direction === OrderDirection::Desc ? '<' : '>';
             $column = $this->quoteOrderColumn($resolveInternalKey($attribute), $alias);
-            $parts[] = "{$column} {$operator} ?";
-            $clauseBindings[] = $cursor[$attribute];
+            if ($nullable && $cursor[$attribute] === null) {
+                if ($direction !== $this->getNullOrder()) {
+                    continue;
+                }
+                $parts[] = "{$column} IS NOT NULL";
+            } elseif ($nullable && $direction !== $this->getNullOrder()) {
+                $parts[] = "COALESCE({$column} {$operator} ?, TRUE)";
+                $clauseBindings[] = $cursor[$attribute];
+            } else {
+                $parts[] = "{$column} {$operator} ?";
+                $clauseBindings[] = $cursor[$attribute];
+            }
             $clauses[] = '('.\implode(' AND ', $parts).')';
             \array_push($bindings, ...$clauseBindings);
         }

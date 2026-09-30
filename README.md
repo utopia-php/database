@@ -256,12 +256,18 @@ Document permissions and relationships are hooks. Register both after you create
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 
-// Stores the rows that document permissions are checked against on the SQL adapters
+// Writes, moves and deletes the permission rows that MariaDB, MySQL and SQLite check document permissions
+// against. PostgreSQL checks the row's own _permissions column; MongoDB, Memory and Redis keep permissions
+// with the document.
 $database->addHook(new Permissions());
 
 // Populates related documents and handles nested writes and cascades
 $database->addHook(new Relationships($database));
 ```
+
+Without `Hook\Permissions`, MariaDB, MySQL and SQLite neither write nor remove permission rows, and without
+`Hook\Relationships` no `onDelete` rule runs. See
+[UPGRADE.md](UPGRADE.md#register-the-permission-and-relationship-hooks).
 
 To act on database events, register a lifecycle hook. It receives every event (`Utopia\Database\Event`), so check the event inside `handle()`. A hook that also implements `Named` replaces the hook already registered under its name, and `silent()` can silence it by name.
 

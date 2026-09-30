@@ -2163,7 +2163,7 @@ class Redis extends Adapter implements
                     \array_unshift($signature, $tenant);
                 }
                 if (\serialize($signature) === $newHash) {
-                    throw new UniqueException('Document with the requested unique attributes already exists');
+                    throw new UniqueException(UniqueException::MESSAGE);
                 }
             }
         }

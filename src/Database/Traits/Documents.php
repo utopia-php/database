@@ -1387,6 +1387,15 @@ trait Documents
                 throw new ConflictException('Document was updated after the request timestamp');
             }
 
+            $storedAttributes = [];
+            if ($this->validate && $collection->getId() !== self::METADATA) {
+                foreach ($document as $key => $value) {
+                    if ($old->offsetExists($key) && self::valuesEqual($value, $old->getAttribute($key))) {
+                        $storedAttributes[] = $key;
+                    }
+                }
+            }
+
             $document = $this->encode($collection, $document);
 
             if ($this->validate) {
@@ -1397,7 +1406,8 @@ trait Documents
                     maxAllowedDate: $this->adapter->getMaxDateTime(),
                     supportForAttributes: $this->adapter->supports(Capability::DefinedAttributes),
                     supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
-                    currentDocument: $old
+                    currentDocument: $old,
+                    storedAttributes: $storedAttributes,
                 );
                 if (! $structureValidator->isValid($document)) { // Make sure updated structure still apply collection rules (if any)
                     throw new StructureException($structureValidator->getDescription());

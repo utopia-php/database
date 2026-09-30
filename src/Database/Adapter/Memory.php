@@ -1535,11 +1535,11 @@ class Memory extends Adapter implements Feature\Relationships
                         }
                     }
                     if (! $existingIsSelf) {
-                        throw new UniqueException('Document with the requested unique attributes already exists');
+                        throw new UniqueException(UniqueException::MESSAGE);
                     }
                 }
                 if (isset($pendingByIndex[$indexId][$hash]) && $pendingByIndex[$indexId][$hash] !== $docKey) {
-                    throw new UniqueException('Document with the requested unique attributes already exists');
+                    throw new UniqueException(UniqueException::MESSAGE);
                 }
                 $pendingByIndex[$indexId][$hash] = $docKey;
             }
@@ -2252,7 +2252,7 @@ class Memory extends Adapter implements Feature\Relationships
     {
         if ($newHash !== null && isset($this->uniqueIndexHashes[$key][$indexId][$newHash])
             && $this->uniqueIndexHashes[$key][$indexId][$newHash] !== $docKey) {
-            throw new UniqueException('Document with the requested unique attributes already exists');
+            throw new UniqueException(UniqueException::MESSAGE);
         }
 
         $previousValueAtNew = $newHash !== null ? ($this->uniqueIndexHashes[$key][$indexId][$newHash] ?? null) : null;
@@ -3266,7 +3266,7 @@ class Memory extends Adapter implements Feature\Relationships
         foreach ($newSignatures as $indexId => $hash) {
             $existing = $this->uniqueIndexHashes[$key][$indexId][$hash] ?? null;
             if ($existing !== null && $existing !== $docKey) {
-                throw new UniqueException('Document with the requested unique attributes already exists');
+                throw new UniqueException(UniqueException::MESSAGE);
             }
         }
     }

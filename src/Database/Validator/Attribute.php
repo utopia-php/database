@@ -428,7 +428,7 @@ class Attribute extends Validator
                     vectors: $this->supportForVectors,
                 );
                 $this->message = 'Unknown attribute type: '.$type->value.'. Must be one of '.\implode(', ', \array_map(
-                    fn (ColumnType $available): string => $available->value,
+                    AttributeVO::persistedType(...),
                     $availableTypes,
                 ));
                 throw new DatabaseException($this->message);
@@ -519,8 +519,17 @@ class Attribute extends Validator
         }
 
         if ($defaultType === 'array') {
-            // Spatial types require the array itself
-            if (! in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon]) && $type !== ColumnType::Object) {
+            if (AttributeVO::isSpatialType($type)) {
+                $spatial = new Spatial($type->value);
+                if (! $spatial->isValid($default)) {
+                    $this->message = 'Invalid default value: '.$spatial->getDescription();
+                    throw new DatabaseException($this->message);
+                }
+
+                return;
+            }
+
+            if ($type !== ColumnType::Object) {
                 /** @var array<mixed> $default */
                 foreach ($default as $value) {
                     $this->validateDefaultTypes($type, $value, $signed);
@@ -537,33 +546,33 @@ class Attribute extends Validator
             case ColumnType::MediumText:
             case ColumnType::LongText:
                 if ($defaultType !== 'string') {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.AttributeVO::persistedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::Integer:
             case ColumnType::Boolean:
                 if ($type->value !== $defaultType) {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.AttributeVO::persistedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::BigInteger:
                 if (! (new BigInt($signed, $this->supportUnsignedBigInt))->isValid($default)) {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.AttributeVO::persistedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::Float:
             case ColumnType::Double:
                 if ($defaultType !== 'double') {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.AttributeVO::persistedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
             case ColumnType::Datetime:
                 if ($defaultType !== 'string') {
-                    $this->message = 'Default value '.json_encode($default).' does not match given type '.$type->value;
+                    $this->message = 'Default value '.json_encode($default).' does not match given type '.AttributeVO::persistedType($type);
                     throw new DatabaseException($this->message);
                 }
                 break;
@@ -582,7 +591,7 @@ class Attribute extends Validator
                     ColumnType::MediumText->value,
                     ColumnType::LongText->value,
                     ColumnType::Integer->value,
-                    ColumnType::BigInteger->value,
+                    AttributeVO::persistedType(ColumnType::BigInteger),
                     ColumnType::Float->value,
                     ColumnType::Double->value,
                     ColumnType::Boolean->value,

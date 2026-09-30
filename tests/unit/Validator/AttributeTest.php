@@ -76,7 +76,7 @@ class AttributeTest extends TestCase
         $validator = new Attribute(attributes: []);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('does not match given type biginteger');
+        $this->expectExceptionMessage('does not match given type bigint');
         $validator->isValid(new AttributeVO(
             key: 'total',
             type: ColumnType::BigInteger,
@@ -89,7 +89,7 @@ class AttributeTest extends TestCase
         $validator = new Attribute(attributes: [], supportUnsignedBigInt: true);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('does not match given type biginteger');
+        $this->expectExceptionMessage('does not match given type bigint');
         $validator->isValid(new AttributeVO(
             key: 'totals',
             type: ColumnType::BigInteger,
@@ -2211,7 +2211,7 @@ class AttributeTest extends TestCase
         $validator = new Attribute(attributes: []);
 
         $this->expectException(DatabaseException::class);
-        $this->expectExceptionMessage('does not match given type biginteger');
+        $this->expectExceptionMessage('does not match given type bigint');
         $validator->isValid(new AttributeVO(
             key: 'counter',
             type: ColumnType::BigInteger,

@@ -26,6 +26,7 @@ use Utopia\Database\Validator\Attribute as AttributeValidator;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Index as IndexValidator;
 use Utopia\Database\Validator\IndexDependency as IndexDependencyValidator;
+use Utopia\Database\Validator\Spatial as SpatialValidator;
 use Utopia\Database\Validator\Structure;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -480,8 +481,16 @@ trait Attributes
         }
 
         if ($defaultType === 'array') {
-            // Spatial types require the array itself
-            if (! \in_array($type, [ColumnType::Point, ColumnType::Linestring, ColumnType::Polygon, ColumnType::Object], true)) {
+            if (Attribute::isSpatialType($type)) {
+                $spatial = new SpatialValidator($type->value);
+                if (! $spatial->isValid($default)) {
+                    throw new DatabaseException('Invalid default value: '.$spatial->getDescription());
+                }
+
+                return;
+            }
+
+            if ($type !== ColumnType::Object) {
                 /** @var array<mixed> $defaultArr */
                 $defaultArr = $default;
                 foreach ($defaultArr as $value) {
@@ -501,29 +510,29 @@ trait Attributes
             case ColumnType::MediumText:
             case ColumnType::LongText:
                 if ($defaultType !== 'string') {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Integer:
             case ColumnType::Boolean:
                 if ($type->value !== $defaultType) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::BigInteger:
                 if (! (new BigInt($signed, $this->adapter->supports(Capability::UnsignedBigInt)))->isValid($default)) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Float:
             case ColumnType::Double:
                 if ($defaultType !== 'double') {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Datetime:
                 if ($defaultType !== ColumnType::String->value) {
-                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value);
+                    throw new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type));
                 }
                 break;
             case ColumnType::Vector:
@@ -534,7 +543,7 @@ trait Attributes
                 break;
             default:
                 throw \in_array($type, Attribute::TYPES, true)
-                    ? new DatabaseException('Default value '.$defaultStr.' does not match given type '.$type->value)
+                    ? new DatabaseException('Default value '.$defaultStr.' does not match given type '.Attribute::persistedType($type))
                     : $this->unknownType($type->value);
         }
     }
@@ -548,7 +557,7 @@ trait Attributes
         );
 
         return new DatabaseException('Unknown attribute type: '.$type.'. Must be one of '.\implode(', ', \array_map(
-            fn (ColumnType $available): string => $available->value,
+            Attribute::persistedType(...),
             $availableTypes,
         )));
     }

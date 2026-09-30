@@ -142,7 +142,7 @@ class QueryCache
                     $typed[$key] = $value;
                 }
             }
-            $documents[] = new Document($typed);
+            $documents[] = Document::fromStorage($typed);
         }
 
         return $documents;

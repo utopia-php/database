@@ -4,6 +4,15 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Adapter\None;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Cache\QueryCache;
+use Utopia\Database\Cache\Scope;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\Permission;
@@ -117,6 +126,160 @@ final class DocumentFromStorageTest extends TestCase
         $this->expectExceptionMessage($message);
 
         Document::fromStorage($data);
+    }
+
+    public function testJsonFilterDecodesADocumentShapedValueWithANonStringPermission(): void
+    {
+        $database = new Database(new Memory(), new Cache(new None()));
+        $collection = new Collection(id: 'users', attributes: [
+            Attribute::string(key: 'prefs', size: 1024, filters: ['json']),
+            Attribute::string(key: 'settings', size: 1024, filters: ['json']),
+        ]);
+
+        $decoded = $database->decode($collection, new Document([
+            'prefs' => '{"$id":"x","$permissions":["read(\\"any\\")",42]}',
+            'settings' => '{"outer":{"$id":"y","$permissions":[7]}}',
+        ]));
+
+        $prefs = $decoded->getAttribute('prefs');
+        $this->assertInstanceOf(Document::class, $prefs);
+        $this->assertSame([Permission::read(Role::any())], $prefs->getPermissions());
+
+        $settings = $decoded->getAttribute('settings');
+        $this->assertIsArray($settings);
+        $this->assertInstanceOf(Document::class, $settings['outer']);
+        $this->assertSame([], $settings['outer']->getPermissions());
+    }
+
+    public function testQueryCacheRebuildsCachedDocumentsWithANonStringPermission(): void
+    {
+        $queryCache = new QueryCache(new Cache(new MemoryCache()));
+        $entry = $queryCache->getEntry(new Scope(), 'users', []);
+        $this->assertNotNull($entry);
+        $stored = new Document();
+        $stored->exchangeArray([Document::ID => 'legacy', Document::PERMISSIONS => [Permission::read(Role::any()), 42]]);
+        $this->assertTrue($queryCache->set($entry, [$stored], $queryCache->getGeneration($entry)));
+
+        $cached = $queryCache->get($entry);
+
+        $this->assertNotNull($cached);
+        $this->assertCount(1, $cached);
+        $this->assertSame('legacy', $cached[0]->getId());
+        $this->assertSame([Permission::read(Role::any())], $cached[0]->getPermissions());
+    }
+
+    /**
+     * A json value 7.x stored with a non-string permission stays readable through a mapped document
+     * type, cold and from the cache, and does not block an update of another attribute.
+     */
+    public function testAMappedTypeReadsAStoredJsonValueWithANonStringPermission(): void
+    {
+        $reads = 0;
+        $adapter = new class ($reads) extends Memory {
+            public function __construct(private int &$reads)
+            {
+                parent::__construct();
+            }
+
+            #[\Override]
+            public function getDocument(Document $collection, string $id, array $queries = [], bool $forUpdate = false): Document
+            {
+                if ($collection->getId() === 'users') {
+                    $this->reads++;
+                }
+
+                return parent::getDocument($collection, $id, $queries, $forUpdate);
+            }
+        };
+        $database = new Database($adapter, new Cache($this->jsonRoundTripCache()));
+        $database
+            ->setDatabase('from_storage')
+            ->setNamespace('from_storage_'.\uniqid());
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'users',
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::string(key: 'prefs', size: 1024, filters: ['json']),
+            ],
+            permissions: [Permission::read(Role::any()), Permission::update(Role::any())],
+            documentSecurity: false,
+        ));
+        $user = new class ([]) extends Document {
+        };
+        $database->setDocumentType('users', $user::class);
+        $database->getAuthorization()->skip(fn (): Document => $adapter->createDocument($database->getCollection('users'), new Document([
+            Document::ID => 'legacy',
+            Document::PERMISSIONS => [],
+            Document::CREATED_AT => '2024-01-01T00:00:00.000+00:00',
+            Document::UPDATED_AT => '2024-01-01T00:00:00.000+00:00',
+            'name' => 'Ada',
+            'prefs' => '{"$id":"x","$permissions":["read(\\"any\\")",42],"theme":"dark"}',
+        ])));
+
+        $cold = $database->getDocument('users', 'legacy');
+        $cached = $database->getDocument('users', 'legacy');
+        $this->assertSame(1, $reads, 'The second read must be served from the cache');
+
+        foreach (['cold' => $cold, 'cached' => $cached] as $read => $document) {
+            $this->assertInstanceOf($user::class, $document, $read);
+            $prefs = $document->getAttribute('prefs');
+            $this->assertInstanceOf(Document::class, $prefs, $read);
+            $this->assertSame('dark', $prefs->getAttribute('theme'), $read);
+            $this->assertSame([Permission::read(Role::any())], $prefs->getPermissions(), $read);
+        }
+
+        $found = $database->find('users');
+        $this->assertCount(1, $found);
+        $this->assertInstanceOf($user::class, $found[0]);
+
+        $renamed = $database->updateDocument('users', 'legacy', new Document(['name' => 'Grace']));
+        $this->assertSame('Grace', $renamed->getAttribute('name'));
+    }
+
+    public function testAStorageRebuildKeepsTheMappedTypeAndDropsNonStringPermissions(): void
+    {
+        $user = new class ([]) extends Document {
+        };
+        $database = new class (new Memory(), new Cache(new None())) extends Database {
+            /**
+             * @param  array<string, mixed>  $data
+             */
+            public function rebuild(string $collection, array $data): Document
+            {
+                return $this->createDocumentInstance($collection, $data);
+            }
+        };
+        $database->setDocumentType('users', $user::class);
+
+        $document = $database->rebuild('users', [
+            Document::ID => 'legacy',
+            Document::PERMISSIONS => [Permission::read(Role::any()), 42],
+            'prefs' => [Document::ID => 'x', Document::PERMISSIONS => [7, Permission::update(Role::any())]],
+            'devices' => [[Document::ID => 'phone', Document::PERMISSIONS => [false, Permission::delete(Role::any())]]],
+        ]);
+
+        $this->assertInstanceOf($user::class, $document);
+        $this->assertSame([Permission::read(Role::any())], $document->getPermissions());
+        $this->assertSame([Permission::update(Role::any())], $document->getDocument('prefs')->getPermissions());
+        $this->assertSame([Permission::delete(Role::any())], $document->getDocuments('devices')[0]->getPermissions());
+    }
+
+    private function jsonRoundTripCache(): MemoryCache
+    {
+        return new class () extends MemoryCache {
+            #[\Override]
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
+            {
+                if (\is_array($data)) {
+                    /** @var array<int|string, mixed> $data */
+                    $data = \json_decode((string) \json_encode($data), true);
+                }
+
+                return parent::save($key, $data, $hash);
+            }
+        };
     }
 
     /**

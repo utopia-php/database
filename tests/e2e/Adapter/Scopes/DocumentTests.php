@@ -14,6 +14,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
+use Utopia\Database\DateTime;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
@@ -9696,6 +9697,55 @@ trait DocumentTests
                 $this->assertSame($expected, $ids, $case);
                 $this->assertSame(\count($expected), $database->count($collection, [$countQuery]), $case);
             }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * A json value stored with a non-string permission (7.x accepted it) stays readable cold and
+     * cached, through find(), and does not block an update of another attribute.
+     */
+    public function testStoredJsonValueWithANonStringPermissionStaysReadable(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = 'stored_json_permissions';
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::string(key: 'prefs', size: 1024, filters: ['json']),
+            ],
+            permissions: [Permission::read(Role::any()), Permission::update(Role::any())],
+            documentSecurity: false,
+        ));
+
+        try {
+            $database->getAuthorization()->skip(fn (): Document => $database->getAdapter()->createDocument($database->getCollection($collection), new Document([
+                '$id' => 'legacy',
+                '$permissions' => [],
+                '$createdAt' => DateTime::now(),
+                '$updatedAt' => DateTime::now(),
+                'name' => 'Ada',
+                'prefs' => '{"$id":"x","$permissions":["read(\\"any\\")",42],"theme":"dark"}',
+            ])));
+
+            foreach (['cold', 'cached'] as $read) {
+                $prefs = $database->getDocument($collection, 'legacy')->getAttribute('prefs');
+                $this->assertInstanceOf(Document::class, $prefs, $read);
+                $this->assertSame('dark', $prefs->getAttribute('theme'), $read);
+                $this->assertSame([Permission::read(Role::any())], $prefs->getPermissions(), $read);
+            }
+
+            $found = $database->find($collection);
+            $this->assertCount(1, $found);
+            $this->assertInstanceOf(Document::class, $found[0]->getAttribute('prefs'));
+
+            $renamed = $database->updateDocument($collection, 'legacy', new Document(['name' => 'Grace']));
+            $this->assertSame('Grace', $renamed->getAttribute('name'));
+            $this->assertSame('Grace', $database->getDocument($collection, 'legacy')->getAttribute('name'));
         } finally {
             $database->deleteCollection($collection);
         }

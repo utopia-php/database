@@ -15,9 +15,16 @@ use Utopia\Database\Cache\QueryCache;
 use Utopia\Database\Cache\Scope;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Character as CharacterException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
+use Utopia\Database\Exception\Order as OrderException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
+use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Structure as StructureException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Hook\Lifecycle;
@@ -90,6 +97,25 @@ class Database
     public const TTL = 60 * 60 * 24; // 24 hours
 
     private const CACHE_EMPTY_MARKER = '$empty';
+
+    /**
+     * Failures that fail the same way on every attempt, so withRetries() rethrows them at once.
+     *
+     * @var list<class-string<Throwable>>
+     */
+    private const array DETERMINISTIC_FAILURES = [
+        AuthorizationException::class,
+        CharacterException::class,
+        DuplicateException::class,
+        LimitException::class,
+        NotFoundException::class,
+        OrderException::class,
+        QueryException::class,
+        RelationshipException::class,
+        RestrictedException::class,
+        StructureException::class,
+        TypeException::class,
+    ];
 
     public const INSERT_BATCH_SIZE = 1_000;
 
@@ -401,7 +427,7 @@ class Database
 
                 /** @var array<string, mixed> $decoded */
                 if (array_key_exists(Document::ID, $decoded)) {
-                    return new Document($decoded);
+                    return Document::fromStorage($decoded);
                 }
 
                 $decoded = array_map(function ($item) use ($document, $attribute) {
@@ -416,7 +442,7 @@ class Database
                         return Index::fromArray($item);
                     }
 
-                    return new Document($item);
+                    return Document::fromStorage($item);
                 }, $decoded);
 
                 return $decoded;
@@ -3005,16 +3031,63 @@ class Database
     }
 
     /**
-     * Create a document instance of the appropriate type
+     * Create a document instance of the appropriate type from data read back from storage or the
+     * cache. Non-string permissions are dropped, as Document::fromStorage() does, instead of failing
+     * the read; a mapped type is kept.
      *
      * @param  string  $collection  Collection ID
      * @param  array<string, mixed>  $data  Document data
      */
     protected function createDocumentInstance(string $collection, array $data): Document
     {
-        $className = $this->documentTypes[$collection] ?? Document::class;
+        $className = $this->documentTypes[$collection] ?? null;
+        if ($className === null) {
+            return Document::fromStorage($data);
+        }
 
-        return $className::fromArray($data);
+        try {
+            return $className::fromArray($data);
+        } catch (StructureException) {
+            return $className::fromArray(self::withStringPermissions($data));
+        }
+    }
+
+    /**
+     * The data with the non-string permissions of the document, and of the documents nested in it
+     * the way the Document constructor nests them, dropped.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private static function withStringPermissions(array $data): array
+    {
+        $permissions = $data[Document::PERMISSIONS] ?? null;
+        if (\is_array($permissions)) {
+            $data[Document::PERMISSIONS] = \array_values(\array_filter($permissions, \is_string(...)));
+        }
+
+        foreach ($data as $key => $value) {
+            if (! \is_array($value)) {
+                continue;
+            }
+
+            if (isset($value[Document::ID]) || isset($value[Document::COLLECTION])) {
+                /** @var array<string, mixed> $value */
+                $data[$key] = self::withStringPermissions($value);
+
+                continue;
+            }
+
+            foreach ($value as $childKey => $child) {
+                if (\is_array($child) && (isset($child[Document::ID]) || isset($child[Document::COLLECTION]))) {
+                    /** @var array<string, mixed> $child */
+                    $value[$childKey] = self::withStringPermissions($child);
+                }
+            }
+            $data[$key] = $value;
+        }
+
+        return $data;
     }
 
     /**
@@ -3200,6 +3273,10 @@ class Database
 
                 return;
             } catch (Throwable $e) {
+                if (! $this->isRetryable($e)) {
+                    throw $e;
+                }
+
                 $lastException = $e;
                 $attempt++;
 
@@ -3218,6 +3295,21 @@ class Database
         }
 
         throw $lastException;
+    }
+
+    private function isRetryable(Throwable $error): bool
+    {
+        if ($this->failedAfterCommit($error)) {
+            return false;
+        }
+
+        foreach (self::DETERMINISTIC_FAILURES as $deterministic) {
+            if ($error instanceof $deterministic) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -3252,12 +3344,15 @@ class Database
      * 2. Rolling back database operations if metadata persistence fails
      * 3. Providing detailed error messages for both success and failure scenarios
      *
+     * A failure raised after the metadata write committed (its cache invalidation or events) is
+     * rethrown unchanged and rolls nothing back: the definition it reports on is stored.
+     *
      * @param  Document  $collection  The collection document to persist
      * @param  callable|null  $rollbackOperation  Cleanup operation to run if persistence fails (null if no cleanup needed)
      * @param  bool  $shouldRollback  Whether rollback should be attempted (e.g., false for duplicates in shared tables)
      * @param  string  $operationDescription  Description of the operation for error messages
      * @param  bool  $rollbackReturnsErrors  Whether rollback operation returns error array (true) or throws (false)
-     * @param  bool  $silentRollback  Whether rollback errors should be silently caught (true) or thrown (false)
+     * @param  bool  $silentRollback  Whether a failed rollback is reported after the persistence error (true) or fails the call as a cleanup failure (false)
      *
      * @throws DatabaseException If metadata persistence fails after all retries
      */
@@ -3276,6 +3371,11 @@ class Database
                 );
             }
         } catch (Throwable $e) {
+            if ($this->failedAfterCommit($e)) {
+                throw $e;
+            }
+
+            $cleanupFailure = '';
             if ($shouldRollback && $rollbackOperation !== null) {
                 if ($rollbackReturnsErrors) {
                     /** @var array<string> $cleanupErrors */
@@ -3289,15 +3389,15 @@ class Database
                 } elseif ($silentRollback) {
                     try {
                         $rollbackOperation();
-                    } catch (Throwable $e) {
-                        // Silent rollback - errors are swallowed
+                    } catch (Throwable $cleanupError) {
+                        $cleanupFailure = ' | Cleanup error: '.$cleanupError->getMessage();
                     }
                 } else {
                     try {
                         $rollbackOperation();
-                    } catch (Throwable $ex) {
+                    } catch (Throwable $cleanupError) {
                         throw new DatabaseException(
-                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: ".$ex->getMessage().' | Cleanup error: '.$e->getMessage(),
+                            "Failed to persist metadata after retries and cleanup failed for {$operationDescription}: ".$e->getMessage().' | Cleanup error: '.$cleanupError->getMessage(),
                             previous: $e
                         );
                     }
@@ -3305,7 +3405,7 @@ class Database
             }
 
             throw new DatabaseException(
-                "Failed to persist metadata after retries for {$operationDescription}: ".$e->getMessage(),
+                "Failed to persist metadata after retries for {$operationDescription}: ".$e->getMessage().$cleanupFailure,
                 previous: $e
             );
         }

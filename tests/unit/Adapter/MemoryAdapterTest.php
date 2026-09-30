@@ -13,6 +13,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -142,6 +143,34 @@ final class MemoryAdapterTest extends TestCase
         $this->assertSame($listings['sqlite'], $listings['memory'], 'Memory must list the collections created without a tenant, as SQL does');
     }
 
+    public function testNoChangeUpdateChecksOnlyTheReadPermission(): void
+    {
+        $database = $this->memory();
+        $database->createCollection(new Collection(id: 'documents'));
+        $database->createAttribute('documents', Attribute::string(key: 'string', size: 128, required: true));
+        $database->createAttribute('documents', Attribute::integer(key: 'integer_signed', required: true));
+        $database->createAttribute('documents', Attribute::integer(key: 'integer_unsigned', size: 4, required: true, signed: false));
+        $database->createAttribute('documents', Attribute::integer(key: 'bigint_signed', size: 8, required: true));
+        $database->createAttribute('documents', Attribute::integer(key: 'bigint_unsigned', size: 9, required: true, signed: false));
+        $database->createAttribute('documents', Attribute::double(key: 'float_signed', required: true));
+        $database->createAttribute('documents', Attribute::double(key: 'float_unsigned', required: true, signed: false));
+        $database->createAttribute('documents', Attribute::boolean(key: 'boolean', required: true));
+        $database->createAttribute('documents', Attribute::string(key: 'colors', size: 32, required: true, array: true));
+
+        $readable = $database->createDocument('documents', $this->typedValues('readable', [Permission::read(Role::any())]));
+        $updated = $database->updateDocument('documents', $readable->getId(), $readable);
+
+        $this->assertSame($readable->getUpdatedAt(), $updated->getUpdatedAt(), 'A no-change update must pass on read permission alone and leave the document untouched');
+
+        $hidden = $database->createDocument('documents', $this->typedValues('hidden', []));
+        try {
+            $database->updateDocument('documents', $hidden->getId(), $hidden);
+            $this->fail('A no-change update without read permission must be rejected');
+        } catch (AuthorizationException $exception) {
+            $this->assertSame('No permissions provided for action \'read\'', $exception->getMessage());
+        }
+    }
+
     private function database(Adapter $adapter): Database
     {
         return (new Database($adapter, new Cache(new None())))
@@ -198,6 +227,26 @@ final class MemoryAdapterTest extends TestCase
             Permission::update(Role::any()),
             Permission::delete(Role::any()),
         ];
+    }
+
+    /**
+     * @param  list<string>  $permissions
+     */
+    private function typedValues(string $id, array $permissions): Document
+    {
+        return new Document([
+            '$id' => $id,
+            '$permissions' => $permissions,
+            'string' => 'text📝',
+            'integer_signed' => -Database::MAX_INT,
+            'integer_unsigned' => Database::MAX_INT,
+            'bigint_signed' => -Database::MAX_BIG_INT,
+            'bigint_unsigned' => Database::MAX_BIG_INT,
+            'float_signed' => -123456789.12346,
+            'float_unsigned' => 123456789.12346,
+            'boolean' => true,
+            'colors' => ['pink', 'green', 'blue'],
+        ]);
     }
 
     /**

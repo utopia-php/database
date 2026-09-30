@@ -150,6 +150,67 @@ final class CoroutineRolesTest extends TestCase
         $this->assertSame(['any'], $this->authorization->getRoles());
     }
 
+    public function testRoleChangesInACoroutineStartedInsideWithRolesStayInThatCoroutine(): void
+    {
+        $this->skipWithoutCoroutines();
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->withRoles([self::ALICE], function () use (&$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, $done): void {
+                    $this->authorization->addRole('team:admins');
+                    $seen['childAfterAdd'] = $this->authorization->getRoles();
+                    $this->authorization->removeRole(self::ALICE);
+                    $seen['childAfterRemove'] = $this->authorization->getRoles();
+                    $done->push(true);
+                });
+
+                $done->pop();
+                $seen['parent'] = $this->authorization->getRoles();
+            });
+
+            $seen['after'] = $this->authorization->getRoles();
+
+            Coroutine::create(function () use (&$seen): void {
+                $seen['unrelated'] = $this->authorization->getRoles();
+            });
+        });
+
+        $this->assertSame([
+            'childAfterAdd' => [self::ALICE, 'team:admins'],
+            'childAfterRemove' => ['team:admins'],
+            'parent' => [self::ALICE],
+            'after' => ['any'],
+            'unrelated' => ['any'],
+        ], $seen);
+        $this->assertSame(['any'], $this->authorization->getRoles());
+    }
+
+    public function testCleanRolesInACoroutineStartedInsideWithRolesLeavesTheSharedRoles(): void
+    {
+        $this->skipWithoutCoroutines();
+        $seen = null;
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->withRoles([self::ALICE], function () use (&$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use (&$seen, $done): void {
+                    $this->authorization->cleanRoles();
+                    $seen = $this->authorization->isValid(new Input(PermissionType::Read, [self::ALICE]));
+                    $done->push(true);
+                });
+
+                $done->pop();
+            });
+        });
+
+        $this->assertFalse($seen);
+        $this->assertSame(['any'], $this->authorization->getRoles());
+    }
+
     public function testACloneStartsFromTheCurrentRolesAndKeepsItsOwn(): void
     {
         $clone = $this->authorization->withRoles([self::ALICE], fn (): Authorization => clone $this->authorization);

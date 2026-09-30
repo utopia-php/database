@@ -238,7 +238,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   `withRequestTimestamp()`, `skipDuplicates()` and `Authorization::withRoles()` are scoped to the calling coroutine
   and the coroutines it starts; sibling coroutines sharing the handle or the `Authorization` no longer see them. The
   plain setters (`setStatus()`, `enable()`, `disable()`, `reset()`, `setTenant()`, ...) still change the shared
-  value, except inside such a scope, where the change lasts until the scope ends.
+  value, except inside such a scope, including one the coroutine inherited from the coroutine that started it: there
+  the change applies to the calling coroutine and the coroutines it starts, and lasts until the scope ends.
 - Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine
   and outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
 - Linking an existing many-to-many related document needs update permission on it, as one-to-one, one-to-many and
@@ -606,6 +607,12 @@ not change anything for an upgrade from 7.x.
   - Scoped toggles (`skipFilters()`, `skipValidation()`, `withPreserveDates()`, `withPreserveSequence()`,
     `withTenant()`, `withRequestTimestamp()`, `skipDuplicates()`) no longer reach other coroutines sharing a handle,
     and overlapping scopes in different coroutines no longer leave the handle on another scope's value.
+  - A setter called in a coroutine started inside a scope (`addRole()`, `removeRole()` or `cleanRoles()` inside
+    `withRoles()`, `disable()` or `reset()` inside `skip()`, `setTenant()` inside `withTenant()`, and the setters of
+    the other scoped toggles) changes only what that coroutine and the coroutines it starts see, until the scope
+    ends. Before, it changed the shared value: the coroutine that called it did not see the change, every other
+    coroutine sharing the handle did, and the change outlived the scope, so a `disable()` inside `skip()` left
+    authorization off and an `addRole()` inside `withRoles()` gave every caller the scope's roles.
 - **Hooks and events:**
   - Every document write fires `document_purge` again, once per purged document.
   - `silent($callback, $listeners)` no longer silences every hook.

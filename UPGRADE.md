@@ -560,8 +560,11 @@ or the `Authorization` do not see them:
 
 The plain setters (`Authorization::setStatus()`, `enable()`, `disable()`, `reset()`, `addRole()`, `removeRole()` and
 `cleanRoles()`, and `setTenant()`, `enableValidation()`, `disableValidation()`, `enableFilters()`,
-`disableFilters()`, `setPreserveDates()` and `setPreserveSequence()`) still change the shared value, or, inside such a
-scope, the scope's value until it ends.
+`disableFilters()`, `setPreserveDates()` and `setPreserveSequence()`) still change the shared value when the calling
+coroutine is outside every such scope. Inside one, whether the calling coroutine opened it or inherited it from the
+coroutine that started it, a setter changes only what the calling coroutine and the coroutines it starts see, and
+only until the scope ends. When the scope ends, the value is what it was before the scope, as in 7.x, and a change
+made by a coroutine started inside the scope never reaches the other coroutines sharing the handle.
 
 To run work started in another coroutine under the caller's state, take `$snapshot = $database->snapshot()` in the
 caller and run the work inside `$database->withSnapshot($snapshot, $callback)`. A snapshot carries the authorization

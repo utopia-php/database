@@ -126,6 +126,162 @@ final class ValueTest extends TestCase
         $this->assertSame('changed', $value->get());
     }
 
+    public function testAWriteInACoroutineStartedInsideAnOverrideStaysInThatCoroutine(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $value->with('override', function () use ($value, &$seen): void {
+                $written = new Channel(1);
+                $released = new Channel(1);
+
+                Coroutine::create(function () use ($value, &$seen, $written, $released): void {
+                    $value->set('child');
+                    $seen['child'] = $value->get();
+                    $written->push(true);
+                    $released->pop();
+                });
+
+                $written->pop();
+                $seen['parent'] = $value->get();
+
+                $siblingDone = new Channel(1);
+                Coroutine::create(function () use ($value, &$seen, $siblingDone): void {
+                    $seen['sibling'] = $value->get();
+                    $siblingDone->push(true);
+                });
+                $siblingDone->pop();
+                $released->push(true);
+            });
+
+            Coroutine::create(function () use ($value, &$seen): void {
+                $seen['unrelated'] = $value->get();
+            });
+        });
+
+        $this->assertSame(
+            ['child' => 'child', 'parent' => 'override', 'sibling' => 'override', 'unrelated' => 'handle'],
+            $seen,
+        );
+        $this->assertSame('handle', $value->get());
+    }
+
+    public function testAWriteInACoroutineStartedInsideAnOverrideEndsWithThatOverride(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $written = new Channel(1);
+            $closed = new Channel(1);
+            $done = new Channel(1);
+
+            $value->with('override', function () use ($value, &$seen, $written, $closed, $done): void {
+                Coroutine::create(function () use ($value, &$seen, $written, $closed, $done): void {
+                    $value->set('child');
+                    $written->push(true);
+                    $closed->pop();
+                    $seen['afterScope'] = $value->get();
+                    $done->push(true);
+                });
+
+                $written->pop();
+            });
+
+            $closed->push(true);
+            $done->pop();
+            $seen['parent'] = $value->get();
+        });
+
+        $this->assertSame(['afterScope' => 'handle', 'parent' => 'handle'], $seen);
+    }
+
+    public function testAWriteInACoroutineStartedInsideAnOverrideIsSeenByTheCoroutinesItStarts(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $value->with('override', function () use ($value, &$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use ($value, &$seen, $done): void {
+                    $value->set('child');
+                    $grandchildDone = new Channel(1);
+
+                    Coroutine::create(function () use ($value, &$seen, $grandchildDone): void {
+                        $seen['grandchild'] = $value->get();
+                        $value->set('grandchild');
+                        $seen['grandchildAfterWrite'] = $value->get();
+                        $grandchildDone->push(true);
+                    });
+
+                    $grandchildDone->pop();
+                    $seen['child'] = $value->get();
+                    $done->push(true);
+                });
+
+                $done->pop();
+                $seen['parent'] = $value->get();
+            });
+        });
+
+        $this->assertSame(
+            ['grandchild' => 'child', 'grandchildAfterWrite' => 'grandchild', 'child' => 'child', 'parent' => 'override'],
+            $seen,
+        );
+        $this->assertSame('handle', $value->get());
+    }
+
+    public function testAWriteInACoroutineUnderAnOverrideOpenedOutsideCoroutinesStaysInThatCoroutine(): void
+    {
+        $value = new Value('handle');
+        $seen = [];
+
+        $value->with('override', function () use ($value, &$seen): void {
+            $this->inCoroutine(function () use ($value, &$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use ($value, &$seen, $done): void {
+                    $value->set('child');
+                    $seen['child'] = $value->get();
+                    $done->push(true);
+                });
+
+                $done->pop();
+                $seen['parent'] = $value->get();
+            });
+
+            $seen['outside'] = $value->get();
+        });
+
+        $this->assertSame(['child' => 'child', 'parent' => 'override', 'outside' => 'override'], $seen);
+        $this->assertSame('handle', $value->get());
+    }
+
+    public function testANullWriteInACoroutineStartedInsideAnOverrideIsKept(): void
+    {
+        $value = new Value('handle');
+        $seen = null;
+
+        $this->inCoroutine(function () use ($value, &$seen): void {
+            $value->with('override', function () use ($value, &$seen): void {
+                $done = new Channel(1);
+
+                Coroutine::create(function () use ($value, &$seen, $done): void {
+                    $value->set(null);
+                    $seen = [$value->get()];
+                    $done->push(true);
+                });
+
+                $done->pop();
+            });
+        });
+
+        $this->assertSame([null], $seen);
+    }
+
     public function testAChildsOverrideLeavesItsParentUnchanged(): void
     {
         $value = new Value('handle');

@@ -1218,8 +1218,6 @@ trait GeneralTests
         }
 
         $driver = $adapter->getDriver();
-        $killer = clone $driver;
-        $killer->reconnect();
 
         $interruptedByTimeout = function () use ($driver): bool {
             $statement = $driver->prepare('SELECT SLEEP(3)');
@@ -1241,10 +1239,11 @@ trait GeneralTests
         try {
             $connection = $adapter->getConnectionId();
             $this->assertMatchesRegularExpression('/^\d+$/', $connection);
-            $killer->exec("KILL {$connection}");
+            $driver->exec('SET SESSION wait_timeout = 1');
+            \sleep(2);
 
             $interrupted = ['statement that reconnects' => $interruptedByTimeout()];
-            $this->assertNotSame($connection, $adapter->getConnectionId(), 'KILL must have forced a reconnect');
+            $this->assertNotSame($connection, $adapter->getConnectionId(), 'The server closing the idle session must have forced a reconnect');
 
             $database->setTimeout(1000);
             $interrupted['same timeout set again'] = $interruptedByTimeout();

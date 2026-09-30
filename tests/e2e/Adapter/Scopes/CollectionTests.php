@@ -8,6 +8,7 @@ use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
@@ -32,6 +33,7 @@ use Utopia\Database\Hook\Transform;
 use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\Storage;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\ForeignKeyAction;
 use Utopia\Query\Schema\IndexType;
@@ -1963,5 +1965,28 @@ trait CollectionTests
         } finally {
             $database->deleteCollection($collection);
         }
+    }
+
+    public function testDeletingACollectionWhoseTableIsGoneDropsItsPermissionsTable(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(MariaDB::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'mainTableGone';
+        $database->createCollection(new Collection(id: $collection, permissions: [Permission::read(Role::any())]));
+        $this->assertTrue($database->exists(collection: Storage::permissionsTable($collection)));
+
+        $table = $database->getDatabase().'.'.$database->getNamespace().'_'.$collection;
+        $database->getAuthorization()->skip(fn () => $database->schema()->table($table)->drop()->execute());
+
+        $this->assertTrue($database->deleteCollection($collection));
+        $this->assertTrue($database->getCollection($collection)->isEmpty());
+        $this->assertFalse($database->exists(collection: Storage::permissionsTable($collection)), 'The permissions table of a collection whose table was gone was left behind');
     }
 }

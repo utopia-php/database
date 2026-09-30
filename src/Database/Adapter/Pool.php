@@ -161,6 +161,7 @@ class Pool extends Adapter
         $adapter->setTenant($this->getTenant());
         $adapter->setTenantPerDocument($this->getTenantPerDocument());
         $adapter->setAuthorization($this->authorization);
+        $adapter->enableAlterLocks($this->alterLocks);
 
         if ($this->supportForAttributes !== null) {
             $adapter->setSupportForAttributes($this->supportForAttributes);

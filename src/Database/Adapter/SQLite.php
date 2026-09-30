@@ -220,7 +220,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
     public function setTenant(int|string|null $tenant): bool
     {
-        $changed = $this->tenant !== $tenant;
+        $changed = $this->currentTenant() !== $tenant;
         $result = parent::setTenant($tenant);
         if ($changed) {
             // Invalidate after the parent setter so a validation failure
@@ -733,7 +733,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             $stmt = $this->prepare($sql, event: Event::AttributeUpdate);
             $stmt->bindValue(':max', $attribute->size, PDO::PARAM_INT);
             if ($this->sharedTables) {
-                $stmt->bindValue(':'.Storage::TENANT, $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
+                $stmt->bindValue(':'.Storage::TENANT, $this->currentTenant(), \is_int($this->currentTenant()) ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
 
             try {
@@ -981,7 +981,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     private function getTenantSegment(): string
     {
-        return $this->filter((string) ($this->tenant ?? ''));
+        return $this->filter((string) ($this->currentTenant() ?? ''));
     }
 
     /**
@@ -990,17 +990,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     private function getTenantSqlLiteral(): string
     {
-        if ($this->tenant === null) {
+        if ($this->currentTenant() === null) {
             return 'NULL';
         }
-        if (\is_int($this->tenant)) {
-            return (string) $this->tenant;
+        if (\is_int($this->currentTenant())) {
+            return (string) $this->currentTenant();
         }
 
         $pdo = $this->getPDO();
         $quoted = $pdo instanceof PDOProxy
-            ? $pdo->__call('quote', [(string) $this->tenant])
-            : $pdo->quote((string) $this->tenant);
+            ? $pdo->__call('quote', [(string) $this->currentTenant()])
+            : $pdo->quote((string) $this->currentTenant());
         if (! \is_string($quoted)) {
             throw new DatabaseException('Failed to quote SQLite tenant');
         }

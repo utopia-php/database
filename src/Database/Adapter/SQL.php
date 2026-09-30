@@ -1091,7 +1091,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private function documentTenant(Document $document): int|string|null
     {
-        return $this->sharedTables ? ($document->getTenant() ?? $this->tenant) : null;
+        return $this->sharedTables ? ($document->getTenant() ?? $this->currentTenant()) : null;
     }
 
     /**
@@ -3476,7 +3476,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $allowNullColumn = $source.'.'.Storage::UID;
             }
             $tenantFilter = new TenantFilter(
-                $tenants === [] ? $this->tenant : $tenants,
+                $tenants === [] ? $this->currentTenant() : $tenants,
                 Database::METADATA,
                 $table,
                 $allowNullColumn,
@@ -3526,7 +3526,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $table = $this->getSQLTableRaw($name);
         $tenants = new RawTenantFilter(
-            $this->tenant,
+            $this->currentTenant(),
             $table,
             $name === Database::METADATA || $name === Storage::permissionsTable(Database::METADATA),
             $this->getIdentifierQuoteChar(),
@@ -3575,7 +3575,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             permTypeColumn: Storage::PERM_TYPE,
             subqueryFilter: $this->sharedTables
                 ? new TenantFilter(
-                    $this->tenant,
+                    $this->currentTenant(),
                     Database::METADATA,
                     Storage::permissionsTable($collection),
                     quoteChar: $this->getIdentifierQuoteChar(),
@@ -3611,7 +3611,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $this->removeWriteHook(Tenancy::class);
         if ($this->sharedTables) {
-            $this->addWriteHook(new Tenancy($this->tenant));
+            $this->addWriteHook(new Tenancy($this->currentTenant()));
         }
     }
 
@@ -4917,7 +4917,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $preserving = $chain->hasPreservingOuterJoin();
 
         if ($this->sharedTables && $preserving) {
-            $tenantFilter = new TenantFilter($this->tenant, quoteChar: $this->getIdentifierQuoteChar());
+            $tenantFilter = new TenantFilter($this->currentTenant(), quoteChar: $this->getIdentifierQuoteChar());
             $tenantConditions = [];
             foreach ($joinTablePrefixes as $join) {
                 $tenantConditions[$join['alias']] = $tenantFilter->joined($join['alias']);

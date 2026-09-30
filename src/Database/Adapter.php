@@ -272,7 +272,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     public function setTenant(int|string|null $tenant): bool
     {
-        $this->tenant = $tenant;
+        $this->scopedTenant()->set($tenant);
 
         return true;
     }
@@ -290,7 +290,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
      */
     public function getTenant(): int|string|null
     {
-        $tenant = $this->tenant;
+        $tenant = $this->currentTenant();
         if (\is_string($tenant) && \ctype_digit($tenant)) {
             return (int) $tenant;
         }
@@ -309,6 +309,16 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     public function withTenant(int|string|null $tenant, callable $callback): mixed
     {
         return $this->scopedTenant()->with($tenant, $callback);
+    }
+
+    /**
+     * The tenant the calling coroutine's statements run as, exactly as it was set. The adapters read it through
+     * this method rather than the `$tenant` property hook: PHP 8.5.10's tracing JIT crashes on a hot trace that
+     * passes a hooked property as a call argument.
+     */
+    protected function currentTenant(): int|string|null
+    {
+        return $this->scopedTenant()->get();
     }
 
     /**

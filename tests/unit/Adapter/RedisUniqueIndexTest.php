@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Adapter;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 use Redis;
@@ -23,6 +24,16 @@ use Utopia\Database\Validator\Authorization;
 final class RedisUniqueIndexTest extends TestCase
 {
     private const string USERS = 'users';
+
+    private const string NOTES = 'notes';
+
+    private const string NOTE = 'note';
+
+    private const string ALICE = 'alice';
+
+    private const string BOB = 'bob';
+
+    private const string KEY_SEGMENT = 'doc';
 
     private const int TENANT = 5;
 
@@ -134,6 +145,59 @@ final class RedisUniqueIndexTest extends TestCase
         $this->assertSame(['taken@example.test'], $database->withTenant(self::OTHER_TENANT, fn (): array => $this->emails($database)));
     }
 
+    /**
+     * @return array<string, array{0: bool}>
+     */
+    public static function tenancies(): array
+    {
+        return [
+            'dedicated tables' => [false],
+            'shared tables' => [true],
+        ];
+    }
+
+    #[DataProvider('tenancies')]
+    public function testDroppingACollectionNamedLikeAKeySegmentKeepsOtherGrants(bool $sharedTables): void
+    {
+        $database = $this->notesDatabase($sharedTables);
+        $database->createCollection(new Collection(id: self::KEY_SEGMENT, attributes: [Attribute::string(key: 'title', size: 64)]));
+        $database->createDocument(self::KEY_SEGMENT, new Document(['$id' => self::NOTE, '$permissions' => [Permission::read(Role::any())], 'title' => 'dropped']));
+
+        $this->assertTrue($database->deleteCollection(self::KEY_SEGMENT));
+        $database->updateDocument(self::NOTES, self::NOTE, $this->readers([self::ALICE]));
+
+        $this->assertSame([self::NOTE], $this->readableBy($database, self::ALICE));
+        $this->assertSame([], $this->readableBy($database, self::BOB), 'Dropping another collection must leave the grants a later revoke removes');
+        $this->assertSame([], $this->keysOf($sharedTables, self::KEY_SEGMENT), 'Dropping a collection must remove every key it owns');
+    }
+
+    #[DataProvider('tenancies')]
+    public function testDroppingACollectionRemovesGrantsWrittenBeforeTheRegistry(bool $sharedTables): void
+    {
+        $database = $this->notesDatabase($sharedTables);
+        foreach ($this->keys('*:grants:*') as $registry) {
+            $this->forget($registry);
+        }
+
+        $this->assertTrue($database->deleteCollection(self::NOTES));
+
+        $this->assertSame([], $this->keysOf($sharedTables, self::NOTES), 'Dropping a collection must remove the grants written before the registry existed');
+    }
+
+    #[DataProvider('tenancies')]
+    public function testDroppingACollectionRemovesRegisteredGrantsItsIdIndexMisses(bool $sharedTables): void
+    {
+        $database = $this->notesDatabase($sharedTables);
+        foreach ($this->keys('*:idx:*'.self::NOTES) as $index) {
+            $this->forget($index);
+        }
+
+        $this->assertTrue($database->deleteCollection(self::NOTES));
+
+        $grants = \array_filter($this->keysOf($sharedTables, self::NOTES), static fn (string $key): bool => \str_contains($key, ':perm:'));
+        $this->assertSame([], \array_values($grants), 'Dropping a collection must remove the grants it registered, even those its id index no longer lists');
+    }
+
     private function database(): Database
     {
         return (new Database(new RedisAdapter($this->client), new Cache(new None())))
@@ -174,6 +238,41 @@ final class RedisUniqueIndexTest extends TestCase
         return new Document(['$id' => $id, 'email' => $email]);
     }
 
+    private function notesDatabase(bool $sharedTables): Database
+    {
+        $database = $this->database()->setSharedTables($sharedTables);
+        if ($sharedTables) {
+            $database->setTenant(self::TENANT);
+        }
+        $database->create();
+        $database->createCollection(new Collection(
+            id: self::NOTES,
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::update(Role::any()),
+                Permission::delete(Role::any()),
+            ],
+            documentSecurity: true,
+        ));
+        $database->createDocument(self::NOTES, $this->readers([self::ALICE, self::BOB])->setAttribute('$id', self::NOTE)->setAttribute('title', 'kept'));
+
+        return $database;
+    }
+
+    /**
+     * @param  list<string>  $readers
+     */
+    private function readers(array $readers): Document
+    {
+        return new Document([
+            '$permissions' => \array_map(
+                static fn (string $reader): string => Permission::read(Role::user($reader)),
+                $readers,
+            ),
+        ]);
+    }
+
     /**
      * @return list<string>
      */
@@ -186,6 +285,52 @@ final class RedisUniqueIndexTest extends TestCase
         \sort($emails);
 
         return $emails;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function readableBy(Database $database, string $reader): array
+    {
+        $roles = $this->authorization->getRoles();
+        $this->authorization->cleanRoles();
+        $this->authorization->addRole(Role::user($reader)->toString());
+
+        try {
+            return \array_values(\array_map(
+                static fn (Document $document): string => $document->getId(),
+                $database->find(self::NOTES),
+            ));
+        } finally {
+            $this->authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $this->authorization->addRole($role);
+            }
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function keysOf(bool $sharedTables, string $collection): array
+    {
+        $prefix = RedisAdapter::KEY_PREFIX.':redis_unique:redis_unique:';
+        $tenant = $sharedTables ? 't:'.self::TENANT.':' : '';
+        $owned = [
+            $prefix.'meta:'.$collection,
+            $prefix.'grants:'.$collection,
+            $prefix.'idx:'.$tenant.$collection,
+            $prefix.'seq:'.$tenant.$collection,
+            $prefix.'doc:'.$tenant.$collection.':'.self::NOTE,
+            $prefix.'perm:'.$tenant.'doc:'.$collection.':'.self::NOTE,
+        ];
+        foreach (['r', 'c', 'u', 'd'] as $letter) {
+            foreach ([Role::any(), Role::user(self::ALICE), Role::user(self::BOB)] as $role) {
+                $owned[] = $prefix.'perm:'.$tenant.$collection.':'.$letter.':'.$role->toString();
+            }
+        }
+
+        return \array_values(\array_filter($owned, $this->has(...)));
     }
 
     private function fakeClient(): Redis

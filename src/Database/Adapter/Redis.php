@@ -46,6 +46,7 @@ use Utopia\Query\Schema\IndexType;
  *     {ns}:{db}:idx:{col}                     | SET  | doc IDs in collection
  *     {ns}:{db}:perm:{col}:{letter}:{role}    | SET  | doc IDs by action+role
  *     {ns}:{db}:perm:doc:{col}:{id}           | HASH | role -> csv letters
+ *     {ns}:{db}:grants:{col}                  | SET  | perm keys written for the collection
  *
  * Shared-tables variants bucket on tenant under `t:{tenant}` segments.
  */
@@ -1729,6 +1730,7 @@ class Redis extends Adapter implements
                 $this->client->sAdd($setKey, $id);
             }
             $this->client->hMSet($hashKey, $hashFields);
+            $this->client->sAdd($this->grantsKey($this->ns(), $collection), $hashKey, ...\array_column($writes, 2));
             $this->client->exec();
         } catch (\Throwable $e) {
             try {
@@ -1777,6 +1779,7 @@ class Redis extends Adapter implements
                 $this->client->sRem($setKey, $id);
             }
             $this->client->del($hashKey);
+            $this->client->sRem($this->grantsKey($this->ns(), $collection), $hashKey);
             $this->client->exec();
         } catch (\Throwable $e) {
             try {
@@ -2211,49 +2214,93 @@ class Redis extends Adapter implements
     {
         $collection = $this->filter($collection);
         $prefix = $this->nsFor($namespace, $database);
-        $metaKey = $this->key($prefix, 'meta', $collection);
-        $idxKey = $this->key($prefix, 'idx', $collection);
-        $seqKey = $this->key($prefix, 'seq', $collection);
+        $grantsKey = $this->grantsKey($prefix, $collection);
 
-        /** @var array<int, string>|false $docIds */
-        $docIds = $client->sMembers($idxKey);
-        if (\is_array($docIds) && $docIds !== []) {
-            $keys = [];
-            foreach ($docIds as $docId) {
-                $keys[] = $this->key($prefix, 'doc', $collection, $docId);
-                $keys[] = $this->key($prefix, 'perm', 'doc', $collection, $docId);
-                if (\count($keys) >= self::SCAN_BATCH_SIZE) {
-                    $client->del(...$keys);
-                    $keys = [];
-                }
+        /** @var array<int, string>|false $registered */
+        $registered = $client->sMembers($grantsKey);
+        $keys = \is_array($registered) ? $registered : [];
+
+        $buckets = [null, ...$this->tenantBuckets($client, $prefix, 'idx', $collection), ...$this->tenantBuckets($client, $prefix, 'seq', $collection)];
+        foreach (\array_unique($buckets) as $bucket) {
+            $idxKey = $this->scopedKey($prefix, 'idx', $bucket, $collection);
+            $keys[] = $idxKey;
+            $keys[] = $this->scopedKey($prefix, 'seq', $bucket, $collection);
+
+            /** @var array<int, string>|false $docIds */
+            $docIds = $client->sMembers($idxKey);
+            if (! \is_array($docIds) || $docIds === []) {
+                continue;
             }
-            if ($keys !== []) {
-                $client->del(...$keys);
+
+            $permDocKeys = [];
+            foreach ($docIds as $docId) {
+                $keys[] = $this->scopedKey($prefix, 'doc', $bucket, $collection, (string) $docId);
+                $permDocKeys[] = $this->scopedKey($prefix, 'perm', $bucket, 'doc', $collection, (string) $docId);
+            }
+            \array_push($keys, ...$permDocKeys);
+
+            $client->multi(\Redis::PIPELINE);
+            foreach ($permDocKeys as $permDocKey) {
+                $client->hGetAll($permDocKey);
+            }
+            $grantsByDocument = $client->exec();
+            foreach (\is_array($grantsByDocument) ? $grantsByDocument : [] as $grants) {
+                foreach (\is_array($grants) ? $grants : [] as $role => $letters) {
+                    foreach (\explode(',', \is_string($letters) ? $letters : '') as $letter) {
+                        if ($letter !== '') {
+                            $keys[] = $this->scopedKey($prefix, 'perm', $bucket, $collection, $letter, (string) $role);
+                        }
+                    }
+                }
             }
         }
 
-        $this->deleteByPattern($client, $prefix.self::SEP.'doc'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection.self::SEP.'*');
-        $this->deleteByPattern($client, $prefix.self::SEP.'idx'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection);
-        $this->deleteByPattern($client, $prefix.self::SEP.'seq'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection);
-
-        $this->deleteByPattern($client, $this->key($prefix, 'perm', $collection).self::SEP.'*');
-        $this->deleteByPattern($client, $prefix.self::SEP.'perm'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection.self::SEP.'*');
-        $this->deleteByPattern($client, $prefix.self::SEP.'perm'.self::SEP.'t'.self::SEP.'*'.self::SEP.'doc'.self::SEP.$collection.self::SEP.'*');
-        $this->deleteByPattern($client, $this->key($prefix, 'tenants', $collection).self::SEP.'*');
-
-        $client->del($metaKey, $idxKey, $seqKey);
+        $keys[] = $this->key($prefix, 'meta', $collection);
+        $keys[] = $grantsKey;
+        foreach (\array_chunk(\array_values(\array_unique($keys)), self::SCAN_BATCH_SIZE) as $batch) {
+            $client->del(...$batch);
+        }
     }
 
-    private function deleteByPattern(RedisClient $client, string $pattern): void
+    private function grantsKey(string $prefix, string $collection): string
     {
+        return $this->key($prefix, 'grants', $collection);
+    }
+
+    private function scopedKey(string $prefix, string $family, ?string $bucket, string ...$parts): string
+    {
+        $scope = $bucket === null ? [] : ['t', $bucket];
+
+        return $this->key($prefix, $family, ...$scope, ...$parts);
+    }
+
+    /**
+     * Tenant buckets that hold a {family}:t:{bucket}:{collection} key. A bucket never contains the
+     * separator, so a key the pattern also matches for another layout is skipped.
+     *
+     * @return array<int, string>
+     */
+    private function tenantBuckets(RedisClient $client, string $prefix, string $family, string $collection): array
+    {
+        $head = $this->key($prefix, $family, 't').self::SEP;
+        $tail = self::SEP.$collection;
+        $buckets = [];
         $cursor = null;
         do {
             /** @var array<int, string>|false $batch */
-            $batch = $client->scan($cursor, $pattern, self::SCAN_BATCH_SIZE);
-            if (\is_array($batch) && $batch !== []) {
-                $client->del(...$batch);
+            $batch = $client->scan($cursor, $head.'*'.$tail, self::SCAN_BATCH_SIZE);
+            foreach (\is_array($batch) ? $batch : [] as $key) {
+                if (! \str_starts_with($key, $head) || ! \str_ends_with($key, $tail)) {
+                    continue;
+                }
+                $bucket = \substr($key, \strlen($head), -\strlen($tail));
+                if ($bucket !== '' && ! \str_contains($bucket, self::SEP)) {
+                    $buckets[] = $bucket;
+                }
             }
         } while ($cursor !== 0 && $cursor !== null);
+
+        return $buckets;
     }
 
     private function computeCollectionSize(string $collection): int

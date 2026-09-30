@@ -1437,8 +1437,7 @@ trait Attributes
         foreach ($attributes as $attribute) {
             try {
                 $this->cleanupAttribute($collectionId, $attribute->getId(), $maxAttempts);
-            } catch (DatabaseException $e) {
-                // Continue cleaning up other attributes even if one fails
+            } catch (Throwable $e) {
                 $errors[] = $e->getMessage();
             }
         }

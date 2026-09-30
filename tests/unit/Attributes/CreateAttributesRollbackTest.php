@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Attributes;
 
+use PDOException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Tests\Unit\Support\StderrCapture;
@@ -31,6 +32,8 @@ final class CreateAttributesRollbackTest extends TestCase
      * @var list<string>
      */
     private array $dropped = [];
+
+    private bool $driverErrors = false;
 
     public function testCleanupErrorsForEveryColumnThatCouldNotBeDroppedFollowTheMetadataError(): void
     {
@@ -86,6 +89,29 @@ final class CreateAttributesRollbackTest extends TestCase
         $this->assertSame(['title', 'nick'], $this->storedKeys($database));
     }
 
+    public function testADriverErrorWhileDroppingAColumnIsCollectedAndTheRemainingColumnsAreStillDropped(): void
+    {
+        $database = $this->database();
+        $this->lockedColumns = ['nick'];
+        $this->driverErrors = true;
+        $this->metadataFailure = new RuntimeException('metadata store is read-only');
+
+        $thrown = null;
+        StderrCapture::during(function () use ($database, &$thrown): void {
+            try {
+                $database->createAttributes(self::COLLECTION, $this->attributes('nick', 'title'));
+            } catch (\Throwable $error) {
+                $thrown = $error;
+            }
+        });
+
+        $this->assertInstanceOf(DatabaseException::class, $thrown);
+        $this->assertSame(self::PREFIX."metadata store is read-only | Cleanup errors: SQLSTATE[55P03]: lock not available on 'nick'", $thrown->getMessage());
+        $this->assertSame($this->metadataFailure, $thrown->getPrevious());
+        $this->assertSame(['title'], $this->dropped, 'the columns after the failing one are still dropped');
+        $this->assertSame([], $this->storedKeys($database));
+    }
+
     /**
      * @return list<Attribute>
      */
@@ -120,7 +146,9 @@ final class CreateAttributesRollbackTest extends TestCase
         $metadataFailure = fn (): ?RuntimeException => $this->metadataFailure;
         $drop = function (string $id): void {
             if (\in_array($id, $this->lockedColumns, true)) {
-                throw new DatabaseException("Column '{$id}' is locked");
+                throw $this->driverErrors
+                    ? new PDOException("SQLSTATE[55P03]: lock not available on '{$id}'")
+                    : new DatabaseException("Column '{$id}' is locked");
             }
 
             $this->dropped[] = $id;

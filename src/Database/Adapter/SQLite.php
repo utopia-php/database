@@ -37,6 +37,7 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
+use Utopia\Database\Validator\BigInt;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
@@ -2355,7 +2356,11 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
                 if ($change->getOld()->isEmpty() && ! empty($extractedOperators)) {
                     foreach ($extractedOperators as $operatorKey => $operator) {
                         $default = $attributeDefaults[$operatorKey] ?? null;
-                        $currentRegularAttributes[$operatorKey] = $this->applyOperatorToValue($operator, $default);
+                        $value = $this->applyOperatorToValue($operator, $default);
+                        if ($operator->getMethod()->isNumeric() && \is_string($value) && ! BigInt::fitsPhpInt($value)) {
+                            throw new LimitException('Value out of range');
+                        }
+                        $currentRegularAttributes[$operatorKey] = $value;
                     }
                 }
 

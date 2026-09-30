@@ -96,6 +96,29 @@ final class FractionalBoundTest extends TestCase
     }
 
     #[DataProvider('lanes')]
+    public function testAFractionalChangeValueOnAnIntegerIsRefused(bool $definedAttributes): void
+    {
+        $database = $this->database($definedAttributes);
+
+        foreach ([
+            'increase' => static fn (): Document => $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1.5),
+            'decrease' => static fn (): Document => $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 0.5),
+            'increase by a numeric string' => static fn (): Document => $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', '1.5'),
+        ] as $case => $change) {
+            try {
+                $change();
+                $this->fail("A fractional change value on an integer attribute was accepted ({$case})");
+            } catch (TypeException $error) {
+                $this->assertSame('Change value must be an integer.', $error->getMessage(), $case);
+            }
+        }
+
+        $this->assertSame(100, $this->stored($database, 'count'));
+        $this->assertSame(102, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 2)->getAttribute('count'));
+        $this->assertSame(3.0, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'ratio', 1.5)->getAttribute('ratio'));
+    }
+
+    #[DataProvider('lanes')]
     public function testFractionalBoundsOnADoubleAreAccepted(bool $definedAttributes): void
     {
         $database = $this->database($definedAttributes);

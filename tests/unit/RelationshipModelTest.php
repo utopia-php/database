@@ -9,8 +9,13 @@ use ReflectionParameter;
 use Utopia\Cache\Adapter\None as NoneAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Attribute;
+use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
@@ -431,12 +436,27 @@ class RelationshipModelTest extends TestCase
 
     public function testCreateDocumentInstanceHydratesRelationship(): void
     {
-        $database = $this->database();
-        $database->setDocumentType('rels', Relationship::class);
-
-        $document = $this->instantiate($database, 'rels', [
+        $database = new Database(new Memory(), new Cache(new NoneAdapter()));
+        $database->setDatabase('relationships')->setNamespace('relationships');
+        $database->getAuthorization()->addRole(Role::any()->toString());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'rels',
+            attributes: [
+                Attribute::string(key: 'key', size: 64),
+                Attribute::string(key: 'collection', size: 64),
+                Attribute::string(key: 'relatedCollection', size: 64),
+                Attribute::string(key: 'relationType', size: 64),
+                Attribute::boolean(key: 'twoWay'),
+                Attribute::string(key: 'twoWayKey', size: 64),
+                Attribute::string(key: 'onDelete', size: 64),
+                Attribute::string(key: 'side', size: 64),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+        $database->createDocument('rels', new Document([
             '$id' => 'comments',
-            '$collection' => 'rels',
             'key' => 'comments',
             'collection' => 'posts',
             'relatedCollection' => 'comments',
@@ -445,7 +465,10 @@ class RelationshipModelTest extends TestCase
             'twoWayKey' => 'post',
             'onDelete' => ForeignKeyAction::Cascade->value,
             'side' => RelationSide::Parent->value,
-        ]);
+        ]));
+        $database->setDocumentType('rels', Relationship::class);
+
+        $document = $database->getDocument('rels', 'comments');
 
         $this->assertInstanceOf(Relationship::class, $document);
         $this->assertSame('posts', $document->collection);
@@ -462,19 +485,6 @@ class RelationshipModelTest extends TestCase
             $this->createStub(Adapter::class),
             new Cache(new NoneAdapter()),
         );
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    private function instantiate(Database $database, string $collection, array $data): Document
-    {
-        $method = new ReflectionMethod(Database::class, 'createDocumentInstance');
-
-        /** @var Document $document */
-        $document = $method->invoke($database, $collection, $data);
-
-        return $document;
     }
 
     public function testMagicReadsKeepStoredEnumsAndFallBackToAttributes(): void

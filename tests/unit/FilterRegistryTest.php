@@ -9,8 +9,11 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Type\Custom;
+use Utopia\Database\Type\TypeRegistry;
 use Utopia\Query\Schema\ColumnType;
 
 class FilterRegistryTest extends TestCase
@@ -179,5 +182,68 @@ class FilterRegistryTest extends TestCase
             $this->read($this->createDatabase()),
             'a later instance with the same config must hit the entry the first one cached',
         );
+    }
+
+    public function testFilterEncodeFailureIsADatabaseExceptionWithTheOriginalAsPrevious(): void
+    {
+        $failure = new \InvalidArgumentException('cannot encode the probe', 7);
+        Database::addFilter(
+            'failingEncode',
+            static fn (mixed $value) => throw $failure,
+            static fn (mixed $value) => $value,
+        );
+
+        $this->assertEncodeFailureWrapped($this->database, 'failingEncode', $failure);
+    }
+
+    public function testCustomTypeEncodeFailureIsADatabaseExceptionWithTheOriginalAsPrevious(): void
+    {
+        $failure = new \DomainException('cannot encode the custom probe', 11);
+        $registry = new TypeRegistry();
+        $registry->register(new class ($failure) implements Custom {
+            public function __construct(private readonly \DomainException $failure)
+            {
+            }
+
+            public function name(): string
+            {
+                return 'failingType';
+            }
+
+            public function encode(mixed $value): mixed
+            {
+                throw $this->failure;
+            }
+
+            public function decode(mixed $value): mixed
+            {
+                return $value;
+            }
+        });
+
+        $this->assertEncodeFailureWrapped($this->createDatabase()->setTypeRegistry($registry), 'failingType', $failure);
+    }
+
+    private function assertEncodeFailureWrapped(Database $database, string $filter, \Throwable $failure): void
+    {
+        $collection = new Document([
+            '$id' => 'probes',
+            'attributes' => [new Document([
+                '$id' => 'probe',
+                'type' => ColumnType::String->value,
+                'array' => false,
+                'filters' => [$filter],
+            ])],
+        ]);
+
+        try {
+            $database->encode($collection, new Document(['$id' => 'probe', 'probe' => 'value']));
+            $this->fail('encode() must rethrow the failure of '.$filter);
+        } catch (DatabaseException $error) {
+            $this->assertSame(DatabaseException::class, $error::class);
+            $this->assertSame($failure->getMessage(), $error->getMessage());
+            $this->assertSame($failure->getCode(), $error->getCode());
+            $this->assertSame($failure, $error->getPrevious());
+        }
     }
 }

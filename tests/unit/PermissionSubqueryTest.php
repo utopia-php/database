@@ -271,9 +271,9 @@ final class PermissionSubqueryTest extends TestCase
                 return parent::prepareStatement($sql, $event);
             }
 
-            protected function executeResult(Statement $result, ?Event $event = null): PDOStatement|DatabasePDOStatement|PDOStatementProxy
+            protected function executeResult(Statement $result, ?Event $event = null, string $collection = ''): PDOStatement|DatabasePDOStatement|PDOStatementProxy
             {
-                $statement = parent::executeResult($result, $event);
+                $statement = parent::executeResult($result, $event, $collection);
                 $this->statements[$this->statements->count() - 1] = [$result->query, $result->bindings];
 
                 return $statement;

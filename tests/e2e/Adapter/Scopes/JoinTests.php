@@ -7955,4 +7955,55 @@ trait JoinTests
 
         $this->cleanupAggCollections($database, $collections);
     }
+
+    public function testFullOuterJoinInRandomOrderReturnsEveryRow(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $customers = 'j47a_random_customers';
+        $notes = 'j47a_random_notes';
+        $this->cleanupAggCollections($database, [$customers, $notes]);
+
+        $database->createCollection(new Collection(id: $customers, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+        $database->createAttribute($customers, Attribute::string(key: 'name', size: 16, required: true));
+        $database->createCollection(new Collection(id: $notes, permissions: [Permission::create(Role::any()), Permission::read(Role::any())], documentSecurity: false));
+        $database->createAttribute($notes, Attribute::string(key: 'customerId', size: 16, required: true));
+        $database->createAttribute($notes, Attribute::string(key: 'body', size: 16, required: true));
+
+        foreach (['c1', 'c2', 'c3'] as $customer) {
+            $database->createDocument($customers, new Document(['$id' => $customer, 'name' => $customer]));
+        }
+        foreach (['n1' => 'c1', 'n2' => 'c1', 'n3' => 'c2', 'n4' => 'cx'] as $note => $customer) {
+            $database->createDocument($notes, new Document(['$id' => $note, 'customerId' => $customer, 'body' => $note]));
+        }
+
+        $join = Query::fullOuterJoin($notes, '$id', 'customerId', '=', 'note');
+        $select = Query::select(['name', 'note.body']);
+        /**
+         * @param array<Document> $documents
+         * @return list<string>
+         */
+        $rows = static function (array $documents): array {
+            $rows = [];
+            foreach ($documents as $document) {
+                $rows[] = \json_encode([$document->getAttribute('name'), $document->getAttribute('note.body')], JSON_THROW_ON_ERROR);
+            }
+            \sort($rows);
+
+            return $rows;
+        };
+
+        try {
+            $expected = $rows($database->find($customers, [$join, $select]));
+            $this->assertCount(5, $expected);
+            $this->assertSame($expected, $rows($database->find($customers, [$join, $select, Query::orderRandom(), Query::limit(100)])));
+        } finally {
+            $this->cleanupAggCollections($database, [$customers, $notes]);
+        }
+    }
 }

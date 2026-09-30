@@ -5177,6 +5177,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $orderType = $orderTypes[$i] ?? OrderDirection::Asc;
                     if ($orderType === OrderDirection::Random) {
                         $orderParts[] = $this->createBuilder()->compileOrder(BaseQuery::orderRandom());
+                        $sql = 'SELECT * FROM ('.$result->query.') AS '.$quote.self::FOJ_ROWS_ALIAS.$quote;
 
                         continue;
                     }

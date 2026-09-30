@@ -8002,7 +8002,12 @@ trait JoinTests
                     $plans++;
 
                     $details = \array_map(
-                        static fn (Document $row): string => (string) $row->getAttribute('detail'),
+                        static function (Document $row): string {
+                            $detail = $row->getAttribute('detail');
+                            self::assertIsString($detail);
+
+                            return $detail;
+                        },
                         $adapter->rawQuery('EXPLAIN QUERY PLAN '.$log->query),
                     );
                     $report = $log->query."\n  ".\implode("\n  ", $details);
@@ -8059,11 +8064,8 @@ trait JoinTests
         }
 
         $join = Query::join($posts, '$id', 'authorId', '=', 'post');
-        /**
-         * @param  array<mixed>  $ids
-         * @return array<mixed>
-         */
         $sorted = static function (array $ids): array {
+            /** @var array<string> $ids */
             \sort($ids);
 
             return $ids;
@@ -8071,7 +8073,12 @@ trait JoinTests
 
         foreach (['quick fox', '"quick fox"', 'lazy'] as $term) {
             $matching = $sorted(\array_map(
-                static fn (Document $post): mixed => $post->getAttribute('authorId'),
+                static function (Document $post): string {
+                    $author = $post->getAttribute('authorId');
+                    self::assertIsString($author);
+
+                    return $author;
+                },
                 $database->find($posts, [Query::search('body', $term)]),
             ));
             $this->assertNotSame([], $matching, $term);
@@ -8142,6 +8149,7 @@ trait JoinTests
         ];
         $amounts = ['k1' => 1, 'k2' => 10, 'k3' => 100, 'k4' => 1000];
         $ids = static function (array $documents): array {
+            /** @var array<Document> $documents */
             $ids = \array_map(static fn (Document $document): string => $document->getId(), $documents);
             \sort($ids);
 
@@ -8150,10 +8158,10 @@ trait JoinTests
         $themeOf = ['t1' => 'k1', 't2' => 'k2', 't3' => 'k3'];
 
         foreach ($filters as $name => [$joined, $direct, $expected]) {
-            $this->assertSame($expected, \array_values(\array_map(
+            $this->assertSame($expected, \array_map(
                 static fn (string $theme): string => $themeOf[$theme],
                 $ids($database->find($themes, [$direct])),
-            )), $name.': the same filter on the joined collection');
+            ), $name.': the same filter on the joined collection');
 
             $join = Query::join($themes, 'theme', '$id', '=', 'th');
             $this->assertSame($expected, $ids($database->find($tickets, [$join, $joined])), $name.': find()');
@@ -8578,6 +8586,7 @@ trait JoinTests
          * @return list<string>
          */
         $rows = static function (array $documents): array {
+            /** @var array<Document> $documents */
             $rows = [];
             foreach ($documents as $document) {
                 $rows[] = \json_encode([$document->getAttribute('name'), $document->getAttribute('note.body')], JSON_THROW_ON_ERROR);

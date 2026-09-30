@@ -10337,7 +10337,10 @@ trait DocumentTests
                 $database->createDocument($items, new Document(['$id' => $code, '$permissions' => [], 'code' => $code, 'name' => $name]));
             }
 
-            $rows = static fn (array $documents): array => \array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents);
+            $rows = static function (array $documents): array {
+                /** @var array<Document> $documents */
+                return \array_map(static fn (Document $document): array => $document->getArrayCopy(), $documents);
+            };
 
             foreach (['join' => Query::join($items, 'item', 'code', '=', 'it'), 'full outer join' => Query::fullOuterJoin($items, 'item', 'code', '=', 'it')] as $case => $join) {
                 $this->assertEquals(
@@ -10405,7 +10408,10 @@ trait DocumentTests
 
             $item = Query::join($items, 'item', 'code', '=', 'it');
             $extra = Query::join($extras, 'item', 'code', '=', 'ex');
-            $ids = static fn (array $documents): array => \array_map(static fn (Document $document): string => $document->getId(), $documents);
+            $ids = static function (array $documents): array {
+                /** @var array<Document> $documents */
+                return \array_map(static fn (Document $document): string => $document->getId(), $documents);
+            };
 
             $rows = $database->find($orders, [$item, Query::select(['name', 'it.*']), Query::orderAsc('$id')]);
             $this->assertSame(['o1', 'o2', 'o3'], $ids($rows));

@@ -1499,11 +1499,13 @@ trait IndexTests
     {
         $database->createDocument($collection, new Document([$attribute => $value]));
 
+        $error = null;
         try {
             $database->createDocument($collection, new Document([$attribute => $value]));
-            $this->fail('The unique index on '.$attribute.' must reject a second document with the same value');
-        } catch (UniqueException $e) {
-            $this->assertInstanceOf(UniqueException::class, $e);
+        } catch (Throwable $caught) {
+            $error = $caught;
         }
+
+        $this->assertInstanceOf(UniqueException::class, $error, 'The unique index on '.$attribute.' must reject a second document with the same value');
     }
 }

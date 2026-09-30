@@ -159,7 +159,12 @@ trait MySQLJoinPlanTests
         }
 
         $statements = \array_values(\array_filter(
-            \array_map(static fn (Document $trace): string => (string) $trace->getAttribute('QUERY'), $traces),
+            \array_map(static function (Document $trace): string {
+                $query = $trace->getAttribute('QUERY');
+                self::assertIsString($query);
+
+                return $query;
+            }, $traces),
             static fn (string $query): bool => \str_contains($query, 'LEFT JOIN'),
         ));
         $this->assertNotSame([], $statements, 'The optimizer trace must hold the read');
@@ -171,8 +176,10 @@ trait MySQLJoinPlanTests
     {
         $rows = $adapter->rawQuery('EXPLAIN FORMAT=TREE '.$statement);
         $this->assertCount(1, $rows);
+        $plan = $rows[0]->getAttribute('EXPLAIN');
+        $this->assertIsString($plan);
 
-        return (string) $rows[0]->getAttribute('EXPLAIN');
+        return $plan;
     }
 
     /**

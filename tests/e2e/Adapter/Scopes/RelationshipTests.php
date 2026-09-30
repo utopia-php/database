@@ -11,6 +11,7 @@ use Tests\E2E\Adapter\Scopes\Relationships\ManyToOneTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToManyTests;
 use Tests\E2E\Adapter\Scopes\Relationships\OneToOneTests;
 use Tests\E2E\Adapter\Support\EventRecorder;
+use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -4587,8 +4588,12 @@ trait RelationshipTests
         $database->createRelationship(Relationship::oneToOne(collection: $toys, relatedCollection: $parts, twoWay: true, key: 'part', twoWayKey: 'toy'));
         $link = function (string $collection, string $id, string $key) use ($database): ?string {
             $value = $database->skipRelationships(fn () => $database->getDocument($collection, $id))->getAttribute($key);
+            if ($value instanceof Document) {
+                return $value->getId();
+            }
+            $this->assertTrue($value === null || \is_string($value));
 
-            return $value instanceof Document ? $value->getId() : $value;
+            return $value;
         };
 
         try {
@@ -4612,12 +4617,13 @@ trait RelationshipTests
             $this->assertSame('c4', $link($parents, 'p4', 'partner'));
             $this->assertSame('p4', $link($children, 'c4', 'parent'));
 
+            $error = null;
             try {
                 $database->updateDocument($parents, 'p5', new Document(['partner' => new Document(['$id' => 'c3'])]));
-                $this->fail('Linking a document that is already linked elsewhere was accepted');
-            } catch (DuplicateException $exception) {
-                $this->assertInstanceOf(DuplicateException::class, $exception);
+            } catch (Throwable $caught) {
+                $error = $caught;
             }
+            $this->assertInstanceOf(DuplicateException::class, $error, 'Linking a document that is already linked elsewhere was accepted');
             $this->assertNull($link($parents, 'p5', 'partner'));
             $this->assertSame('p1', $link($children, 'c3', 'parent'));
             $this->assertSame('c3', $link($parents, 'p1', 'partner'));
@@ -4792,9 +4798,12 @@ trait RelationshipTests
             key: 'partner',
             twoWayKey: 'parent',
         ));
-        $link = fn (string $collection, string $id, string $key): ?string => $database->skipRelationships(
-            fn () => $database->getDocument($collection, $id)
-        )->getAttribute($key);
+        $link = function (string $collection, string $id, string $key) use ($database): ?string {
+            $value = $database->skipRelationships(fn () => $database->getDocument($collection, $id))->getAttribute($key);
+            $this->assertTrue($value === null || \is_string($value));
+
+            return $value;
+        };
 
         try {
             foreach (['a', 'b', 'L', 'free'] as $id) {

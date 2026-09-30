@@ -12,6 +12,7 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
 
@@ -108,5 +109,37 @@ trait MongoReadFilterTests
         $authorization->addRole(Role::any()->toString());
         $authorization->addRole(Role::users()->toString());
         $authorization->addRole(Role::user($user)->toString());
+    }
+
+    public function testFiltersMatchALiteralDollarWord(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'dollar_words';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'label', size: 64, required: true)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        try {
+            foreach (['lead' => '$USD 10', 'tail' => '10 $USD', 'plain' => 'plain'] as $id => $label) {
+                $database->createDocument($collection, new Document(['$id' => $id, 'label' => $label]));
+            }
+
+            $idsOf = function (Query $query) use ($database, $collection): array {
+                $ids = \array_map(fn (Document $document): string => $document->getId(), $database->find($collection, [$query]));
+                \sort($ids);
+
+                return $ids;
+            };
+
+            $this->assertSame(['lead', 'tail'], $idsOf(Query::contains('label', ['$USD'])));
+            $this->assertSame(['plain'], $idsOf(Query::notContains('label', ['$USD'])));
+            $this->assertSame(['plain', 'tail'], $idsOf(Query::notStartsWith('label', '$USD')));
+            $this->assertSame(['lead', 'plain'], $idsOf(Query::notEndsWith('label', '$USD')));
+        } finally {
+            $database->deleteCollection($collection);
+        }
     }
 }

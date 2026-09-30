@@ -3969,17 +3969,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      *
      * @param  string  $value  The user input to escape
      * @param  string  $pattern  The pattern template (e.g., ".*%s.*" for contains)
-     *
-     * @throws DatabaseException
      */
     private function createSafeRegex(string $value, string $pattern = '%s', string $flags = 'i'): Regex
     {
         $escaped = preg_quote($value, '/');
-
-        // Validate that the pattern doesn't contain injection vectors
-        if (preg_match('/\$[a-z]+/i', $escaped)) {
-            throw new DatabaseException('Invalid regex pattern: potential injection detected');
-        }
 
         $finalPattern = sprintf($pattern, $escaped);
 

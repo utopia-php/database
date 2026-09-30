@@ -6,7 +6,6 @@ use Exception;
 use PDOException;
 use Redis;
 use RedisException;
-use ReflectionProperty;
 use Tests\Unit\Cache\CountingCache;
 use Throwable;
 use Utopia\Cache\Adapter\Redis as RedisAdapter;
@@ -1219,14 +1218,9 @@ trait GeneralTests
         }
 
         $driver = $adapter->getDriver();
-        $settings = [];
-        foreach (['dsn', 'username', 'password'] as $name) {
-            $value = (new ReflectionProperty(PDO::class, $name))->getValue($driver);
-            $this->assertIsString($value);
-            $settings[] = $value;
-        }
-        [$dsn, $username, $password] = $settings;
-        $killer = new \PDO($dsn, $username, $password, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        $this->assertInstanceOf(PDO::class, $driver);
+        $killer = clone $driver;
+        $killer->reconnect();
 
         $interruptedByTimeout = function () use ($driver): bool {
             $statement = $driver->prepare('SELECT SLEEP(3)');

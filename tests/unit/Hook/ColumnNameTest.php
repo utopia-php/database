@@ -71,4 +71,44 @@ final class ColumnNameTest extends TestCase
             }
         }
     }
+
+    public function testPermissionFilterWithoutRolesMatchesNothing(): void
+    {
+        $filter = new PermissionFilter([], static fn (string $table): string => $table.'_perms');
+
+        $condition = $filter->filter('posts');
+
+        $this->assertSame('1 = 0', $condition->expression);
+        $this->assertSame([], $condition->bindings);
+    }
+
+    public function testPermissionFilterRejectsAPermissionsTableOutsideTheIdentifierPattern(): void
+    {
+        $filter = new PermissionFilter(['any'], static fn (string $table): string => $table.' perms');
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Invalid permissions table name: posts perms');
+
+        $filter->filter('posts');
+    }
+
+    public function testPermissionFilterWithNoColumnsMatchesOnlyCollectionWidePermissions(): void
+    {
+        $filter = new PermissionFilter(['any'], static fn (string $table): string => $table.'_perms', columns: []);
+
+        $condition = $filter->filter('posts');
+
+        $this->assertStringEndsWith(' AND type = ? AND column IS NULL)', $condition->expression);
+        $this->assertSame(['any', 'read'], $condition->bindings);
+    }
+
+    public function testPermissionFilterWithColumnsMatchesThemOrCollectionWidePermissions(): void
+    {
+        $filter = new PermissionFilter(['any', 'users'], static fn (string $table): string => $table.'_perms', columns: ['title', 'body']);
+
+        $condition = $filter->filter('posts');
+
+        $this->assertStringEndsWith(' AND type = ? AND (column IS NULL OR column IN (?, ?)))', $condition->expression);
+        $this->assertSame(['any', 'users', 'read', 'title', 'body'], $condition->bindings);
+    }
 }

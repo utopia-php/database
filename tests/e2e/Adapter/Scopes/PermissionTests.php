@@ -1964,4 +1964,50 @@ trait PermissionTests
             $documents,
         ));
     }
+
+    public function testNoRolesReadsNoDocumentOfADocumentSecurityCollection(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $collection = 'perm_no_roles_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true));
+        $database->createAttribute($collection, Attribute::integer(key: 'amount', required: true));
+
+        $authorization->skip(function () use ($database, $collection): void {
+            $database->createDocument($collection, new Document([
+                '$id' => 'public',
+                '$permissions' => [Permission::read(Role::any())],
+                'amount' => 10,
+            ]));
+            $database->createDocument($collection, new Document([
+                '$id' => 'private',
+                '$permissions' => [Permission::read(Role::user('owner'))],
+                'amount' => 20,
+            ]));
+        });
+
+        $roles = $authorization->getRoles();
+        $authorization->cleanRoles();
+
+        try {
+            $found = $database->find($collection);
+            $count = $database->count($collection);
+            $public = $database->getDocument($collection, 'public');
+        } finally {
+            $authorization->cleanRoles();
+            foreach ($roles as $role) {
+                $authorization->addRole($role);
+            }
+        }
+
+        $this->assertSame([], $this->documentIds($found));
+        $this->assertSame(0, $count);
+        $this->assertTrue($public->isEmpty());
+
+        $database->deleteCollection($collection);
+    }
 }

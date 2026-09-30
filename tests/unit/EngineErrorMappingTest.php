@@ -118,6 +118,28 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertMapped(self::postgres(), self::engineError('42P01', 7, $message), $expected, $mapped);
     }
 
+    /**
+     * @return array<string, array{0: Closure(PDOException): Throwable}>
+     */
+    public static function mariaDBFamilyProvider(): array
+    {
+        return [
+            'MariaDB' => [self::mariaDB()],
+            'MySQL' => [self::mySQL()],
+        ];
+    }
+
+    /**
+     * @param  Closure(PDOException): Throwable  $map
+     */
+    #[DataProvider('mariaDBFamilyProvider')]
+    public function testIndexOnAColumnTheTableLacksIsAttributeNotFound(Closure $map): void
+    {
+        $error = self::engineError('42000', 1072, "SQLSTATE[42000]: Syntax error or access violation: 1072 Key column 'name' doesn't exist in table");
+
+        $this->assertMapped($map, $error, NotFoundException::class, 'Attribute not found');
+    }
+
     public function testPostgresDistinctReadOrderedByAnUnselectedAttributeIsAQueryErrorInAnyLanguage(): void
     {
         $error = self::engineError('42P10', 7, "SQLSTATE[42P10]: Invalid column reference: 7 FEHLER:  bei SELECT DISTINCT m\u{FC}ssen ORDER-BY-Ausdr\u{FC}cke in der Select-Liste erscheinen\nLINE 1: ...\"main\" ORDER BY \"main\".\"price\" ASC");

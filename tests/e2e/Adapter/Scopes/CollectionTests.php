@@ -1876,6 +1876,36 @@ trait CollectionTests
         }
     }
 
+    public function testIndexOnAColumnTheTableLacksIsAttributeNotFound(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\RawQuery::class) || $adapter->hasFeature(SQLite::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'indexDrifted';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+
+        $this->deleteColumn($collection, 'name');
+
+        try {
+            $database->createIndex($collection, Index::key(key: 'nameIndex', attributes: ['name']));
+            $this->fail('Expected NotFoundException for an index on a column the table lacks');
+        } catch (NotFoundException $e) {
+            $this->assertSame('Attribute not found', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     private function dropCollectionTable(Database $database, string $collection): void
     {
         $table = $database->getNamespace().'_'.$collection;

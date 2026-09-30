@@ -623,6 +623,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      */
     public function renameAttribute(string $collection, string $old, string $new): bool
     {
+        if ($this->isRenamed($collection, $old, $new)) {
+            return true;
+        }
+
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $table->renameColumn($this->filter($old), $this->filter($new));
@@ -639,6 +643,35 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             throw $this->processException($e);
         }
     }
+
+    /**
+     * Whether an earlier rename already moved the column: under shared tables every tenant
+     * of a collection id renames the one physical column, so only the first rename runs.
+     *
+     * @throws DatabaseException
+     */
+    protected function isRenamed(string $collection, string $old, string $new): bool
+    {
+        $old = $this->filter($old);
+        $new = $this->filter($new);
+
+        if ($old === $new) {
+            return false;
+        }
+
+        $columns = $this->getColumnNames($collection);
+
+        return ! \in_array($old, $columns, true) && \in_array($new, $columns, true);
+    }
+
+    /**
+     * The physical column names of a collection's table, empty when the table does not exist.
+     *
+     * @return array<string>
+     *
+     * @throws DatabaseException
+     */
+    abstract protected function getColumnNames(string $collection): array;
 
     /**
      * Get Document

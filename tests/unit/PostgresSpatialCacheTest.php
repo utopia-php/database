@@ -16,6 +16,15 @@ final class PostgresSpatialCacheTest extends TestCase
 {
     public function testRenameInvalidatesSpatialCacheWhenTypeAlterFails(): void
     {
+        $columns = $this->getMockBuilder(\PDOStatement::class)
+            ->disableOriginalConstructor()
+            ->getMock();
+        $columns->expects($this->once())
+            ->method('execute')
+            ->willReturn(true);
+        $columns->method('fetchAll')
+            ->willReturn(['_id', 'position']);
+
         $rename = $this->getMockBuilder(\PDOStatement::class)
             ->disableOriginalConstructor()
             ->getMock();
@@ -33,9 +42,9 @@ final class PostgresSpatialCacheTest extends TestCase
         $pdo = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
-        $pdo->expects($this->exactly(2))
+        $pdo->expects($this->exactly(3))
             ->method('prepare')
-            ->willReturnOnConsecutiveCalls($rename, $alter);
+            ->willReturnOnConsecutiveCalls($columns, $rename, $alter);
 
         $adapter = new Postgres($pdo);
         $adapter->setDatabase('database');

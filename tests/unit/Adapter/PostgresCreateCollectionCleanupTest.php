@@ -6,6 +6,7 @@ use PDO;
 use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\StderrCapture;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Exception as DatabaseException;
@@ -45,6 +46,28 @@ final class PostgresCreateCollectionCleanupTest extends TestCase
             'DROP TABLE IF EXISTS "database"."namespace_books"; DROP TABLE IF EXISTS "database"."namespace_books_perms"',
             $this->statements[3],
         );
+    }
+
+    public function testACleanupThatFailsKeepsTheOriginalErrorAndLogsTheCleanupFailure(): void
+    {
+        $this->failures[self::DECLARED_INDEX] = $this->engineError('42703', 'column "title" does not exist');
+        $this->failures['DROP TABLE IF EXISTS'] = $this->engineError('25P02', 'current transaction is aborted, commands ignored until end of transaction block');
+
+        $error = null;
+        $log = StderrCapture::during(function () use (&$error): void {
+            try {
+                $this->adapter()->createCollection('books', [Attribute::string('title', size: 64)], [
+                    new Index('title_index', IndexType::Key, ['title']),
+                ]);
+            } catch (\Throwable $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertInstanceOf(NotFoundException::class, $error, 'the index failure reaches the caller, not the failed drop');
+        $this->assertSame('Attribute not found', $error->getMessage());
+        $this->assertStringStartsWith('DROP TABLE IF EXISTS', $this->statements[3]);
+        $this->assertStringContainsString("Failed to rollback collection 'books': SQLSTATE[25P02]", $log, 'the failed cleanup is logged');
     }
 
     public function testADeclaredIndexThatAlreadyExistsKeepsBothTables(): void

@@ -335,9 +335,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             }
 
             if ($created && ! ($e instanceof DuplicateException)) {
-                $dropSchema = $this->createSchemaBuilder();
-                $dropSql = $dropSchema->table($tableRaw)->dropIfExists()->query.'; '.$dropSchema->table($permsTableRaw)->dropIfExists()->query;
-                $this->executeStatement($dropSql, Event::CollectionCreate);
+                $this->discardCreatedCollection($id);
             }
 
             throw $e;

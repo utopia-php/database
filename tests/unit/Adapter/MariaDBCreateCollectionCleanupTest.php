@@ -7,6 +7,7 @@ use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Support\StderrCapture;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Attribute;
@@ -52,6 +53,30 @@ final class MariaDBCreateCollectionCleanupTest extends TestCase
             'DROP TABLE IF EXISTS `database`.`namespace_books`; DROP TABLE IF EXISTS `database`.`namespace_books_perms`',
             $this->statements[2],
         );
+    }
+
+    /**
+     * @param class-string<MariaDB> $class
+     */
+    #[DataProvider('engines')]
+    public function testACleanupThatFailsKeepsTheOriginalErrorAndLogsTheCleanupFailure(string $class): void
+    {
+        $this->failures[self::PERMISSIONS_TABLE] = $this->engineError('70100', 1969, 'Query execution was interrupted (max_statement_time exceeded)');
+        $this->failures['DROP TABLE IF EXISTS'] = $this->engineError('HY000', 2006, 'MySQL server has gone away');
+
+        $error = null;
+        $log = StderrCapture::during(function () use ($class, &$error): void {
+            try {
+                $this->adapter($class)->createCollection('books', [Attribute::string('title', size: 64)]);
+            } catch (\Throwable $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertInstanceOf(TimeoutException::class, $error, 'the permissions table failure reaches the caller, not the failed drop');
+        $this->assertSame('Query timed out', $error->getMessage());
+        $this->assertStringStartsWith('DROP TABLE IF EXISTS', $this->statements[2]);
+        $this->assertStringContainsString("Failed to rollback collection 'books': SQLSTATE[HY000]: MySQL server has gone away", $log, 'the failed cleanup is logged');
     }
 
     /**

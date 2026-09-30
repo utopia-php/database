@@ -9,6 +9,7 @@ use PDOStatement;
 use Swoole\Database\PDOProxy;
 use Swoole\Database\PDOStatementProxy;
 use Throwable;
+use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -2971,6 +2972,28 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             throw $error;
         }
+    }
+
+    /**
+     * Drop the tables a failed createCollection() created. A drop that fails too is logged, so the caller still
+     * receives the error that failed the create.
+     */
+    protected function discardCreatedCollection(string $id): void
+    {
+        try {
+            $this->dropCreatedCollection($id);
+        } catch (Throwable $error) {
+            Console::error("Failed to rollback collection '{$id}': ".$error->getMessage());
+        }
+    }
+
+    protected function dropCreatedCollection(string $id): void
+    {
+        $schema = $this->createSchemaBuilder();
+        $main = $schema->table($this->getSQLTableRaw($id))->dropIfExists();
+        $permissions = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
+
+        $this->executeStatement($main->query.'; '.$permissions->query, Event::CollectionCreate);
     }
 
     /**

@@ -6,6 +6,7 @@ use Closure;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use Tests\Unit\Support\StderrCapture;
 use Throwable;
 use Utopia\Cache\Adapter\Memory as MemoryCache;
 use Utopia\Cache\Cache;
@@ -14,9 +15,11 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Validator\Authorization;
 
 final class CreateCollectionCleanupTest extends TestCase
@@ -143,5 +146,44 @@ final class CreateCollectionCleanupTest extends TestCase
         $this->assertInstanceOf(DatabaseException::class, $error);
         $this->assertFalse($adapter->exists('cleanup', 'logs'), 'A table without a stored definition must be dropped');
         $this->assertTrue($database->getCollection('logs')->isEmpty());
+    }
+
+    public function testACleanupThatFailsKeepsTheOriginalErrorAndLogsTheCleanupFailure(): void
+    {
+        $indexFailure = new RuntimeException('the index could not be built');
+        $adapter = new class (new PDO('sqlite::memory:'), $indexFailure) extends SQLite {
+            public function __construct(PDO $pdo, private readonly RuntimeException $indexFailure)
+            {
+                parent::__construct($pdo);
+            }
+
+            #[\Override]
+            public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = [], Event $event = Event::IndexCreate): bool
+            {
+                throw $this->indexFailure;
+            }
+
+            #[\Override]
+            public function deleteCollection(string $id): bool
+            {
+                throw new RuntimeException('database is locked');
+            }
+        };
+        $adapter->setDatabase('cleanup');
+        $adapter->setNamespace('cleanup_'.\uniqid());
+
+        $error = null;
+        $log = StderrCapture::during(function () use ($adapter, &$error): void {
+            try {
+                $adapter->createCollection('logs', [Attribute::string(key: 'message', size: 64)], [
+                    Index::key(key: 'byMessage', attributes: ['message']),
+                ]);
+            } catch (Throwable $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertSame($indexFailure, $error, 'the index failure reaches the caller, not the failed drop');
+        $this->assertStringContainsString("Failed to rollback collection 'logs': database is locked", $log, 'the failed cleanup is logged');
     }
 }

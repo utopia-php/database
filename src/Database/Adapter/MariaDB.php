@@ -246,9 +246,7 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             $error = $this->processException($e);
 
             if ($created && ! $error instanceof DuplicateException) {
-                $main = $schema->table($this->getSQLTableRaw($id))->dropIfExists();
-                $permissionsTable = $schema->table($this->getSQLTableRaw(Storage::permissionsTable($id)))->dropIfExists();
-                $this->executeStatement($main->query.'; '.$permissionsTable->query, Event::CollectionCreate);
+                $this->discardCreatedCollection($id);
             }
 
             throw $error;

@@ -401,7 +401,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   `createCollection()` does and as 7.x did.
 - A failed `createCollection()` (a declared index that fails, a timeout, a spatial index with orders, a permissions
   table that fails) drops the tables it created, so the collection can be created again. It used to leave them, and
-  later creates failed with `Collection already exists`.
+  later creates failed with `Collection already exists`. When that drop fails as well (for example inside an aborted
+  PostgreSQL transaction or after a lost connection), the drop failure is logged and the error that failed the
+  create is thrown.
 - `createIndex()` compares an index that exists in the schema but not in the metadata with the request (columns,
   prefix lengths, key, unique, fulltext or spatial) on adapters with schema index introspection: a match is adopted,
   a mismatch is dropped and recreated, as in 7.3.12.

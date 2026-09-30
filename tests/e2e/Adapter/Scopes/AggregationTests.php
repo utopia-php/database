@@ -1958,7 +1958,7 @@ trait AggregationTests
         );
         $this->assertRejectedAsQueryShape(
             fn () => $database->skipValidation(fn () => $database->find($collection, [...$joins, Query::limit(1)])),
-            'Too many tables in a join',
+            'Too many joins: at most 8 are allowed',
         );
 
         $database->deleteCollection($collection);

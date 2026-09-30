@@ -2237,22 +2237,7 @@ class Redis extends Adapter implements
                 $keys[] = $this->scopedKey($prefix, 'doc', $bucket, $collection, (string) $docId);
                 $permDocKeys[] = $this->scopedKey($prefix, 'perm', $bucket, 'doc', $collection, (string) $docId);
             }
-            \array_push($keys, ...$permDocKeys);
-
-            $client->multi(\Redis::PIPELINE);
-            foreach ($permDocKeys as $permDocKey) {
-                $client->hGetAll($permDocKey);
-            }
-            $grantsByDocument = $client->exec();
-            foreach (\is_array($grantsByDocument) ? $grantsByDocument : [] as $grants) {
-                foreach (\is_array($grants) ? $grants : [] as $role => $letters) {
-                    foreach (\explode(',', \is_string($letters) ? $letters : '') as $letter) {
-                        if ($letter !== '') {
-                            $keys[] = $this->scopedKey($prefix, 'perm', $bucket, $collection, $letter, (string) $role);
-                        }
-                    }
-                }
-            }
+            \array_push($keys, ...$permDocKeys, ...$this->roleSetKeys($client, $prefix, $bucket, $collection, $permDocKeys));
         }
 
         $keys[] = $this->key($prefix, 'meta', $collection);
@@ -2265,6 +2250,57 @@ class Redis extends Adapter implements
     private function grantsKey(string $prefix, string $collection): string
     {
         return $this->key($prefix, 'grants', $collection);
+    }
+
+    /**
+     * @param  array<int, string>  $permDocKeys
+     * @return array<int, string>
+     */
+    private function roleSetKeys(RedisClient $client, string $prefix, ?string $bucket, string $collection, array $permDocKeys): array
+    {
+        if ($permDocKeys === []) {
+            return [];
+        }
+
+        $client->multi(\Redis::PIPELINE);
+        foreach ($permDocKeys as $permDocKey) {
+            $client->hGetAll($permDocKey);
+        }
+        $grantsByDocument = $client->exec();
+
+        $keys = [];
+        foreach (\is_array($grantsByDocument) ? $grantsByDocument : [] as $grants) {
+            foreach (\is_array($grants) ? $grants : [] as $role => $letters) {
+                foreach (\explode(',', \is_string($letters) ? $letters : '') as $letter) {
+                    if ($letter !== '') {
+                        $keys[] = $this->scopedKey($prefix, 'perm', $bucket, $collection, $letter, (string) $role);
+                    }
+                }
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * The registered permission keys of the collection that belong to the tenant bucket. A bucket
+     * never contains the separator, so one bucket's scope is never a prefix of another's.
+     *
+     * @return array<int, string>
+     */
+    private function registeredGrantKeys(RedisClient $client, string $prefix, ?string $bucket, string $collection): array
+    {
+        /** @var array<int, string>|false $registered */
+        $registered = $client->sMembers($this->grantsKey($prefix, $collection));
+        $keys = \is_array($registered) ? $registered : [];
+
+        if ($bucket === null) {
+            return $keys;
+        }
+
+        $scope = $this->scopedKey($prefix, 'perm', $bucket).self::SEP;
+
+        return \array_values(\array_filter($keys, static fn (string $key): bool => \str_starts_with($key, $scope)));
     }
 
     private function scopedKey(string $prefix, string $family, ?string $bucket, string ...$parts): string
@@ -2306,42 +2342,35 @@ class Redis extends Adapter implements
     private function computeCollectionSize(string $collection): int
     {
         $collection = $this->filter($collection);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $prefix = $this->ns();
+        $metaKey = $this->key($prefix, 'meta', $collection);
 
         if ((bool) $this->client->exists($metaKey) === false) {
             return 0;
         }
 
-        $total = $this->measureKey($metaKey);
-
+        $bucket = $this->tenantBucket();
         $idxKey = $this->idxKey($collection);
-        $total += $this->measureKey($idxKey);
+        $keys = [$metaKey, $idxKey];
 
         /** @var array<int, string>|false $docIds */
         $docIds = $this->client->sMembers($idxKey);
-        if (\is_array($docIds)) {
-            foreach ($docIds as $docId) {
-                $total += $this->measureKey($this->docKey($collection, (string) $docId));
-                $total += $this->measureKey($this->permDocKey($collection, (string) $docId));
-            }
+        $permDocKeys = [];
+        foreach (\is_array($docIds) ? $docIds : [] as $docId) {
+            $keys[] = $this->docKey($collection, (string) $docId);
+            $permDocKeys[] = $this->permDocKey($collection, (string) $docId);
         }
+        \array_push(
+            $keys,
+            ...$permDocKeys,
+            ...$this->roleSetKeys($this->client, $prefix, $bucket, $collection, $permDocKeys),
+            ...$this->registeredGrantKeys($this->client, $prefix, $bucket, $collection),
+        );
 
-        $bucket = $this->tenantBucket();
-        if ($bucket !== null) {
-            $permPrefix = $this->ns().self::SEP.'perm'.self::SEP.'t'.self::SEP.$bucket.self::SEP.$collection.self::SEP.'*';
-        } else {
-            $permPrefix = $this->key($this->ns(), 'perm', $collection).self::SEP.'*';
+        $total = 0;
+        foreach (\array_unique($keys) as $key) {
+            $total += $this->measureKey($key);
         }
-        $cursor = null;
-        do {
-            /** @var array<int, string>|false $batch */
-            $batch = $this->client->scan($cursor, $permPrefix, self::SCAN_BATCH_SIZE);
-            if (\is_array($batch)) {
-                foreach ($batch as $key) {
-                    $total += $this->measureKey($key);
-                }
-            }
-        } while ($cursor !== 0 && $cursor !== null);
 
         return $total;
     }

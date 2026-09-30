@@ -33,6 +33,8 @@ final class RedisUniqueIndexTest extends TestCase
 
     private const string BOB = 'bob';
 
+    private const string CAROL = 'carol';
+
     private const string KEY_SEGMENT = 'doc';
 
     private const int TENANT = 5;
@@ -198,6 +200,62 @@ final class RedisUniqueIndexTest extends TestCase
         $this->assertSame([], \array_values($grants), 'Dropping a collection must remove the grants it registered, even those its id index no longer lists');
     }
 
+    #[DataProvider('tenancies')]
+    public function testSizingACollectionNamedLikeAKeySegmentCountsOnlyItsOwnKeys(bool $sharedTables): void
+    {
+        $database = $this->notesDatabase($sharedTables);
+        $database->createCollection(new Collection(id: self::KEY_SEGMENT, attributes: [Attribute::string(key: 'title', size: 64)]));
+        $database->createDocument(self::KEY_SEGMENT, new Document(['$id' => self::NOTE, '$permissions' => [Permission::read(Role::any())], 'title' => 'sized']));
+
+        $this->assertSame($this->bytesOf($sharedTables, self::KEY_SEGMENT), $database->getSizeOfCollection(self::KEY_SEGMENT), 'A collection named like a key segment must not count other collections\' grants');
+        $this->assertSame($this->bytesOf($sharedTables, self::NOTES), $database->getSizeOfCollection(self::NOTES));
+    }
+
+    #[DataProvider('tenancies')]
+    public function testSizingCountsGrantsWrittenBeforeTheRegistry(bool $sharedTables): void
+    {
+        $database = $this->notesDatabase($sharedTables);
+        foreach ($this->keys('*:grants:*') as $registry) {
+            $this->forget($registry);
+        }
+
+        $this->assertSame($this->bytesOf($sharedTables, self::NOTES), $database->getSizeOfCollection(self::NOTES), 'Sizing must count the grants written before the registry existed');
+    }
+
+    #[DataProvider('tenancies')]
+    public function testSizingCountsRegisteredGrantsItsIdIndexMisses(bool $sharedTables): void
+    {
+        $database = $this->notesDatabase($sharedTables);
+        foreach ($this->keys('*:idx:*'.self::NOTES) as $index) {
+            $this->forget($index);
+        }
+        $unindexed = $this->keys('*:redis_unique:doc:*'.self::NOTES.':'.self::NOTE);
+
+        $this->assertCount(1, $unindexed);
+        $expected = $this->bytesOf($sharedTables, self::NOTES) - $this->bytes($unindexed[0]);
+
+        $this->assertSame($expected, $database->getSizeOfCollection(self::NOTES), 'Sizing must count the grants the collection registered, even those its id index no longer lists');
+    }
+
+    public function testSizingUnderSharedTablesCountsOnlyTheSelectedTenantsGrants(): void
+    {
+        $database = $this->notesDatabase(true);
+        $expected = $this->bytesOf(true, self::NOTES);
+
+        $database->withTenant(self::OTHER_TENANT, function () use ($database): void {
+            $database->createCollection(new Collection(
+                id: self::NOTES,
+                attributes: [Attribute::string(key: 'title', size: 64)],
+                permissions: [Permission::create(Role::any())],
+                documentSecurity: true,
+            ));
+            $database->createDocument(self::NOTES, $this->readers([self::CAROL])->setAttribute('$id', self::NOTE)->setAttribute('title', 'other tenant'));
+        });
+
+        $this->assertNotSame([], $this->keys('*:perm:t:'.self::OTHER_TENANT.':'.self::NOTES.':*'));
+        $this->assertSame($expected, $database->getSizeOfCollection(self::NOTES), 'Sizing must count only the selected tenant\'s grants');
+    }
+
     private function database(): Database
     {
         return (new Database(new RedisAdapter($this->client), new Cache(new None())))
@@ -333,6 +391,36 @@ final class RedisUniqueIndexTest extends TestCase
         return \array_values(\array_filter($owned, $this->has(...)));
     }
 
+    private function bytesOf(bool $sharedTables, string $collection): int
+    {
+        $bytes = 0;
+        foreach ($this->keysOf($sharedTables, $collection) as $key) {
+            if (\str_contains($key, ':grants:') || \str_contains($key, ':seq:')) {
+                continue;
+            }
+            $bytes += $this->bytes($key);
+        }
+
+        return $bytes;
+    }
+
+    private function bytes(string $key): int
+    {
+        if (isset($this->strings[$key])) {
+            return \strlen($key) + \strlen($this->strings[$key]);
+        }
+
+        $bytes = \strlen($key);
+        foreach ($this->hashes[$key] ?? [] as $field => $value) {
+            $bytes += \strlen((string) $field) + \strlen($value);
+        }
+        foreach ($this->members($key) as $member) {
+            $bytes += \strlen($member);
+        }
+
+        return $bytes;
+    }
+
     private function fakeClient(): Redis
     {
         $client = self::createStub(Redis::class);
@@ -443,6 +531,13 @@ final class RedisUniqueIndexTest extends TestCase
             }
 
             return $this->reply($client, $removed);
+        });
+        $client->method('rawCommand')->willThrowException(new \RedisException('MEMORY USAGE is not available'));
+        $client->method('type')->willReturnCallback(fn (string $key): int => match (true) {
+            isset($this->strings[$key]) => Redis::REDIS_STRING,
+            isset($this->sets[$key]) => Redis::REDIS_SET,
+            isset($this->hashes[$key]) => Redis::REDIS_HASH,
+            default => Redis::REDIS_NOT_FOUND,
         });
         $client->method('scan')->willReturnCallback(fn (mixed $iterator, ?string $pattern = null): mixed => $this->keys($pattern ?? '*'));
 

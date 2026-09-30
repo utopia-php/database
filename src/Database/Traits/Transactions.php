@@ -4,7 +4,9 @@ namespace Utopia\Database\Traits;
 
 use Closure;
 use Throwable;
+use Utopia\Database\Capability;
 use Utopia\Database\Event;
+use WeakMap;
 
 /**
  * Provides transactional execution support, delegating to the underlying database adapter.
@@ -19,6 +21,9 @@ trait Transactions
 
     /** @var array<int, list<Closure(): void>> Document purge events of the open invalidation scope, by coroutine id, fired once its outermost transaction has committed. */
     protected array $documentPurgeEvents = [];
+
+    /** @var WeakMap<Throwable, true>|null Failures raised after their outermost transaction committed. */
+    private ?WeakMap $committedFailures = null;
 
     /**
      * Run a callback inside a transaction.
@@ -73,7 +78,11 @@ trait Transactions
     /**
      * Run the callback in an adapter transaction that leaves no document purge event of a
      * rolled-back attempt queued: each attempt starts from the events queued before the
-     * transaction, and a transaction that fails drops the events queued inside it.
+     * transaction, and a transaction that fails drops the events queued inside it when the
+     * adapter rolls a nested transaction back to its savepoint. Without savepoints nothing
+     * rolls a failed nested call back, so its writes stay in the caller's transaction and so
+     * do their events; a failed outermost transaction drops every event in the invalidation
+     * scope instead.
      *
      * @template T
      *
@@ -97,7 +106,9 @@ trait Transactions
                 return $callback();
             });
         } catch (Throwable $error) {
-            $discard();
+            if ($this->adapter->supports(Capability::NestedTransactions)) {
+                $discard();
+            }
 
             throw $error;
         }
@@ -218,10 +229,22 @@ trait Transactions
             $failure ??= $announcement;
 
             if ($failure !== null) {
+                $this->committedFailures ??= new WeakMap();
+                $this->committedFailures[$failure] = true;
+
                 throw $failure;
             }
         }
 
         return $result;
+    }
+
+    /**
+     * Whether the error was raised after its outermost transaction committed: the writes it
+     * reports on are stored, and only the invalidation or the events after the commit failed.
+     */
+    private function failedAfterCommit(Throwable $error): bool
+    {
+        return isset($this->committedFailures[$error]);
     }
 }

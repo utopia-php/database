@@ -158,6 +158,32 @@ final class TransactionStateTest extends TestCase
     }
 
     /**
+     * A reconnect the callback did not surface leaves the driver without the top-level
+     * transaction the adapter still counts. Its commit has nothing to commit, so the call
+     * must fail instead of returning as if the work were stored, and must not run the
+     * callback again: statements after the reconnect may already have run on their own.
+     */
+    public function testTopLevelCommitAfterTheDriverLostTheTransactionFails(): void
+    {
+        $connection = $this->createConnection();
+        $adapter = new MariaDB($connection);
+        $attempts = 0;
+
+        $error = $this->capture(function () use ($adapter, $connection, &$attempts): void {
+            $adapter->withTransaction(function () use ($connection, &$attempts): void {
+                $attempts++;
+                $connection->reconnectSilently();
+            });
+        });
+
+        $this->assertInstanceOf(TransactionException::class, $error, 'A commit of a transaction the driver no longer holds must fail');
+        $this->assertSame(1, $attempts, 'The work of a lost transaction must not run again');
+        $this->assertSame(1, $connection->begins);
+        $this->assertSame(0, $connection->commits, 'Nothing may be committed after the transaction was lost');
+        $this->assertFalse($adapter->inTransaction());
+    }
+
+    /**
      * @param callable(): mixed $callback
      */
     private function capture(callable $callback): ?Throwable

@@ -22,7 +22,6 @@ use Utopia\Console;
  * @method bool rollBack()
  * @method bool inTransaction()
  * @method string|false quote(string $string, int $type = PhpPDO::PARAM_STR)
- * @method bool setAttribute(int $attribute, mixed $value)
  * @method mixed getAttribute(int $attribute)
  * @method string|false lastInsertId(?string $name = null)
  * @method \PDOStatement|false query(string $query, ?int $fetchMode = null, mixed ...$fetchModeArgs)
@@ -31,7 +30,21 @@ class PDO
 {
     protected PhpPDO $pdo;
 
+    /**
+     * Methods that send a statement, lowercased as PHP compares method names.
+     */
+    private const array STATEMENTS = ['begintransaction', 'commit', 'exec', 'query'];
+
+    private const string ROLLBACK = 'ROLLBACK';
+
     private ?string $hostname = null;
+
+    /**
+     * Whether a reconnect dropped the caller's open transaction and the caller has not
+     * rolled it back yet. Until then every statement is refused, so none of them runs
+     * in autocommit on the new connection.
+     */
+    private bool $lostTransaction = false;
 
     /**
      * Statements that set session state, keyed by the setting each one sets.
@@ -39,6 +52,13 @@ class PDO
      * @var array<string, string>
      */
     private array $session = [];
+
+    /**
+     * Attributes set after connecting, replayed on every connection a reconnect opens.
+     *
+     * @var array<int, mixed>
+     */
+    private array $attributes = [];
 
     /**
      * Create a new PDO wrapper instance.
@@ -85,6 +105,8 @@ class PDO
      */
     public function prepareNative(string $query, array $options = []): PhpPDOStatement
     {
+        $this->guard($query);
+
         try {
             $statement = $this->pdo->prepare($query, $options);
         } catch (Throwable $e) {
@@ -109,6 +131,17 @@ class PDO
      */
     public function __call(string $method, array $args): mixed
     {
+        if ($this->lostTransaction && \strcasecmp($method, 'rollBack') === 0) {
+            $this->lostTransaction = false;
+
+            return true;
+        }
+
+        if (\in_array(\strtolower($method), self::STATEMENTS, true)) {
+            $statement = $args[0] ?? null;
+            $this->guard(\is_string($statement) ? $statement : $method);
+        }
+
         try {
             return $this->pdo->{$method}(...$args);
         } catch (Throwable $e) {
@@ -118,18 +151,31 @@ class PDO
 
                 $inTransaction = $this->pdo->inTransaction();
 
-                // Attempt to reconnect
                 $this->reconnect();
 
-                // If we weren't in a transaction, also retry the query
-                // In a transaction we can't retry as the state is attached to the previous connection
                 if (! $inTransaction) {
                     return $this->pdo->{$method}(...$args);
                 }
+
+                $this->lostTransaction = true;
             }
 
             throw $e;
         }
+    }
+
+    /**
+     * Set an attribute on the connection and on every connection a reconnect opens.
+     */
+    public function setAttribute(int $attribute, mixed $value): bool
+    {
+        if (! $this->pdo->setAttribute($attribute, $value)) {
+            return false;
+        }
+
+        $this->attributes[$attribute] = $value;
+
+        return true;
     }
 
     /**
@@ -149,17 +195,24 @@ class PDO
     }
 
     /**
-     * Create a new connection to the database with the configured session.
+     * Create a new connection to the database with the attributes set after connecting
+     * and the configured session.
      *
-     * It replaces the current connection only once the session is replayed: after a
-     * failed replay the lost connection stays, so the next call reconnects again
-     * instead of running without the configured session.
+     * It replaces the current connection only once both are replayed: after a failed
+     * replay the lost connection stays, so the next call reconnects again instead of
+     * running without them.
      *
      * @throws Throwable
      */
     public function reconnect(): void
     {
         $pdo = $this->connect();
+
+        foreach ($this->attributes as $attribute => $value) {
+            if (! $pdo->setAttribute($attribute, $value)) {
+                throw new PDOException("Failed to restore attribute {$attribute}");
+            }
+        }
 
         foreach ($this->session as $statement) {
             if ($pdo->exec($statement) === false) {
@@ -168,6 +221,28 @@ class PDO
         }
 
         $this->pdo = $pdo;
+        $this->lostTransaction = false;
+    }
+
+    /**
+     * Refuse a statement while a lost transaction is not rolled back. A bare ROLLBACK is
+     * the caller ending that transaction, so it is let through and ends the refusal.
+     *
+     * @throws PDOException
+     */
+    private function guard(string $statement): void
+    {
+        if (! $this->lostTransaction) {
+            return;
+        }
+
+        if (\strcasecmp(\trim($statement), self::ROLLBACK) === 0) {
+            $this->lostTransaction = false;
+
+            return;
+        }
+
+        throw new PDOException('The transaction was lost with the connection: roll it back before running another statement');
     }
 
     private function connect(): PhpPDO
@@ -191,7 +266,7 @@ class PDO
 
     public function inTransaction(): bool
     {
-        return $this->pdo->inTransaction();
+        return $this->lostTransaction || $this->pdo->inTransaction();
     }
 
     /**

@@ -31,6 +31,11 @@ enum Capability
     case JSONOverlaps;
     case MultiDimensionDistance;
     case MultipleFulltextIndexes;
+    /**
+     * A nested transaction that fails rolls back to its savepoint and leaves the enclosing
+     * transaction open. Without it a nested call runs inside the enclosing transaction and
+     * its writes stay there when it fails.
+     */
     case NestedTransactions;
     case NumericCasting;
     case ObjectIndexes;

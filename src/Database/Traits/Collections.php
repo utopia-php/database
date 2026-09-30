@@ -232,6 +232,10 @@ trait Collections
             }
             throw new DuplicateException('Collection '.$id.' already exists', previous: $e);
         } catch (Throwable $e) {
+            if ($this->failedAfterCommit($e)) {
+                throw $e;
+            }
+
             if ($created) {
                 try {
                     $this->cleanupCollection($id);

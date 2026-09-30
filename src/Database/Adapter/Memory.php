@@ -754,8 +754,6 @@ class Memory extends Adapter implements Feature\Relationships
                 // Junction columns live on the junction collection, which is
                 // created with explicit attributes by the wrapper.
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -815,8 +813,6 @@ class Memory extends Adapter implements Feature\Relationships
                     }
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -863,8 +859,6 @@ class Memory extends Adapter implements Feature\Relationships
             case RelationType::ManyToMany:
                 // Junction collection is dropped by the wrapper via cleanupCollection.
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;

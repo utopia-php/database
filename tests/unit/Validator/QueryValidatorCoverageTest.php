@@ -17,6 +17,7 @@ use Utopia\Database\Validator\Query\Filter;
 use Utopia\Database\Validator\Query\GroupBy;
 use Utopia\Database\Validator\Query\Having;
 use Utopia\Database\Validator\Query\Join;
+use Utopia\Database\Validator\Query\Limit;
 use Utopia\Query\Method;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
@@ -237,6 +238,20 @@ final class QueryValidatorCoverageTest extends TestCase
         $this->assertSame('Join requires a table name', $validator->getDescription());
 
         $this->assertTrue($validator->isValid(Query::join('authors', 'authorId', 'id', alias: 'author')), $validator->getDescription());
+    }
+
+    public function testTheLimitValidatorRefusesAnotherMethodAndANonNumericLimit(): void
+    {
+        $validator = new Limit();
+
+        $this->assertFalse($validator->isValid(Query::offset(5)));
+        $this->assertSame('Invalid query method: offset', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid(new Query(Method::Limit, '', ['abc'])));
+        $this->assertStringStartsWith('Invalid limit: ', $validator->getDescription());
+
+        $this->assertFalse($validator->isValid('limit(5)'));
+        $this->assertTrue($validator->isValid(Query::limit(5)), $validator->getDescription());
     }
 
     private function filter(bool $supportForAttributes = true): Filter

@@ -98,6 +98,9 @@ trait Documents
     /** @var array<int, array<string, string>> Definition keys of the collections the open invalidation scope wrote, by coroutine id and collection key. */
     private array $documentCacheDefinitions = [];
 
+    /** The metadata collection's definition, built once per process; every read gets a deep clone. */
+    private static ?Document $metadataDefinition = null;
+
     /** @var WeakMap<Document, string>|null The document-cache epoch each collection definition was read with, until the definition is let go. */
     private static ?WeakMap $collectionCacheEpochs = null;
 
@@ -414,7 +417,7 @@ trait Documents
     public function getDocument(string $collection, string $id, array $queries = [], bool $forUpdate = false): Document
     {
         if ($collection === self::METADATA && $id === self::METADATA) {
-            return new Document(self::collectionMeta());
+            return clone (self::$metadataDefinition ??= new Document(self::collectionMeta()));
         }
 
         if (empty($collection)) {

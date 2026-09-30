@@ -129,12 +129,12 @@ final class PostgresSpatialCacheTest extends TestCase
      */
     private function insert(Postgres $adapter, Document $collection, array $attributes): string
     {
-        $this->statements = [];
+        $prepared = \count($this->statements);
         $this->bindings = [];
 
         $adapter->createDocument($collection, new Document(['$id' => 'document', '$permissions' => [], ...$attributes]));
 
-        $statement = $this->statements[0] ?? null;
+        $statement = $this->statements[$prepared] ?? null;
         $this->assertIsString($statement);
 
         return $statement;

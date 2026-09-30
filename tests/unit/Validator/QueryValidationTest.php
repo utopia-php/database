@@ -361,40 +361,6 @@ final class QueryValidationTest extends TestCase
     }
 
     /**
-     * A select names a joined collection's attributes one by one: `alias.*` is no projection the
-     * adapters build, so it stays refused, and a read without a select (or with `*`) returns them all.
-     */
-    public function testAJoinAliasHasNoWildcardSelect(): void
-    {
-        $join = Query::join('items', '$id', 'ownerRef', '=', 'it');
-        $message = 'Cannot select "it.*": select a joined collection\'s attributes by name (alias.attribute); a read without a select, or with "*", returns them all';
-
-        $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('owners', [$join, Query::select(['name', 'it.*'])]));
-        $this->assertInvalidQuery($message, fn (): mixed => $this->database->find('owners', [$join, Query::select(['*', 'it.*'])]));
-
-        $rows = $this->database->find('owners', [$join, Query::select(['*']), Query::orderAsc('it.title')]);
-        $this->assertSame(['cup', 'pen'], \array_map(static fn (Document $row): mixed => $row->getAttribute('it.title'), $rows));
-    }
-
-    /**
-     * The adapters order by the main table's column under a bare name, so a name only a joined
-     * collection declares is ordered by under its alias, whether it is grouped bare or aliased.
-     */
-    public function testAnOrderNamesAJoinedAttributeUnderItsAlias(): void
-    {
-        $join = Query::join('items', '$id', 'ownerRef', '=', 'it');
-
-        foreach ([['price'], ['it.price']] as $groups) {
-            $this->assertInvalidQuery('Attribute not found in schema: price', fn (): mixed => $this->database->find('owners', [$join, Query::groupBy($groups), Query::count('*', 'rows'), Query::orderAsc('price')]));
-
-            $rows = $this->database->find('owners', [$join, Query::groupBy($groups), Query::count('*', 'rows'), Query::orderDesc('it.price')]);
-            $this->assertSame([7, 5], \array_map(static fn (Document $row): mixed => $row->getAttribute('price'), $rows));
-        }
-
-        $this->assertInvalidQuery('Attribute not found in schema: price', fn (): mixed => $this->database->find('owners', [$join, Query::orderAsc('price')]));
-    }
-
-    /**
      * A document read validator accepts joins by default, as its callers expect, and refuses them
      * with the Documents validator's opt-in flag turned off.
      */

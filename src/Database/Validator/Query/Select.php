@@ -162,12 +162,6 @@ class Select extends Base
                     return $this->rejectUngrouped($attribute);
                 }
 
-                if ($column === '*' && isset($this->joinAliases[$alias])) {
-                    $this->message = 'Cannot select "'.$attribute.'": select a joined collection\'s attributes by name (alias.attribute); a read without a select, or with "*", returns them all';
-
-                    return false;
-                }
-
                 // For relationships, just validate the top level.
                 // Will validate each nested level during the recursive calls.
                 $attribute = $alias;

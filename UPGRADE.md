@@ -269,6 +269,10 @@ A listener is now an object implementing `Utopia\Database\Hook\Lifecycle` and re
 - Registering a named hook replaces the lifecycle hook already registered under that name, in its position.
   Re-registering on every request or job no longer stacks listeners. Hooks without a name are appended every time
   they are added.
+- A name is unique per `Database`, across all events. 7.x kept one listener per event and name, so
+  `on(EVENT_DOCUMENT_CREATE, 'usage', ...)` and `on(EVENT_DOCUMENT_DELETE, 'usage', ...)` were two listeners. In 8.0
+  several `Named` hooks with the same name keep only the one registered last: handle all of a name's events in one
+  hook, or give each hook its own name.
 - `silent()` can silence a named hook on its own (see below).
 
 ```php

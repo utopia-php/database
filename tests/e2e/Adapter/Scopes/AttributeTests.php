@@ -6,6 +6,7 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -2733,7 +2734,8 @@ trait AttributeTests
             $database->setTenant($second);
             $database->createCollection($definition);
 
-            if ($database->getAdapter()->hasFeature(Feature\SchemaAttributes::class)) {
+            $adapter = $database->getAdapter();
+            if ($adapter->hasFeature(Feature\SchemaAttributes::class) || $adapter instanceof Postgres) {
                 try {
                     $database->createAttribute($collection, Attribute::string(key: 'age', size: 64));
                     $this->fail('A column another tenant stores with another type must be refused');

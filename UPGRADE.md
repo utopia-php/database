@@ -1209,6 +1209,8 @@ API might expect. [CHANGELOG.md](CHANGELOG.md) describes the features themselves
   read orders by (`note.score`, `$sequence`, `note.$id`); a missing value throws `Utopia\Database\Exception\Order`
   (`Cursor has no value for order attribute 'note.$id'. …`). A value is never taken from the main document's attribute
   of the same name. A read whose `select()` leaves a paged join's `alias.$id` out has to select it to be paged.
+  `cursor()` and `iterate()` check the last row of each full batch before yielding the batch, so such a read throws
+  before the first row; a read that fits in one batch is not paged and needs no such value.
 - A value may be null (a row an outer join did not match, a nullable attribute). Nulls keep the engine's position:
   first in ascending order on MariaDB, MySQL and SQLite, last on PostgreSQL, and the cursor pages through them.
 - A row a right or full outer join returned without a main document (its `$id` is `''`) is a valid cursor for that

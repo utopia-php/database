@@ -3721,52 +3721,7 @@ trait Documents
         }
 
         if (! $isAggregation && ! $distinct) {
-            $uniqueOrderBy = false;
-            foreach ($orderAttributes as $order) {
-                if ($order === Document::ID || $order === Document::SEQUENCE) {
-                    $uniqueOrderBy = true;
-                }
-            }
-
-            $vectorSearch = false;
-            foreach ($filters as $filter) {
-                if (\in_array($filter->getMethod(), [Method::VectorCosine, Method::VectorDot, Method::VectorEuclidean], true)) {
-                    $vectorSearch = true;
-                    break;
-                }
-            }
-
-            // A vector index answers exactly one sort key, the distance. A tie break behind it
-            // makes the ordering unanswerable from the index and the collection is read in full,
-            // so the tie break is only added when a cursor needs a stable page boundary.
-            // The tie break sits behind the caller's own order so every requested key is still
-            // read. It follows the direction of a leading timestamp so a descending list returns
-            // a batch that shares one timestamp newest-inserted first.
-            if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
-                $leadingAttribute = $orderAttributes[0] ?? null;
-                $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
-
-                $orderAttributes[] = Document::SEQUENCE;
-                $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
-                    ? $leadingOrderType
-                    : OrderDirection::Asc;
-            }
-
-            $aliases = \array_keys($joinedCollections);
-            if ((! $vectorSearch || ! empty($cursor)) && \count($aliases) === \count($joins)) {
-                foreach (\array_values($joins) as $position => $join) {
-                    $alias = $aliases[$position];
-                    $joinedId = $alias.'.'.Document::ID;
-                    if (
-                        ! $this->joinMatchesAtMostOneRow($join, $alias)
-                        && ! \in_array($joinedId, $orderAttributes, true)
-                        && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)
-                    ) {
-                        $orderAttributes[] = $joinedId;
-                        $orderTypes[] = OrderDirection::Asc;
-                    }
-                }
-            }
+            [$orderAttributes, $orderTypes] = $this->addTieBreaks($orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor));
         }
 
         if (! empty($cursor)) {
@@ -4059,6 +4014,7 @@ trait Documents
 
         $sum = $limit;
         $latestDocument = null;
+        $check = null;
 
         while ($sum === $limit) {
             $newQueries = $queries;
@@ -4080,12 +4036,16 @@ trait Documents
             }
 
             $sum = count($results);
+            $latestDocument = $results[array_key_last($results)];
+
+            if ($sum === $limit) {
+                $check ??= $this->nextPageCheck($collection, $queries);
+                $check($latestDocument);
+            }
 
             foreach ($results as $document) {
                 yield $document;
             }
-
-            $latestDocument = $results[array_key_last($results)];
         }
     }
 
@@ -4356,6 +4316,7 @@ trait Documents
             $queries,
             static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
         ));
+        $check = null;
 
         while ($remaining === null || $remaining > 0) {
             $size = $remaining === null ? $batchSize : \min($batchSize, $remaining);
@@ -4368,13 +4329,19 @@ trait Documents
             }
 
             $documents = $this->find($collection, [...$page, ...$queries]);
+            $last = \end($documents);
+            $pages = $last !== false && \count($documents) === $size && ($remaining === null || $remaining > $size);
+
+            if ($pages) {
+                $check ??= $this->nextPageCheck($collection, $queries);
+                $check($last);
+            }
 
             foreach ($documents as $document) {
                 yield $document;
             }
 
-            $last = \end($documents);
-            if ($last === false || \count($documents) < $size) {
+            if (! $pages) {
                 return;
             }
 
@@ -4395,6 +4362,102 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         return $this->find($collection, $queries);
+    }
+
+    /**
+     * A vector index answers exactly one sort key, the distance: a tie break behind it makes the ordering unanswerable
+     * from the index, so tie breaks are only added when a cursor needs a stable page boundary.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<Query>  $filters
+     * @param  array<Query>  $joins
+     * @param  array<string, Document>  $joinedCollections
+     * @return array{array<string>, array<OrderDirection>}
+     */
+    private function addTieBreaks(array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged): array
+    {
+        $uniqueOrderBy = \in_array(Document::ID, $orderAttributes, true) || \in_array(Document::SEQUENCE, $orderAttributes, true);
+
+        $vectorSearch = false;
+        foreach ($filters as $filter) {
+            if (\in_array($filter->getMethod(), [Method::VectorCosine, Method::VectorDot, Method::VectorEuclidean], true)) {
+                $vectorSearch = true;
+                break;
+            }
+        }
+
+        if ($vectorSearch && ! $paged) {
+            return [$orderAttributes, $orderTypes];
+        }
+
+        if (! $uniqueOrderBy) {
+            $leadingAttribute = $orderAttributes[0] ?? null;
+            $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
+
+            $orderAttributes[] = Document::SEQUENCE;
+            $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
+                ? $leadingOrderType
+                : OrderDirection::Asc;
+        }
+
+        $aliases = \array_keys($joinedCollections);
+        if (\count($aliases) === \count($joins)) {
+            foreach (\array_values($joins) as $position => $join) {
+                $alias = $aliases[$position];
+                $joinedId = $alias.'.'.Document::ID;
+                if (
+                    ! $this->joinMatchesAtMostOneRow($join, $alias)
+                    && ! \in_array($joinedId, $orderAttributes, true)
+                    && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)
+                ) {
+                    $orderAttributes[] = $joinedId;
+                    $orderTypes[] = OrderDirection::Asc;
+                }
+            }
+        }
+
+        return [$orderAttributes, $orderTypes];
+    }
+
+    /**
+     * What find() checks of the cursor it is given for a joined or distinct read, run on a page's last row before the
+     * page is yielded, so a read that cannot be paged fails before its caller acts on any row.
+     *
+     * @param  array<Query>  $queries
+     * @return Closure(Document): void
+     */
+    private function nextPageCheck(string $collection, array $queries): Closure
+    {
+        $grouped = Query::groupForDatabase($queries);
+        $joins = $grouped['joins'];
+        $distinct = $grouped['distinct'];
+        if (($joins === [] && ! $distinct) || $grouped['aggregations'] !== [] || $grouped['groupBy'] !== []) {
+            return static function (Document $cursor): void {
+            };
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+        $joinedCollections = $this->joinedCollectionsByAlias($joins, $this->resolveJoinedCollections($joins));
+        $selects = $grouped['selections'];
+        $filters = $grouped['filters'];
+        $orderAttributes = $grouped['orderAttributes'];
+        $orderTypes = $grouped['orderTypes'];
+
+        return function (Document $cursor) use ($collection, $joins, $distinct, $joinedCollections, $selects, $filters, $orderAttributes, $orderTypes): void {
+            $orders = $orderAttributes;
+            if ($joinedCollections !== []) {
+                [$orders, $cursor] = $this->qualifyJoinedOrders($collection, $orders, $cursor, $joinedCollections);
+            }
+
+            if ($distinct) {
+                $this->assertDistinctCursorOrder($selects, $orders);
+            } else {
+                [$orders] = $this->addTieBreaks($orders, $orderTypes, $filters, $joins, $joinedCollections, true);
+            }
+
+            $this->assertCursorHasOrderValues($cursor, $orders);
+        };
     }
 
     /**

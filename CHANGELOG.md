@@ -97,8 +97,9 @@ have to make, with the 7.x and 8.0 forms side by side.
     `Exception\Query` (`Unsupported join ON condition: <method>`) in `find()`, `count()`, `sum()` and `getDocument()`.
   - A cursor over a joined read names the joined row: paging a one-to-many, left, right or full outer join returns
     every row once in both directions, through rows an outer join did not match and rows without a main document. A
-    cursor missing an order value is refused by name instead of borrowing the main document's value.
-    `getDocument()` with a join pairs the lowest-sequence joined row. See
+    cursor missing an order value is refused by name instead of borrowing the main document's value, and `cursor()`
+    and `iterate()` over a joined read whose rows lack such a value throw before yielding a row instead of after the
+    first batch. `getDocument()` with a join pairs the lowest-sequence joined row. See
     [Paging a joined read](UPGRADE.md#paging-a-joined-read).
   - With joins, a bare attribute in an aggregate function or `groupBy()` refers to the main collection's attribute
     when the main collection declares it, else to the attribute of the one joined collection that declares it. A

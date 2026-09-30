@@ -688,19 +688,17 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
      */
     public function updateAttribute(string $collection, Attribute $attribute, ?string $newKey = null): bool
     {
-        if (! empty($newKey) && $newKey !== $attribute->key) {
-            return $this->renameAttribute($collection, $attribute->key, $newKey);
-        }
+        $renameTo = ! empty($newKey) && $newKey !== $attribute->key ? $newKey : null;
 
         // SQLite is dynamically typed — `ALTER TABLE ... MODIFY COLUMN` is
         // not supported and a smaller declared size silently accepts
         // larger values. Under MySQL emulation, scan the column and
-        // raise the same TruncateException MariaDB throws. Off-
-        // emulation the declared size is metadata-only, so skip the
-        // scan and let the rename branch (if any) handle the rest.
+        // raise the same TruncateException MariaDB throws, before any
+        // rename, as MariaDB refuses the whole CHANGE COLUMN. Off-
+        // emulation the declared size is metadata-only.
         if ($this->emulateMySQL && $attribute->type === ColumnType::String && $attribute->size > 0 && ! $attribute->array) {
             $name = $this->filter($collection);
-            $column = $this->filter($attribute->key);
+            $column = $this->filter($renameTo !== null && $this->isRenamed($collection, $attribute->key, $renameTo) ? $renameTo : $attribute->key);
 
             // Under shared tables the underlying table is shared across
             // tenants; scoping the scan by `_tenant` keeps tenant A's
@@ -725,6 +723,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             if ($exceeds) {
                 throw new TruncateException("Attribute '{$attribute->key}' has values exceeding new size {$attribute->size}");
             }
+        }
+
+        if ($renameTo !== null) {
+            return $this->renameAttribute($collection, $attribute->key, $renameTo);
         }
 
         return true;

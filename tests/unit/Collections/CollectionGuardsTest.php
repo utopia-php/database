@@ -16,6 +16,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -161,6 +162,99 @@ final class CollectionGuardsTest extends TestCase
         $this->assertTrue($adapter->exists('guards', self::COLLECTION), 'the table is created again');
         $this->assertFalse($database->getCollection(self::COLLECTION)->isEmpty());
         $this->assertSame([], $database->find(self::COLLECTION), 'the restored table is empty: only its definition survives');
+    }
+
+    public function testTheSizeOfAMissingCollectionIsNotFound(): void
+    {
+        $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
+
+        foreach ([
+            fn (): int => $database->getSizeOfCollection('missing'),
+            fn (): int => $database->getSizeOfCollectionOnDisk('missing'),
+        ] as $size) {
+            try {
+                $size();
+                $this->fail('a missing collection has no size');
+            } catch (NotFoundException $error) {
+                $this->assertSame('Collection not found', $error->getMessage());
+            }
+        }
+    }
+
+    public function testATenantCannotReadTheSizeOfATenantlessCollection(): void
+    {
+        $database = $this->sharedDatabase();
+        $this->assertIsInt($database->getSizeOfCollection(self::COLLECTION));
+
+        $database->setTenant(self::TENANT);
+        foreach ([
+            fn (): int => $database->getSizeOfCollection(self::COLLECTION),
+            fn (): int => $database->getSizeOfCollectionOnDisk(self::COLLECTION),
+        ] as $size) {
+            try {
+                $size();
+                $this->fail('a tenant must not read the size of a collection it does not own');
+            } catch (NotFoundException $error) {
+                $this->assertSame('Collection not found', $error->getMessage());
+            }
+        }
+    }
+
+    public function testTheSizeOnDiskNeedsATenantUnderSharedTables(): void
+    {
+        $database = $this->sharedDatabase();
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Missing tenant. Tenant must be set when table sharing is enabled.');
+
+        $database->getSizeOfCollectionOnDisk(self::COLLECTION);
+    }
+
+    public function testALostCreationRaceKeepsTheTableAndLogsAFailedCachePurge(): void
+    {
+        $adapter = new Memory();
+        $winner = new DuplicateException('Document already exists');
+        $database = new class ($adapter, new Cache(new None()), $winner) extends Database {
+            public function __construct(Adapter $adapter, Cache $cache, private readonly DuplicateException $winner)
+            {
+                parent::__construct($adapter, $cache);
+            }
+
+            public function createDocument(string $collection, Document $document): Document
+            {
+                if ($collection === self::METADATA && $document->getId() === 'raced') {
+                    throw $this->winner;
+                }
+
+                return parent::createDocument($collection, $document);
+            }
+
+            public function purgeCachedDocument(string $collectionId, ?string $id): bool
+            {
+                if ($id === 'raced') {
+                    throw new RuntimeException('the cache is down');
+                }
+
+                return parent::purgeCachedDocument($collectionId, $id);
+            }
+        };
+        $database->setDatabase('guards')->setNamespace('guards_'.\uniqid());
+        $database->create();
+
+        $error = null;
+        $log = StderrCapture::during(function () use ($database, &$error): void {
+            try {
+                $database->createCollection(new Collection(id: 'raced'));
+            } catch (DuplicateException $caught) {
+                $error = $caught;
+            }
+        });
+
+        $this->assertInstanceOf(DuplicateException::class, $error);
+        $this->assertSame('Collection raced already exists', $error->getMessage());
+        $this->assertSame($winner, $error->getPrevious());
+        $this->assertStringContainsString('Warning: Failed to purge stale collection cache: the cache is down', $log);
+        $this->assertTrue($adapter->exists('guards', 'raced'), 'the table the winner described is kept');
     }
 
     private function database(Adapter $adapter): Database

@@ -2473,7 +2473,9 @@ class Database
             }
 
             if ($method->isJoin()) {
-                $this->convertQueriesWithMap($query->getJoinOnQueries(), $attributesById, $isNestedQueryAttributeSupported);
+                /** @var array<Query> $onQueries */
+                $onQueries = $query->getJoinOnQueries();
+                $this->convertQueriesWithMap($onQueries, $attributesById, $isNestedQueryAttributeSupported);
 
                 continue;
             }

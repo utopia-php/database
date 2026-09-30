@@ -86,6 +86,7 @@ final readonly class Storage
      */
     public static function columnMap(): array
     {
+        /** @var array<string, string> $columnMap */
         static $columnMap = \array_flip(self::ATTRIBUTE_MAP);
 
         return $columnMap;

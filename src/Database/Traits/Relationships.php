@@ -597,7 +597,7 @@ trait Relationships
                 }
             }
 
-            if ($adapterUpdated) {
+            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
                 try {
                     $reverseRelModel = new Relationship(
                         collection: $collection->getId(),

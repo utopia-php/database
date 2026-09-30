@@ -3243,10 +3243,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     private static function getInternalAttributeArrays(): array
     {
-        return self::$internalAttributeArrays ??= \array_map(
+        return self::$internalAttributeArrays ??= \array_values(\array_map(
             fn (Attribute $attribute): array => [Document::ID => $attribute->key, 'type' => $attribute->type, 'array' => $attribute->array],
             Database::internalAttributes()
-        );
+        ));
     }
 
     /**
@@ -3368,8 +3368,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      * Keys cannot begin with $ in MongoDB
      * Convert $ prefix to _ on $id, $permissions, and $collection
      *
-     * @param  array<string, mixed>  $array
-     * @return array<string, mixed>
+     * @template TKey of array-key
+     *
+     * @param  array<TKey, mixed>  $array
+     * @return array<TKey|string, mixed>
      */
     protected function replaceChars(string $from, string $to, array $array): array
     {
@@ -3377,7 +3379,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $keysToRename = [];
         foreach ($array as $k => $v) {
             if (is_array($v)) {
-                /** @var array<string, mixed> $v */
+                /** @var array<array-key, mixed> $v */
                 $array[$k] = $this->replaceChars($from, $to, $v);
             }
 

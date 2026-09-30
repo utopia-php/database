@@ -3671,7 +3671,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $this->statementBindings[$stmt] ?? [],
             (\microtime(true) - $start) * 1000,
             $this->statementCollections[$stmt] ?? '',
-            $this->getStatementEvent($stmt)?->value ?? '',
+            $this->getStatementEvent($stmt)->value ?? '',
         );
 
         return $result;
@@ -5392,7 +5392,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * by that bare name, and the main collection's group keeps it when both are grouped.
      *
      * @param  array<string>  $groups
-     * @return array<int, string>
+     * @return array<string>
      */
     private function qualifiedGroupNames(array $groups): array
     {
@@ -6422,7 +6422,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $limit = \is_float($bound) && \is_finite($bound) ? (BigInt::integralValue($bound) ?? $bound) : $bound;
         $comparison = \is_int($result) && BigInt::isIntegerValue($limit)
             ? BigInt::compare($result, $limit)
-            : $result <=> $limit + 0;
+            : $result <=> (\is_string($limit) ? (float) $limit : $limit);
 
         $crossed = match ($method) {
             OperatorType::Increment, OperatorType::Multiply, OperatorType::Power => \is_nan((float) $result) || $comparison > 0,

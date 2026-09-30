@@ -361,7 +361,7 @@ class BigInt extends Validator
     }
 
     /**
-     * @phpstan-assert-if-true int|string $value
+     * @phpstan-assert-if-true =int|string $value
      */
     public static function isIntegerValue(mixed $value): bool
     {

@@ -15,12 +15,14 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Hook\PermissionFilter;
@@ -1642,6 +1644,22 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             && \str_contains($e->getMessage(), 'for SELECT DISTINCT, ORDER BY expressions must appear in select list')
         ) {
             return new QueryException('A distinct() query can only be ordered by a selected attribute on this database', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '40P01' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TransactionException('Deadlock detected', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '40001' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TransactionException('Could not serialize access due to a concurrent update', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '55P03' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new TransactionException('Lock not available', $e->getCode(), $e);
+        }
+
+        if ($e->getCode() === '22021' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new CharacterException('Invalid character', $e->getCode(), $e);
         }
 
         return $e;

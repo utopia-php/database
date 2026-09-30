@@ -22,7 +22,6 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
-use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 use Utopia\Database\Exception\Truncate as TruncateException;
 use Utopia\Database\Exception\Unique as UniqueException;
@@ -1753,11 +1752,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
 
     protected function processException(PDOException $e): Exception
     {
-        // Timeout
-        if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 3024) {
-            return new TimeoutException('Query timed out', $e->getCode(), $e);
-        }
-
         // Table/index already exists (SQLITE_ERROR with "already exists" message)
         if ($e->getCode() === 'HY000' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 1 && stripos($e->getMessage(), 'already exists') !== false) {
             return new DuplicateException('Collection already exists', $e->getCode(), $e);

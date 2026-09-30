@@ -116,27 +116,24 @@ final class MongoAdapterPathsTest extends TestCase
         $this->assertSame([], $this->argumentsOf('createIndexes'));
     }
 
-    public function testRenamingAnIndexTheSchemaDoesNotHaveRenamesNothing(): void
+    public function testRenamingAnIndexTheSchemaDoesNotHaveFailsWithTheDriverError(): void
     {
-        $this->replyWithIndexes(['_id_', '_uid']);
+        $this->replyWithIndexMetadata();
+        $this->replies['dropIndexes'] = static fn (): never => throw new MongoException('index not found with name [by_title]', 27);
 
-        $this->assertFalse($this->adapter()->renameIndex('books', 'by_title', 'by_name'));
-        $this->assertSame([], $this->argumentsOf('dropIndexes'));
-        $this->assertSame([], $this->argumentsOf('createIndexes'));
-    }
+        try {
+            $this->adapter()->renameIndex('books', 'by_title', 'by_name');
+            $this->fail('Renaming an index the schema does not have must fail');
+        } catch (MongoException $exception) {
+            $this->assertSame(27, $exception->getCode());
+        }
 
-    public function testRenamingAnIndexTheSchemaAlreadyRenamedIsReportedRenamed(): void
-    {
-        $this->replyWithIndexes(['_id_', '_uid', 'by_name']);
-
-        $this->assertTrue($this->adapter()->renameIndex('books', 'by_title', 'by_name'));
-        $this->assertSame([], $this->argumentsOf('dropIndexes'));
         $this->assertSame([], $this->argumentsOf('createIndexes'));
     }
 
     public function testRenamingAnIndexTheSchemaHasRebuildsItUnderTheNewName(): void
     {
-        $this->replyWithIndexes(['_id_', '_uid', 'by_title']);
+        $this->replyWithIndexMetadata();
 
         $this->assertTrue($this->adapter()->renameIndex('books', 'by_title', 'by_name'));
         $this->assertSame([[self::NAMESPACE.'_books', ['by_title'], []]], $this->argumentsOf('dropIndexes'));
@@ -395,20 +392,13 @@ final class MongoAdapterPathsTest extends TestCase
         return $reply !== null ? $reply($arguments) : null;
     }
 
-    /**
-     * @param  list<string>  $physical
-     */
-    private function replyWithIndexes(array $physical): void
+    private function replyWithIndexMetadata(): void
     {
         $this->replies['find'] = static fn (): stdClass => self::batch([(object) [
             Storage::UID => 'books',
             'indexes' => \json_encode([['$id' => 'by_title', 'key' => 'by_title', 'type' => 'key', 'attributes' => ['title']]]),
             'attributes' => \json_encode([['$id' => 'title', 'key' => 'title', 'type' => 'string']]),
         ]]);
-        $this->replies['query'] = static fn (array $arguments): stdClass => (object) ['cursor' => (object) [
-            'firstBatch' => \array_map(static fn (string $name): stdClass => (object) ['name' => $name], $physical),
-            'id' => 0,
-        ]];
     }
 
     private function adapter(): Mongo

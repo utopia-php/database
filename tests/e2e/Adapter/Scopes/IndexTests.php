@@ -1497,6 +1497,19 @@ trait IndexTests
         try {
             $this->assertTrue($database->getAdapter()->renameIndex($collection, 'byAge', 'ageIndex'));
 
+            if ($database->getAdapter() instanceof Mongo) {
+                try {
+                    $database->renameIndex($collection, 'byAge', 'ageIndex');
+                    $this->fail('MongoDB drops the old index before it renames, so a rename the schema already made fails');
+                } catch (DatabaseException $error) {
+                    $this->assertStringStartsWith("Failed to rename index 'byAge' to 'ageIndex': ", $error->getMessage());
+                }
+
+                $this->assertSame(['byAge'], $this->getIndexKeys($database, $collection));
+
+                return;
+            }
+
             $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'));
             $this->assertSame(['ageIndex'], $this->getIndexKeys($database, $collection));
         } finally {

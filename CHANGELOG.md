@@ -392,10 +392,10 @@ have to make, with the 7.x and 8.0 forms side by side.
   the schema has the index under neither name, instead of recording a rename that did not happen. This holds on
   PostgreSQL, MariaDB, MySQL, MongoDB, Memory and Redis; PostgreSQL, Memory and Redis used to report such a rename
   as done. SQLite rebuilds the index under the new name from its definition, so its schema matches the metadata.
-  An index the schema already has under the new name completes the rename on every adapter. Under shared tables a
-  tenant's rename also completes while the collection's shared index has either name (on PostgreSQL, while another
-  tenant's copy of it does); on MongoDB a later tenant's rename of an index another tenant already renamed completes
-  instead of failing.
+  An index the schema already has under the new name completes the rename on every adapter but MongoDB, which
+  drops the old index first and fails with the driver's IndexNotFound, as before. Under shared tables a tenant's
+  rename also completes while the collection's shared index has either name (on PostgreSQL, while another tenant's
+  copy of it does); MongoDB's shared tables are unchanged.
 - A failed `updateRelationship()` restores the definitions it had already written (parent, two-way child, junction
   keys) and rethrows the original error. Its rollback reverses the column rename before renaming the indexes back,
   so SQLite, Memory and MongoDB rebuild each index over the column it covers instead of losing it.

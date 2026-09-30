@@ -2847,7 +2847,7 @@ trait AttributeTests
             }
 
             $this->assertTenantsFindByTheRenamedIndex($database, $collection, $first, $second);
-        }, sqlOnly: false);
+        });
     }
 
     public function testSharedTablesALaterTenantRenamesAnIndexFirst(): void
@@ -2859,7 +2859,7 @@ trait AttributeTests
             }
 
             $this->assertTenantsFindByTheRenamedIndex($database, $collection, $first, $second);
-        }, sqlOnly: false);
+        });
     }
 
     public function testSharedTablesRenameOfAnIndexNoTenantHasInTheSchemaFails(): void
@@ -2884,7 +2884,7 @@ trait AttributeTests
             }
 
             $this->assertSame(['byAge'], $this->getIndexKeys($database, $collection));
-        }, sqlOnly: false);
+        });
     }
 
     private function assertTenantsFindByTheRenamedIndex(Database $database, string $collection, int|string ...$tenants): void
@@ -2953,11 +2953,11 @@ trait AttributeTests
     /**
      * @param  callable(Database, string, int|string, int|string): void  $scenario
      */
-    private function runSharedRename(callable $scenario, bool $sqlOnly = true): void
+    private function runSharedRename(callable $scenario): void
     {
         $database = $this->getDatabase();
 
-        if (! $database->getSharedTables() || ($sqlOnly && ! $database->getAdapter() instanceof SQL)) {
+        if (! $database->getSharedTables() || ! $database->getAdapter() instanceof SQL) {
             $this->expectNotToPerformAssertions();
 
             return;

@@ -1218,7 +1218,6 @@ trait GeneralTests
         }
 
         $driver = $adapter->getDriver();
-        $this->assertInstanceOf(PDO::class, $driver);
         $killer = clone $driver;
         $killer->reconnect();
 

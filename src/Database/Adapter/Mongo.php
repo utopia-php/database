@@ -23,6 +23,7 @@ use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -77,7 +78,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         '$nor',
         '$exists',
         '$elemMatch',
-        '$exists',
+        '$all',
     ];
 
     protected Client $client;
@@ -739,33 +740,21 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     }
                 }
 
-                // Add partial filter for indexes to avoid indexing null values
-                if (in_array($index->type, [
-                    IndexType::Unique,
-                    IndexType::Key,
-                ])) {
-                    $partialFilter = [];
+                if (in_array($index->type, [IndexType::Unique, IndexType::Key])) {
+                    $fields = [];
                     foreach ($attributes as $attr) {
-                        $attr = (string) $attr;
-                        // Find the matching attribute in collectionAttributes to get its type
-                        $attrType = 'string'; // Default fallback
+                        $attributeType = ColumnType::String;
                         foreach ($collectionAttributes as $collectionAttr) {
                             if ($collectionAttr->key === $attr) {
-                                $attrType = $this->getMongoTypeCode($collectionAttr->type);
+                                $attributeType = $collectionAttr->type;
                                 break;
                             }
                         }
 
-                        $attr = $this->filter($this->getInternalKeyForAttribute($attr));
-
-                        // Use both $exists: true and $type to exclude nulls and ensure correct type
-                        $partialFilter[$attr] = [
-                            '$exists' => true,
-                            '$type' => $attrType,
-                        ];
+                        $fields[$this->filter($this->getInternalKeyForAttribute($attr))] = $attributeType;
                     }
-                    if (! empty($partialFilter)) {
-                        $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
+                    if (! empty($fields)) {
+                        $newIndexes[$i]['partialFilterExpression'] = $this->getPartialFilterExpression($index->type, $fields);
                     }
                 }
             }
@@ -876,7 +865,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $this->getClient()->update(
             $collection,
             [],
-            ['$unset' => [$id => '']],
+            ['$unset' => [$this->escapeMongoFieldName($this->getInternalKeyForAttribute($id)) => '']],
             multi: true
         );
 
@@ -893,8 +882,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $collection = $this->getNamespace().'_'.$this->filter($collection);
 
-        $from = $this->filter($this->getInternalKeyForAttribute($id));
-        $to = $this->filter($this->getInternalKeyForAttribute($name));
+        $from = $this->escapeMongoFieldName($this->getInternalKeyForAttribute($id));
+        $to = $this->escapeMongoFieldName($this->getInternalKeyForAttribute($name));
         $options = $this->getTransactionOptions();
 
         $this->getClient()->update(
@@ -987,8 +976,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                     $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
                 }
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -1049,8 +1036,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
                 $this->getClient()->dropCollection($junction);
                 break;
-            default:
-                throw new DatabaseException('Invalid relationship type');
         }
 
         return true;
@@ -1145,16 +1130,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             $indexes['expireAfterSeconds'] = $ttl;
         }
 
-        // Add partial filter for indexes to avoid indexing null values
         if (in_array($type, [IndexType::Unique, IndexType::Key])) {
-            $partialFilter = [];
+            $fields = [];
             foreach ($attributes as $i => $attr) {
-                $attrType = Attribute::tryNormalizeType($indexAttributeTypes[$i] ?? '') ?? ColumnType::String;
-                $attrType = $this->getMongoTypeCode($attrType);
-                $partialFilter[$attr] = ['$exists' => true, '$type' => $attrType];
+                $fields[$attr] = Attribute::tryNormalizeType($indexAttributeTypes[$index->attributes[$i]] ?? '') ?? ColumnType::String;
             }
-            if (! empty($partialFilter)) {
-                $indexes['partialFilterExpression'] = $partialFilter;
+            if (! empty($fields)) {
+                $indexes['partialFilterExpression'] = $this->getPartialFilterExpression($type, $fields);
             }
         }
         try {
@@ -2464,12 +2446,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
             return 0;
         } catch (MongoException $e) {
-            $processed = $this->processException($e);
-            if ($processed instanceof TimeoutException) {
-                throw $processed;
-            }
-
-            return 0;
+            throw $this->processException($e);
         }
     }
 
@@ -2484,8 +2461,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $name = $this->getNamespace().'_'.$this->filter($collection->getId());
 
-        // queries
         $queries = array_map(fn ($query) => clone $query, $queries);
+        $this->escapeQueryAttributes($collection, $queries);
+        $field = $this->getEscapedAttributes($collection)[$attribute] ?? $attribute;
+
         /** @var array<string, mixed> $filters */
         $filters = $this->buildFilters($queries);
         $filters = $this->applyReadFilters($filters, $collection->getId(), PermissionType::Read);
@@ -2508,7 +2487,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $pipeline[] = [
             '$group' => [
                 Storage::SEQUENCE => null,
-                'total' => ['$sum' => '$'.$attribute],
+                'total' => ['$sum' => '$'.$field],
             ],
         ];
 
@@ -3293,6 +3272,27 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function escapeQueryAttributes(Document $collection, array $queries): void
     {
+        $dotAttributes = $this->getEscapedAttributes($collection);
+
+        if (empty($dotAttributes)) {
+            return;
+        }
+
+        foreach ($queries as $query) {
+            $attr = $query->getAttribute();
+            if (isset($dotAttributes[$attr])) {
+                $query->setAttribute($dotAttributes[$attr]);
+            }
+        }
+    }
+
+    /**
+     * The stored field name of each collection attribute whose key holds a dot or starts with `$`.
+     *
+     * @return array<string, string>
+     */
+    private function getEscapedAttributes(Document $collection): array
+    {
         $rawAttrs = $collection->getAttribute('attributes', []);
         /** @var array<array<string, mixed>> $attributes */
         $attributes = \is_array($rawAttrs) ? $rawAttrs : [];
@@ -3306,16 +3306,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             }
         }
 
-        if (empty($dotAttributes)) {
-            return;
-        }
-
-        foreach ($queries as $query) {
-            $attr = $query->getAttribute();
-            if (isset($dotAttributes[$attr])) {
-                $query->setAttribute($dotAttributes[$attr]);
-            }
-        }
+        return $dotAttributes;
     }
 
     /**
@@ -3422,9 +3413,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $array[Document::ID] = $this->stringifyIdentifier($array[Storage::UID]);
                 unset($array[Storage::UID]);
             }
-            if (isset($array[Storage::TENANT])) {
+            if (\array_key_exists(Storage::TENANT, $array)) {
                 $tenant = $array[Storage::TENANT];
-                $array[Document::TENANT] = \is_int($tenant) ? $tenant : $this->stringifyIdentifier($tenant);
+                $array[Document::TENANT] = \is_int($tenant) || $tenant === null ? $tenant : $this->stringifyIdentifier($tenant);
                 unset($array[Storage::TENANT]);
             }
         } elseif ($from === '$') {
@@ -3436,7 +3427,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $array[Storage::SEQUENCE] = $array[Document::SEQUENCE];
                 unset($array[Document::SEQUENCE]);
             }
-            if (isset($array[Document::TENANT])) {
+            if (\array_key_exists(Document::TENANT, $array)) {
                 $array[Storage::TENANT] = $array[Document::TENANT];
                 unset($array[Document::TENANT]);
             }
@@ -3715,8 +3706,8 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     protected function getQueryValue(Method $method, mixed $value): mixed
     {
         return match ($method) {
-            Method::StartsWith => preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/').'.*',
-            Method::EndsWith => '.*'.preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/'),
+            Method::StartsWith => '^'.preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/'),
+            Method::EndsWith => preg_quote(\is_string($value) ? $value : (\is_scalar($value) ? (string) $value : ''), '/').'$',
             default => $value,
         };
     }
@@ -3732,7 +3723,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         return match ($order) {
             OrderDirection::Asc => 1,
             OrderDirection::Desc => -1,
-            default => throw new DatabaseException('Unknown sort order:'.$order->value.'. Must be one of '.OrderDirection::Asc->value.', '.OrderDirection::Desc->value),
+            OrderDirection::Random => throw new QueryException('Random order is not supported by this adapter'),
         };
     }
 
@@ -4099,9 +4090,35 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Converts Appwrite database type to MongoDB BSON type code.
+     * MongoDB uses a partial index for a query only when the query implies its filter, and a filter on a value implies
+     * `$exists` but never `$type`. A unique index requires every field to exist with its stored type, so null values
+     * never collide. A key index requires only its leading field to exist, so a filter on that field, alone or with
+     * the following ones, can use it.
+     *
+     * @param  non-empty-array<string, ColumnType>  $fields  stored field name => attribute type, in index order
+     * @return array<string, array<string, mixed>>
      */
-    private function getMongoTypeCode(ColumnType $type): string
+    private function getPartialFilterExpression(IndexType $type, array $fields): array
+    {
+        if ($type !== IndexType::Unique) {
+            return [\array_key_first($fields) => ['$exists' => true]];
+        }
+
+        $filter = [];
+        foreach ($fields as $field => $attributeType) {
+            $filter[$field] = ['$exists' => true, '$type' => $this->getMongoTypeCode($attributeType)];
+        }
+
+        return $filter;
+    }
+
+    /**
+     * The BSON types a stored value of the column type can have. PHP integers are written as int
+     * or long by magnitude, and a float attribute also accepts integers.
+     *
+     * @return string|list<string>
+     */
+    private function getMongoTypeCode(ColumnType $type): string|array
     {
         return match ($type) {
             ColumnType::String,
@@ -4111,10 +4128,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             ColumnType::LongText,
             ColumnType::Id,
             ColumnType::Uuid7 => 'string',
-            ColumnType::BigInteger => 'long',
-            ColumnType::Integer => 'int',
+            ColumnType::BigInteger,
+            ColumnType::Integer => ['int', 'long'],
             ColumnType::Float,
-            ColumnType::Double => 'double',
+            ColumnType::Double => ['double', 'int', 'long'],
             ColumnType::Boolean => 'bool',
             ColumnType::Datetime => 'date',
             default => 'string'

@@ -40,8 +40,11 @@ class Order extends Base
     /**
      * @param  array<Document>  $attributes
      */
-    public function __construct(array $attributes = [], protected bool $supportForAttributes = true)
-    {
+    public function __construct(
+        array $attributes = [],
+        protected bool $supportForAttributes = true,
+        protected bool $supportForOrderRandom = true,
+    ) {
         foreach ($attributes as $attribute) {
             /** @var string $attrKey */
             $attrKey = $attribute->getAttribute('key', $attribute->getAttribute(Document::ID));
@@ -114,7 +117,13 @@ class Order extends Base
         }
 
         if ($method === Method::OrderRandom) {
-            return true; // orderRandom doesn't need an attribute
+            if (! $this->supportForOrderRandom) {
+                $this->message = 'Random order is not supported by this adapter';
+
+                return false;
+            }
+
+            return true;
         }
 
         return false;

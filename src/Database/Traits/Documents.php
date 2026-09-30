@@ -275,6 +275,7 @@ trait Documents
             $supportForJoins,
             $supportForAggregations,
             $this->adapter->getSharedTables(),
+            $this->adapter->supports(Capability::OrderRandom),
         );
     }
 

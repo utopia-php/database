@@ -2,10 +2,14 @@
 
 namespace Tests\E2E\Adapter\Scopes;
 
+use DateTime as NativeDateTime;
 use Exception;
+use MongoDB\BSON\UTCDateTime;
+use stdClass;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
@@ -17,6 +21,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -24,6 +29,7 @@ use Utopia\Database\Index;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Index as IndexValidator;
+use Utopia\Mongo\Client;
 use Utopia\Query\Schema\ColumnType;
 use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\Order;
@@ -1328,5 +1334,176 @@ trait IndexTests
         }
 
         return null;
+    }
+
+    public function testMongoUniqueIndexOnAnIntegerIsEnforced(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createMongoUniqueIndexCollection($database, [Attribute::integer(key: 'count', size: 8)]);
+
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'count', 7);
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'count', 5_000_000_000);
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testMongoUniqueIndexesOnFloatBooleanAndDatetimeAreEnforced(): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter() instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = $this->createMongoUniqueIndexCollection($database, [
+            Attribute::double(key: 'price'),
+            Attribute::boolean(key: 'active'),
+            Attribute::datetime(key: 'seenAt'),
+        ]);
+
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'price', 9.5);
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'active', true);
+        $this->assertMongoUniqueIndexRejectsDuplicates($database, $collection, 'seenAt', '2026-01-01T00:00:00.000+00:00');
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testMongoKeyIndexesServeEqualityFilters(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter instanceof Mongo) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $values = [
+            'count' => 7,
+            'price' => 9.5,
+            'active' => true,
+            'seenAt' => new UTCDateTime(new NativeDateTime('2026-01-01T00:00:00+00:00')),
+            'name' => 'first',
+        ];
+        $attributes = [
+            Attribute::integer(key: 'count'),
+            Attribute::double(key: 'price'),
+            Attribute::boolean(key: 'active'),
+            Attribute::datetime(key: 'seenAt'),
+            Attribute::string(key: 'name', size: 16),
+            Attribute::string(key: 'group', size: 16),
+        ];
+        $indexes = \array_map(
+            fn (string $attribute): Index => Index::key(key: $attribute.'_key', attributes: [$attribute]),
+            \array_keys($values),
+        );
+        $indexes[] = Index::key(key: 'group_count', attributes: ['group', 'count']);
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+
+        $fromCollection = 'key_scan_collection_'.\uniqid();
+        $database->createCollection(new Collection(id: $fromCollection, attributes: $attributes, indexes: $indexes, permissions: $permissions, documentSecurity: false));
+
+        $fromIndex = 'key_scan_index_'.\uniqid();
+        $database->createCollection(new Collection(id: $fromIndex, attributes: $attributes, permissions: $permissions, documentSecurity: false));
+        foreach ($indexes as $index) {
+            $database->createIndex($fromIndex, $index);
+        }
+
+        foreach ([$fromCollection, $fromIndex] as $collection) {
+            $database->createDocument($collection, new Document([
+                'count' => 7,
+                'price' => 9.5,
+                'active' => true,
+                'seenAt' => '2026-01-01T00:00:00.000+00:00',
+                'name' => 'first',
+                'group' => 'a',
+            ]));
+
+            foreach ($values as $attribute => $value) {
+                $plan = $this->explainMongoFind($adapter, $collection, [$attribute => $value]);
+
+                $this->assertStringContainsString('"stage":"IXSCAN"', $plan, $collection.': an equality on '.$attribute.' must scan its key index');
+                $this->assertStringContainsString('"indexName":"'.$attribute.'_key"', $plan, $collection.': an equality on '.$attribute.' must use '.$attribute.'_key');
+            }
+
+            $plan = $this->explainMongoFind($adapter, $collection, ['group' => 'a']);
+            $this->assertStringContainsString('"stage":"IXSCAN"', $plan, $collection.': an equality on the leading field of a compound key index must scan it');
+            $this->assertStringContainsString('"indexName":"group_count"', $plan, $collection.': an equality on group alone must use group_count');
+
+            $database->deleteCollection($collection);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $filter
+     */
+    private function explainMongoFind(Mongo $adapter, string $collection, array $filter): string
+    {
+        if ($adapter->getSharedTables()) {
+            $filter = [Storage::TENANT => $adapter->getTenant(), ...$filter];
+        }
+
+        $client = $adapter->getDriver();
+        $this->assertInstanceOf(Client::class, $client);
+
+        $explain = $client->query([
+            'explain' => [
+                'find' => $adapter->getNamespace().'_'.$adapter->filter($collection),
+                'filter' => $filter,
+            ],
+            'verbosity' => 'queryPlanner',
+        ]);
+        $this->assertInstanceOf(stdClass::class, $explain);
+
+        $planner = $explain->queryPlanner ?? null;
+        $this->assertInstanceOf(stdClass::class, $planner);
+
+        $plan = \json_encode($planner->winningPlan ?? null);
+        $this->assertIsString($plan);
+
+        return $plan;
+    }
+
+    /**
+     * @param  list<Attribute>  $attributes
+     */
+    private function createMongoUniqueIndexCollection(Database $database, array $attributes): string
+    {
+        $collection = 'unique_types_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: $attributes,
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        foreach ($attributes as $attribute) {
+            $database->createIndex($collection, Index::unique(key: $attribute->key.'_unique', attributes: [$attribute->key]));
+        }
+
+        return $collection;
+    }
+
+    private function assertMongoUniqueIndexRejectsDuplicates(Database $database, string $collection, string $attribute, mixed $value): void
+    {
+        $database->createDocument($collection, new Document([$attribute => $value]));
+
+        try {
+            $database->createDocument($collection, new Document([$attribute => $value]));
+            $this->fail('The unique index on '.$attribute.' must reject a second document with the same value');
+        } catch (UniqueException $e) {
+            $this->assertInstanceOf(UniqueException::class, $e);
+        }
     }
 }

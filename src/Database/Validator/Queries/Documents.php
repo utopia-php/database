@@ -28,6 +28,7 @@ class Documents extends IndexedQueries
      * @param  array<Document>  $attributes
      * @param  array<Document>  $indexes
      * @param  bool  $sharedTables  Whether the tables hold `$tenant`, as they do under shared tables
+     * @param  bool  $supportForOrderRandom  Whether the adapter can order by random (Capability::OrderRandom)
      *
      * @throws \Utopia\Database\Exception
      */
@@ -44,6 +45,7 @@ class Documents extends IndexedQueries
         bool $supportForJoins = false,
         bool $supportForAggregations = false,
         bool $sharedTables = false,
+        bool $supportForOrderRandom = true,
     ) {
         $attributes[] = new Document([
             Document::ID => Document::ID,
@@ -83,7 +85,7 @@ class Documents extends IndexedQueries
                 $supportForAttributes,
                 $supportUnsignedBigInt
             ),
-            new Order($attributes, $supportForAttributes),
+            new Order($attributes, $supportForAttributes, $supportForOrderRandom),
             new Select($attributes, $supportForAttributes, $sharedTables),
         ];
 

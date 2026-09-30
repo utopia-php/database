@@ -10,10 +10,13 @@ use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 
 /**
  * Base registers Hook\Permissions on every lane's shared Database, so these tests build their own
@@ -108,5 +111,160 @@ trait MongoReadFilterTests
         $authorization->addRole(Role::any()->toString());
         $authorization->addRole(Role::users()->toString());
         $authorization->addRole(Role::user($user)->toString());
+    }
+
+    public function testStartsWithAndEndsWithAreAnchored(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar', 'barfoo', 'Foobar', 'barfoobar']);
+
+        $this->assertSame(['foobar'], $this->namesOf($database->find($collection, [Query::startsWith('name', 'foo')])));
+        $this->assertSame(['barfoo'], $this->namesOf($database->find($collection, [Query::endsWith('name', 'foo')])));
+        $this->assertSame(1, $database->count($collection, [Query::startsWith('name', 'foo')]));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testContainsAllWorksOnFind(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar', 'barfoo', 'foobaz']);
+
+        $this->assertSame(['barfoo', 'foobar'], $this->namesOf($database->find($collection, [Query::containsAll('tags', ['foo', 'bar'])])));
+        $this->assertSame(2, $database->count($collection, [Query::containsAll('tags', ['foo', 'bar'])]));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testCountReportsDriverErrors(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar']);
+
+        try {
+            $database->getAdapter()->count($database->getCollection($collection), [Query::regex('name', '(')]);
+            $this->fail('count() must report the driver error for an invalid regular expression instead of 0');
+        } catch (MongoException $e) {
+            $this->assertNotSame(0, $e->getCode());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testDottedAttributesSurviveRenameAndDelete(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'dotted_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'a.b', size: 16),
+                Attribute::string(key: 'x.y', size: 16),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+        $database->createDocument($collection, new Document(['$id' => 'first', 'a.b' => 'renamed', 'x.y' => 'deleted']));
+
+        $database->updateAttribute($collection, 'a.b', newKey: 'c');
+        $this->assertSame('renamed', $database->getDocument($collection, 'first')->getAttribute('c'));
+
+        $database->deleteAttribute($collection, 'x.y');
+        $database->createAttribute($collection, Attribute::string(key: 'x.y', size: 16));
+        $this->assertNull($database->getDocument($collection, 'first')->getAttribute('x.y'));
+
+        $database->deleteCollection($collection);
+    }
+
+    public function testOrderRandomIsRejectedAsAQueryError(): void
+    {
+        $database = $this->getDatabase();
+        $collection = $this->createNamesCollection($database, ['foobar']);
+
+        try {
+            foreach ([
+                fn (): array => $database->find($collection, [Query::orderRandom()]),
+                fn (): array => $database->skipValidation(fn (): array => $database->find($collection, [Query::orderRandom()])),
+            ] as $find) {
+                try {
+                    $find();
+                    $this->fail('orderRandom() must be rejected as a query error where the adapter cannot order by random');
+                } catch (QueryException $e) {
+                    $this->assertStringContainsString('Random order is not supported', $e->getMessage());
+                }
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testSumOnADottedAttributeMatchesTheCountedRows(): void
+    {
+        $database = $this->getDatabase();
+        $collection = 'dotted_sum_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::integer(key: 'score.value'),
+                Attribute::string(key: 'group.name', size: 16),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        foreach ([[1, 'a'], [2, 'a'], [4, 'b']] as [$score, $group]) {
+            $database->createDocument($collection, new Document(['score.value' => $score, 'group.name' => $group]));
+        }
+
+        $queries = [Query::equal('group.name', ['a'])];
+
+        $this->assertSame(2, $database->count($collection, $queries));
+        $this->assertSame(3, $database->sum($collection, 'score.value', $queries));
+        $this->assertSame(7, $database->sum($collection, 'score.value'));
+
+        $database->deleteCollection($collection);
+    }
+
+    /**
+     * @param  list<string>  $names
+     */
+    private function createNamesCollection(Database $database, array $names): string
+    {
+        $collection = 'names_'.\uniqid();
+
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [
+                Attribute::string(key: 'name', size: 64),
+                Attribute::string(key: 'tags', size: 16, array: true),
+            ],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+            documentSecurity: false,
+        ));
+
+        foreach ($names as $name) {
+            $database->createDocument($collection, new Document(['name' => $name, 'tags' => \str_split($name, 3)]));
+        }
+
+        return $collection;
+    }
+
+    /**
+     * @param  array<Document>  $documents
+     * @return list<string>
+     */
+    private function namesOf(array $documents): array
+    {
+        $names = [];
+        foreach ($documents as $document) {
+            $name = $document->getAttribute('name');
+            $this->assertIsString($name);
+            $names[] = $name;
+        }
+        \sort($names);
+
+        return $names;
     }
 }

@@ -14,6 +14,7 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Database;
+use Utopia\Database\PDO;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Validator\Boolean;
@@ -44,9 +45,6 @@ $cli
         $namespace = '_ns';
         $cache = new Cache(new NoCache());
 
-        // ------------------------------------------------------------------
-        // Adapter configuration
-        // ------------------------------------------------------------------
         $dbAdapters = [
             'mariadb' => [
                 'host' => 'mariadb',

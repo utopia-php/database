@@ -2,47 +2,55 @@
 
 namespace Tests\Unit\Adapter;
 
+use PDO;
+use PDOStatement;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use stdClass;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQL;
+use Utopia\Database\Attribute;
 use Utopia\Database\Exception as DatabaseException;
-use Utopia\Query\Schema\Column;
-use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\MySQL as MySQLSchema;
-use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
-use Utopia\Query\Schema\Table;
 
 final class AddTableColumnTest extends TestCase
 {
+    /**
+     * @var list<string>
+     */
+    private array $statements = [];
+
     public function testVectorOnMySQLTableThrowsDatabaseException(): void
     {
         $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Vector columns are only supported on PostgreSQL');
 
-        $this->addTableColumn((new MySQLSchema())->table('t'), 'embedding', ColumnType::Vector, 3);
+        $this->adapter(MariaDB::class)->createAttribute('movies', Attribute::vector(key: 'embedding', size: 3));
     }
 
     public function testVectorOnPostgreSQLTableSetsTypeAndDimensions(): void
     {
-        $size = 4;
-        $column = $this->addTableColumn((new PostgreSQLSchema())->table('t'), 'embedding', ColumnType::Vector, $size);
+        $this->assertTrue($this->adapter(Postgres::class)->createAttribute('movies', Attribute::vector(key: 'embedding', size: 4)));
 
-        $this->assertSame(ColumnType::Vector, $column->type);
-        $this->assertSame($size, $column->dimensions);
+        $this->assertSame(['ALTER TABLE "database"."namespace_movies" ADD COLUMN "embedding" VECTOR(4) NULL'], $this->statements);
     }
 
-    private function addTableColumn(Table $table, string $id, ColumnType $type, int $size): Column
+    /**
+     * @param  class-string<SQL>  $adapter
+     */
+    private function adapter(string $adapter): SQL
     {
-        $adapter = new MariaDB(new stdClass());
-        $method = new ReflectionMethod(SQL::class, 'addTableColumn');
-        $column = $method->invoke($adapter, $table, $id, $type, $size);
+        $statement = self::createStub(PDOStatement::class);
+        $statement->method('execute')->willReturn(true);
+        $pdo = self::createStub(PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use ($statement): PDOStatement {
+            $this->statements[] = $query;
 
-        if (! $column instanceof Column) {
-            $this->fail('addTableColumn did not return a Column');
-        }
+            return $statement;
+        });
 
-        return $column;
+        $sql = new $adapter($pdo);
+        $sql->setDatabase('database');
+        $sql->setNamespace('namespace');
+
+        return $sql;
     }
 }

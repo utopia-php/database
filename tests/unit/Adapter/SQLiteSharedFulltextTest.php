@@ -101,9 +101,10 @@ final class SQLiteSharedFulltextTest extends TestCase
     private function sequences(string $tenant): array
     {
         $statement = $this->pdo->prepare('SELECT _id FROM `' . self::NAMESPACE . '_notes` WHERE _tenant = ? ORDER BY _id');
+        $this->assertInstanceOf(\PDOStatement::class, $statement);
         $statement->execute([$tenant]);
 
-        return \array_map(intval(...), $statement->fetchAll(PDO::FETCH_COLUMN));
+        return \array_values(\array_map(intval(...), $statement->fetchAll(PDO::FETCH_COLUMN)));
     }
 
     /**
@@ -112,13 +113,16 @@ final class SQLiteSharedFulltextTest extends TestCase
     private function indexedRows(string $tenant): array
     {
         $tables = $this->pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE ? AND name LIKE '%\\_fts' ESCAPE '\\'");
+        $this->assertInstanceOf(\PDOStatement::class, $tables);
         $tables->execute([self::NAMESPACE . '_' . \str_replace("'", '', $tenant) . '_notes_%']);
         $names = $tables->fetchAll(PDO::FETCH_COLUMN);
         $this->assertCount(1, $names, 'one fulltext table for ' . $tenant);
+        $name = $names[0];
+        $this->assertIsString($name);
 
-        $statement = $this->pdo->query('SELECT rowid FROM `' . $names[0] . "` WHERE `" . $names[0] . "` MATCH 'word OR rewritten' ORDER BY rowid");
+        $statement = $this->pdo->query('SELECT rowid FROM `' . $name . '` WHERE `' . $name . "` MATCH 'word OR rewritten' ORDER BY rowid");
         $this->assertInstanceOf(\PDOStatement::class, $statement);
 
-        return \array_map(intval(...), $statement->fetchAll(PDO::FETCH_COLUMN));
+        return \array_values(\array_map(intval(...), $statement->fetchAll(PDO::FETCH_COLUMN)));
     }
 }

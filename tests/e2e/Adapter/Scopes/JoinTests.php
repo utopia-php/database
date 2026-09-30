@@ -8244,4 +8244,79 @@ trait JoinTests
 
         return ($row->getId() === '' ? '-' : $row->getId()).'/'.(\is_string($joined) ? $joined : '-');
     }
+
+    /**
+     * An order on a bare name only the join declares (`label`) pages like the qualified `n.label`:
+     * after and before every row, in pages of two both ways, through tied labels and the rows an
+     * outer join left without a note. A name two joins declare is refused.
+     *
+     * @param  list<string>  $rows
+     */
+    #[DataProvider('joinCursorShapes')]
+    public function testJoinCursorPagesAlongABareJoinedOrder(Method $join, array $rows): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        [$authors, $notes] = $this->seedJoinCursorFixture($database);
+        $joinQuery = new Query($join, $notes, ['$id', '=', 'author', 'n']);
+
+        foreach (['ascending' => true, 'descending' => false] as $label => $ascending) {
+            $queries = [$joinQuery, $ascending ? Query::orderAsc('label') : Query::orderDesc('label')];
+            $qualified = [$joinQuery, $ascending ? Query::orderAsc('n.label') : Query::orderDesc('n.label')];
+
+            $keys = $this->joinCursorKeys($database, $authors, $qualified);
+            $sorted = $keys;
+            \sort($sorted);
+            $expected = $rows;
+            \sort($expected);
+            $this->assertSame($expected, $sorted, "{$label}: the qualified read returns each joined row once");
+            $this->assertSame($keys, $this->joinCursorKeys($database, $authors, $queries), "{$label}: the bare name orders by the joined attribute");
+
+            $all = \array_values($database->find($authors, [...$queries, Query::limit(100)]));
+            foreach ($all as $index => $row) {
+                $this->assertSame(\array_slice($keys, $index + 1), $this->joinCursorKeys($database, $authors, [...$queries, Query::cursorAfter($row)]), "{$label}: after {$keys[$index]}");
+                $this->assertSame(\array_slice($keys, 0, $index), $this->joinCursorKeys($database, $authors, [...$queries, Query::cursorBefore($row)]), "{$label}: before {$keys[$index]}");
+            }
+
+            $forward = [];
+            $cursor = null;
+            for ($page = 0; $page <= \count($all); $page++) {
+                $batch = $database->find($authors, [...$queries, Query::limit(2), ...($cursor === null ? [] : [Query::cursorAfter($cursor)])]);
+                \array_push($forward, ...\array_map($this->joinCursorKey(...), $batch));
+                if (\count($batch) < 2) {
+                    break;
+                }
+                $cursor = $batch[1];
+            }
+            $this->assertSame($keys, $forward, "{$label}: paging forward in pages of two");
+
+            $backward = [];
+            $cursor = $all[\count($all) - 1];
+            for ($page = 0; $page <= \count($all); $page++) {
+                $batch = $database->find($authors, [...$queries, Query::limit(2), Query::cursorBefore($cursor)]);
+                $backward = [...\array_map($this->joinCursorKey(...), $batch), ...$backward];
+                if (\count($batch) < 2) {
+                    break;
+                }
+                $cursor = $batch[0];
+            }
+            $this->assertSame(\array_slice($keys, 0, -1), $backward, "{$label}: paging backward in pages of two from the last row");
+        }
+
+        $twice = [Query::leftJoin($notes, '$id', 'author', '=', 'n'), Query::leftJoin($notes, '$id', 'author', '=', 'm')];
+        $cursor = $database->find($authors, [...$twice, Query::orderAsc('n.label'), Query::limit(1)])[0];
+        try {
+            $database->find($authors, [...$twice, Query::orderAsc('label'), Query::cursorAfter($cursor)]);
+            $this->fail('A bare name two joins declare must be refused, not read from one of them');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('Attribute "label" is ambiguous across joins; qualify it with a join alias', $exception->getMessage());
+        }
+
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+    }
 }

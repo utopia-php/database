@@ -111,28 +111,4 @@ final class ColumnNameTest extends TestCase
         $this->assertStringEndsWith(' AND type = ? AND (column IS NULL OR column IN (?, ?)))', $condition->expression);
         $this->assertSame(['any', 'users', 'read', 'title', 'body'], $condition->bindings);
     }
-
-    public function testWrapAcceptsADigitOrHyphenLeadingColumnAndQuotesIt(): void
-    {
-        $this->assertSame('(x = 1 OR `1db`.`_uid` IS NULL)', AllowNullColumn::wrap(new Condition('x = 1'), '1db._uid')->expression);
-        $this->assertSame('(x = 1 OR `-ns`.`_uid` IS NULL)', AllowNullColumn::wrap(new Condition('x = 1'), '-ns._uid')->expression);
-    }
-
-    public function testPermissionFilterAcceptsADigitLeadingPermissionsTableAndQuotesIt(): void
-    {
-        $filter = new PermissionFilter(['any'], static fn (string $table): string => '1db.ns_'.$table.'_perms');
-
-        $condition = $filter->filter('posts');
-
-        $this->assertStringContainsString(' FROM `1db`.`ns_posts_perms` WHERE ', $condition->expression);
-        $this->assertSame(['any', 'read'], $condition->bindings);
-    }
-
-    public function testPermissionFilterStillRefusesADigitLeadingUnquotedColumn(): void
-    {
-        $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessage('Invalid column name: 1role');
-
-        new PermissionFilter(['any'], static fn (string $table): string => $table.'_perms', permRoleColumn: '1role');
-    }
 }

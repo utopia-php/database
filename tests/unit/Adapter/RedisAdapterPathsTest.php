@@ -274,18 +274,29 @@ final class RedisAdapterPathsTest extends TestCase
         $adapter->renameIndex('missing', 'by_title', 'by_name');
     }
 
-    public function testRenamingAnIndexTheCollectionDoesNotRecordWritesNothing(): void
+    public function testRenamingAnIndexTheCollectionDoesNotRecordWritesNothingAndReportsNothingRenamed(): void
     {
         $adapter = $this->adapter();
         $this->createNotes($adapter);
         $adapter->createIndex(self::NOTES, Index::key(key: 'by_title', attributes: ['title']));
         $this->hashWrites = [];
 
-        $this->assertTrue($adapter->renameIndex(self::NOTES, 'absent', 'other'));
+        $this->assertFalse($adapter->renameIndex(self::NOTES, 'absent', 'other'));
         $this->assertSame([], $this->hashWrites);
 
         $this->assertTrue($adapter->renameIndex(self::NOTES, 'by_title', 'by_name'));
         $this->assertCount(1, $this->recordedHashWrites());
+    }
+
+    public function testRenamingAnIndexTheCollectionAlreadyRenamedReportsItRenamed(): void
+    {
+        $adapter = $this->adapter();
+        $this->createNotes($adapter);
+        $adapter->createIndex(self::NOTES, Index::key(key: 'by_name', attributes: ['title']));
+        $this->hashWrites = [];
+
+        $this->assertTrue($adapter->renameIndex(self::NOTES, 'by_title', 'by_name'));
+        $this->assertSame([], $this->hashWrites);
     }
 
     public function testGetSequencesBackFillsOnlyTheDocumentsThatLackOne(): void

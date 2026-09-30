@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Limit as LimitException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Operator;
 use Utopia\Database\Validator\Authorization;
 
 final class FractionalBoundTest extends TestCase
@@ -92,6 +93,27 @@ final class FractionalBoundTest extends TestCase
         $this->assertSame(101, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, -9.0e18)->getAttribute('count'));
         $this->assertSame(102, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, 1.0e19)->getAttribute('count'));
         $this->assertSame(101, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, -1.0e19)->getAttribute('count'));
+        $this->assertSame(101, $this->stored($database, 'count'));
+    }
+
+    #[DataProvider('lanes')]
+    public function testWholeNumberStringBoundsOnAnIntegerAreAcceptedAsOperatorLimitsAre(bool $definedAttributes): void
+    {
+        $database = $this->database($definedAttributes);
+
+        $this->assertSame(101, $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, '101.0')->getAttribute('count'));
+
+        try {
+            $database->increaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, '101.00');
+            $this->fail('An increase past a whole number string maximum was accepted');
+        } catch (LimitException $error) {
+            $this->assertSame('Attribute value exceeds maximum limit: 101', $error->getMessage());
+        }
+
+        $this->assertSame(100, $database->decreaseDocumentAttribute(self::COLLECTION, self::DOCUMENT, 'count', 1, '-5.0')->getAttribute('count'));
+        $this->assertSame(101, $database->updateDocument(self::COLLECTION, self::DOCUMENT, new Document([
+            'count' => Operator::increment(1, '101.0'),
+        ]))->getAttribute('count'));
         $this->assertSame(101, $this->stored($database, 'count'));
     }
 

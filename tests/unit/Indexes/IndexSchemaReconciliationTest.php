@@ -85,6 +85,34 @@ final class IndexSchemaReconciliationTest extends TestCase
         $this->assertSame(['existing'], $this->indexKeys($database));
     }
 
+    public function testRenamingAnIndexTheSchemaNoLongerHasFails(): void
+    {
+        $adapter = new Memory();
+        $database = $this->database($adapter);
+        $adapter->deleteIndex(self::COLLECTION, 'existing');
+
+        try {
+            $database->renameIndex(self::COLLECTION, 'existing', 'renamed');
+            $this->fail('a rename of an index the schema does not have must fail');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to rename index 'existing' to 'renamed': Failed to rename index", $error->getMessage());
+        }
+
+        $this->assertSame(['existing'], $this->indexKeys($database));
+        $this->assertFalse($adapter->renameIndex(self::COLLECTION, 'existing', 'renamed'));
+    }
+
+    public function testRenamingAnIndexTheSchemaAlreadyRenamedCompletes(): void
+    {
+        $adapter = new Memory();
+        $database = $this->database($adapter);
+        $this->assertTrue($adapter->renameIndex(self::COLLECTION, 'existing', 'renamed'));
+
+        $this->assertTrue($database->renameIndex(self::COLLECTION, 'existing', 'renamed'));
+        $this->assertSame(['renamed'], $this->indexKeys($database));
+        $this->assertTrue($adapter->renameIndex(self::COLLECTION, 'existing', 'renamed'), 'the index already carries the new name');
+    }
+
     public function testARenameTheSchemaAlreadyAppliedIsCompleted(): void
     {
         $adapter = new class () extends Memory {

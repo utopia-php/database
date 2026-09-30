@@ -525,9 +525,10 @@ $database->removeTransform(Label::class);
     it on MariaDB and MySQL, failed on PostgreSQL, and stored a float in the integer attribute on SQLite, MongoDB,
     Memory and Redis. Pass an integer change value, or use a float attribute for fractional counters.
   - for a fractional `max` or `min` (`Max must be an integer.`, `Min must be an integer.`). Integer bounds are
-    compared with exact integer arithmetic, so 64-bit and unsigned values never pass through a float. A whole-number
-    float such as `102.0` is accepted and converted exactly. Pass a whole bound, for example `floor($max)` or
-    `ceil($min)`, which admits the same integer values.
+    compared with exact integer arithmetic, so 64-bit and unsigned values never pass through a float. The bound
+    accepts the same whole numbers as an operator limit: an integer, an integer string, a string with only zero
+    decimals such as `'102.0'`, or a float without a fractional part such as `102.0`, each converted exactly. Pass
+    a whole bound, for example `floor($max)` or `ceil($min)`, which admits the same integer values.
 
   Change values and bounds on float and double attributes may still be fractional.
 - **Operator limits on integer attributes.** The `max` or `min` limit of `Operator::increment()`, `decrement()`,

@@ -1429,7 +1429,7 @@ trait Attributes
         foreach ($attributes as $attribute) {
             try {
                 $this->cleanupAttribute($collectionId, $attribute->getId(), $maxAttempts);
-            } catch (Throwable $e) {
+            } catch (Exception $e) {
                 $errors[] = $e->getMessage();
             }
         }

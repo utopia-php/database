@@ -41,8 +41,8 @@ have to make, with the 7.x and 8.0 forms side by side.
   every adapter.
 - `increaseDocumentAttribute()` and `decreaseDocumentAttribute()` refuse a fractional change value or a fractional
   `max`/`min` on an integer attribute with `Exception\Type`, and the numeric operators refuse a fractional limit on
-  an integer attribute with `Exception\Structure`, before anything is written. See
-  [Documents](UPGRADE.md#documents).
+  an integer attribute with `Exception\Structure`, before anything is written. Both accept the same whole-number
+  forms (for example `5`, `'5'`, `'5.0'` and `5.0`). See [Documents](UPGRADE.md#documents).
 - Scopes such as `Authorization::skip()`, `silent()`, `skipRelationships()`, `withTenant()` and the other scoped
   toggles apply to the calling coroutine and the coroutines it starts, not to other coroutines sharing the handle.
   See [Coroutines](UPGRADE.md#coroutines).
@@ -391,9 +391,16 @@ have to make, with the 7.x and 8.0 forms side by side.
   exception) instead of the rollback's error; the rollback failure is logged.
 - `createAttributes()` rolls back every column it created when a driver error (for example a lock timeout or a lost
   connection on PostgreSQL) interrupts dropping one of them, and throws the metadata failure with that error
-  appended, instead of letting the driver error escape and leaving the remaining columns.
+  appended, instead of letting the driver error escape and leaving the remaining columns. A PHP `Error` (for
+  example a `TypeError`) raised while dropping a column is rethrown unchanged instead of being collected.
 - `renameIndex()` fails with `Failed to rename index '<old>' to '<new>'` and keeps the old key in the metadata when
-  the adapter renames nothing, instead of recording a rename that did not happen.
+  the schema has the index under neither name, instead of recording a rename that did not happen. This holds on
+  PostgreSQL, MariaDB, MySQL, MongoDB, Memory and Redis; PostgreSQL, Memory and Redis used to report such a rename
+  as done. SQLite rebuilds the index under the new name from its definition, so its schema matches the metadata.
+  An index the schema already has under the new name completes the rename on every adapter but MongoDB, which
+  drops the old index first and fails with the driver's IndexNotFound, as before. Under shared tables a tenant's
+  rename also completes while the collection's shared index has either name (on PostgreSQL, while another tenant's
+  copy of it does); MongoDB's shared tables are unchanged.
 - A failed `updateRelationship()` restores the definitions it had already written (parent, two-way child, junction
   keys) and rethrows the original error. Its rollback reverses the column rename before renaming the indexes back,
   so SQLite, Memory and MongoDB rebuild each index over the column it covers instead of losing it.
@@ -405,7 +412,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   `createCollection()` does and as 7.x did.
 - A failed `createCollection()` (a declared index that fails, a timeout, a spatial index with orders, a permissions
   table that fails) drops the tables it created, so the collection can be created again. It used to leave them, and
-  later creates failed with `Collection already exists`.
+  later creates failed with `Collection already exists`. When that drop fails as well (for example inside an aborted
+  PostgreSQL transaction or after a lost connection), the drop failure is logged and the error that failed the
+  create is thrown.
 - `createIndex()` compares an index that exists in the schema but not in the metadata with the request (columns,
   prefix lengths, key, unique, fulltext or spatial) on adapters with schema index introspection: a match is adopted,
   a mismatch is dropped and recreated, as in 7.3.12.

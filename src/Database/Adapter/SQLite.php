@@ -584,7 +584,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
             }
 
             if ($created && ! $e instanceof DuplicateException) {
-                $this->deleteCollection($id);
+                $this->discardCreatedCollection($id);
             }
 
             throw $e;
@@ -664,6 +664,12 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     public function getSizeOfCollectionOnDisk(string $collection): int
     {
         return $this->getSizeOfCollection($collection);
+    }
+
+    #[Override]
+    protected function dropCreatedCollection(string $id): void
+    {
+        $this->deleteCollection($id);
     }
 
     /**

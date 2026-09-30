@@ -38,6 +38,7 @@ use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
+use Utopia\Query\Builder\Statement;
 use Utopia\Query\Method;
 use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema\ColumnType;
@@ -1670,6 +1671,21 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         return $e;
+    }
+
+    #[\Override]
+    protected function processSelectException(PDOException $e, Statement $statement): Exception
+    {
+        if (
+            $e->getCode() === '42P10'
+            && isset($e->errorInfo[1])
+            && $e->errorInfo[1] === 7
+            && \str_starts_with($statement->query, 'SELECT DISTINCT ')
+        ) {
+            return new QueryException('A distinct() query can only be ordered by a selected attribute on this database', $e->getCode(), $e);
+        }
+
+        return parent::processSelectException($e, $statement);
     }
 
     /**

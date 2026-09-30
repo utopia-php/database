@@ -16,14 +16,20 @@ use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Document;
 use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Query\OrderDirection;
 
 final class EngineErrorMappingTest extends TestCase
 {
     private const string NAMESPACE = 'engine';
+
+    private const string DISTINCT_ORDER = 'A distinct() query can only be ordered by a selected attribute on this database';
 
     /**
      * @return array<string, array{0: Closure(PDOException): Throwable, 1: PDOException, 2: class-string<Throwable>, 3: string}>
@@ -112,6 +118,31 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertMapped(self::postgres(), self::engineError('42P01', 7, $message), $expected, $mapped);
     }
 
+    public function testPostgresDistinctReadOrderedByAnUnselectedAttributeIsAQueryErrorInAnyLanguage(): void
+    {
+        $error = self::engineError('42P10', 7, "SQLSTATE[42P10]: Invalid column reference: 7 FEHLER:  bei SELECT DISTINCT m\u{FC}ssen ORDER-BY-Ausdr\u{FC}cke in der Select-Liste erscheinen\nLINE 1: ...\"main\" ORDER BY \"main\".\"price\" ASC");
+
+        $failure = $this->postgresFindFailure($error, [Query::distinct(), Query::select(['category'])]);
+
+        $this->assertInstanceOf(QueryException::class, $failure);
+        $this->assertSame(self::DISTINCT_ORDER, $failure->getMessage());
+        $this->assertSame($error, $failure->getPrevious());
+    }
+
+    public function testPostgresReadWithoutDistinctLeavesAnUnnamedInvalidColumnReferenceRaw(): void
+    {
+        $error = self::engineError('42P10', 7, 'SQLSTATE[42P10]: Invalid column reference: 7 FEHLER:  ORDER BY Position 3 ist nicht in der Select-Liste');
+
+        $this->assertSame($error, $this->postgresFindFailure($error, [Query::select(['category'])]));
+    }
+
+    public function testPostgresConflictTargetWithoutAConstraintIsNotADistinctError(): void
+    {
+        $error = self::engineError('42P10', 7, 'SQLSTATE[42P10]: Invalid column reference: 7 ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification');
+
+        $this->assertSame($error, self::postgres()($error));
+    }
+
     public function testSQLiteDoesNotTreatTheMySQLTimeoutCodeAsATimeout(): void
     {
         $error = self::engineError('HY000', 3024, 'SQLSTATE[HY000]: General error: 3024 Query execution was interrupted');
@@ -179,6 +210,32 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertInstanceOf($expected, $mapped);
         $this->assertSame($message, $mapped->getMessage());
         $this->assertSame($error, $mapped->getPrevious());
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    private function postgresFindFailure(PDOException $error, array $queries): Throwable
+    {
+        $statement = $this->createStub(PDOStatement::class);
+        $statement->method('execute')->willThrowException($error);
+        $pdo = $this->createStub(PDO::class);
+        $pdo->method('prepare')->willReturn($statement);
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('utopiaTests');
+        $adapter->setNamespace(self::NAMESPACE);
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter->setAuthorization($authorization);
+
+        try {
+            $adapter->find(new Document(['$id' => 'orders']), $queries, orderAttributes: ['price'], orderTypes: [OrderDirection::Asc]);
+        } catch (Throwable $failure) {
+            return $failure;
+        }
+
+        $this->fail('The read succeeded');
     }
 
     /**

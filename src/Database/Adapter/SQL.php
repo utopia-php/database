@@ -5278,7 +5278,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($exception !== null) {
-            throw $this->processException($exception);
+            throw $this->processSelectException($exception, $result);
         }
 
         return $results;
@@ -6265,6 +6265,11 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     protected function processException(PDOException $e): Exception
     {
         return $e;
+    }
+
+    protected function processSelectException(PDOException $e, Statement $statement): Exception
+    {
+        return $this->processException($e);
     }
 
     /**

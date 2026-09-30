@@ -99,7 +99,7 @@ class QueryCache
             'context' => $context,
         ]));
 
-        $slot = (string) (\hexdec(\substr($field, 0, 8)) % $this->slots);
+        $slot = (string) ((int) \hexdec(\substr($field, 0, 8)) % $this->slots);
 
         return new Entry($key, $collection, $field, $epoch, $slot);
     }

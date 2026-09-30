@@ -235,8 +235,8 @@ trait Collections
             if ($created) {
                 try {
                     $this->cleanupCollection($id);
-                } catch (Throwable $e) {
-                    Console::error("Failed to rollback collection '{$id}': ".$e->getMessage());
+                } catch (Throwable $cleanupError) {
+                    Console::error("Failed to rollback collection '{$id}': ".$cleanupError->getMessage());
                 }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': ".$e->getMessage(), previous: $e);

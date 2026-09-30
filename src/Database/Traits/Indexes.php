@@ -246,9 +246,14 @@ trait Indexes
             // rollback both failed). Verify by attempting a reverse rename — if
             // $new exists in schema, the reverse succeeds confirming a prior rename.
             try {
-                $this->adapter->renameIndex($collection->getId(), $new, $old);
+                if (! $this->adapter->renameIndex($collection->getId(), $new, $old)) {
+                    throw new DatabaseException('Failed to rename index');
+                }
                 // Reverse succeeded — index was at $new. Re-rename to complete.
                 $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
+                if (! $renamed) {
+                    throw new DatabaseException('Failed to rename index');
+                }
             } catch (Throwable) {
                 // Reverse also failed — genuine error
                 throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);

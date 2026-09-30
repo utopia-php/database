@@ -3635,6 +3635,10 @@ trait Documents
         $joinedByAlias = $this->joinedCollectionsByAlias($joins, $joinedCollectionsById);
         $joinedCollections = $isAggregation ? [] : $joinedByAlias;
 
+        if ($joinedCollections !== [] && $cursor !== null) {
+            [$orderAttributes, $cursor] = $this->qualifyJoinedOrders($collection, $orderAttributes, $cursor, $joinedCollections);
+        }
+
         if (! $isAggregation && ! $distinct) {
             $uniqueOrderBy = false;
             foreach ($orderAttributes as $order) {
@@ -4366,6 +4370,56 @@ trait Documents
                 throw new QueryException("A cursor on a distinct() read pages along its orders, so the read must order by every selected attribute, and '{$attribute}' is not ordered");
             }
         }
+    }
+
+    /**
+     * A cursor on a bare order name only one join declares carries the value under `alias.name`, the
+     * name the adapter orders by (SQL::qualifyJoinedOrders()), so the order is qualified here, before
+     * the tie keys and the cursor checks read it. A cursor value under the bare name follows it. A
+     * name several joins declare is refused rather than read from one of them.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<string, Document>  $joinedCollections
+     * @return array{array<string>, Document}
+     *
+     * @throws QueryException
+     */
+    private function qualifyJoinedOrders(Document $collection, array $orderAttributes, Document $cursor, array $joinedCollections): array
+    {
+        foreach ($orderAttributes as $index => $attribute) {
+            if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
+                continue;
+            }
+
+            $aliases = [];
+            foreach ($joinedCollections as $alias => $joined) {
+                /** @var array<Attribute|Document> $joinedAttributes */
+                $joinedAttributes = $joined->getAttribute('attributes', []);
+                foreach ($joinedAttributes as $declared) {
+                    if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
+                        $aliases[] = $alias;
+                        break;
+                    }
+                }
+            }
+
+            if (\count($aliases) > 1) {
+                throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+            }
+
+            if ($aliases === []) {
+                continue;
+            }
+
+            $qualified = $aliases[0].'.'.$attribute;
+            $orderAttributes[$index] = $qualified;
+            if ($cursor->offsetExists($attribute) && ! $cursor->offsetExists($qualified)) {
+                $cursor = clone $cursor;
+                $cursor->setAttribute($qualified, $cursor->getAttribute($attribute));
+            }
+        }
+
+        return [$orderAttributes, $cursor];
     }
 
     /**

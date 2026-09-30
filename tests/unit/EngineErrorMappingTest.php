@@ -15,6 +15,7 @@ use Throwable;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\MariaDB;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
@@ -26,10 +27,13 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Transaction as TransactionException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Mongo\Client;
+use Utopia\Mongo\Exception as MongoException;
 use Utopia\Query\OrderDirection;
 
 final class EngineErrorMappingTest extends TestCase
@@ -220,6 +224,38 @@ final class EngineErrorMappingTest extends TestCase
         $error = self::engineError('42P10', 7, 'SQLSTATE[42P10]: Invalid column reference: 7 ERROR:  there is no unique or exclusion constraint matching the ON CONFLICT specification');
 
         $this->assertSame($error, self::postgres()($error));
+    }
+
+    public function testMongoTypeMismatchIsAnInvalidOperation(): void
+    {
+        $adapter = new class (new class () extends Client {
+            public function __construct()
+            {
+            }
+
+            #[\Override]
+            public function connect(): self
+            {
+                return $this;
+            }
+
+            #[\Override]
+            public function close(): void
+            {
+            }
+        }) extends Mongo {
+            public function map(Throwable $error): Throwable
+            {
+                return $this->processException($error);
+            }
+        };
+        $error = new MongoException('Cannot apply $inc to a value of non-numeric type. {_id: ObjectId(\'66f9\')} has the field \'name\' of non-numeric type string', 14);
+
+        $mapped = $adapter->map($error);
+
+        $this->assertInstanceOf(TypeException::class, $mapped);
+        $this->assertSame('Invalid operation', $mapped->getMessage());
+        $this->assertSame($error, $mapped->getPrevious());
     }
 
     public function testSQLiteDoesNotTreatTheMySQLTimeoutCodeAsATimeout(): void

@@ -8,6 +8,7 @@ use Tests\E2E\Adapter\Support\EventRecorder;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
@@ -24,6 +25,7 @@ use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
+use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -1932,6 +1934,39 @@ trait CollectionTests
             $this->fail('Expected QueryException for max() over a boolean attribute');
         } catch (QueryException $e) {
             $this->assertSame('Query applies a function or operator the attribute type does not support', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testMongoIncrementOfATextValueIsAnInvalidOperation(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Mongo::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'incrementText';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::string(key: 'name', size: 64)], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+        $document = $database->createDocument($collection, new Document([
+            '$id' => 'text',
+            '$permissions' => [Permission::read(Role::any())],
+            'name' => 'plain',
+        ]));
+
+        try {
+            $adapter->increaseDocumentAttribute($collection, 'text', 'name', 1, $document->getUpdatedAt() ?? '');
+            $this->fail('Expected TypeException for an increment of a text value');
+        } catch (TypeException $e) {
+            $this->assertSame('Invalid operation', $e->getMessage());
         } finally {
             $database->deleteCollection($collection);
         }

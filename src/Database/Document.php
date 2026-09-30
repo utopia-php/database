@@ -760,12 +760,22 @@ class Document extends ArrayObject
      */
     public function __clone()
     {
-        foreach ($this as $key => $value) {
+        foreach (parent::getArrayCopy() as $key => $value) {
             if ($value instanceof self) {
                 $this[$key] = clone $value;
-            } elseif (\is_array($value)) {
-                $this[$key] = \array_map(fn ($item) => $item instanceof self ? clone $item : $item, $value);
+
+                continue;
             }
+
+            if (! \is_array($value) || $value === []) {
+                continue;
+            }
+
+            $copy = [];
+            foreach ($value as $index => $item) {
+                $copy[$index] = $item instanceof self ? clone $item : $item;
+            }
+            $this[$key] = $copy;
         }
     }
 }

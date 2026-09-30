@@ -9731,6 +9731,7 @@ trait DocumentTests
         try {
             $database->getAuthorization()->skip(fn (): Document => $database->getAdapter()->createDocument($database->getCollection($collection), new Document([
                 '$id' => 'legacy',
+                ...($database->getSharedTables() ? ['$tenant' => $database->getTenant()] : []),
                 '$permissions' => [],
                 '$createdAt' => DateTime::now(),
                 '$updatedAt' => DateTime::now(),

@@ -378,8 +378,11 @@ have to make, with the 7.x and 8.0 forms side by side.
   a free document whose id matches a linked document of the other collection.
 - `createDocuments()` under `skipDuplicates()` writes permissions only for the documents it inserted. A replayed id
   no longer adds its permissions to the stored document (MariaDB, MySQL and SQLite; also present in 7.x), and a row
-  skipped for another unique value leaves no permission rows behind. On MongoDB it matches ids case-insensitively,
-  as its `_uid` index does, instead of failing on an id stored with different case.
+  skipped for another unique value leaves no permission rows behind. On MongoDB it matches ids as its `_uid` index
+  does (ignoring case and accents), instead of failing on an id stored with different case, and it reports only the
+  documents its upserts inserted: it reads back the `$sequence` each was given, so an id the index matches or one
+  another writer stores first is not counted. A document it inserts without a `$sequence` gets a UUID v7 one, as
+  `createDocuments()` without `skipDuplicates()` gives it, instead of a server-generated `ObjectId`.
 - `Adapter::find()` with no limit and an offset returns the rows after the offset on every SQL engine instead of
   throwing (MariaDB, MySQL and SQLite rejected `OFFSET` without `LIMIT`; also in 7.x).
 - A failed rollback of a metadata write no longer replaces or mislabels the error that failed the write.

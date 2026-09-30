@@ -52,6 +52,25 @@ final class DocumentWriteMinorsTest extends TestCase
         );
     }
 
+    public function testFindLeavesTheCallersCursorUnchanged(): void
+    {
+        $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
+        foreach (['first', 'second'] as $id) {
+            $database->createDocument(self::COLLECTION, new Document([
+                '$id' => $id,
+                'secret' => $id,
+                'seen' => '2026-01-02T03:04:05.678+00:00',
+            ]));
+        }
+        $cursor = $database->getDocument(self::COLLECTION, 'first');
+        $before = $cursor->getArrayCopy();
+
+        $page = $database->find(self::COLLECTION, [Query::cursorAfter($cursor), Query::limit(1)]);
+
+        $this->assertSame(['second'], \array_map(static fn (Document $document): string => $document->getId(), $page));
+        $this->assertSame($before, $cursor->getArrayCopy());
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

@@ -3660,7 +3660,7 @@ trait Documents
         $joinedCollections = $isAggregation ? [] : $this->joinedCollectionsByAlias($joins);
 
         if (! empty($cursor)) {
-            $cursor = $this->encode($collection, $cursor);
+            $cursor = $this->encode($collection, clone $cursor);
             $cursor = $this->castingBefore($collection, $cursor);
             $cursor = $this->encodeJoins($cursor, $joinedCollections);
             $cursor = $cursor->getArrayCopy();

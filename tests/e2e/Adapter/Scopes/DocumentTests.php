@@ -3,6 +3,7 @@
 namespace Tests\E2E\Adapter\Scopes;
 
 use Exception;
+use InvalidArgumentException;
 use PDOException;
 use PHPUnit\Framework\Attributes\Depends;
 use Throwable;
@@ -9696,6 +9697,49 @@ trait DocumentTests
                 $this->assertSame($expected, $ids, $case);
                 $this->assertSame(\count($expected), $database->count($collection, [$countQuery]), $case);
             }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testIncreaseAndDecreaseRefuseAFractionalBoundOnAnInteger(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = 'fractional_bound_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::integer(key: 'count', required: true));
+        $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 100]));
+
+        try {
+            if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+                $this->assertSame(101, $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.4)->getAttribute('count'));
+                $this->assertSame(100, $database->decreaseDocumentAttribute($collection, 'counter', 'count', 1, 99.5)->getAttribute('count'));
+
+                return;
+            }
+
+            try {
+                $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.4);
+                $this->fail('A fractional maximum on an integer attribute was accepted');
+            } catch (InvalidArgumentException $error) {
+                $this->assertSame('Value must be an integer.', $error->getMessage());
+            }
+
+            try {
+                $database->decreaseDocumentAttribute($collection, 'counter', 'count', 1, 0.5);
+                $this->fail('A fractional minimum on an integer attribute was accepted');
+            } catch (InvalidArgumentException $error) {
+                $this->assertSame('Value must be an integer.', $error->getMessage());
+            }
+
+            $this->assertSame(100, $database->getDocument($collection, 'counter')->getAttribute('count'));
+            $this->assertSame(101, $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.0)->getAttribute('count'));
         } finally {
             $database->deleteCollection($collection);
         }

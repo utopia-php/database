@@ -281,6 +281,46 @@ final class MirrorReplicationTest extends TestCase
         $this->assertSame(0, $mirror->countPendingReplications());
     }
 
+    public function testReplicationRunsUnderTheCallersRolesAfterTheCallerChangedThem(): void
+    {
+        $this->authorization->skip(fn (): Document => $this->mirror->createDocument(self::SECRETS, new Document([
+            Document::ID => 'owned',
+            'title' => 'owned',
+            Document::PERMISSIONS => [Permission::read(Role::user('alice')), Permission::delete(Role::user('alice'))],
+        ])));
+        $this->writes = [];
+        $this->delays = [self::DELETED => 0.02];
+
+        $this->inCoroutine(function (): void {
+            $this->authorization->addRole(Role::user('alice')->toString());
+            $this->mirror->deleteDocument(self::SECRETS, 'owned');
+            $this->authorization->cleanRoles();
+            $this->authorization->addRole(Role::any()->toString());
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['owned', self::DELETED]], $this->titlesWritten());
+        $this->assertSame([Role::any()->toString()], $this->authorization->getRoles());
+    }
+
+    public function testAReplicationDoesNotChangeTheCallersRoles(): void
+    {
+        $this->delays = [self::DELETED => 0.01];
+        $seen = [];
+
+        $this->inCoroutine(function () use (&$seen): void {
+            $this->authorization->addRole(Role::user('bob')->toString());
+            $this->mirror->deleteDocument(self::NOTES, 'public');
+            $seen['whileQueued'] = $this->authorization->getRoles();
+            Coroutine::sleep(0.03);
+            $seen['afterReplication'] = $this->authorization->getRoles();
+        });
+
+        $roles = [Role::any()->toString(), Role::user('bob')->toString()];
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['whileQueued' => $roles, 'afterReplication' => $roles], $seen);
+    }
+
     public function testConcurrentReplicationsDoNotShareTheDestinationsSkipDuplicates(): void
     {
         $this->authorization->skip(fn (): Document => $this->destination->createDocument(self::NOTES, new Document([

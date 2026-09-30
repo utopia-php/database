@@ -9,8 +9,8 @@ use Utopia\Validator;
 /**
  * Validates authorization by checking if any of the current roles match the required permissions.
  *
- * The status is shared by every caller, except inside skip() and withStatus(): those scopes belong to the calling
- * coroutine and the coroutines it starts (see {@see Value}).
+ * The status and the roles are shared by every caller, except inside skip(), withStatus() and withRoles(): those
+ * scopes belong to the calling coroutine and the coroutines it starts (see {@see Value}).
  */
 class Authorization extends Validator
 {
@@ -26,22 +26,25 @@ class Authorization extends Validator
     protected bool $statusDefault = true;
 
     /**
-     * @var array<string, bool>
+     * @var Value<array<string, bool>>
      */
-    private array $roles = [
-        'any' => true,
-    ];
+    private Value $roles;
 
     protected string $message = 'Authorization Error';
 
     public function __construct()
     {
         $this->status = new Value(true);
+
+        /** @var Value<array<string, bool>> $roles */
+        $roles = new Value(['any' => true]);
+        $this->roles = $roles;
     }
 
     public function __clone()
     {
         $this->status = new Value($this->status->get());
+        $this->roles = new Value($this->roles->get());
     }
 
     /**
@@ -82,9 +85,10 @@ class Authorization extends Validator
         }
 
         $permission = '-';
+        $roles = $this->roles->get();
 
         foreach ($permissions as $permission) {
-            if (\array_key_exists($permission, $this->roles)) {
+            if (\array_key_exists($permission, $roles)) {
                 return true;
             }
         }
@@ -102,7 +106,9 @@ class Authorization extends Validator
      */
     public function addRole(string $role): void
     {
-        $this->roles[$role] = true;
+        $roles = $this->roles->get();
+        $roles[$role] = true;
+        $this->roles->set($roles);
     }
 
     /**
@@ -113,7 +119,9 @@ class Authorization extends Validator
      */
     public function removeRole(string $role): void
     {
-        unset($this->roles[$role]);
+        $roles = $this->roles->get();
+        unset($roles[$role]);
+        $this->roles->set($roles);
     }
 
     /**
@@ -121,7 +129,22 @@ class Authorization extends Validator
      */
     public function getRoles(): array
     {
-        return \array_keys($this->roles);
+        return \array_keys($this->roles->get());
+    }
+
+    /**
+     * Run the callback with exactly these roles for the calling coroutine and the coroutines it starts. Roles
+     * added or removed inside the callback change that scope only.
+     *
+     * @template T
+     *
+     * @param  array<string>  $roles
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public function withRoles(array $roles, callable $callback): mixed
+    {
+        return $this->roles->with(\array_fill_keys($roles, true), $callback);
     }
 
     /**
@@ -131,7 +154,7 @@ class Authorization extends Validator
      */
     public function cleanRoles(): void
     {
-        $this->roles = [];
+        $this->roles->set([]);
     }
 
     /**
@@ -142,7 +165,7 @@ class Authorization extends Validator
      */
     public function hasRole(string $role): bool
     {
-        return \array_key_exists($role, $this->roles);
+        return \array_key_exists($role, $this->roles->get());
     }
 
     /**

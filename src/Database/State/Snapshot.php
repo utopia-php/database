@@ -13,6 +13,7 @@ final readonly class Snapshot
 {
     /**
      * @param  bool  $authorization  Whether authorization checks apply
+     * @param  array<string>  $roles  The roles authorization checks against
      * @param  bool  $relationships  Whether relationships are populated and written
      * @param  bool  $existCheck  Whether related documents must exist before they are linked
      * @param  bool  $population  Whether a relationship population is already running
@@ -29,6 +30,7 @@ final readonly class Snapshot
      */
     public function __construct(
         public bool $authorization,
+        public array $roles,
         public bool $relationships,
         public bool $existCheck,
         public bool $population,

@@ -207,6 +207,7 @@ final class CoroutineStateTest extends TestCase
     {
         return new Snapshot(
             authorization: true,
+            roles: ['any'],
             relationships: true,
             existCheck: true,
             population: $population,

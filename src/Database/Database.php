@@ -1581,13 +1581,14 @@ class Database
     }
 
     /**
-     * Capture the authorization, relationship, silence, tenant and toggle state the calling coroutine sees, so work
-     * started elsewhere can run under it with withSnapshot().
+     * Capture the authorization status and roles, relationship, silence, tenant and toggle state the calling
+     * coroutine sees, so work started elsewhere can run under it with withSnapshot().
      */
     public function snapshot(): Snapshot
     {
         return new Snapshot(
             authorization: $this->authorization->getStatus(),
+            roles: $this->authorization->getRoles(),
             relationships: $this->relationshipHook?->isEnabled() ?? true,
             existCheck: $this->relationshipHook?->shouldCheckExist() ?? true,
             population: $this->relationshipHook?->isInBatchPopulation() ?? false,
@@ -1624,10 +1625,12 @@ class Database
             ),
         );
 
-        return $this->authorization->withStatus(
-            $snapshot->authorization,
+        $authorized = fn () => $this->authorization->withRoles(
+            $snapshot->roles,
             $hook === null ? $scoped : fn () => $hook->withSnapshot($snapshot, $scoped),
         );
+
+        return $this->authorization->withStatus($snapshot->authorization, $authorized);
     }
 
     /**

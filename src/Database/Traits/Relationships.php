@@ -518,11 +518,11 @@ trait Relationships
                 $attribute->setAttribute('key', $actualNewKey);
                 $attribute->setAttribute('options', [
                     'relatedCollection' => $relatedCollection->getId(),
-                    'relationType' => $oldRel->type,
+                    'relationType' => $oldRel->type->value,
                     'twoWay' => $actualTwoWay,
                     'twoWayKey' => $actualNewTwoWayKey,
-                    'onDelete' => $actualOnDelete,
-                    'side' => $oldRel->side,
+                    'onDelete' => $actualOnDelete->value,
+                    'side' => $oldRel->side->value,
                 ]);
             }, triggerEvent: false)];
 
@@ -531,7 +531,7 @@ trait Relationships
                 $options = $twoWayAttribute->getAttribute('options', []);
                 $options['twoWayKey'] = $actualNewKey;
                 $options['twoWay'] = $actualTwoWay;
-                $options['onDelete'] = $actualOnDelete;
+                $options['onDelete'] = $actualOnDelete->value;
 
                 $twoWayAttribute->setAttribute(Document::ID, $actualNewTwoWayKey);
                 $twoWayAttribute->setAttribute('key', $actualNewTwoWayKey);
@@ -673,7 +673,7 @@ trait Relationships
                     $options = $twoWayAttribute->getAttribute('options', []);
                     $options['twoWayKey'] = $id;
                     $options['twoWay'] = $oldRel->twoWay;
-                    $options['onDelete'] = $oldRel->onDelete;
+                    $options['onDelete'] = $oldRel->onDelete->value;
                     $twoWayAttribute->setAttribute(Document::ID, $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
                     $twoWayAttribute->setAttribute('options', $options);

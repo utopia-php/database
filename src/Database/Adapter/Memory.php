@@ -658,6 +658,10 @@ class Memory extends Adapter implements Feature\Relationships
             return true;
         }
 
+        if (isset($this->data[$key]['attributes'][$new])) {
+            throw new DuplicateException('Attribute already exists');
+        }
+
         $this->data[$key]['attributes'][$new] = $this->data[$key]['attributes'][$old];
         unset($this->data[$key]['attributes'][$old]);
 

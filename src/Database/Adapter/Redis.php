@@ -42,12 +42,15 @@ use Utopia\Query\Schema\IndexType;
  *     {ns}:dbs                                | SET  | database names
  *     {ns}:{db}:cols                          | SET  | collection IDs
  *     {ns}:{db}:meta:{col}                    | HASH | schema/attrs/indexes
+ *     {ns}:{db}:meta:t:{tenant}:{col}         | HASH | a tenant's schema/attrs/indexes under shared tables
  *     {ns}:{db}:doc:{col}:{id}                | STRING | JSON Document
  *     {ns}:{db}:idx:{col}                     | SET  | doc IDs in collection
  *     {ns}:{db}:perm:{col}:{letter}:{role}    | SET  | doc IDs by action+role
  *     {ns}:{db}:perm:doc:{col}:{id}           | HASH | role -> csv letters
  *
- * Shared-tables variants bucket on tenant under `t:{tenant}` segments.
+ * Shared-tables variants bucket on tenant under `t:{tenant}` segments. Each tenant keeps its
+ * own schema record, as its documents follow its own attributes and indexes; a tenant without one
+ * reads the collection-wide record older versions wrote.
  */
 class Redis extends Adapter implements
     Feature\Relationships,
@@ -230,12 +233,14 @@ class Redis extends Adapter implements
     {
         $id = $this->filter($name);
         $colsKey = $this->key($this->ns(), 'cols');
-        $metaKey = $this->key($this->ns(), 'meta', $id);
+        $metaKey = $this->metaKey($id);
         $idxKey = $this->idxKey($id);
 
         if ((bool) $this->client->exists($metaKey)) {
             throw new DuplicateException('Collection already exists');
         }
+
+        $existsForAnotherTenant = $this->getSharedTables() && (bool) $this->client->sIsMember($colsKey, $id);
 
         $attributePayload = [];
         foreach ($attributes as $attribute) {
@@ -281,6 +286,10 @@ class Redis extends Adapter implements
             $client->sAdd($colsKey, $id);
         });
 
+        if ($existsForAnotherTenant) {
+            throw new DuplicateException('Collection already exists');
+        }
+
         return true;
     }
 
@@ -318,9 +327,9 @@ class Redis extends Adapter implements
     {
         $collection = $this->filter($collection);
         $id = $this->filter($attribute->key);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -356,9 +365,9 @@ class Redis extends Adapter implements
     {
         $collection = $this->filter($collection);
         $id = $this->filter($attribute->key);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -390,9 +399,9 @@ class Redis extends Adapter implements
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             return true;
         }
 
@@ -419,9 +428,9 @@ class Redis extends Adapter implements
         $collection = $this->filter($collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -438,10 +447,24 @@ class Redis extends Adapter implements
                 $attrs[$i] = $attribute;
                 $touched = true;
             }
-            if (! $touched) {
-                return;
+            if ($touched) {
+                $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
             }
-            $client->hSet($metaKey, 'attrs', \json_encode($attrs, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+
+            $indexes = $this->readIndexesField($client, $metaKey);
+            $touched = false;
+            foreach ($indexes as $i => $index) {
+                $attributes = \is_array($index['attributes'] ?? null) ? $index['attributes'] : [];
+                foreach ($attributes as $position => $attribute) {
+                    if (\is_string($attribute) && $this->filter($attribute) === $old) {
+                        $indexes[$i]['attributes'][$position] = $new;
+                        $touched = true;
+                    }
+                }
+            }
+            if ($touched) {
+                $client->hSet($metaKey, 'indexes', \json_encode($indexes, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE));
+            }
         });
 
         $this->renameDocumentField($collection, $old, $new);
@@ -592,9 +615,9 @@ class Redis extends Adapter implements
     {
         $collection = $this->filter($collection);
         $id = $this->filter($index->key);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -681,9 +704,9 @@ class Redis extends Adapter implements
     {
         $collection = $this->filter($collection);
         $id = $this->filter($id);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             return true;
         }
 
@@ -707,9 +730,9 @@ class Redis extends Adapter implements
         $collection = $this->filter($collection);
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -949,7 +972,7 @@ class Redis extends Adapter implements
 
             $relationshipKeys = [];
             if ($col !== Database::METADATA) {
-                $metaKey = $this->key($this->ns(), 'meta', $col);
+                $metaKey = $this->metaKey($col);
                 $attributes = $this->readAttributesField($redis, $metaKey);
                 $relationshipKeys = $this->extractRelationshipKeys($attributes);
             }
@@ -1029,7 +1052,7 @@ class Redis extends Adapter implements
 
             $relationshipKeys = [];
             if ($col !== Database::METADATA) {
-                $metaKey = $this->key($this->ns(), 'meta', $col);
+                $metaKey = $this->metaKey($col);
                 $attributes = $this->readAttributesField($redis, $metaKey);
                 $relationshipKeys = $this->extractRelationshipKeys($attributes);
             }
@@ -1274,9 +1297,9 @@ class Redis extends Adapter implements
     public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
     {
         $collectionId = $this->filter($collection->getId());
-        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
+        $metaKey = $this->metaKey($collectionId);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1313,9 +1336,9 @@ class Redis extends Adapter implements
     public function sum(Document $collection, string $attribute, array $queries = [], ?int $max = null): float|int
     {
         $collectionId = $this->filter($collection->getId());
-        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
+        $metaKey = $this->metaKey($collectionId);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1349,9 +1372,9 @@ class Redis extends Adapter implements
     public function count(Document $collection, array $queries = [], ?int $max = null): int
     {
         $collectionId = $this->filter($collection->getId());
-        $metaKey = $this->key($this->ns(), 'meta', $collectionId);
+        $metaKey = $this->metaKey($collectionId);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             throw new NotFoundException('Collection not found');
         }
 
@@ -1588,6 +1611,53 @@ class Redis extends Adapter implements
         $bucket = $this->bucketFor($tenant);
 
         return $this->key($this->ns(), 'doc', 't', $bucket, $collection, $id);
+    }
+
+    private function metaKey(string $collection, int|string|null $tenant = null): string
+    {
+        if (! $this->getSharedTables() || $collection === Database::METADATA) {
+            return $this->key($this->ns(), 'meta', $collection);
+        }
+
+        return $this->key($this->ns(), 'meta', 't', $this->bucketFor($tenant), $collection);
+    }
+
+    /**
+     * The collection-wide record a tenant's record falls back to, or null for a record that is
+     * not a tenant's.
+     */
+    private function sharedMetaKey(string $metaKey): ?string
+    {
+        $tenantPrefix = $this->key($this->ns(), 'meta', 't').self::SEP;
+        if (! \str_starts_with($metaKey, $tenantPrefix)) {
+            return null;
+        }
+
+        $separator = \strrpos($metaKey, self::SEP);
+
+        return $this->key($this->ns(), 'meta', \substr($metaKey, $separator === false ? 0 : $separator + 1));
+    }
+
+    private function hasMeta(string $metaKey): bool
+    {
+        if ((bool) $this->client->exists($metaKey)) {
+            return true;
+        }
+
+        $sharedMetaKey = $this->sharedMetaKey($metaKey);
+
+        return $sharedMetaKey !== null && (bool) $this->client->exists($sharedMetaKey);
+    }
+
+    private function readMetaField(RedisClient $client, string $metaKey, string $field): ?string
+    {
+        $raw = $client->hGet($metaKey, $field);
+        if (! \is_string($raw)) {
+            $sharedMetaKey = $this->sharedMetaKey($metaKey);
+            $raw = $sharedMetaKey === null ? false : $client->hGet($sharedMetaKey, $field);
+        }
+
+        return \is_string($raw) && $raw !== '' ? $raw : null;
     }
 
     private function idxKey(string $collection, int|string|null $tenant = null): string
@@ -2008,8 +2078,8 @@ class Redis extends Adapter implements
      */
     private function readAttributesField(RedisClient $client, string $metaKey): array
     {
-        $raw = $client->hGet($metaKey, 'attrs');
-        if (! \is_string($raw) || $raw === '') {
+        $raw = $this->readMetaField($client, $metaKey, 'attrs');
+        if ($raw === null) {
             return [];
         }
         /** @var array<int, array<string, mixed>> $decoded */
@@ -2023,8 +2093,8 @@ class Redis extends Adapter implements
      */
     private function readIndexesField(RedisClient $client, string $metaKey): array
     {
-        $raw = $client->hGet($metaKey, 'indexes');
-        if (! \is_string($raw) || $raw === '') {
+        $raw = $this->readMetaField($client, $metaKey, 'indexes');
+        if ($raw === null) {
             return [];
         }
         $decoded = \json_decode($raw, true, self::JSON_DECODE_DEPTH, JSON_THROW_ON_ERROR);
@@ -2063,7 +2133,7 @@ class Redis extends Adapter implements
 
     private function enforceUniqueIndexes(RedisClient $client, string $collection, Document $document, ?string $excludeId = null): void
     {
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection, $document->getTenant());
         $indexes = $this->readIndexesField($client, $metaKey);
 
         $uniqueIndexes = [];
@@ -2205,6 +2275,7 @@ class Redis extends Adapter implements
         $this->deleteByPattern($client, $prefix.self::SEP.'doc'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection.self::SEP.'*');
         $this->deleteByPattern($client, $prefix.self::SEP.'idx'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection);
         $this->deleteByPattern($client, $prefix.self::SEP.'seq'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection);
+        $this->deleteByPattern($client, $prefix.self::SEP.'meta'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection);
 
         $this->deleteByPattern($client, $this->key($prefix, 'perm', $collection).self::SEP.'*');
         $this->deleteByPattern($client, $prefix.self::SEP.'perm'.self::SEP.'t'.self::SEP.'*'.self::SEP.$collection.self::SEP.'*');
@@ -2229,9 +2300,9 @@ class Redis extends Adapter implements
     private function computeCollectionSize(string $collection): int
     {
         $collection = $this->filter($collection);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             return 0;
         }
 
@@ -2316,9 +2387,9 @@ class Redis extends Adapter implements
     {
         $collection = $this->filter($collection);
         $field = $this->filter($field);
-        $metaKey = $this->key($this->ns(), 'meta', $collection);
+        $metaKey = $this->metaKey($collection);
 
-        if ((bool) $this->client->exists($metaKey) === false) {
+        if (! $this->hasMeta($metaKey)) {
             return;
         }
 
@@ -2457,7 +2528,7 @@ class Redis extends Adapter implements
             return $document;
         }
 
-        $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
+        $metaKey = $this->metaKey($this->filter($collection));
         $attributes = $this->readAttributesField($this->client, $metaKey);
         $relationshipKeys = $this->extractRelationshipKeys($attributes);
         if ($relationshipKeys === []) {
@@ -2539,7 +2610,7 @@ class Redis extends Adapter implements
 
         $relationshipKeys = [];
         if ($collection !== Database::METADATA) {
-            $metaKey = $this->key($this->ns(), 'meta', $this->filter($collection));
+            $metaKey = $this->metaKey($this->filter($collection));
             $attributes = $this->readAttributesField($client, $metaKey);
             $relationshipKeys = $this->extractRelationshipKeys($attributes);
         }

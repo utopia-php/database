@@ -880,14 +880,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function deleteAttribute(string $collection, string $id): bool
     {
-        $collection = $this->getNamespace().'_'.$this->filter($collection);
-
-        $this->getClient()->update(
-            $collection,
-            [],
-            ['$unset' => [$id => '']],
-            multi: true
-        );
+        $this->updateTenantDocuments($collection, ['$unset' => [$id => '']]);
 
         return true;
     }
@@ -900,21 +893,31 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     public function renameAttribute(string $collection, string $id, string $name): bool
     {
-        $collection = $this->getNamespace().'_'.$this->filter($collection);
-
         $from = $this->filter($this->getInternalKeyForAttribute($id));
         $to = $this->filter($this->getInternalKeyForAttribute($name));
-        $options = $this->getTransactionOptions();
 
-        $this->getClient()->update(
-            $collection,
-            [],
-            ['$rename' => [$from => $to]],
-            multi: true,
-            options: $options
-        );
+        $this->updateTenantDocuments($collection, ['$rename' => [$from => $to]]);
 
         return true;
+    }
+
+    /**
+     * Apply a schema change to the documents of the selected tenant only: under shared tables
+     * other tenants' documents follow their own collection definitions.
+     *
+     * @param  array<string, mixed>  $update
+     *
+     * @throws MongoException
+     */
+    private function updateTenantDocuments(string $collection, array $update): void
+    {
+        $this->getClient()->update(
+            $this->getNamespace().'_'.$this->filter($collection),
+            $this->applyTenantFilter([], $collection),
+            $update,
+            $this->getTransactionOptions(),
+            multi: true,
+        );
     }
 
     /**
@@ -937,9 +940,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         ?string $newKey = null,
         ?string $newTwoWayKey = null
     ): bool {
-        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->collection);
-        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
-
         $escapedKey = $this->escapeMongoFieldName($relationship->key);
         $escapedNewKey = ! \is_null($newKey) ? $this->escapeMongoFieldName($newKey) : null;
         $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
@@ -960,20 +960,20 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         switch ($relationship->type) {
             case RelationType::OneToOne:
                 if (! \is_null($newKey) && $relationship->key !== $newKey) {
-                    $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
+                    $this->updateTenantDocuments($relationship->collection, $renameKey);
                 }
                 if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
-                    $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
+                    $this->updateTenantDocuments($relationship->relatedCollection, $renameTwoWayKey);
                 }
                 break;
             case RelationType::OneToMany:
                 if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
-                    $this->getClient()->update($relatedCollectionName, updates: $renameTwoWayKey, multi: true);
+                    $this->updateTenantDocuments($relationship->relatedCollection, $renameTwoWayKey);
                 }
                 break;
             case RelationType::ManyToOne:
                 if (! \is_null($newKey) && $relationship->key !== $newKey) {
-                    $this->getClient()->update($collectionName, updates: $renameKey, multi: true);
+                    $this->updateTenantDocuments($relationship->collection, $renameKey);
                 }
                 break;
             case RelationType::ManyToMany:
@@ -986,14 +986,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 }
 
                 $junction = $relationship->side === RelationSide::Parent
-                    ? $this->getNamespace().'_'.$this->filter('_'.$collectionDoc->getSequence().'_'.$relatedCollectionDoc->getSequence())
-                    : $this->getNamespace().'_'.$this->filter('_'.$relatedCollectionDoc->getSequence().'_'.$collectionDoc->getSequence());
+                    ? '_'.$collectionDoc->getSequence().'_'.$relatedCollectionDoc->getSequence()
+                    : '_'.$relatedCollectionDoc->getSequence().'_'.$collectionDoc->getSequence();
 
                 if (! \is_null($newKey) && $relationship->key !== $newKey) {
-                    $this->getClient()->update($junction, updates: $renameKey, multi: true);
+                    $this->updateTenantDocuments($junction, $renameKey);
                 }
                 if ($relationship->twoWay && ! \is_null($newTwoWayKey) && $relationship->twoWayKey !== $newTwoWayKey) {
-                    $this->getClient()->update($junction, updates: $renameTwoWayKey, multi: true);
+                    $this->updateTenantDocuments($junction, $renameTwoWayKey);
                 }
                 break;
             default:
@@ -1010,37 +1010,35 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     public function deleteRelationship(
         Relationship $relationship
     ): bool {
-        $collectionName = $this->getNamespace().'_'.$this->filter($relationship->collection);
-        $relatedCollectionName = $this->getNamespace().'_'.$this->filter($relationship->relatedCollection);
         $escapedKey = $this->escapeMongoFieldName($relationship->key);
         $escapedTwoWayKey = $this->escapeMongoFieldName($relationship->twoWayKey);
 
         switch ($relationship->type) {
             case RelationType::OneToOne:
                 if ($relationship->side === RelationSide::Parent) {
-                    $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
+                    $this->updateTenantDocuments($relationship->collection, ['$unset' => [$escapedKey => '']]);
                     if ($relationship->twoWay) {
-                        $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
+                        $this->updateTenantDocuments($relationship->relatedCollection, ['$unset' => [$escapedTwoWayKey => '']]);
                     }
                 } elseif ($relationship->side === RelationSide::Child) {
-                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
+                    $this->updateTenantDocuments($relationship->relatedCollection, ['$unset' => [$escapedTwoWayKey => '']]);
                     if ($relationship->twoWay) {
-                        $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
+                        $this->updateTenantDocuments($relationship->collection, ['$unset' => [$escapedKey => '']]);
                     }
                 }
                 break;
             case RelationType::OneToMany:
                 if ($relationship->side === RelationSide::Parent) {
-                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
+                    $this->updateTenantDocuments($relationship->relatedCollection, ['$unset' => [$escapedTwoWayKey => '']]);
                 } else {
-                    $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
+                    $this->updateTenantDocuments($relationship->collection, ['$unset' => [$escapedKey => '']]);
                 }
                 break;
             case RelationType::ManyToOne:
                 if ($relationship->side === RelationSide::Parent) {
-                    $this->getClient()->update($collectionName, [], ['$unset' => [$escapedKey => '']], multi: true);
+                    $this->updateTenantDocuments($relationship->collection, ['$unset' => [$escapedKey => '']]);
                 } else {
-                    $this->getClient()->update($relatedCollectionName, [], ['$unset' => [$escapedTwoWayKey => '']], multi: true);
+                    $this->updateTenantDocuments($relationship->relatedCollection, ['$unset' => [$escapedTwoWayKey => '']]);
                 }
                 break;
             case RelationType::ManyToMany:

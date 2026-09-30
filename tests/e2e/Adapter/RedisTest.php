@@ -3,7 +3,6 @@
 namespace Tests\E2E\Adapter;
 
 use Redis;
-use ReflectionMethod;
 use Utopia\Cache\Adapter\None as NoneCacheAdapter;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Redis as RedisAdapter;
@@ -148,8 +147,13 @@ class RedisTest extends Base
         $client = self::$redisClient;
         $this->assertInstanceOf(RedisAdapter::class, $adapter);
         $this->assertNotNull($client);
-        $key = (new ReflectionMethod(RedisAdapter::class, 'docKey'))->invoke($adapter, $collection, 'note');
-        $this->assertIsString($key);
+        $segments = [RedisAdapter::KEY_PREFIX, $adapter->getNamespace(), $adapter->getDatabase(), 'doc'];
+        if ($adapter->getSharedTables()) {
+            $tenant = $adapter->getTenant();
+            \array_push($segments, 't', $tenant === null ? '_' : (string) $tenant);
+        }
+        \array_push($segments, $collection, 'note');
+        $key = \implode(RedisAdapter::SEP, $segments);
         $payload = $client->get($key);
         $this->assertIsString($payload);
         $stored = \json_decode($payload, true, flags: JSON_THROW_ON_ERROR);

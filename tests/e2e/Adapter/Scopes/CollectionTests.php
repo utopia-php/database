@@ -1895,4 +1895,32 @@ trait CollectionTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testRewritingADatetimeColumnKeepsItsValues(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'datetimeRewrite';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::datetime(key: 'at')],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+
+        try {
+            $database->createDocument($collection, new Document([
+                '$id' => 'moment',
+                'at' => '2024-05-06T07:08:09.123+00:00',
+            ]));
+
+            $database->updateAttribute($collection, 'at', newKey: 'happenedAt');
+            $this->assertSame('2024-05-06T07:08:09.123+00:00', $database->getDocument($collection, 'moment')->getAttribute('happenedAt'));
+
+            $database->updateAttribute($collection, 'happenedAt', type: ColumnType::Datetime, required: true);
+            $this->assertSame('2024-05-06T07:08:09.123+00:00', $database->getDocument($collection, 'moment')->getAttribute('happenedAt'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

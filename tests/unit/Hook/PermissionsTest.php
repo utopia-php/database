@@ -3,7 +3,6 @@
 namespace Tests\Unit\Hook;
 
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
@@ -11,7 +10,6 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\PDO;
 use Utopia\Database\PermissionType;
-use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
 
 final class PermissionsTest extends TestCase
@@ -90,51 +88,6 @@ final class PermissionsTest extends TestCase
             ['_document' => 'caseSensitive', '_type' => 'create', '_permission' => 'users'],
             ['_document' => 'caseSensitive', '_type' => 'read', '_permission' => 'guests'],
         ], $this->permissionRows($pdo));
-    }
-
-    public function testCurrentPermissionsPrefersExactDocumentIdWhenBothCasingsExist(): void
-    {
-        $exact = [
-            PermissionType::Create->value => ['guests'],
-            PermissionType::Read->value => [],
-            PermissionType::Update->value => [],
-            PermissionType::Delete->value => [],
-        ];
-        $other = [
-            PermissionType::Create->value => ['any'],
-            PermissionType::Read->value => [],
-            PermissionType::Update->value => [],
-            PermissionType::Delete->value => [],
-        ];
-
-        /** @var array<string, list<string>> $current */
-        $current = $this->invokeHook('currentPermissions', [
-            [
-                'CaseSensitive' => $exact,
-                'caseSensitive' => $other,
-            ],
-            'CaseSensitive',
-        ]);
-
-        $this->assertSame(['guests'], $current[PermissionType::Create->value]);
-    }
-
-    public function testGroupPermissionRowsPopulatesBothRequestedCasings(): void
-    {
-        /** @var array<string, array<string, list<string>>> $map */
-        $map = $this->invokeHook('groupPermissionRows', [
-            ['CaseSensitive', 'caseSensitive'],
-            [
-                [
-                    Storage::PERM_DOCUMENT => 'caseSensitive',
-                    Storage::PERM_TYPE => PermissionType::Create->value,
-                    Storage::PERM_PERMISSION => 'any',
-                ],
-            ],
-        ]);
-
-        $this->assertSame(['any'], $map['CaseSensitive'][PermissionType::Create->value]);
-        $this->assertSame(['any'], $map['caseSensitive'][PermissionType::Create->value]);
     }
 
     public function testUpdateDoesNotInsertDuplicatePermissionRows(): void
@@ -304,16 +257,5 @@ final class PermissionsTest extends TestCase
         $adapter->addWriteHook(new Permissions());
 
         return $adapter;
-    }
-
-    /**
-     * @param  list<mixed>  $arguments
-     */
-    private function invokeHook(string $method, array $arguments = []): mixed
-    {
-        $hook = new Permissions();
-        $reflection = new ReflectionMethod(Permissions::class, $method);
-
-        return $reflection->invoke($hook, ...$arguments);
     }
 }

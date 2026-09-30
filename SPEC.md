@@ -40,32 +40,30 @@ Each database adapter should support the following action for fast storing and r
 * delete
 
 **Collections** (Tables for MariaDB)
-* createCollection($name)
-* deleteCollection($name)
+* createCollection(string $name, array $attributes = [], array $indexes = [])
+* deleteCollection(string $id)
 
 **Attributes** (Table columns for MariaDB)
-* createAttribute(string $collection, string $name, string $type)
-* deleteAttribute(string $collection, string $name)
+* createAttribute(string $collection, Attribute $attribute)
+* deleteAttribute(string $collection, string $id)
 
 **Indices** (Table indices for MariaDB)
-* createIndex(string $collection, string $name, string $type)
-* deleteIndex(string $collection, string $name, string $type)
+* createIndex(string $collection, Index $index)
+* deleteIndex(string $collection, string $id)
 
 **Documents** (Table rows columns for MariaDB)
-* getDocument(string $collection, $id)
-* createDocument(string $collection, array $data)
-* updateDocument(string $collection, $id, array $data)
-* deleteDocument(string $collection, $id)
+* getDocument(Document $collection, string $id)
+* createDocument(Document $collection, Document $document)
+* updateDocument(Document $collection, string $id, Document $document)
+* deleteDocument(string $collection, string $id)
 
 ## Queries
 
 Each database adapter should allow querying simple and advanced queries in consideration of underline limitations.
 
 Method for quering data:
-* find(string $collection, $filters)
-* findFirst(string $collection, $filters)
-* findLast(string $collection, $filters)
-* count(string $collection, $filters)
+* find(Document $collection, array $queries)
+* count(Document $collection, array $queries)
 
 ### Supported Query Operations
 * Equal (==)

@@ -50,7 +50,7 @@ final class ValueTest extends TestCase
             $thrown = $error;
         }
 
-        $this->assertInstanceOf(RuntimeException::class, $thrown);
+        $this->assertSame('failed', $thrown->getMessage());
         $this->assertSame('handle', $value->get());
     }
 

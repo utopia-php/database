@@ -1744,6 +1744,7 @@ trait GeneralTests
 
                 return $database->getDocument($collection, 'created');
             }));
+            $this->assertInstanceOf(Document::class, $read);
             $this->assertSame('created', $read->getAttribute('name'));
             $this->assertSame('again', $database->getDocument($collection, 'written')->getAttribute('name'));
         } finally {

@@ -91,11 +91,10 @@ final class TransactionCacheReadTest extends TestCase
 
             $observed = $writer->withTransaction(function () use ($writer, $reader): array {
                 $writer->updateDocument('users', 'user', new Document(['name' => 'renamed']));
+                $committed = $reader->getDocument('users', 'user')->getAttribute('name');
+                $own = $writer->getDocument('users', 'user');
 
-                return [
-                    $reader->getDocument('users', 'user')->getAttribute('name'),
-                    $writer->getDocument('users', 'user')->getAttribute('name'),
-                ];
+                return [$committed, $own->getAttribute('name')];
             });
 
             $this->assertSame('original', $observed[0], 'A reader outside the transaction reads the committed row and caches it');
@@ -216,7 +215,9 @@ final class TransactionCacheReadTest extends TestCase
         $database->createDocument('libraries', $this->library('library', 'book'));
 
         $this->assertSame(0, $adapter->metadataReads, 'A create with 3 nested documents must read no collection definition on a warm cache (7.3.12: 0 reads)');
-        $this->assertCount(3, $database->getDocument('libraries', 'library')->getAttribute('books'));
+        $books = $database->getDocument('libraries', 'library')->getAttribute('books');
+        $this->assertIsArray($books);
+        $this->assertCount(3, $books);
     }
 
     public function testAMissingCollectionCostsOneMetadataRead(): void

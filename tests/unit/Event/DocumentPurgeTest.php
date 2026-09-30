@@ -594,12 +594,12 @@ final class DocumentPurgeTest extends TestCase
         $failure = new RuntimeException('region broadcast failed');
         $database->addHook(new FailingLifecycle(Event::DocumentPurge, $failure));
 
-        $this->assertSame($failure, $this->failureOf(static fn (): mixed => $database->withTransaction(
-            static function () use ($database): void {
+        $this->assertSame($failure, $this->failureOf(static function () use ($database): void {
+            $database->withTransaction(static function () use ($database): void {
                 $database->updateDocument(HookFixture::COLLECTION, 'first', new Document(['title' => 'renamed']));
                 $database->updateDocument(HookFixture::COLLECTION, 'second', new Document(['title' => 'renamed']));
-            },
-        )));
+            });
+        }));
 
         $this->assertSame(['posts/first', 'posts/second'], $this->purged($recorder));
     }

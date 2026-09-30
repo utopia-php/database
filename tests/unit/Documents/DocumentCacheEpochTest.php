@@ -624,8 +624,9 @@ final class DocumentCacheEpochTest extends TestCase
         $read = $database->withTransaction(function () use ($database, $cache, $definitionKey, $definition): mixed {
             $this->renameDocument($database, 'webhooks', 'hook', 'updated');
             $cache->save($definitionKey, $definition);
+            $document = $database->getDocument('webhooks', 'hook');
 
-            return $database->getDocument('webhooks', 'hook')->getAttribute('name');
+            return $document->getAttribute('name');
         });
 
         $this->assertSame('updated', $read, 'A transaction must read what its batch write changed even when another reader saved the definition as it was before the write');

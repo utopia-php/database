@@ -2,13 +2,11 @@
 
 namespace Tests\Unit\Adapter;
 
-use Exception;
 use PDO;
 use PDOException;
 use PDOStatement;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use ReflectionProperty;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
@@ -272,8 +270,13 @@ final class ColumnRenameTest extends TestCase
 
     private function postgresError(string $state, string $message): PDOException
     {
-        $error = new PDOException("SQLSTATE[{$state}]: 7 ERROR:  {$message}");
-        (new ReflectionProperty(Exception::class, 'code'))->setValue($error, $state);
+        $error = new class ("SQLSTATE[{$state}]: 7 ERROR:  {$message}", $state) extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $error->errorInfo = [$state, 7, $message];
 
         return $error;

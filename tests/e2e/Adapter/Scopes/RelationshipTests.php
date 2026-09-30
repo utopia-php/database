@@ -5098,4 +5098,160 @@ trait RelationshipTests
 
         return $ids;
     }
+
+    public function testNestedPathFilterThroughAOneToManyHopStaysWithinTheQueryValueLimit(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $parents = 'nestedHopParents';
+        $children = 'nestedHopChildren';
+        $labels = 'nestedHopLabels';
+        $database->createCollection(new Collection(id: $parents, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $children, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $labels, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::oneToMany(collection: $parents, relatedCollection: $children, twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: $children, relatedCollection: $labels, twoWay: true, key: 'labels', twoWayKey: 'child', onDelete: ForeignKeyAction::SetNull));
+
+        foreach (\range(1, 4) as $number) {
+            $database->createDocument($parents, new Document(['$id' => "parent{$number}"]));
+            $database->createDocument($children, new Document(['$id' => "child{$number}", 'parent' => "parent{$number}"]));
+            $database->createDocument($labels, new Document(['$id' => "label{$number}", 'name' => $number === 4 ? 'other' : 'match', 'child' => "child{$number}"]));
+        }
+
+        $max = $database->getMaxQueryValues();
+        $database->setMaxQueryValues(2);
+
+        try {
+            $ids = \array_map(fn (Document $parent): string => $parent->getId(), $database->find($parents, [Query::equal('children.labels.name', ['match'])]));
+            \sort($ids);
+
+            $this->assertSame(['parent1', 'parent2', 'parent3'], $ids);
+        } finally {
+            $database->setMaxQueryValues($max);
+            $database->deleteCollection($parents);
+            $database->deleteCollection($children);
+            $database->deleteCollection($labels);
+        }
+    }
+
+    public function testSelectingNestedAttributesThroughTheChildSideOfAManyToOne(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $stores = 'nestedSelectStores';
+        $products = 'nestedSelectProducts';
+        $database->createCollection(new Collection(id: $stores, attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $products, attributes: [Attribute::string(key: 'name', size: 64), Attribute::string(key: 'sku', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::manyToOne(collection: $products, relatedCollection: $stores, twoWay: true, key: 'store', twoWayKey: 'products', onDelete: ForeignKeyAction::SetNull));
+
+        try {
+            $database->createDocument($stores, new Document(['$id' => 'store1', 'name' => 'Store 1']));
+            foreach (['product1', 'product2'] as $id) {
+                $database->createDocument($products, new Document(['$id' => $id, 'name' => "Name {$id}", 'sku' => "sku-{$id}", 'store' => 'store1']));
+            }
+
+            $reads = [
+                'getDocument' => $database->getDocument($stores, 'store1', [Query::select(['*', 'products.name'])]),
+                'findOne' => $database->findOne($stores, [Query::select(['*', 'products.name'])]),
+            ];
+            foreach ($reads as $read => $store) {
+                $this->assertSame('Store 1', $store->getAttribute('name'), $read);
+                $ids = \array_map(fn (Document $product): string => $product->getId(), $store->getDocuments('products'));
+                \sort($ids);
+                $this->assertSame(['product1', 'product2'], $ids, $read);
+                foreach ($store->getDocuments('products') as $product) {
+                    $this->assertSame("Name {$product->getId()}", $product->getAttribute('name'), $read);
+                    $this->assertFalse($product->offsetExists('sku'), "{$read} must return only the selected attribute of {$product->getId()}");
+                    $this->assertFalse($product->offsetExists('store'), "{$read} must not return the back-reference of {$product->getId()}");
+                }
+            }
+
+            $store = $database->getDocument($stores, 'store1', [Query::select(['*', 'products.'])]);
+            $this->assertCount(2, $store->getDocuments('products'));
+            foreach ($store->getDocuments('products') as $product) {
+                $this->assertSame("sku-{$product->getId()}", $product->getAttribute('sku'), 'A trailing dot selects every attribute of the related documents');
+            }
+        } finally {
+            $database->deleteCollection($stores);
+            $database->deleteCollection($products);
+        }
+    }
+
+    public function testContainsAllOnRelationshipEdgeCases(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! ($database->getAdapter()->hasFeature(Feature\Relationships::class))) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $projects = 'containsAllProjects';
+        $developers = 'containsAllDevelopers';
+        $database->createCollection(new Collection(id: $projects, permissions: $this->relationshipCoveragePermissions()));
+        $database->createCollection(new Collection(id: $developers, attributes: [Attribute::string(key: 'devName', size: 64)], permissions: $this->relationshipCoveragePermissions()));
+        $database->createRelationship(Relationship::manyToMany(collection: $projects, relatedCollection: $developers, twoWay: true, key: 'developers', twoWayKey: 'projects', onDelete: ForeignKeyAction::SetNull));
+
+        try {
+            foreach (['dev1' => 'Alice', 'dev2' => 'Bob', 'dev3' => 'Carol'] as $id => $name) {
+                $database->createDocument($developers, new Document(['$id' => $id, 'devName' => $name]));
+            }
+            $database->createDocument($projects, new Document(['$id' => 'project1', 'developers' => ['dev1', 'dev2']]));
+            $database->createDocument($projects, new Document(['$id' => 'project2', 'developers' => ['dev1', 'dev3']]));
+
+            $found = function (Query $query) use ($database, $projects): array {
+                $ids = \array_map(fn (Document $project): string => $project->getId(), $database->find($projects, [$query]));
+                \sort($ids);
+
+                return $ids;
+            };
+
+            $this->assertSame(['project1'], $found(Query::containsAll('developers.$id', ['dev2'])));
+            $this->assertSame(['project2'], $found(Query::containsAll('developers.$id', ['dev1', 'dev3'])));
+            $this->assertSame([], $found(Query::containsAll('developers.$id', ['dev1', 'nobody'])));
+            $this->assertSame([], $found(Query::containsAll('developers.$id', ['dev2', 'dev3'])));
+            $this->assertSame([], $found(Query::equal('developers.devName', ['Nobody'])));
+
+            if ($database->getAdapter()->supports(Capability::DefinedAttributes)) {
+                try {
+                    $database->find($projects, [Query::equal('developers.unknownAttribute', ['x'])]);
+                    $this->fail('A filter on an unknown related attribute must be rejected');
+                } catch (QueryException $exception) {
+                    $this->assertStringContainsString('unknownAttribute', $exception->getMessage());
+                }
+            }
+        } finally {
+            $database->deleteCollection($projects);
+            $database->deleteCollection($developers);
+        }
+    }
+
+    /**
+     * @return array<string>
+     */
+    private function relationshipCoveragePermissions(): array
+    {
+        return [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+    }
 }

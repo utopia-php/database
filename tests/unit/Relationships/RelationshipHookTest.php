@@ -12,18 +12,25 @@ use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
+use Utopia\Database\Exception\Query as QueryException;
+use Utopia\Database\Exception\Relationship as RelationshipException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
+use Utopia\Database\Operator;
+use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
 use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\CursorDirection;
 use Utopia\Query\Schema\ForeignKeyAction;
 
 final class RelationshipHookTest extends TestCase
@@ -899,5 +906,385 @@ final class RelationshipHookTest extends TestCase
     private function manyToManyLink(): Relationship
     {
         return Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testANewNestedManyToManyDocumentKeepsItsOwnPermissions(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => [Permission::read(Role::any())]]));
+
+        $own = [Permission::read(Role::any()), Permission::update(Role::user('owner'))];
+        $database->updateDocument('parent', 'parent1', new Document([
+            'children' => [new Document(['$id' => 'child1', '$permissions' => $own])],
+        ]));
+
+        $child = $database->getAuthorization()->skip(fn () => $database->getDocument('child', 'child1'));
+        $this->assertSame($own, $child->getPermissions(), 'A nested many-to-many document created with its own permissions must keep them');
+        $this->assertSame(['child1'], $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testANewNestedManyToManyDocumentWithoutPermissionsTakesTheParentPermissions(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        $parentPermissions = [Permission::read(Role::any()), Permission::update(Role::user('owner'))];
+        $database->createDocument('parent', new Document(['$id' => 'parent1', '$permissions' => $parentPermissions]));
+
+        $database->updateDocument('parent', 'parent1', new Document([
+            'children' => [new Document(['$id' => 'child1'])],
+        ]));
+
+        $child = $database->getAuthorization()->skip(fn () => $database->getDocument('child', 'child1'));
+        $this->assertSame($parentPermissions, $child->getPermissions());
+    }
+
+    public function testNestedPathFiltersStayWithinTheQueryValueLimit(): void
+    {
+        $adapter = new class () extends Memory {
+            /** @var array<string, int> */
+            public array $largestValueCounts = [];
+
+            public function find(Document $collection, array $queries = [], ?int $limit = 25, ?int $offset = null, array $orderAttributes = [], array $orderTypes = [], array $cursor = [], CursorDirection $cursorDirection = CursorDirection::After, PermissionType $forPermission = PermissionType::Read): array
+            {
+                $this->largestValueCounts[$collection->getId()] = \max($this->largestValueCounts[$collection->getId()] ?? 0, $this->largestValueCount($queries));
+
+                return parent::find($collection, $queries, $limit, $offset, $orderAttributes, $orderTypes, $cursor, $cursorDirection, $forPermission);
+            }
+
+            /**
+             * @param  array<mixed>  $queries
+             */
+            private function largestValueCount(array $queries): int
+            {
+                $largest = 0;
+                foreach ($queries as $query) {
+                    if (! $query instanceof Query) {
+                        continue;
+                    }
+                    $largest = \max($largest, $query->isNested() ? $this->largestValueCount($query->getValues()) : \count($query->getValues()));
+                }
+
+                return $largest;
+            }
+        };
+
+        $database = $this->database(fn (): Adapter => $adapter);
+        $database->createCollection(new Collection(id: 'parent', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'child', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'tag', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'label', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'owner', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::manyToMany(collection: 'child', relatedCollection: 'tag', twoWay: true, key: 'tags', twoWayKey: 'children', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::oneToMany(collection: 'tag', relatedCollection: 'label', twoWay: true, key: 'labels', twoWayKey: 'tag', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::manyToOne(collection: 'child', relatedCollection: 'owner', twoWay: true, key: 'owner', twoWayKey: 'children', onDelete: ForeignKeyAction::SetNull));
+        $database->createRelationship(Relationship::manyToMany(collection: 'parent', relatedCollection: 'tag', twoWay: true, key: 'topics', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull));
+
+        foreach (\range(1, 6) as $number) {
+            $name = $number === 6 ? 'other' : 'match';
+            $database->createDocument('owner', new Document(['$id' => "owner{$number}", 'name' => $name]));
+            $database->createDocument('tag', new Document(['$id' => "tag{$number}"]));
+            $database->createDocument('label', new Document(['$id' => "label{$number}", 'name' => $name, 'tag' => "tag{$number}"]));
+            $database->createDocument('child', new Document(['$id' => "child{$number}", 'tags' => ["tag{$number}"], 'owner' => "owner{$number}"]));
+            $database->createDocument('parent', new Document(['$id' => "parent{$number}", 'children' => ["child{$number}"], 'topics' => ["tag{$number}"]]));
+        }
+
+        $database->setMaxQueryValues(2);
+
+        $matching = ['parent1', 'parent2', 'parent3', 'parent4', 'parent5'];
+        $filters = [
+            'children.tags.labels.name' => [['match'], $matching, ['child', 'junction', 'label']],
+            'children.owner.name' => [['match'], $matching, ['child', 'owner']],
+            'topics.labels.name' => [['match'], $matching, ['junction', 'label', 'tag']],
+            'children.$id' => [['child1', 'child2'], ['parent1', 'parent2'], ['child']],
+        ];
+        foreach ($filters as $path => [$values, $expected, $collections]) {
+            $adapter->largestValueCounts = [];
+
+            $ids = \array_map(fn (Document $parent): string => $parent->getId(), $database->find('parent', [Query::equal($path, $values), Query::select(['$id'])]));
+            \sort($ids);
+            $this->assertSame($expected, $ids, "Filtering by {$path}");
+
+            unset($adapter->largestValueCounts['parent']);
+            $collectionsRead = \array_values(\array_unique(\array_map(fn (string $collection): string => \str_starts_with($collection, '_') ? 'junction' : $collection, \array_keys($adapter->largestValueCounts))));
+            \sort($collectionsRead);
+            $this->assertSame($collections, $collectionsRead, "Filtering by {$path} reads only the collections on the path");
+            foreach ($adapter->largestValueCounts as $collection => $largest) {
+                $this->assertLessThanOrEqual(2, $largest, "A read of {$collection} while filtering by {$path} carried {$largest} values");
+            }
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCascadeWithOnlyADanglingJunctionRowDeletesTheParent(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate(
+            $database,
+            Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::Cascade),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+            false,
+        );
+        $junction = '_'.$database->getCollection('parent')->getSequence().'_'.$database->getCollection('child')->getSequence();
+
+        $database->getAuthorization()->skip(function () use ($database): void {
+            $database->createDocument('child', new Document(['$id' => 'child1']));
+            $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1']]));
+            $database->skipRelationships(fn () => $database->deleteDocument('child', 'child1'));
+        });
+
+        $this->assertSame([], $this->ids($database, 'child'));
+        $this->assertCount(1, $this->ids($database, $junction), 'The junction row must outlive the child it points at');
+
+        $this->assertTrue($database->deleteDocument('parent', 'parent1'));
+        $this->assertSame([], $this->ids($database, 'parent'));
+        $this->assertSame([], $this->ids($database, $junction));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testCreatingWithAListOnTheChildSideOfAOneWayOneToOneIsRejected(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull));
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+
+        try {
+            $database->createDocument('child', new Document(['$id' => 'child1', 'parent' => ['parent1']]));
+            $this->fail('A list on the child side of a one-way one-to-one must be rejected');
+        } catch (RelationshipException $exception) {
+            $this->assertSame('Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.', $exception->getMessage());
+        }
+
+        $this->assertSame([], $this->ids($database, 'child'));
+    }
+
+    /**
+     * @return iterable<string, array{Closure(): Adapter, Relationship, string, bool, array<string, mixed>, string, bool}>
+     */
+    public static function invalidRelationshipUpdates(): iterable
+    {
+        $oneToOne = Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
+        $twoWayOneToOne = Relationship::oneToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'partner', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
+        $oneToMany = Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull);
+        $manyToOne = Relationship::manyToOne(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'child', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
+        $manyToMany = Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull);
+
+        $cases = [
+            'one-way one-to-one child side' => [$oneToOne, 'child', false, ['parent' => 'parent1'], 'Invalid relationship value. Cannot set a value from the child side of a oneToOne relationship when twoWay is false.', false],
+            'two-way one-to-one integer' => [$twoWayOneToOne, 'parent', false, ['partner' => 123], 'Invalid relationship value. Must be either a document, document ID or null.', false],
+            'two-way one-to-one list' => [$twoWayOneToOne, 'parent', false, ['partner' => ['child1']], 'Invalid relationship value. Must be either a document, document ID or null.', false],
+            'one-to-many list item' => [$oneToMany, 'parent', false, ['children' => [123]], 'Invalid relationship value. Must be either a document or document ID.', false],
+            'many-to-many list item' => [$manyToMany, 'parent', false, ['children' => [123]], 'Invalid relationship value. Must be either a document or document ID.', false],
+            'many-to-one document without id' => [$manyToOne, 'parent', false, ['child' => new Document(['name' => 'n'])], 'Invalid relationship value. Document must have a valid $id.', false],
+            'many-to-one empty scalar' => [$manyToOne, 'parent', true, ['child' => false], 'Invalid relationship value. Must be either a document ID or a document.', false],
+            'many-to-one scalar' => [$manyToOne, 'parent', false, ['child' => 123], 'Invalid relationship value.', false],
+            'many-to-many bulk string' => [$manyToMany, 'parent', false, ['children' => 'child1'], 'Invalid relationship value. Must be an array of documents or document IDs.', true],
+        ];
+
+        foreach (self::adapters() as $adapterName => [$adapter]) {
+            foreach ($cases as $caseName => [$relationship, $collection, $linked, $update, $message, $bulk]) {
+                yield "{$adapterName}: {$caseName}" => [$adapter, $relationship, $collection, $linked, $update, $message, $bulk];
+            }
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     * @param  array<string, mixed>  $update
+     */
+    #[DataProvider('invalidRelationshipUpdates')]
+    public function testUpdateRejectsInvalidRelationshipValues(Closure $adapter, Relationship $relationship, string $collection, bool $linked, array $update, string $message, bool $bulk): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, $relationship);
+        $database->createDocument('child', new Document(['$id' => 'child1']));
+        $database->createDocument('parent', new Document(['$id' => 'parent1', ...($linked ? [$relationship->key => 'child1'] : [])]));
+
+        $id = $collection === 'parent' ? 'parent1' : 'child1';
+        $stored = fn (): array => $database->getAuthorization()->skip(fn () => $database->skipRelationships(fn () => $database->getDocument($collection, $id)))->getArrayCopy();
+        $before = $stored();
+
+        try {
+            if ($bulk) {
+                $database->updateDocuments($collection, new Document($update));
+            } else {
+                $database->updateDocument($collection, $id, new Document($update));
+            }
+            $this->fail('An invalid relationship value must be rejected');
+        } catch (RelationshipException $exception) {
+            $this->assertSame($message, $exception->getMessage());
+        }
+
+        $this->assertSame($before, $stored());
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testSelectingNestedAttributesThroughTheChildSideOfAManyToOne(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $database->createCollection(new Collection(id: 'store', attributes: [Attribute::string(key: 'name', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'product', attributes: [Attribute::string(key: 'name', size: 64), Attribute::string(key: 'sku', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::manyToOne(collection: 'product', relatedCollection: 'store', twoWay: true, key: 'store', twoWayKey: 'products', onDelete: ForeignKeyAction::SetNull));
+
+        $database->createDocument('store', new Document(['$id' => 'store1', 'name' => 'Store 1']));
+        foreach (['product1', 'product2'] as $id) {
+            $database->createDocument('product', new Document(['$id' => $id, 'name' => "Name {$id}", 'sku' => "sku-{$id}", 'store' => 'store1']));
+        }
+
+        $stores = [
+            'getDocument' => $database->getDocument('store', 'store1', [Query::select(['*', 'products.name'])]),
+            'findOne' => $database->findOne('store', [Query::select(['*', 'products.name'])]),
+        ];
+        foreach ($stores as $read => $store) {
+            $this->assertSame('Store 1', $store->getAttribute('name'), $read);
+            $products = $store->getDocuments('products');
+            $this->assertSame(['product1', 'product2'], $this->relatedIds($store, 'products'), $read);
+            foreach ($products as $product) {
+                $this->assertSame("Name {$product->getId()}", $product->getAttribute('name'), $read);
+                $this->assertFalse($product->offsetExists('sku'), "{$read} must return only the selected attribute of {$product->getId()}");
+                $this->assertFalse($product->offsetExists('store'), "{$read} must not return the back-reference of {$product->getId()}");
+            }
+        }
+
+        $store = $database->getDocument('store', 'store1', [Query::select(['*', 'products.'])]);
+        $this->assertSame(['product1', 'product2'], $this->relatedIds($store, 'products'));
+        foreach ($store->getDocuments('products') as $product) {
+            $this->assertSame("sku-{$product->getId()}", $product->getAttribute('sku'), 'A trailing dot selects every attribute of the related documents');
+            $this->assertSame("Name {$product->getId()}", $product->getAttribute('name'));
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testRelationshipFilterConversionEdgeCases(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $database->createCollection(new Collection(id: 'project', permissions: $this->permissions(), documentSecurity: false));
+        $database->createCollection(new Collection(id: 'developer', attributes: [Attribute::string(key: 'devName', size: 64)], permissions: $this->permissions(), documentSecurity: false));
+        $database->createRelationship(Relationship::manyToMany(collection: 'project', relatedCollection: 'developer', twoWay: true, key: 'developers', twoWayKey: 'projects', onDelete: ForeignKeyAction::SetNull));
+
+        foreach (['dev1' => 'Alice', 'dev2' => 'Bob', 'dev3' => 'Carol'] as $id => $name) {
+            $database->createDocument('developer', new Document(['$id' => $id, 'devName' => $name]));
+        }
+        $database->createDocument('project', new Document(['$id' => 'project1', 'developers' => ['dev1', 'dev2']]));
+        $database->createDocument('project', new Document(['$id' => 'project2', 'developers' => ['dev1', 'dev3']]));
+
+        $projects = function (Query $query) use ($database): array {
+            $ids = \array_map(fn (Document $project): string => $project->getId(), $database->find('project', [$query]));
+            \sort($ids);
+
+            return $ids;
+        };
+
+        $this->assertSame(['project1'], $projects(Query::containsAll('developers.$id', ['dev2'])));
+        $this->assertSame(['project2'], $projects(Query::containsAll('developers.$id', ['dev1', 'dev3'])));
+        $this->assertSame([], $projects(Query::containsAll('developers.$id', ['dev1', 'nobody'])), 'A value no related document matches leaves no project');
+        $this->assertSame([], $projects(Query::containsAll('developers.$id', ['dev2', 'dev3'])), 'Values no single project holds together leave no project');
+        $this->assertSame([], $projects(Query::equal('developers.devName', ['Nobody'])));
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            return;
+        }
+
+        try {
+            $database->find('project', [Query::equal('developers.unknownAttribute', ['x'])]);
+            $this->fail('A filter on an unknown related attribute must be rejected');
+        } catch (QueryException $exception) {
+            $this->assertStringContainsString('unknownAttribute', $exception->getMessage());
+        }
+    }
+
+    /**
+     * @return iterable<string, array{Closure(): Adapter, Relationship}>
+     */
+    public static function manySideRelationships(): iterable
+    {
+        foreach (self::adapters() as $adapterName => [$adapter]) {
+            yield "{$adapterName}: one-to-many" => [$adapter, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull)];
+            yield "{$adapterName}: many-to-many" => [$adapter, Relationship::manyToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parents', onDelete: ForeignKeyAction::SetNull)];
+        }
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('manySideRelationships')]
+    public function testSetOperatorsDecideWhichDocumentsStayLinked(Closure $adapter, Relationship $relationship): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, $relationship);
+        foreach (['child1', 'child2', 'child3'] as $id) {
+            $database->createDocument('child', new Document(['$id' => $id]));
+        }
+        $database->createDocument('parent', new Document(['$id' => 'parent1', 'children' => ['child1', 'child2', 'child3']]));
+
+        $steps = [
+            'arrayUnique' => [Operator::arrayUnique(), ['child1', 'child2', 'child3']],
+            'arrayFilter' => [Operator::arrayFilter('isNotNull'), ['child1', 'child2', 'child3']],
+            'arrayIntersect' => [Operator::arrayIntersect(['child1', 'child2']), ['child1', 'child2']],
+            'arrayDiff' => [Operator::arrayDiff(['child1']), ['child2']],
+            'arrayInsert' => [Operator::arrayInsert(0, 'child3'), ['child2', 'child3']],
+        ];
+        foreach ($steps as $step => [$operator, $expected]) {
+            $database->updateDocument('parent', 'parent1', new Document(['children' => $operator]));
+
+            $this->assertSame($expected, $this->relatedIds($database->getDocument('parent', 'parent1'), 'children'), "After {$step}");
+            foreach (['child1', 'child2', 'child3'] as $id) {
+                $linked = $relationship->type === RelationType::OneToMany
+                    ? $database->getDocument('child', $id)->getDocument('parent')->getId() === 'parent1'
+                    : $this->relatedIds($database->getDocument('child', $id), 'parents') === ['parent1'];
+                $this->assertSame(\in_array($id, $expected, true), $linked, "After {$step}, {$id} seen from its own side");
+            }
+        }
+    }
+
+    public function testLinkingAChildGrantedUpdateOnlyByItsOwnPermissionsWithoutThePermissionsHook(): void
+    {
+        $authorization = new Authorization();
+        $authorization->addRole(Role::any()->toString());
+
+        $database = new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None()));
+        $database
+            ->setAuthorization($authorization)
+            ->setDatabase('relationship_hook')
+            ->setNamespace('relationship_hook_'.\uniqid());
+        $database->create();
+        $database->addHook(new Relationships($database));
+
+        $this->relate(
+            $database,
+            Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::SetNull),
+            [Permission::create(Role::any()), Permission::read(Role::any())],
+        );
+
+        $database->createDocument('parent', new Document(['$id' => 'parent1']));
+        $database->createDocument('child', new Document(['$id' => 'child1', '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())]]));
+
+        $database->updateDocument('parent', 'parent1', new Document(['children' => ['child1']]));
+
+        $child = $database->skipRelationships(fn () => $database->getDocument('child', 'child1'));
+        $this->assertSame('parent1', $child->getAttribute('parent'), 'A child the caller may update through its own permissions must be linked');
     }
 }

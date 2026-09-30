@@ -20,4 +20,11 @@ final class DateTimeTest extends TestCase
 
         $this->assertGreaterThan('2000-01-01 00:00:00.000', $result);
     }
+
+    public function testFormatTzReturnsUnparseableInputUnchanged(): void
+    {
+        $this->assertSame('not a date', DateTime::formatTz('not a date'));
+        $this->assertNull(DateTime::formatTz(null));
+        $this->assertSame('2024-05-06T07:08:09.123+02:00', DateTime::formatTz('2024-05-06 07:08:09.123+02:00'));
+    }
 }

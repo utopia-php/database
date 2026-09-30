@@ -2790,19 +2790,6 @@ trait AttributeTests
         try {
             $adapter->renameAttribute($collection, 'before', 'after');
 
-            if (! $schemaAttributes) {
-                try {
-                    $database->renameAttribute($collection, 'before', 'after');
-                    $this->fail('Without schema introspection a failed rename must be reported');
-                } catch (DatabaseException $error) {
-                    $this->assertStringStartsWith("Failed to rename attribute 'before' to 'after': ", $error->getMessage());
-                }
-
-                $this->assertSame(['before'], $this->getAttributeKeys($database, $collection));
-
-                return;
-            }
-
             $this->assertTrue($database->renameAttribute($collection, 'before', 'after'));
             $this->assertSame(['after'], $this->getAttributeKeys($database, $collection));
 

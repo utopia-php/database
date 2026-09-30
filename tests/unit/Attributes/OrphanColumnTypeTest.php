@@ -199,7 +199,7 @@ final class OrphanColumnTypeTest extends TestCase
     {
         [$database, $adapter] = $this->database();
         $database->createAttribute(self::COLLECTION, Attribute::string(key: 'before', size: 64));
-        $adapter->createAttribute(self::COLLECTION, Attribute::string(key: 'after', size: 64));
+        $adapter->renameAttribute(self::COLLECTION, 'before', 'after');
 
         $this->assertTrue($database->renameAttribute(self::COLLECTION, 'before', 'after'));
 

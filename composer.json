@@ -52,18 +52,18 @@
         "utopia-php/validators": "^1.0",
         "utopia-php/console": "^0.1 || ^0.2",
         "utopia-php/cache": "^4.0 || ^5.0",
-        "utopia-php/pools": "2.*",
-        "utopia-php/mongo": "1.*",
+        "utopia-php/pools": "^2.0",
+        "utopia-php/mongo": "^1.0",
         "utopia-php/query": "^0.6",
         "utopia-php/async": "^0.2"
     },
     "require-dev": {
-        "fakerphp/faker": "1.23.*",
+        "fakerphp/faker": "^1.23",
         "phpunit/phpunit": "^12.5",
         "brianium/paratest": "^7.20",
         "swoole/ide-helper": "5.1.3",
         "utopia-php/cli": "^0.24.4",
-        "laravel/pint": "*",
+        "laravel/pint": "^1.29",
         "phpstan/phpstan": "^2.1",
         "phpstan/phpstan-phpunit": "^2.0"
     },

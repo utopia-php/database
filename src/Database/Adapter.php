@@ -785,6 +785,17 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
+     * Under shared tables: the index with this key that another tenant's definition of the
+     * collection lists, where the engine keeps one index per table and key for every tenant
+     * that declares it. Null when no other tenant lists the key, or when each tenant's index is
+     * its own.
+     */
+    public function findSharedIndex(string $collection, string $key): ?Index
+    {
+        return null;
+    }
+
+    /**
      * @param  array<string, string>  $indexAttributeTypes
      * @param  array<string, mixed>  $collation
      */

@@ -1112,6 +1112,34 @@ class Memory extends Adapter implements Feature\Relationships
         return true;
     }
 
+    /**
+     * Memory keeps one index record per collection and key, as a SQL table keeps one index,
+     * so every tenant that declares the key shares it.
+     */
+    #[\Override]
+    public function findSharedIndex(string $collection, string $key): ?Index
+    {
+        if (! $this->sharedTables) {
+            return null;
+        }
+
+        $tenant = $this->getTenant();
+        foreach ($this->data[$this->key(Database::METADATA)]['documents'] ?? [] as $row) {
+            $uid = $row[Storage::UID] ?? null;
+            $indexes = $row['indexes'] ?? null;
+            if ($uid !== $collection || ($row[Storage::TENANT] ?? null) === $tenant || ! \is_string($indexes)) {
+                continue;
+            }
+
+            $index = Index::findByKey($indexes, $key);
+            if ($index !== null) {
+                return $index;
+            }
+        }
+
+        return null;
+    }
+
     public function createIndex(string $collection, Index $index, array $indexAttributeTypes = [], array $collation = []): bool
     {
         $key = $this->key($collection);

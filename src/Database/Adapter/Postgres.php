@@ -755,7 +755,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value.', '.IndexType::Spatial->value.', '.IndexType::Object->value.', '.IndexType::HnswEuclidean->value.', '.IndexType::HnswCosine->value.', '.IndexType::HnswDot->value),
         };
 
-        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
+        $keyName = $this->getIndexName($collection, $id);
         $tableRaw = $this->getSQLTableRaw($collection);
         $schema = $this->createSchemaBuilder();
 
@@ -805,6 +805,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             rawColumns: $columns,
         )->query;
 
+        if ($this->sharedTables) {
+            $sql = \preg_replace('/^CREATE (UNIQUE )?INDEX /', 'CREATE $1INDEX IF NOT EXISTS ', $sql) ?? $sql;
+        }
+
         try {
             return $this->executeStatement($sql, $event);
         } catch (PDOException $e) {
@@ -823,15 +827,17 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $collection = $this->filter($collection);
         $id = $this->filter($id);
 
-        $keyName = $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
-        $schemaQualifiedName = $this->getDatabase().'.'.$keyName;
-
         $schema = $this->createSchemaBuilder();
-        $sql = $schema->dropIndex($this->getSQLTableRaw($collection), $schemaQualifiedName)->query;
-        // Add IF EXISTS since the schema builder's dropIndex does not include it
-        $sql = str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
+        $statements = [];
+        foreach ([$this->getIndexName($collection, $id), $this->getTenantIndexName($collection, $id)] as $keyName) {
+            if ($keyName === null) {
+                continue;
+            }
+            $sql = $schema->dropIndex($this->getSQLTableRaw($collection), $this->getDatabase().'.'.$keyName)->query;
+            $statements[] = \str_replace('DROP INDEX', 'DROP INDEX IF EXISTS', $sql);
+        }
 
-        return $this->executeStatement($sql, Event::IndexDelete);
+        return $this->executeStatement(\implode('; ', $statements), Event::IndexDelete);
     }
 
     /**
@@ -843,19 +849,48 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     public function renameIndex(string $collection, string $old, string $new): bool
     {
         $collection = $this->filter($collection);
-        $namespace = $this->getNamespace();
         $old = $this->filter($old);
         $new = $this->filter($new);
-        $schemaName = $this->getDatabase();
-        $oldIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$old}");
-        $newIndexName = $this->getShortKey("{$namespace}_{$this->tenant}_{$collection}_{$new}");
+
+        $names = [[$this->getIndexName($collection, $old), $this->getIndexName($collection, $new)]];
+        $tenantOld = $this->getTenantIndexName($collection, $old);
+        $tenantNew = $this->getTenantIndexName($collection, $new);
+        if ($tenantOld !== null && $tenantNew !== null) {
+            $names[] = [$tenantOld, $tenantNew];
+        }
 
         $schemaBuilder = $this->createSchemaBuilder();
-        $schemaQualifiedOld = $schemaName.'.'.$oldIndexName;
-        $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $schemaQualifiedOld, $newIndexName)->query;
-        $sql = \str_replace('ALTER INDEX', 'ALTER INDEX IF EXISTS', $sql);
+        $statements = [];
+        foreach ($names as [$oldIndexName, $newIndexName]) {
+            $sql = $schemaBuilder->renameIndex($this->getSQLTableRaw($collection), $this->getDatabase().'.'.$oldIndexName, $newIndexName)->query;
+            $statements[] = \str_replace('ALTER INDEX', 'ALTER INDEX IF EXISTS', $sql);
+        }
 
-        return $this->executeStatement($sql, Event::IndexRename);
+        return $this->executeStatement(\implode('; ', $statements), Event::IndexRename);
+    }
+
+    /**
+     * Under shared tables one index serves every tenant that declares its key on the table, so
+     * its name leaves the tenant out.
+     */
+    private function getIndexName(string $collection, string $id): string
+    {
+        $tenant = $this->sharedTables ? '' : $this->tenant;
+
+        return $this->getShortKey("{$this->getNamespace()}_{$tenant}_{$collection}_{$id}");
+    }
+
+    /**
+     * The name versions before 8.0 gave an index under shared tables: one copy per tenant. A
+     * tenant's delete or rename still reaches the copy it created.
+     */
+    private function getTenantIndexName(string $collection, string $id): ?string
+    {
+        if (! $this->sharedTables || $this->tenant === null) {
+            return null;
+        }
+
+        return $this->getShortKey("{$this->getNamespace()}_{$this->tenant}_{$collection}_{$id}");
     }
 
     /**

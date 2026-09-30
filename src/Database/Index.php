@@ -380,6 +380,46 @@ class Index extends Document
     }
 
     /**
+     * Whether the other index indexes the same thing under any key: the same type over the same
+     * attributes in the same order, and the same time to live for a TTL index. Prefix lengths
+     * and orders are left out, as engines normalize them differently.
+     */
+    public function isEquivalentTo(self $other): bool
+    {
+        if ($this->type !== $other->type) {
+            return false;
+        }
+
+        if ($this->type === IndexType::Ttl && $this->ttl !== $other->ttl) {
+            return false;
+        }
+
+        return \array_map(\strtolower(...), \array_values($this->attributes))
+            === \array_map(\strtolower(...), \array_values($other->attributes));
+    }
+
+    /**
+     * The index with this key, case-insensitively, among the indexes a collection's metadata
+     * lists as JSON.
+     */
+    public static function findByKey(string $indexes, string $key): ?self
+    {
+        $decoded = \json_decode($indexes, true);
+        foreach (\is_array($decoded) ? $decoded : [] as $index) {
+            if (! \is_array($index)) {
+                continue;
+            }
+            $indexKey = $index['key'] ?? $index[Document::ID] ?? null;
+            if (\is_string($indexKey) && \strtolower($indexKey) === \strtolower($key)) {
+                /** @var array<string, mixed> $index */
+                return self::fromArray($index);
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Create from an associative array (used by collection config files).
      *
      * @param  array<string, mixed>  $data

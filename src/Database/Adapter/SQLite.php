@@ -784,6 +784,15 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
+     * SQLite names an index after the tenant that creates it, so every tenant's index is its own.
+     */
+    #[\Override]
+    public function findSharedIndex(string $collection, string $key): ?Index
+    {
+        return null;
+    }
+
+    /**
      * Create Index
      *
      * @param  array<string,string>  $indexAttributeTypes

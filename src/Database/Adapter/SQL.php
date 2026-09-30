@@ -667,6 +667,48 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
+     * Reads the metadata table across tenants: a row lists its indexes as JSON, so only rows
+     * whose JSON names the key are fetched, and one is enough.
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function findSharedIndex(string $collection, string $key): ?Index
+    {
+        if (! $this->sharedTables) {
+            return null;
+        }
+
+        $tenant = $this->quote(Storage::TENANT);
+        $otherTenants = $this->tenant === null
+            ? "{$tenant} IS NOT NULL"
+            : "({$tenant} IS NULL OR {$tenant} <> :tenant)";
+        $pattern = \strtr(\strtolower('"key":'.\json_encode($key, JSON_THROW_ON_ERROR)), ['!' => '!!', '%' => '!%', '_' => '!_']);
+
+        $statement = $this->prepareStatement(
+            'SELECT '.$this->quote('indexes').' FROM '.$this->getSQLTable(Database::METADATA)
+            .' WHERE '.$this->quote(Storage::UID).' = :collection AND '.$otherTenants
+            .' AND LOWER('.$this->quote('indexes').") LIKE :pattern ESCAPE '!' LIMIT 1",
+            Event::CollectionRead,
+        );
+        $statement->bindValue(':collection', $collection);
+        $statement->bindValue(':pattern', '%'.$pattern.'%');
+        if ($this->tenant !== null) {
+            $statement->bindValue(':tenant', $this->tenant, \is_int($this->tenant) ? PDO::PARAM_INT : PDO::PARAM_STR);
+        }
+
+        try {
+            $this->execute($statement);
+            $indexes = $statement->fetchColumn();
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        return Index::findByKey(\is_string($indexes) ? $indexes : '[]', $key);
+    }
+
+    /**
      * The physical column names of a collection's table, empty when the table does not exist.
      *
      * @return array<string>

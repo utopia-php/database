@@ -23,7 +23,7 @@ final class PostgresCollectionIndexTest extends TestCase
     {
         return [
             'dedicated tables' => [false, 'CREATE INDEX "namespace__places_countryfirst" ON "database"."namespace_places" ((("data"->>\'country\')::text) DESC, "status")'],
-            'shared tables' => [true, 'CREATE INDEX "namespace_7_places_countryfirst" ON "database"."namespace_places" ("_tenant", (("data"->>\'country\')::text) DESC, "status")'],
+            'shared tables' => [true, 'CREATE INDEX IF NOT EXISTS "namespace__places_countryfirst" ON "database"."namespace_places" ("_tenant", (("data"->>\'country\')::text) DESC, "status")'],
         ];
     }
 

@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
@@ -149,19 +150,28 @@ trait Indexes
             }
         }
 
+        $shared = $this->findSharedIndex($collection->getId(), $id);
+        if ($shared !== null && ! $shared->isEquivalentTo($index)) {
+            throw new MismatchException('Index exists in the shared table with another definition');
+        }
+
         $created = false;
 
-        try {
-            $created = $this->adapter->createIndex($collection->getId(), $index, $indexAttributesWithTypes);
+        if ($shared === null) {
+            try {
+                $created = $this->adapter->createIndex($collection->getId(), $index, $indexAttributesWithTypes);
 
-            if (! $created) {
-                throw new DatabaseException('Failed to create index');
+                if (! $created) {
+                    throw new DatabaseException('Failed to create index');
+                }
+            } catch (MismatchException $e) {
+                throw $e;
+            } catch (DuplicateException $e) {
+                // Metadata check (lines above) already verified index is absent
+                // from metadata. A DuplicateException from the adapter means the
+                // index exists only in physical schema — an orphan from a prior
+                // partial failure. Skip creation and proceed to metadata update.
             }
-        } catch (DuplicateException $e) {
-            // Metadata check (lines above) already verified index is absent
-            // from metadata. A DuplicateException from the adapter means the
-            // index exists only in physical schema — an orphan from a prior
-            // partial failure. Skip creation and proceed to metadata update.
         }
 
         $collection->setAttribute('indexes', $index, SetType::Append);
@@ -234,32 +244,47 @@ trait Indexes
 
         $collection->setAttribute('indexes', $indexes);
 
+        $renamedIndex = $indexNew instanceof Index ? $indexNew : Index::fromDocument($indexNew);
+        $sharedOld = $this->findSharedIndex($collection->getId(), $old);
+        $sharedNew = $this->findSharedIndex($collection->getId(), $new);
+        if ($sharedNew !== null && ! $sharedNew->isEquivalentTo($renamedIndex)) {
+            throw new MismatchException('Index exists in the shared table with another definition');
+        }
+
+        $shared = $sharedOld !== null || $sharedNew !== null;
+        $rollback = fn () => $this->adapter->renameIndex($collection->getId(), $new, $old);
         $renamed = false;
-        try {
-            $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
-            if (! $renamed) {
-                throw new DatabaseException('Failed to rename index');
-            }
-        } catch (Throwable $e) {
-            // Check if the rename already happened in schema (orphan from prior
-            // partial failure where rename succeeded but metadata update and
-            // rollback both failed). Verify by attempting a reverse rename — if
-            // $new exists in schema, the reverse succeeds confirming a prior rename.
+
+        if ($shared) {
+            [$renamed, $rollback] = $this->renameSharedIndex($collection, $renamedIndex, $old, $sharedOld !== null, $sharedNew !== null);
+        } else {
             try {
-                $this->adapter->renameIndex($collection->getId(), $new, $old);
-                // Reverse succeeded — index was at $new. Re-rename to complete.
                 $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
-            } catch (Throwable) {
-                // Reverse also failed — genuine error
-                throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
+                if (! $renamed) {
+                    throw new DatabaseException('Failed to rename index');
+                }
+            } catch (Throwable $e) {
+                // Check if the rename already happened in schema (orphan from prior
+                // partial failure where rename succeeded but metadata update and
+                // rollback both failed). Verify by attempting a reverse rename — if
+                // $new exists in schema, the reverse succeeds confirming a prior rename.
+                try {
+                    $this->adapter->renameIndex($collection->getId(), $new, $old);
+                    // Reverse succeeded — index was at $new. Re-rename to complete.
+                    $renamed = $this->adapter->renameIndex($collection->getId(), $old, $new);
+                } catch (Throwable) {
+                    // Reverse also failed — genuine error
+                    throw new DatabaseException("Failed to rename index '{$old}' to '{$new}': ".$e->getMessage(), previous: $e);
+                }
             }
         }
 
         $this->updateMetadata(
             collection: $collection,
-            rollbackOperation: fn () => $this->adapter->renameIndex($collection->getId(), $new, $old),
+            rollbackOperation: $rollback,
             shouldRollback: $renamed,
-            operationDescription: "index rename '{$old}' to '{$new}'"
+            operationDescription: "index rename '{$old}' to '{$new}'",
+            silentRollback: $shared
         );
 
         $this->withRetries(fn () => $this->purgeCachedCollection($collection->getId()));
@@ -306,43 +331,33 @@ trait Indexes
 
         $shouldRollback = false;
         $deleted = false;
-        try {
-            $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
-
-            if (! $deleted) {
-                throw new DatabaseException('Failed to delete index');
-            }
-            $shouldRollback = true;
-        } catch (NotFoundException) {
-            // Index already absent from schema; treat as deleted
+        if ($this->findSharedIndex($collection->getId(), $id) !== null) {
             $deleted = true;
+        } else {
+            try {
+                $deleted = $this->adapter->deleteIndex($collection->getId(), $id);
+
+                if (! $deleted) {
+                    throw new DatabaseException('Failed to delete index');
+                }
+                $shouldRollback = true;
+            } catch (NotFoundException) {
+                // Index already absent from schema; treat as deleted
+                $deleted = true;
+            }
         }
 
         $collection->setAttribute('indexes', \array_values($indexes));
 
-        // Build indexAttributeTypes from collection attributes for rollback
-        /** @var array<Attribute> $collectionAttributes */
-        $collectionAttributes = $collection->getAttribute('attributes', []);
-        $typedDeletedIndex = $indexDeleted;
-        /** @var array<string, string> $indexAttributeTypes */
-        $indexAttributeTypes = [];
-        foreach ($typedDeletedIndex->attributes as $attr) {
-            $baseAttr = \str_contains($attr, '.') ? \explode('.', $attr, 2)[0] : $attr;
-            foreach ($collectionAttributes as $collectionAttribute) {
-                if ($collectionAttribute->key === $baseAttr) {
-                    $indexAttributeTypes[$attr] = $collectionAttribute->type->value;
-                    break;
-                }
-            }
-        }
+        $indexAttributeTypes = $this->getIndexAttributeTypes($collection, $indexDeleted);
 
         $rollbackIndex = new Index(
             key: $id,
-            type: $typedDeletedIndex->type,
-            attributes: $typedDeletedIndex->attributes,
-            lengths: $typedDeletedIndex->lengths,
-            orders: $typedDeletedIndex->orders,
-            ttl: $typedDeletedIndex->ttl
+            type: $indexDeleted->type,
+            attributes: $indexDeleted->attributes,
+            lengths: $indexDeleted->lengths,
+            orders: $indexDeleted->orders,
+            ttl: $indexDeleted->ttl
         );
         $this->updateMetadata(
             collection: $collection,
@@ -364,6 +379,89 @@ trait Indexes
         );
 
         return $deleted;
+    }
+
+    /**
+     * Under shared tables: the index another tenant's definition lists under this key, which
+     * this tenant shares on engines that keep one index per table and key.
+     */
+    private function findSharedIndex(string $collection, string $key): ?Index
+    {
+        return $this->getSharedTables() ? $this->adapter->findSharedIndex($collection, $key) : null;
+    }
+
+    /**
+     * Rename an index other tenants share. The physical index keeps the name its other listers
+     * know: a key another tenant still lists stays, and one this tenant adopts is created unless
+     * another tenant already has it. The last tenant that lists the old key moves it to the new
+     * name, or drops it where an index of the new name exists; an engine that holds one index per
+     * definition (MongoDB) may have kept the old name when the new one was declared.
+     *
+     * @return array{0: bool, 1: callable(): mixed} Whether the schema changed, and how to undo it
+     */
+    private function renameSharedIndex(Document $collection, Index $renamed, string $old, bool $oldShared, bool $newShared): array
+    {
+        $types = $this->getIndexAttributeTypes($collection, $renamed);
+
+        if (! $newShared) {
+            try {
+                $created = $this->adapter->createIndex($collection->getId(), $renamed, $types);
+            } catch (MismatchException $e) {
+                throw $e;
+            } catch (DuplicateException) {
+                $created = false;
+            }
+
+            return [$created, fn () => $this->adapter->deleteIndex($collection->getId(), $renamed->key)];
+        }
+
+        if (! $oldShared) {
+            $previous = clone $renamed;
+            $previous->key = $old;
+
+            try {
+                $changed = $this->adapter->renameIndex($collection->getId(), $old, $renamed->key);
+            } catch (Throwable) {
+                $changed = false;
+            }
+
+            if (! $changed) {
+                try {
+                    $changed = $this->adapter->deleteIndex($collection->getId(), $old);
+                } catch (NotFoundException) {
+                    $changed = false;
+                }
+            }
+
+            return [$changed, fn () => $this->adapter->createIndex($collection->getId(), $previous, $types)];
+        }
+
+        return [false, static fn (): bool => true];
+    }
+
+    /**
+     * The types of the attributes an index covers, by index attribute; a path into an object
+     * attribute takes the object's type.
+     *
+     * @return array<string, string>
+     */
+    private function getIndexAttributeTypes(Document $collection, Index $index): array
+    {
+        /** @var array<Attribute> $collectionAttributes */
+        $collectionAttributes = $collection->getAttribute('attributes', []);
+
+        $types = [];
+        foreach ($index->attributes as $attribute) {
+            $base = \explode('.', $attribute, 2)[0];
+            foreach ($collectionAttributes as $collectionAttribute) {
+                if ($collectionAttribute->key === $base) {
+                    $types[$attribute] = $collectionAttribute->type->value;
+                    break;
+                }
+            }
+        }
+
+        return $types;
     }
 
     /**

@@ -625,6 +625,14 @@ class Pool extends Adapter
         return $result;
     }
 
+    #[\Override]
+    public function findSharedIndex(string $collection, string $key): ?Index
+    {
+        /** @var Index|null $result */
+        $result = $this->delegate(__FUNCTION__, \func_get_args());
+        return $result;
+    }
+
     /**
      * {@inheritDoc}
      */

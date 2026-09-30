@@ -1112,6 +1112,50 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
+     * A collection's indexes are named by key, so every tenant that declares a key shares its
+     * index. Reads the metadata collection across tenants for a definition that names the key.
+     *
+     * @throws Exception
+     */
+    #[\Override]
+    public function findSharedIndex(string $collection, string $key): ?Index
+    {
+        if (! $this->sharedTables) {
+            return null;
+        }
+
+        $filters = [
+            Storage::UID => $collection,
+            Storage::TENANT => ['$ne' => $this->getTenant()],
+            'indexes' => ['$regex' => \preg_quote('"key":'.\json_encode($key, JSON_THROW_ON_ERROR)), '$options' => 'i'],
+        ];
+
+        try {
+            $response = $this->getClient()->find(
+                $this->getNamespace().'_'.$this->filter(Database::METADATA),
+                $filters,
+                ['limit' => 1] + $this->getTransactionOptions(),
+            );
+            /** @var \stdClass $cursor */
+            $cursor = $response->cursor;
+            /** @var array<mixed> $batch */
+            $batch = $cursor->firstBatch;
+        } catch (MongoException $e) {
+            throw $this->processException($e);
+        }
+
+        if ($batch === []) {
+            return null;
+        }
+
+        /** @var array<string, mixed> $row */
+        $row = $this->getClient()->toArray($batch[0]) ?? [];
+        $indexes = $row['indexes'] ?? null;
+
+        return Index::findByKey(\is_string($indexes) ? $indexes : '[]', $key);
+    }
+
+    /**
      * Create Index
      *
      * @param  array<string, string>  $indexAttributeTypes

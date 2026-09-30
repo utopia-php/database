@@ -14,6 +14,7 @@ use Utopia\Database\Event\Documents\Created as DocumentsCreated;
 use Utopia\Database\Event\Documents\Deleted as DocumentsDeleted;
 use Utopia\Database\Event\Documents\Updated as DocumentsUpdated;
 use Utopia\Database\Hook\Lifecycle;
+use Utopia\Database\Hook\Selective;
 
 /**
  * Delivers domain events to the listeners registered per event class and to an optional
@@ -21,7 +22,7 @@ use Utopia\Database\Hook\Lifecycle;
  * is then rethrown, so the database applies its hook failure policy to it. An \Error is
  * never caught and reaches the caller at once.
  */
-class DispatcherHook implements Lifecycle
+class DispatcherHook implements Lifecycle, Selective
 {
     /** @var array<string, array<callable>> */
     private array $listeners = [];
@@ -36,6 +37,24 @@ class DispatcherHook implements Lifecycle
     public function on(string $eventClass, callable $listener): void
     {
         $this->listeners[$eventClass][] = $listener;
+    }
+
+    public function handles(Event $event): bool
+    {
+        $class = match ($event) {
+            Event::DocumentCreate => DocumentCreated::class,
+            Event::DocumentUpdate => DocumentUpdated::class,
+            Event::DocumentDelete => DocumentDeleted::class,
+            Event::DocumentsCreate => DocumentsCreated::class,
+            Event::DocumentsUpdate => DocumentsUpdated::class,
+            Event::DocumentsDelete => DocumentsDeleted::class,
+            Event::CollectionCreate => CollectionCreated::class,
+            Event::CollectionDelete => CollectionDeleted::class,
+            default => null,
+        };
+
+        return $class !== null
+            && (isset($this->listeners[$class]) || ($this->psr14Dispatcher !== null && \method_exists($this->psr14Dispatcher, 'dispatch')));
     }
 
     public function handle(Event $event, mixed $data): void

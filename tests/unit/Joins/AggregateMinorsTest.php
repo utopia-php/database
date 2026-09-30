@@ -18,6 +18,7 @@ use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Profiler\QueryLog;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 
@@ -76,6 +77,25 @@ final class AggregateMinorsTest extends TestCase
         $this->assertSame(20, $database->sum('orders', 'price', [$item, Query::equal('it.code', ['a'])]));
         $this->assertSame(6, $database->sum('orders', 'quantity', [$item]), 'a name the main collection declares reads the main table');
         $this->assertSame(0, $database->sum('orders', 'price', [$item, Query::equal('it.code', ['z'])]));
+    }
+
+    public function testSumReadsEachJoinedCollectionDefinitionOnce(): void
+    {
+        $database = $this->database();
+        $database->enableProfiling();
+
+        foreach (['validated' => true, 'unvalidated' => false] as $case => $validate) {
+            $validate ? $database->enableValidation() : $database->disableValidation();
+            $database->getProfiler()?->reset();
+
+            $this->assertSame(40, $database->sum('orders', 'price', [Query::join('items', 'item', 'code', '=', 'it')]), $case);
+
+            $reads = \array_filter(
+                $database->getProfiler()?->getLogs() ?? [],
+                static fn (QueryLog $log): bool => \str_contains($log->query, '_metadata') && \in_array('items', $log->bindings, true),
+            );
+            $this->assertCount(1, $reads, $case.': the definition resolved for the join serves the bare name too');
+        }
     }
 
     public function testSumRefusesABareNameNoCollectionOrSeveralJoinsDeclare(): void

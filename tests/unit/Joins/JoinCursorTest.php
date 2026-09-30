@@ -338,6 +338,50 @@ final class JoinCursorTest extends TestCase
         }
     }
 
+    /**
+     * @return iterable<string, array{Method, string, list<Query>, string}>
+     */
+    public static function unpageableJoinedReads(): iterable
+    {
+        foreach (['inner join' => Method::Join, 'left join' => Method::LeftJoin] as $joinName => $join) {
+            foreach (['cursor', 'iterate'] as $helper) {
+                yield "{$joinName}, {$helper}, joined id not selected" => [$join, $helper, [Query::select(['name', 'n.rank'])], 'n.$id'];
+                yield "{$joinName}, {$helper}, joined order not selected" => [$join, $helper, [Query::select(['name', 'n.$id']), Query::orderAsc('n.rank')], 'n.rank'];
+            }
+        }
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    #[DataProvider('unpageableJoinedReads')]
+    public function testPagingAJoinedReadItCannotPageFailsBeforeYieldingARow(Method $join, string $helper, array $queries, string $missing): void
+    {
+        $queries = [new Query($join, 'notes', ['$id', '=', 'author', 'n']), ...$queries];
+        $rows = $helper === 'cursor'
+            ? $this->database->cursor('authors', $queries, 2)
+            : $this->database->iterate('authors', [...$queries, Query::limit(2)]);
+        $yielded = 0;
+
+        try {
+            foreach ($rows as $row) {
+                $yielded++;
+            }
+            $this->fail('A read whose rows lack a value its next page orders by cannot be paged');
+        } catch (OrderException $exception) {
+            $this->assertStringContainsString("Cursor has no value for order attribute '{$missing}'", $exception->getMessage());
+        }
+
+        $this->assertSame(0, $yielded, 'The read must be refused before the caller acts on any of its rows');
+    }
+
+    public function testPagingAJoinedReadThatFitsOnePageNeedsNoPagingValue(): void
+    {
+        $rows = \iterator_to_array($this->database->cursor('authors', [Query::join('notes', '$id', 'author', '=', 'n'), Query::select(['name', 'n.rank'])], 10), false);
+
+        $this->assertCount(5, $rows);
+    }
+
     public function testCursorRefusesCursorBefore(): void
     {
         $this->createItems();

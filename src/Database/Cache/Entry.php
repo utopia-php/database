@@ -9,6 +9,7 @@ final readonly class Entry
         public string $collection,
         public string $field = '',
         public string $epoch = '',
+        public string $slot = '',
     ) {
     }
 }

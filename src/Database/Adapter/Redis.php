@@ -6,6 +6,7 @@ namespace Utopia\Database\Adapter;
 
 use Redis as RedisClient;
 use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Redis\Write;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Database;
@@ -986,37 +987,32 @@ class Redis extends Adapter implements
                     $merged[Document::PERMISSIONS] = $updates->getPermissions();
                 }
 
-                $writes[] = [
-                    'id' => $doc->getId(),
-                    'docKey' => $docKeys[$i],
-                    'payload' => $existingPayload,
-                    'document' => new Document($merged),
-                ];
+                $writes[] = new Write($doc->getId(), $docKeys[$i], $existingPayload, new Document($merged));
             }
 
             if ($attrs !== []) {
                 $this->enforceUniqueIndexesForDocuments(
                     $redis,
                     $col,
-                    \array_column($writes, 'document'),
-                    \array_column($writes, 'id'),
+                    \array_map(static fn (Write $write): Document => $write->document, $writes),
+                    \array_map(static fn (Write $write): string => $write->id, $writes),
                 );
             }
 
-            foreach ($writes as ['id' => $uid, 'docKey' => $docKey, 'payload' => $existingPayload, 'document' => $mergedDocument]) {
-                $redis->set($docKey, $this->encode($mergedDocument));
+            foreach ($writes as $write) {
+                $redis->set($write->key, $this->encode($write->document));
 
                 $this->journal('updateDoc', [
                     'collection' => $col,
-                    'id' => $uid,
-                    'newId' => $uid,
-                    'payload' => $existingPayload,
-                    'docKey' => $docKey,
+                    'id' => $write->id,
+                    'newId' => $write->id,
+                    'payload' => $write->payload,
+                    'docKey' => $write->key,
                 ]);
 
                 if ($hasPermissions) {
-                    $this->clearPermissions($col, $uid);
-                    $this->writePermissions($col, $uid, $mergedDocument);
+                    $this->clearPermissions($col, $write->id);
+                    $this->writePermissions($col, $write->id, $write->document);
                 }
             }
 
@@ -1053,84 +1049,97 @@ class Redis extends Adapter implements
                 $relationshipKeys = $this->extractRelationshipKeys($attributes);
             }
 
+            $writes = [];
             foreach ($changes as $i => $change) {
                 $document = $change->getNew();
                 $id = $document->getId();
-                $tenant = $document->getTenant();
-                $docKey = $this->docKey($col, $id, $tenant);
-                $idxKey = $this->idxKey($col, $tenant);
-                $seqKey = $this->seqKey($col, $tenant);
                 $existingPayload = $existingPayloads[$i] ?? false;
 
-                if (\is_string($existingPayload) && $existingPayload !== '') {
-                    $existing = $this->decode($existingPayload);
-                    if (! empty($relationshipKeys)) {
-                        $existing = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $existing);
-                    }
-                    $existingArray = $existing->getArrayCopy();
-                    $resolved = $this->applyOperators($document->getArrayCopy(), $existingArray);
-                    $merged = \array_merge($existingArray, $resolved);
-                    $merged[Document::ID] = $id;
+                if (! \is_string($existingPayload) || $existingPayload === '') {
+                    $writes[] = new Write($id, $this->docKey($col, $id, $document->getTenant()), null, $document, $document->getTenant());
 
-                    if ($attribute !== '') {
-                        $previous = $existing->getAttribute($attribute);
-                        $delta = $document->getAttribute($attribute);
-                        $previousNumeric = \is_numeric($previous) ? $previous + 0 : 0;
-                        $deltaNumeric = \is_numeric($delta) ? $delta + 0 : 0;
-                        $merged[$attribute] = $previousNumeric + $deltaNumeric;
-                    }
+                    continue;
+                }
 
-                    $mergedDocument = new Document($merged);
-                    $this->enforceUniqueIndexes($redis, $col, $mergedDocument, $id);
-                    $redis->set($docKey, $this->encode($mergedDocument));
+                $existing = $this->decode($existingPayload);
+                if (! empty($relationshipKeys)) {
+                    $existing = $this->surfaceRelationshipAttributesUsing($relationshipKeys, $existing);
+                }
+                $existingArray = $existing->getArrayCopy();
+                $resolved = $this->applyOperators($document->getArrayCopy(), $existingArray);
+                $merged = \array_merge($existingArray, $resolved);
+                $merged[Document::ID] = $id;
+
+                if ($attribute !== '') {
+                    $previous = $existing->getAttribute($attribute);
+                    $delta = $document->getAttribute($attribute);
+                    $previousNumeric = \is_numeric($previous) ? $previous + 0 : 0;
+                    $deltaNumeric = \is_numeric($delta) ? $delta + 0 : 0;
+                    $merged[$attribute] = $previousNumeric + $deltaNumeric;
+                }
+
+                $writes[] = new Write($id, $this->docKey($col, $id, $document->getTenant()), $existingPayload, new Document($merged), $document->getTenant());
+            }
+
+            $this->enforceUniqueIndexesInOrder($redis, $col, $writes);
+
+            foreach ($writes as $write) {
+                $id = $write->id;
+                $document = $write->document;
+                $tenant = $write->tenant;
+
+                if ($write->payload !== null) {
+                    $redis->set($write->key, $this->encode($document));
 
                     $this->journal('updateDoc', [
                         'collection' => $col,
                         'id' => $id,
                         'newId' => $id,
-                        'payload' => $existingPayload,
-                        'docKey' => $docKey,
+                        'payload' => $write->payload,
+                        'docKey' => $write->key,
                     ]);
 
                     $this->clearPermissions($col, $id, $tenant);
-                    $this->writePermissions($col, $id, $mergedDocument);
-
-                    $results[] = $mergedDocument;
-                } else {
-                    $this->enforceUniqueIndexes($redis, $col, $document);
-
-                    $sequence = $document->getSequence();
-                    if (empty($sequence)) {
-                        $next = $redis->incr($seqKey);
-                        $sequence = (string) $next;
-                    } else {
-                        $sequence = (string) $sequence;
-                        $current = $redis->get($seqKey);
-                        if (! \is_string($current) || (int) $sequence > (int) $current) {
-                            $redis->set($seqKey, $sequence);
-                        }
-                    }
-                    $document->setAttribute(Document::SEQUENCE, $sequence);
-
-                    $resolved = $this->applyOperators($document->getArrayCopy(), []);
-                    foreach ($resolved as $attr => $value) {
-                        $document->setAttribute($attr, $value);
-                    }
-
-                    $redis->set($docKey, $this->encode($document));
-                    $redis->sAdd($idxKey, \strtolower($id));
-
                     $this->writePermissions($col, $id, $document);
-                    $this->journal('createDoc', [
-                        'collection' => $col,
-                        'id' => $id,
-                        'docKey' => $docKey,
-                        'idxKey' => $idxKey,
-                        'permDocKey' => $this->permDocKey($col, $id, $tenant),
-                    ]);
 
                     $results[] = $document;
+
+                    continue;
                 }
+
+                $idxKey = $this->idxKey($col, $tenant);
+                $seqKey = $this->seqKey($col, $tenant);
+                $sequence = $document->getSequence();
+                if (empty($sequence)) {
+                    $next = $redis->incr($seqKey);
+                    $sequence = (string) $next;
+                } else {
+                    $sequence = (string) $sequence;
+                    $current = $redis->get($seqKey);
+                    if (! \is_string($current) || (int) $sequence > (int) $current) {
+                        $redis->set($seqKey, $sequence);
+                    }
+                }
+                $document->setAttribute(Document::SEQUENCE, $sequence);
+
+                $resolved = $this->applyOperators($document->getArrayCopy(), []);
+                foreach ($resolved as $attr => $value) {
+                    $document->setAttribute($attr, $value);
+                }
+
+                $redis->set($write->key, $this->encode($document));
+                $redis->sAdd($idxKey, \strtolower($id));
+
+                $this->writePermissions($col, $id, $document);
+                $this->journal('createDoc', [
+                    'collection' => $col,
+                    'id' => $id,
+                    'docKey' => $write->key,
+                    'idxKey' => $idxKey,
+                    'permDocKey' => $this->permDocKey($col, $id, $tenant),
+                ]);
+
+                $results[] = $document;
             }
 
             return $results;
@@ -2112,41 +2121,103 @@ class Redis extends Adapter implements
         }
 
         foreach ($claimed as $idxKey => $signatures) {
-            $tenant = $tenants[$idxKey];
-            /** @var array<int, string>|false $docIds */
-            $docIds = $client->sMembers($idxKey);
-            if (! \is_array($docIds) || $docIds === []) {
-                continue;
-            }
-
-            $docKeys = [];
-            foreach ($docIds as $docId) {
-                if (isset($replaced[$idxKey][\strtolower((string) $docId)])) {
-                    continue;
-                }
-                $docKeys[] = $this->docKey($collection, (string) $docId, $tenant);
-            }
-            if ($docKeys === []) {
-                continue;
-            }
-
-            /** @var array<int, mixed>|false $payloads */
-            $payloads = $client->mGet($docKeys);
-            foreach (\is_array($payloads) ? $payloads : [] as $payload) {
-                if (! \is_string($payload) || $payload === '') {
-                    continue;
-                }
-                $existing = $this->decode($payload);
-                if ($sharedTables && $existing->getTenant() !== $tenant) {
-                    continue;
-                }
-                foreach ($this->uniqueSignatures($existing, $uniqueIndexes, $tenant) as $index => $signature) {
-                    if (isset($signatures[$index][$signature])) {
-                        throw new UniqueException(UniqueException::MESSAGE);
-                    }
+            [$owners] = $this->storedUniqueValues($client, $collection, $idxKey, $tenants[$idxKey], $uniqueIndexes, $replaced[$idxKey] ?? []);
+            foreach ($owners as $index => $values) {
+                if (\array_intersect_key($values, $signatures[$index] ?? []) !== []) {
+                    throw new UniqueException(UniqueException::MESSAGE);
                 }
             }
         }
+    }
+
+    /**
+     * Rejects an upsert batch as writing its documents one after another would: each is checked against the stored
+     * documents and the batch documents before it, and a document that replaces a stored one frees its id's values.
+     *
+     * @param list<Write> $writes
+     */
+    private function enforceUniqueIndexesInOrder(RedisClient $client, string $collection, array $writes): void
+    {
+        $uniqueIndexes = $this->uniqueIndexAttributes($client, $collection);
+        if ($uniqueIndexes === []) {
+            return;
+        }
+
+        $sharedTables = $this->getSharedTables();
+        $owners = [];
+        $held = [];
+        foreach ($writes as $write) {
+            $tenant = $sharedTables ? ($write->document->getTenant() ?? $this->getTenant()) : null;
+            $idxKey = $this->idxKey($collection, $tenant);
+            if (! isset($owners[$idxKey])) {
+                [$owners[$idxKey], $held[$idxKey]] = $this->storedUniqueValues($client, $collection, $idxKey, $tenant, $uniqueIndexes);
+            }
+
+            $id = \strtolower($write->id);
+            $signatures = $this->uniqueSignatures($write->document, $uniqueIndexes, $tenant);
+            foreach ($signatures as $index => $signature) {
+                $owner = $owners[$idxKey][$index][$signature] ?? null;
+                if ($owner !== null && ($write->payload === null || $owner !== $id)) {
+                    throw new UniqueException(UniqueException::MESSAGE);
+                }
+            }
+
+            foreach ($held[$idxKey][$id] ?? [] as $index => $signature) {
+                unset($owners[$idxKey][$index][$signature]);
+            }
+            $held[$idxKey][$id] = $signatures;
+            foreach ($signatures as $index => $signature) {
+                $owners[$idxKey][$index][$signature] = $id;
+            }
+        }
+    }
+
+    /**
+     * The unique values the stored documents of one tenant's bucket hold: by index and value the lowercased id of the
+     * document holding it, and by that id its values.
+     *
+     * @param array<int, array<int, string>> $uniqueIndexes
+     * @param array<string, true> $skipped lowercased ids whose stored documents are left out
+     * @return array{array<int, array<string, string>>, array<string, array<int, string>>}
+     */
+    private function storedUniqueValues(RedisClient $client, string $collection, string $idxKey, int|string|null $tenant, array $uniqueIndexes, array $skipped = []): array
+    {
+        /** @var array<int, string>|false $docIds */
+        $docIds = $client->sMembers($idxKey);
+        $ids = [];
+        $docKeys = [];
+        foreach (\is_array($docIds) ? $docIds : [] as $docId) {
+            $id = \strtolower((string) $docId);
+            if (isset($skipped[$id])) {
+                continue;
+            }
+            $ids[] = $id;
+            $docKeys[] = $this->docKey($collection, (string) $docId, $tenant);
+        }
+        if ($docKeys === []) {
+            return [[], []];
+        }
+
+        $owners = [];
+        $held = [];
+        /** @var array<int, mixed>|false $payloads */
+        $payloads = $client->mGet($docKeys);
+        foreach (\is_array($payloads) ? $payloads : [] as $position => $payload) {
+            if (! \is_string($payload) || $payload === '') {
+                continue;
+            }
+            $existing = $this->decode($payload);
+            if ($this->getSharedTables() && $existing->getTenant() !== $tenant) {
+                continue;
+            }
+            $id = $ids[$position];
+            $held[$id] = $this->uniqueSignatures($existing, $uniqueIndexes, $tenant);
+            foreach ($held[$id] as $index => $signature) {
+                $owners[$index][$signature] = $id;
+            }
+        }
+
+        return [$owners, $held];
     }
 
     /**

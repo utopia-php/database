@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use ArrayObject;
+use Closure;
 use LogicException;
 use PHPUnit\Framework\TestCase;
 use stdClass;
@@ -21,9 +22,8 @@ final class MongoSkipDuplicatesTest extends TestCase
 
     public function testOnlyDocumentsWithANewIdAreWrittenAndReturned(): void
     {
-        /** @var ArrayObject<int, list<string>> $upserted */
-        $upserted = new ArrayObject();
-        $adapter = $this->createAdapter([$this->row('stored', 'sequence-stored', tenant: null)], $upserted, sharedTables: false);
+        $rows = new ArrayObject([$this->row('stored', 'sequence-stored', tenant: null)]);
+        $adapter = $this->createAdapter($rows, sharedTables: false);
 
         $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'stored', 'name' => 'replayed']),
@@ -31,16 +31,16 @@ final class MongoSkipDuplicatesTest extends TestCase
             new Document(['$id' => 'fresh', 'name' => 'second']),
         ]));
 
-        $this->assertSame(['fresh'], \array_map(static fn (Document $document): string => $document->getId(), $created));
+        $this->assertSame(['fresh'], $this->ids($created));
         $this->assertSame('first', $created[0]->getAttribute('name'));
-        $this->assertSame([['fresh']], $upserted->getArrayCopy());
+        $this->assertSame(['stored', 'fresh'], $this->storedIds($rows));
+        $this->assertSame('first', $rows[1]->name);
     }
 
     public function testAnIdStoredUnderAnotherTenantIsNew(): void
     {
-        /** @var ArrayObject<int, list<string>> $upserted */
-        $upserted = new ArrayObject();
-        $adapter = $this->createAdapter([$this->row('shared', 'sequence-one', tenant: 1)], $upserted, sharedTables: true);
+        $rows = new ArrayObject([$this->row('shared', 'sequence-one', tenant: 1)]);
+        $adapter = $this->createAdapter($rows, sharedTables: true);
 
         $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'shared', '$tenant' => 1, 'name' => 'replayed']),
@@ -48,14 +48,13 @@ final class MongoSkipDuplicatesTest extends TestCase
         ]));
 
         $this->assertSame([2], \array_map(static fn (Document $document): int|string|null => $document->getTenant(), $created));
-        $this->assertSame([['shared']], $upserted->getArrayCopy());
+        $this->assertSame(['shared', 'shared'], $this->storedIds($rows));
     }
 
     public function testAnIdDifferingOnlyInCaseIsStored(): void
     {
-        /** @var ArrayObject<int, list<string>> $upserted */
-        $upserted = new ArrayObject();
-        $adapter = $this->createAdapter([$this->row('Stored', 'sequence-stored', tenant: null)], $upserted, sharedTables: false);
+        $rows = new ArrayObject([$this->row('Stored', 'sequence-stored', tenant: null)]);
+        $adapter = $this->createAdapter($rows, sharedTables: false);
 
         $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'stored', 'name' => 'replayed']),
@@ -63,22 +62,65 @@ final class MongoSkipDuplicatesTest extends TestCase
             new Document(['$id' => 'fresh', 'name' => 'second']),
         ]));
 
-        $this->assertSame(['Fresh'], \array_map(static fn (Document $document): string => $document->getId(), $created));
-        $this->assertSame([['Fresh']], $upserted->getArrayCopy());
+        $this->assertSame(['Fresh'], $this->ids($created));
+        $this->assertSame(['Stored', 'Fresh'], $this->storedIds($rows));
+    }
+
+    public function testAnIdTheIdCollationMatchesIsNotReportedAsCreated(): void
+    {
+        $rows = new ArrayObject([$this->row('resume', 'sequence-stored', tenant: null)]);
+        $adapter = $this->createAdapter($rows, sharedTables: false);
+
+        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+            new Document(['$id' => 'résumé', 'name' => 'replayed']),
+        ]));
+
+        $this->assertSame([], $this->ids($created), 'The _uid index collation folds accents, so the upsert matched the stored document and inserted nothing');
+        $this->assertSame(['resume'], $this->storedIds($rows));
+    }
+
+    public function testADocumentAnotherWriterStoresFirstIsNotReportedAsCreated(): void
+    {
+        $rows = new ArrayObject();
+        $adapter = $this->createAdapter($rows, sharedTables: false, beforeUpdate: function () use ($rows): void {
+            $rows->append($this->row('raced', 'sequence-other-writer', tenant: null));
+        });
+
+        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+            new Document(['$id' => 'raced', 'name' => 'late']),
+            new Document(['$id' => 'fresh', 'name' => 'new']),
+        ]));
+
+        $this->assertSame(['fresh'], $this->ids($created), 'A document another writer stored before the upsert ran was matched, not inserted');
+        $this->assertSame(['raced', 'fresh'], $this->storedIds($rows));
+    }
+
+    public function testAReplayedSequenceIsNotReportedAsCreated(): void
+    {
+        $rows = new ArrayObject([$this->row('stored', 'sequence-stored', tenant: null)]);
+        $adapter = $this->createAdapter($rows, sharedTables: false);
+
+        $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
+            new Document(['$id' => 'stored', '$sequence' => 'sequence-stored', 'name' => 'replayed']),
+            new Document(['$id' => 'moved', '$sequence' => 'sequence-new', 'name' => 'new']),
+        ]));
+
+        $this->assertSame(['moved'], $this->ids($created));
+        $this->assertSame(['stored', 'moved'], $this->storedIds($rows));
     }
 
     public function testABatchOfStoredIdsWritesNothing(): void
     {
-        /** @var ArrayObject<int, list<string>> $upserted */
-        $upserted = new ArrayObject();
-        $adapter = $this->createAdapter([$this->row('stored', 'sequence-stored', tenant: null)], $upserted, sharedTables: false);
+        $rows = new ArrayObject([$this->row('stored', 'sequence-stored', tenant: null)]);
+        $adapter = $this->createAdapter($rows, sharedTables: false);
 
         $created = $adapter->skipDuplicates(fn (): array => $adapter->createDocuments(new Document(['$id' => self::COLLECTION]), [
             new Document(['$id' => 'stored', 'name' => 'replayed']),
         ]));
 
         $this->assertSame([], $created);
-        $this->assertSame([], $upserted->getArrayCopy());
+        $this->assertSame(['stored'], $this->storedIds($rows));
+        $this->assertFalse(isset($rows[0]->name), 'A skipped document leaves the stored one untouched');
     }
 
     private function row(string $id, string $sequence, ?int $tenant): stdClass
@@ -92,19 +134,38 @@ final class MongoSkipDuplicatesTest extends TestCase
     }
 
     /**
-     * @param  list<stdClass>  $rows
-     * @param  ArrayObject<int, list<string>>  $upserted
+     * @param  array<Document>  $documents
+     * @return list<string>
      */
-    private function createAdapter(array $rows, ArrayObject $upserted, bool $sharedTables): Mongo
+    private function ids(array $documents): array
     {
-        $client = new class ($rows, $upserted) extends Client {
+        return \array_values(\array_map(static fn (Document $document): string => $document->getId(), $documents));
+    }
+
+    /**
+     * @param  ArrayObject<int, stdClass>  $rows
+     * @return list<string>
+     */
+    private function storedIds(ArrayObject $rows): array
+    {
+        return \array_values(\array_map(static fn (stdClass $row): string => $row->{Storage::UID}, $rows->getArrayCopy()));
+    }
+
+    /**
+     * A client that applies an upsert as MongoDB does: a statement whose filter matches a stored document under the
+     * `_uid` collation (case and accents folded) changes nothing, any other inserts its `$setOnInsert` document.
+     *
+     * @param  ArrayObject<int, stdClass>  $rows
+     */
+    private function createAdapter(ArrayObject $rows, bool $sharedTables, ?Closure $beforeUpdate = null): Mongo
+    {
+        $client = new class ($rows, $beforeUpdate) extends Client {
             /**
-             * @param  list<stdClass>  $rows
-             * @param  ArrayObject<int, list<string>>  $upserted
+             * @param  ArrayObject<int, stdClass>  $rows
              */
             public function __construct(
-                private readonly array $rows,
-                private readonly ArrayObject $upserted,
+                private readonly ArrayObject $rows,
+                private readonly ?Closure $beforeUpdate,
             ) {
             }
 
@@ -127,10 +188,10 @@ final class MongoSkipDuplicatesTest extends TestCase
             public function find(string $collection, array $filters = [], array $options = []): stdClass
             {
                 $collation = $options['collation'] ?? null;
-                $caseInsensitive = \is_array($collation) && ($collation['strength'] ?? null) === 1;
+                $folded = \is_array($collation) && ($collation['strength'] ?? null) === 1;
                 $batch = [];
                 foreach ($this->rows as $row) {
-                    if ($this->matches($row, $filters, $caseInsensitive)) {
+                    if ($this->matches($row, $filters, $folded)) {
                         $batch[] = $row;
                     }
                 }
@@ -149,33 +210,49 @@ final class MongoSkipDuplicatesTest extends TestCase
                     throw new LogicException('An upsert command must list its updates');
                 }
 
-                $ids = [];
+                if ($this->beforeUpdate !== null) {
+                    ($this->beforeUpdate)();
+                }
+
                 foreach ($updates as $update) {
-                    if (! \is_array($update)) {
+                    if (! \is_array($update) || ! \is_array($update['q'] ?? null) || ! ($update['u'] ?? null) instanceof stdClass) {
                         throw new LogicException('An upsert command must hold update documents');
                     }
                     $collation = $update['collation'] ?? null;
                     if (! \is_array($collation) || ($collation['strength'] ?? null) !== 1) {
                         throw new LogicException('An upsert by id must use the _uid index collation');
                     }
-                    $filter = $update['q'] ?? null;
-                    $id = \is_array($filter) ? ($filter[Storage::UID] ?? null) : null;
-                    if (! \is_string($id)) {
+                    if (! \is_string($update['q'][Storage::UID] ?? null)) {
                         throw new LogicException('An upsert by id must filter on _uid');
                     }
-                    $ids[] = $id;
-                }
-                $this->upserted->append($ids);
 
-                return \count($ids);
+                    foreach ($this->rows as $row) {
+                        if ($this->matches($row, $update['q'], true)) {
+                            continue 2;
+                        }
+                    }
+
+                    $row = new stdClass();
+                    foreach ($update['q'] as $field => $value) {
+                        $row->{$field} = $value;
+                    }
+                    foreach ((array) $update['u']->{'$setOnInsert'} as $field => $value) {
+                        $row->{$field} = $value;
+                    }
+                    $this->rows->append($row);
+                }
+
+                return \count($updates);
             }
 
             /**
              * @param  array<mixed>  $filters
              */
-            private function matches(stdClass $row, array $filters, bool $caseInsensitive): bool
+            private function matches(stdClass $row, array $filters, bool $folded): bool
             {
-                $normalize = static fn (mixed $value): mixed => $caseInsensitive && \is_string($value) ? \strtolower($value) : $value;
+                $normalize = static fn (mixed $value): mixed => $folded && \is_string($value)
+                    ? \strtolower(\strtr($value, ['é' => 'e', 'É' => 'E']))
+                    : $value;
                 foreach ($filters as $field => $condition) {
                     $candidates = \is_array($condition) && \is_array($condition['$in'] ?? null)
                         ? $condition['$in']

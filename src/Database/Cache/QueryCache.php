@@ -2,6 +2,7 @@
 
 namespace Utopia\Database\Cache;
 
+use InvalidArgumentException;
 use RuntimeException;
 use Utopia\Cache\Cache;
 use Utopia\Database\Document;
@@ -28,17 +29,26 @@ class QueryCache
 
     private const int WRITER_TIMEOUT = 3600;
 
+    private const int SLOTS = 1024;
+
+    private const string BLOCK_FIELD = 'block';
+
     /** @var array<string, Region> */
     private array $regions = [];
 
     /**
      * @param  int  $writerTimeout  Seconds after which a write that has not activated is treated as abandoned
+     * @param  int  $slots  Results a collection scope keeps at most; queries sharing a slot evict each other
      */
     public function __construct(
         private readonly Cache $cache,
         private readonly string $cacheName = 'default',
         private readonly int $writerTimeout = self::WRITER_TIMEOUT,
+        private readonly int $slots = self::SLOTS,
     ) {
+        if ($slots < 1) {
+            throw new InvalidArgumentException('A query cache needs at least one slot');
+        }
     }
 
     public function setRegion(string $collection, Region $region): void
@@ -68,9 +78,6 @@ class QueryCache
      * Resolve a query's entry in the collection's current epoch; null while the
      * collection's region is disabled or a write to it is in progress.
      *
-     * Every result of a collection scope is a field of one hash, keyed by the query, whose value records
-     * the query and the epoch it was filled under: a cache that keeps no fields holds one result per scope.
-     *
      * @param  array<mixed>  $queries
      *
      * @phpstan-impure
@@ -92,7 +99,9 @@ class QueryCache
             'context' => $context,
         ]));
 
-        return new Entry($key, $collection, $field, $epoch);
+        $slot = (string) ((int) \hexdec(\substr($field, 0, 8)) % $this->slots);
+
+        return new Entry($key, $collection, $field, $epoch, $slot);
     }
 
     /**
@@ -103,7 +112,7 @@ class QueryCache
     public function get(Entry $entry): ?array
     {
         /** @var mixed $data */
-        $data = $this->cache->load($entry->key, $this->getRegion($entry->collection)->ttl, $entry->field);
+        $data = $this->cache->load($entry->key, $this->getRegion($entry->collection)->ttl, $entry->slot);
 
         if ($data === false || $data === null) {
             return null;
@@ -172,7 +181,7 @@ class QueryCache
             'epoch' => $entry->epoch,
             'field' => $entry->field,
             'documents' => $data,
-        ], $entry->field, $generation) !== false;
+        ], $entry->slot, $generation) !== false;
     }
 
     public function invalidateCollection(Scope $scope, string $collection): void
@@ -192,7 +201,8 @@ class QueryCache
     }
 
     /**
-     * Publish a shared tombstone before a mutation starts, and drop the results the previous epoch filled.
+     * Publish a shared tombstone before a mutation starts. The previous epoch's results stay until
+     * a fill of their slot replaces them; the purge of one absent field only advances the lease.
      */
     public function blockCollection(string $key, string $token): void
     {
@@ -205,7 +215,7 @@ class QueryCache
         }
 
         $this->cache->purge($this->getStartedKey($key));
-        $this->cache->purge($key);
+        $this->cache->purge($key, self::BLOCK_FIELD);
     }
 
     /**
@@ -282,14 +292,15 @@ class QueryCache
      * Epochs never expire in the cache, so one cannot vanish under a transaction that
      * outlives the region TTL. An active epoch carries the started generation it was
      * published at: while the started generation still equals it, no mutation has
-     * begun since, so a reader needs one generation read.
+     * begun since, so a reader needs one generation read. The initial epoch needs a
+     * results hash no write has purged, since results filled under it outlive the block.
      */
     private function getEpoch(string $key, string $collection): ?string
     {
         $value = $this->cache->load($this->getEpochKey($key), self::PERMANENT);
 
         if ($value === false || $value === null) {
-            return $this->cache->getGeneration($this->getStartedKey($key)) === self::NEVER_STARTED
+            return $this->cache->getGeneration($key) === self::NEVER_STARTED
                 ? self::INITIAL_EPOCH
                 : null;
         }
@@ -417,7 +428,7 @@ class QueryCache
 
     private function purgeLoadedEntry(Entry $entry): void
     {
-        if (! $this->cache->purge($entry->key, $entry->field)) {
+        if (! $this->cache->purge($entry->key, $entry->slot)) {
             throw new RuntimeException("Failed to purge invalid query cache entry '{$entry->key}'");
         }
     }

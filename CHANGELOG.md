@@ -97,8 +97,9 @@ have to make, with the 7.x and 8.0 forms side by side.
     `Exception\Query` (`Unsupported join ON condition: <method>`) in `find()`, `count()`, `sum()` and `getDocument()`.
   - A cursor over a joined read names the joined row: paging a one-to-many, left, right or full outer join returns
     every row once in both directions, through rows an outer join did not match and rows without a main document. A
-    cursor missing an order value is refused by name instead of borrowing the main document's value.
-    `getDocument()` with a join pairs the lowest-sequence joined row. See
+    cursor missing an order value is refused by name instead of borrowing the main document's value, and `cursor()`
+    and `iterate()` over a joined read whose rows lack such a value throw before yielding a row instead of after the
+    first batch. `getDocument()` with a join pairs the lowest-sequence joined row. See
     [Paging a joined read](UPGRADE.md#paging-a-joined-read).
   - With joins, a bare attribute in an aggregate function or `groupBy()` refers to the main collection's attribute
     when the main collection declares it, else to the attribute of the one joined collection that declares it. A
@@ -169,10 +170,11 @@ have to make, with the 7.x and 8.0 forms side by side.
 - **Hooks.** `Database::addHook()` registers `Hook\Lifecycle` (side effects on events), `Hook\Decorator` (modifies
   the documents a read or write returns), `Hook\Transform` (rewrites SQL before it runs; `removeTransform()` removes
   one), `Hook\Write` (row writes, such as `Hook\Permissions`) and `Hook\Relationships`. A lifecycle hook that also
-  implements `Hook\Named` replaces the hook registered under the same name. `Event\DispatcherHook` is a lifecycle
-  hook with listeners per domain event class (`Event\Document\Created`, `Updated`, `Deleted`,
+  implements `Hook\Named` replaces the hook registered under the same name, and one that implements
+  `Hook\Selective` receives only the events its `handles()` accepts. `Event\DispatcherHook` is a selective
+  lifecycle hook with listeners per domain event class (`Event\Document\Created`, `Updated`, `Deleted`,
   `Event\Documents\Created`, `Updated`, `Deleted` for bulk writes with their count, and `Event\Collection\Created`,
-  `Deleted`).
+  `Deleted`); it handles an event only while a listener or a PSR-14 dispatcher can receive it.
 - **Typed models.** `Collection`, `Attribute`, `Index` and `Relationship`, with factories per type
   (`Attribute::string()`, `Index::key()`, `Relationship::oneToMany()`, ...) and one class per storable attribute type
   in `Utopia\Database\Attribute`. `Attribute::TYPES` lists the storable column types and `Attribute::availableTypes()`
@@ -291,7 +293,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 - `purgeCachedQueries()` also purges the `find()` query cache, and returns `false` when either purge fails.
 - `deleteDocument()` fires `document_update` for each document on the other side of a two-way relationship that the
   delete changed, as 7.4.0 does. When a hook throws, `document_delete` and every related `document_update` still
-  fire, and the first exception reaches the caller afterwards. See
+  fire, and the first exception reaches the caller afterwards. Finding the peers a cascade left costs a read per
+  related collection, which a delete skips unless an active lifecycle hook handles `document_update`. See
   [`document_update` for related documents a delete changed](UPGRADE.md#document_update-for-related-documents-a-delete-changed).
 
 ### Deprecated
@@ -394,8 +397,11 @@ have to make, with the 7.x and 8.0 forms side by side.
   a free document whose id matches a linked document of the other collection.
 - `createDocuments()` under `skipDuplicates()` writes permissions only for the documents it inserted. A replayed id
   no longer adds its permissions to the stored document (MariaDB, MySQL and SQLite; also present in 7.x), and a row
-  skipped for another unique value leaves no permission rows behind. On MongoDB it matches ids case-insensitively,
-  as its `_uid` index does, instead of failing on an id stored with different case.
+  skipped for another unique value leaves no permission rows behind. On MongoDB it matches ids as its `_uid` index
+  does (ignoring case and accents), instead of failing on an id stored with different case, and it reports only the
+  documents its upserts inserted: it reads back the `$sequence` each was given, so an id the index matches or one
+  another writer stores first is not counted. A document it inserts without a `$sequence` gets a UUID v7 one, as
+  `createDocuments()` without `skipDuplicates()` gives it, instead of a server-generated `ObjectId`.
 - `Adapter::find()` with no limit and an offset returns the rows after the offset on every SQL engine instead of
   throwing (MariaDB, MySQL and SQLite rejected `OFFSET` without `LIMIT`; also in 7.x).
 - A failed rollback of a metadata write no longer replaces or mislabels the error that failed the write.
@@ -581,11 +587,12 @@ not change anything for an upgrade from 7.x.
     no longer block the collection's cache while they run. `updateDocument()` invalidates the cache once instead of
     twice.
   - Reads and writes no longer leave a key behind in Redis each: a document has one key, with a field per selection,
-    as in 7.x, and a collection's `find()` results live in one hash, cleared on every invalidation. On the Redis
-    adapters a collection's batch and schema invalidations register as fields of one `#owners` key; adapters that
-    store no fields keep a key per invalidation, which their purge deletes. On Redis, keys matching `*#owner:*`,
-    document entries whose key ends in `:<hash>#<epoch>` and query-cache keys matching `*:qcache:*#active:*` left by
-    earlier builds are no longer read and can be deleted.
+    as in 7.x, and a collection's `find()` results live in one hash of at most `QueryCache`'s `slots` fields (1024
+    by default), which an invalidation retires by epoch without deleting them, so a write costs the same whatever
+    the collection has cached. On the Redis adapters a collection's batch and schema invalidations register as
+    fields of one `#owners` key; adapters that store no fields keep a key per invalidation, which their purge
+    deletes. On Redis, keys matching `*#owner:*`, document entries whose key ends in `:<hash>#<epoch>` and
+    query-cache keys matching `*:qcache:*#active:*` left by earlier builds are no longer read and can be deleted.
   - Cache lookups cost one round trip again: a cached `getDocument()` is two round trips (was 12) and
     `getCollection()`, `find()`, `count()` and `sum()` one (was 6) before their query; single-document writes are
     back at or below 7.x's (create 3, update and delete 4, increase and decrease 4).

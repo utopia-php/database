@@ -56,6 +56,8 @@ final class RedisUniqueIndexTest extends TestCase
 
     private bool $pipelining = false;
 
+    private int $memberReads = 0;
+
     /** @var list<mixed> */
     private array $queued = [];
 
@@ -121,6 +123,47 @@ final class RedisUniqueIndexTest extends TestCase
         }
 
         $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
+    }
+
+    public function testAnUpsertBatchReadsTheStoredDocumentsOnceForItsUniqueChecks(): void
+    {
+        $database = $this->usersDatabase();
+        $this->memberReads = 0;
+        $this->assertSame(1, $database->upsertDocuments(self::USERS, [new Document(['$id' => 'first', 'email' => 'first-moved@example.test'])]));
+        $single = $this->memberReads;
+        $this->memberReads = 0;
+
+        $this->assertSame(4, $database->upsertDocuments(self::USERS, [
+            new Document(['$id' => 'third', 'email' => 'moved@example.test']),
+            new Document(['$id' => 'second', 'email' => 'renamed@example.test']),
+            new Document(['$id' => 'fourth', 'email' => 'fourth@example.test']),
+            new Document(['$id' => 'fifth', 'email' => 'fifth@example.test']),
+        ]));
+
+        $this->assertSame($single, $this->memberReads, 'The unique checks must read the collection once per batch, not once per document');
+        $this->assertSame(['fifth@example.test', 'first-moved@example.test', 'fourth@example.test', 'moved@example.test', 'renamed@example.test'], $this->emails($database));
+    }
+
+    public function testAnUpsertBatchChecksEachDocumentAgainstTheOnesBeforeIt(): void
+    {
+        $database = $this->usersDatabase();
+
+        try {
+            $database->upsertDocuments(self::USERS, [
+                new Document(['$id' => 'fourth', 'email' => 'second@example.test']),
+                new Document(['$id' => 'second', 'email' => 'renamed@example.test']),
+            ]);
+            $this->fail('A new document that takes a unique value before the document holding it gives it up must be rejected');
+        } catch (UniqueException $exception) {
+            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        }
+        $this->assertSame(['first@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
+
+        $this->assertSame(2, $database->upsertDocuments(self::USERS, [
+            new Document(['$id' => 'second', 'email' => 'renamed@example.test']),
+            new Document(['$id' => 'fourth', 'email' => 'second@example.test']),
+        ]));
+        $this->assertSame(['first@example.test', 'renamed@example.test', 'second@example.test', 'third@example.test'], $this->emails($database));
     }
 
     public function testTenantPerDocumentChecksTheDocumentsTenant(): void
@@ -498,7 +541,11 @@ final class RedisUniqueIndexTest extends TestCase
 
             return $this->reply($client, $removed);
         });
-        $client->method('sMembers')->willReturnCallback(fn (string $key): mixed => $this->reply($client, $this->members($key)));
+        $client->method('sMembers')->willReturnCallback(function (string $key) use ($client): mixed {
+            $this->memberReads++;
+
+            return $this->reply($client, $this->members($key));
+        });
         $client->method('sIsMember')->willReturnCallback(fn (string $key, mixed $member): mixed => $this->reply($client, isset($this->sets[$key][$this->text($member)])));
         $client->method('sCard')->willReturnCallback(fn (string $key): mixed => $this->reply($client, \count($this->sets[$key] ?? [])));
         $client->method('sUnion')->willReturnCallback(fn (string ...$keys): mixed => $this->reply(

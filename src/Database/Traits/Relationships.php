@@ -477,7 +477,7 @@ trait Relationships
         $adapterUpdated = false;
         if ($altering) {
             try {
-                $updateRelModel = new Relationship(
+                $current = new Relationship(
                     collection: $collection->getId(),
                     relatedCollection: $relatedCollection->getId(),
                     type: $oldRel->type,
@@ -488,7 +488,7 @@ trait Relationships
                     side: $oldRel->side,
                 );
                 $adapterUpdated = $this->adapter->updateRelationship(
-                    $updateRelModel,
+                    $current,
                     $actualNewKey,
                     $actualNewTwoWayKey
                 );
@@ -599,7 +599,7 @@ trait Relationships
 
             if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
                 try {
-                    $reverseRelModel = new Relationship(
+                    $renamed = new Relationship(
                         collection: $collection->getId(),
                         relatedCollection: $relatedCollection->getId(),
                         type: $oldRel->type,
@@ -610,7 +610,7 @@ trait Relationships
                         side: $oldRel->side,
                     );
                     $this->adapter->updateRelationship(
-                        $reverseRelModel,
+                        $renamed,
                         $id,
                         $oldTwoWayKey
                     );
@@ -691,10 +691,9 @@ trait Relationships
                     throw new RelationshipException('Invalid relationship type.');
             }
         } catch (Throwable $e) {
-            // Reverse adapter update
             if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
                 try {
-                    $reverseRelModel2 = new Relationship(
+                    $renamed = new Relationship(
                         collection: $collection->getId(),
                         relatedCollection: $relatedCollection->getId(),
                         type: $oldRel->type,
@@ -705,7 +704,7 @@ trait Relationships
                         side: $oldRel->side,
                     );
                     $this->adapter->updateRelationship(
-                        $reverseRelModel2,
+                        $renamed,
                         $id,
                         $oldTwoWayKey
                     );
@@ -714,16 +713,14 @@ trait Relationships
                 }
             }
 
-            // Reverse completed index renames
-            foreach (\array_reverse($indexRenamesCompleted) as [$coll, $from, $to]) {
+            foreach (\array_reverse($indexRenamesCompleted) as [$indexedCollection, $from, $to]) {
                 try {
-                    $renameIndex($coll, $from, $to);
+                    $renameIndex($indexedCollection, $from, $to);
                 } catch (Throwable) {
                     // Best effort
                 }
             }
 
-            // Reverse attribute metadata
             try {
                 $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRel) {
                     $attribute->setAttribute(Document::ID, $id);
@@ -906,7 +903,7 @@ trait Relationships
         $collection->setAttribute('attributes', $collectionAttributes);
         $relatedCollection->setAttribute('attributes', $relatedCollectionAttributes);
 
-        $deleteRelModel = new Relationship(
+        $dropped = new Relationship(
             collection: $collection->getId(),
             relatedCollection: $relatedCollection->getId(),
             type: $rel->type,
@@ -918,7 +915,7 @@ trait Relationships
 
         $shouldRollback = false;
         try {
-            $deleted = $this->adapter->deleteRelationship($deleteRelModel);
+            $deleted = $this->adapter->deleteRelationship($dropped);
 
             if (! $deleted) {
                 throw new DatabaseException('Failed to delete relationship');
@@ -939,9 +936,8 @@ trait Relationships
             });
         } catch (Throwable $e) {
             if ($shouldRollback) {
-                // Recreate relationship columns
                 try {
-                    $recreateRelModel = new Relationship(
+                    $restored = new Relationship(
                         collection: $collection->getId(),
                         relatedCollection: $relatedCollection->getId(),
                         type: $rel->type,
@@ -951,7 +947,7 @@ trait Relationships
                         onDelete: $rel->onDelete,
                         side: RelationSide::Parent,
                     );
-                    $this->adapter->createRelationship($recreateRelModel);
+                    $this->adapter->createRelationship($restored);
                 } catch (Throwable) {
                     // Silent rollback — best effort to restore consistency
                 }

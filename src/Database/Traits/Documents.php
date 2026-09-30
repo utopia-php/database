@@ -13,6 +13,7 @@ use Utopia\Console;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\ReadWritePool;
 use Utopia\Database\Attribute;
+use Utopia\Database\Cache\Epoch;
 use Utopia\Database\Cache\Owners;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
@@ -624,7 +625,7 @@ trait Documents
 
         $collectionState = $cacheable && $definition
             ? $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])
-            : ['epoch' => null, 'blockedAt' => null];
+            : new Epoch();
 
         $document = $this->castingAfter($collection, $document);
 
@@ -675,12 +676,12 @@ trait Documents
                     $field,
                     $document->getArrayCopy(),
                     [
-                        self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionState['epoch'],
-                        self::DOCUMENT_CACHE_BLOCKED_AT => $collectionState['blockedAt'],
+                        self::DOCUMENT_CACHE_COLLECTION_EPOCH => $collectionState->value,
+                        self::DOCUMENT_CACHE_BLOCKED_AT => $collectionState->blockedAt,
                         self::DOCUMENT_CACHE_CHECKED_AT => \time(),
                     ],
                     $generation,
-                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])['epoch'] === $collectionState['epoch'],
+                    fn (): bool => $this->loadDocumentCacheState($this->getCacheBaseKeys($id)[0])->value === $collectionState->value,
                 );
             }
         } catch (Exception $e) {
@@ -691,7 +692,7 @@ trait Documents
 
         $this->trigger(Event::DocumentRead, $document);
 
-        $this->attachCollectionCacheEpoch($document, $collectionState['epoch']);
+        $this->attachCollectionCacheEpoch($document, $collectionState->value);
 
         return $document;
     }
@@ -2559,7 +2560,7 @@ trait Documents
         $cacheTarget = $collection->getId() === self::METADATA
             ? new Document([Document::ID => $id, Document::COLLECTION => self::METADATA])
             : $collection->getId();
-        $report = $this->getActiveLifecycleHooks() !== [];
+        $report = $this->getActiveLifecycleHooks(Event::DocumentUpdate) !== [];
         $changed = [];
         $deleted = $this->withMutation(Event::DocumentDelete, $cacheTarget, function () use ($collection, $id, $report, &$changed): ?Document {
             $changed = [];
@@ -2948,10 +2949,8 @@ trait Documents
      * The epoch a collection's documents may be cached under, or null while a write to the collection
      * is in flight, with the time that write blocked it. A tombstone older than the writer timeout
      * lapses into an epoch of its own, which a later activation changes.
-     *
-     * @return array{epoch: ?string, blockedAt: ?int}
      */
-    private function loadDocumentCacheState(string $collectionKey): array
+    private function loadDocumentCacheState(string $collectionKey): Epoch
     {
         $now = \time();
 
@@ -2968,13 +2967,13 @@ trait Documents
             if (\str_starts_with($record, self::DOCUMENT_CACHE_BLOCKED_PREFIX)) {
                 $blockedAt = \ctype_digit($stamp) ? (int) $stamp : 0;
                 if ($blockedAt + $this->cacheWriterTimeout > $now) {
-                    return ['epoch' => null, 'blockedAt' => $blockedAt];
+                    return new Epoch(blockedAt: $blockedAt);
                 }
 
                 $tombstone = \substr($record, \strlen(self::DOCUMENT_CACHE_BLOCKED_PREFIX));
                 $finished = $this->cache->getGeneration($collectionKey.'#finished');
 
-                return ['epoch' => self::DOCUMENT_CACHE_LAPSED_PREFIX.$tombstone.self::DOCUMENT_CACHE_SEPARATOR.$finished, 'blockedAt' => null];
+                return new Epoch(self::DOCUMENT_CACHE_LAPSED_PREFIX.$tombstone.self::DOCUMENT_CACHE_SEPARATOR.$finished);
             }
 
             $started = $this->cache->getGeneration($collectionKey.'#started');
@@ -2982,14 +2981,14 @@ trait Documents
                 ($separator !== false && $started === $stamp)
                 || $started === $this->cache->getGeneration($collectionKey.'#finished')
             ) {
-                return ['epoch' => $marker, 'blockedAt' => null];
+                return new Epoch($marker);
             }
 
             return $this->restoreDocumentCacheEpoch($collectionKey, $now);
         } catch (Throwable $error) {
             Console::warning('Warning: Failed to load document cache epoch: '.$error->getMessage());
 
-            return ['epoch' => null, 'blockedAt' => $now];
+            return new Epoch(blockedAt: $now);
         }
     }
 
@@ -2997,24 +2996,22 @@ trait Documents
      * Replace a missing or unusable epoch: with a fresh one when no write is counted in flight, or
      * else with a tombstone of its own, so the collection lapses back into the cache after the writer
      * timeout even when the write that blocked it left no tombstone behind.
-     *
-     * @return array{epoch: ?string, blockedAt: ?int}
      */
-    private function restoreDocumentCacheEpoch(string $collectionKey, int $now): array
+    private function restoreDocumentCacheEpoch(string $collectionKey, int $now): Epoch
     {
         $started = $this->cache->getGeneration($collectionKey.'#started');
         if ($started !== $this->cache->getGeneration($collectionKey.'#finished')) {
             $this->cache->save($collectionKey.'#epoch', self::DOCUMENT_CACHE_BLOCKED_PREFIX.$this->createDocumentCacheToken().self::DOCUMENT_CACHE_SEPARATOR.$now);
 
-            return ['epoch' => null, 'blockedAt' => $now];
+            return new Epoch(blockedAt: $now);
         }
 
         $epoch = self::DOCUMENT_CACHE_ACTIVE_PREFIX.\bin2hex(\random_bytes(16));
         if ($this->cache->save($collectionKey.'#epoch', $epoch.self::DOCUMENT_CACHE_SEPARATOR.$started) === false) {
-            return ['epoch' => null, 'blockedAt' => $now];
+            return new Epoch(blockedAt: $now);
         }
 
-        return ['epoch' => $epoch, 'blockedAt' => null];
+        return new Epoch($epoch);
     }
 
     /**
@@ -3705,52 +3702,7 @@ trait Documents
         }
 
         if (! $isAggregation && ! $distinct) {
-            $uniqueOrderBy = false;
-            foreach ($orderAttributes as $order) {
-                if ($order === Document::ID || $order === Document::SEQUENCE) {
-                    $uniqueOrderBy = true;
-                }
-            }
-
-            $vectorSearch = false;
-            foreach ($filters as $filter) {
-                if (\in_array($filter->getMethod(), [Method::VectorCosine, Method::VectorDot, Method::VectorEuclidean], true)) {
-                    $vectorSearch = true;
-                    break;
-                }
-            }
-
-            // A vector index answers exactly one sort key, the distance. A tie break behind it
-            // makes the ordering unanswerable from the index and the collection is read in full,
-            // so the tie break is only added when a cursor needs a stable page boundary.
-            // The tie break sits behind the caller's own order so every requested key is still
-            // read. It follows the direction of a leading timestamp so a descending list returns
-            // a batch that shares one timestamp newest-inserted first.
-            if ($uniqueOrderBy === false && (! $vectorSearch || ! empty($cursor))) {
-                $leadingAttribute = $orderAttributes[0] ?? null;
-                $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
-
-                $orderAttributes[] = Document::SEQUENCE;
-                $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
-                    ? $leadingOrderType
-                    : OrderDirection::Asc;
-            }
-
-            $aliases = \array_keys($joinedCollections);
-            if ((! $vectorSearch || ! empty($cursor)) && \count($aliases) === \count($joins)) {
-                foreach (\array_values($joins) as $position => $join) {
-                    $alias = $aliases[$position];
-                    $joinedId = $alias.'.'.Document::ID;
-                    if (
-                        ! $this->joinMatchesAtMostOneRow($join, $alias)
-                        && ! \in_array($joinedId, $orderAttributes, true)
-                        && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)
-                    ) {
-                        $orderAttributes[] = $joinedId;
-                        $orderTypes[] = OrderDirection::Asc;
-                    }
-                }
-            }
+            [$orderAttributes, $orderTypes] = $this->addTieBreaks($orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor));
         }
 
         if (! empty($cursor)) {
@@ -4043,6 +3995,7 @@ trait Documents
 
         $sum = $limit;
         $latestDocument = null;
+        $check = null;
 
         while ($sum === $limit) {
             $newQueries = $queries;
@@ -4064,12 +4017,16 @@ trait Documents
             }
 
             $sum = count($results);
+            $latestDocument = $results[array_key_last($results)];
+
+            if ($sum === $limit) {
+                $check ??= $this->nextPageCheck($collection, $queries);
+                $check($latestDocument);
+            }
 
             foreach ($results as $document) {
                 yield $document;
             }
-
-            $latestDocument = $results[array_key_last($results)];
         }
     }
 
@@ -4197,7 +4154,10 @@ trait Documents
             $this->validateSumAttribute($collection, $attribute, $queries, $joinedCollections);
         }
 
-        $attribute = $this->resolveSumAttribute($collection, $attribute, $queries);
+        if (! \str_contains($attribute, '.') && ! $this->declaresSumAttribute($collection, $attribute)) {
+            $joinedCollections ??= $this->resolveJoinedCollections($queries);
+            $attribute = $this->resolveSumAttribute($collection, $attribute, $queries, $joinedCollections);
+        }
 
         $documentSecurity = $collection->getAttribute('documentSecurity', false);
         $collectionGranted = $this->authorization->isValid(new Input(PermissionType::Read, $collection->getRead()));
@@ -4228,39 +4188,69 @@ trait Documents
     }
 
     /**
-     * A bare attribute name reads the main collection's attribute when the main collection declares
-     * it, else the attribute of the one join whose collection declares it, as an aggregate in find()
-     * does. Any other name is returned as given, for the validator to accept or refuse.
+     * A bare name the main collection does not declare reads the attribute of the one aliased join whose
+     * collection declares it, as an aggregate in find() does. Any other name is returned as given, for the
+     * validator to accept or refuse.
      *
      * @param  array<Query>  $queries
+     * @param  array<string, Document>  $joinedCollections  The collection each join names, by its id
      *
      * @throws QueryException
      */
-    private function resolveSumAttribute(Document $collection, string $attribute, array $queries): string
+    private function resolveSumAttribute(Document $collection, string $attribute, array $queries, array $joinedCollections): string
+    {
+        try {
+            return $this->qualifyJoinedAttribute($collection, $attribute, $this->aliasedJoinCollections($queries, $joinedCollections));
+        } catch (QueryException $exception) {
+            throw new QueryException('Invalid query: '.$exception->getMessage(), previous: $exception);
+        }
+    }
+
+    /**
+     * The collection each join given an alias reads, by that alias.
+     *
+     * @param  array<Query>  $queries
+     * @param  array<string, Document>|null  $joinedCollections  The collection each join names, by its id
+     * @return array<string, Document>
+     */
+    private function aliasedJoinCollections(array $queries, ?array $joinedCollections = null): array
+    {
+        $joins = \array_values(\array_filter(
+            $queries,
+            static fn (Query $query): bool => $query->getMethod()->isJoin() && $query->getJoinAlias() !== '',
+        ));
+
+        return $this->joinedCollectionsByAlias($joins, $joinedCollections);
+    }
+
+    /**
+     * `alias.name` for a bare name the main collection does not declare and exactly one of the joined collections
+     * declares as a non-relationship attribute; any other name as given.
+     *
+     * @param  array<string, Document>  $joinedCollections  The collection each join reads, by its alias
+     *
+     * @throws QueryException  when several joined collections declare the name
+     */
+    private function qualifyJoinedAttribute(Document $collection, string $attribute, array $joinedCollections): string
     {
         if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
             return $attribute;
         }
 
         $aliases = [];
-        foreach ($queries as $query) {
-            if (! $query->getMethod()->isJoin() || $query->getJoinAlias() === '') {
-                continue;
-            }
-
-            $joined = $this->silent(fn () => $this->getCollection($query->getAttribute()));
+        foreach ($joinedCollections as $alias => $joined) {
             /** @var array<Attribute|Document> $joinedAttributes */
             $joinedAttributes = $joined->getAttribute('attributes', []);
             foreach ($joinedAttributes as $declared) {
                 if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
-                    $aliases[] = $query->getJoinAlias();
+                    $aliases[] = $alias;
                     break;
                 }
             }
         }
 
         if (\count($aliases) > 1) {
-            throw new QueryException('Invalid query: Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
+            throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
         }
 
         return $aliases === [] ? $attribute : $aliases[0].'.'.$attribute;
@@ -4301,12 +4291,9 @@ trait Documents
         $validator = new Aggregate($attributes, $this->adapter->supports(Capability::DefinedAttributes), $this->adapter->getSharedTables());
 
         if (\str_contains($attribute, '.') || ! $this->declaresSumAttribute($collection, $attribute)) {
-            $joinedCollections ??= $this->resolveJoinedCollections($queries);
             $joins = [];
-            foreach ($queries as $query) {
-                if ($query->getMethod()->isJoin() && $query->getJoinAlias() !== '') {
-                    $joins[] = JoinedCollection::of($query->getJoinAlias(), $joinedCollections[$query->getAttribute()] ?? new Document());
-                }
+            foreach ($this->aliasedJoinCollections($queries, $joinedCollections) as $alias => $joined) {
+                $joins[] = JoinedCollection::of($alias, $joined);
             }
             $validator->allowJoins($joins);
         }
@@ -4340,6 +4327,7 @@ trait Documents
             $queries,
             static fn (Query $query): bool => ! \in_array($query->getMethod(), [Method::Limit, Method::Offset, Method::CursorAfter, Method::CursorBefore], true),
         ));
+        $check = null;
 
         while ($remaining === null || $remaining > 0) {
             $size = $remaining === null ? $batchSize : \min($batchSize, $remaining);
@@ -4352,13 +4340,19 @@ trait Documents
             }
 
             $documents = $this->find($collection, [...$page, ...$queries]);
+            $last = \end($documents);
+            $pages = $last !== false && \count($documents) === $size && ($remaining === null || $remaining > $size);
+
+            if ($pages) {
+                $check ??= $this->nextPageCheck($collection, $queries);
+                $check($last);
+            }
 
             foreach ($documents as $document) {
                 yield $document;
             }
 
-            $last = \end($documents);
-            if ($last === false || \count($documents) < $size) {
+            if (! $pages) {
                 return;
             }
 
@@ -4379,6 +4373,102 @@ trait Documents
     public function aggregate(string $collection, array $queries): array
     {
         return $this->find($collection, $queries);
+    }
+
+    /**
+     * A vector index answers exactly one sort key, the distance: a tie break behind it makes the ordering unanswerable
+     * from the index, so tie breaks are only added when a cursor needs a stable page boundary.
+     *
+     * @param  array<string>  $orderAttributes
+     * @param  array<OrderDirection>  $orderTypes
+     * @param  array<Query>  $filters
+     * @param  array<Query>  $joins
+     * @param  array<string, Document>  $joinedCollections
+     * @return array{array<string>, array<OrderDirection>}
+     */
+    private function addTieBreaks(array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged): array
+    {
+        $uniqueOrderBy = \in_array(Document::ID, $orderAttributes, true) || \in_array(Document::SEQUENCE, $orderAttributes, true);
+
+        $vectorSearch = false;
+        foreach ($filters as $filter) {
+            if (\in_array($filter->getMethod(), [Method::VectorCosine, Method::VectorDot, Method::VectorEuclidean], true)) {
+                $vectorSearch = true;
+                break;
+            }
+        }
+
+        if ($vectorSearch && ! $paged) {
+            return [$orderAttributes, $orderTypes];
+        }
+
+        if (! $uniqueOrderBy) {
+            $leadingAttribute = $orderAttributes[0] ?? null;
+            $leadingOrderType = $orderTypes[0] ?? OrderDirection::Asc;
+
+            $orderAttributes[] = Document::SEQUENCE;
+            $orderTypes[] = \in_array($leadingAttribute, [Document::CREATED_AT, Document::UPDATED_AT], true)
+                ? $leadingOrderType
+                : OrderDirection::Asc;
+        }
+
+        $aliases = \array_keys($joinedCollections);
+        if (\count($aliases) === \count($joins)) {
+            foreach (\array_values($joins) as $position => $join) {
+                $alias = $aliases[$position];
+                $joinedId = $alias.'.'.Document::ID;
+                if (
+                    ! $this->joinMatchesAtMostOneRow($join, $alias)
+                    && ! \in_array($joinedId, $orderAttributes, true)
+                    && ! \in_array($alias.'.'.Document::SEQUENCE, $orderAttributes, true)
+                ) {
+                    $orderAttributes[] = $joinedId;
+                    $orderTypes[] = OrderDirection::Asc;
+                }
+            }
+        }
+
+        return [$orderAttributes, $orderTypes];
+    }
+
+    /**
+     * What find() checks of the cursor it is given for a joined or distinct read, run on a page's last row before the
+     * page is yielded, so a read that cannot be paged fails before its caller acts on any row.
+     *
+     * @param  array<Query>  $queries
+     * @return Closure(Document): void
+     */
+    private function nextPageCheck(string $collection, array $queries): Closure
+    {
+        $grouped = Query::groupForDatabase($queries);
+        $joins = $grouped['joins'];
+        $distinct = $grouped['distinct'];
+        if (($joins === [] && ! $distinct) || $grouped['aggregations'] !== [] || $grouped['groupBy'] !== []) {
+            return static function (Document $cursor): void {
+            };
+        }
+
+        $collection = $this->silent(fn () => $this->getCollection($collection));
+        $joinedCollections = $this->joinedCollectionsByAlias($joins, $this->resolveJoinedCollections($joins));
+        $selects = $grouped['selections'];
+        $filters = $grouped['filters'];
+        $orderAttributes = $grouped['orderAttributes'];
+        $orderTypes = $grouped['orderTypes'];
+
+        return function (Document $cursor) use ($collection, $joins, $distinct, $joinedCollections, $selects, $filters, $orderAttributes, $orderTypes): void {
+            $orders = $orderAttributes;
+            if ($joinedCollections !== []) {
+                [$orders, $cursor] = $this->qualifyJoinedOrders($collection, $orders, $cursor, $joinedCollections);
+            }
+
+            if ($distinct) {
+                $this->assertDistinctCursorOrder($selects, $orders);
+            } else {
+                [$orders] = $this->addTieBreaks($orders, $orderTypes, $filters, $joins, $joinedCollections, true);
+            }
+
+            $this->assertCursorHasOrderValues($cursor, $orders);
+        };
     }
 
     /**
@@ -4452,31 +4542,11 @@ trait Documents
     private function qualifyJoinedOrders(Document $collection, array $orderAttributes, Document $cursor, array $joinedCollections): array
     {
         foreach ($orderAttributes as $index => $attribute) {
-            if (\str_contains($attribute, '.') || $this->declaresSumAttribute($collection, $attribute)) {
+            $qualified = $this->qualifyJoinedAttribute($collection, $attribute, $joinedCollections);
+            if ($qualified === $attribute) {
                 continue;
             }
 
-            $aliases = [];
-            foreach ($joinedCollections as $alias => $joined) {
-                /** @var array<Attribute|Document> $joinedAttributes */
-                $joinedAttributes = $joined->getAttribute('attributes', []);
-                foreach ($joinedAttributes as $declared) {
-                    if ($declared->getId() === $attribute && ! Attribute::isRelationship($declared)) {
-                        $aliases[] = $alias;
-                        break;
-                    }
-                }
-            }
-
-            if (\count($aliases) > 1) {
-                throw new QueryException('Attribute "'.$attribute.'" is ambiguous across joins; qualify it with a join alias');
-            }
-
-            if ($aliases === []) {
-                continue;
-            }
-
-            $qualified = $aliases[0].'.'.$attribute;
             $orderAttributes[$index] = $qualified;
             if ($cursor->offsetExists($attribute) && ! $cursor->offsetExists($qualified)) {
                 $cursor = clone $cursor;

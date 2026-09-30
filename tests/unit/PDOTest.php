@@ -5,8 +5,6 @@ namespace Tests\Unit;
 use Closure;
 use PDOException;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
-use ReflectionProperty;
 use Utopia\Database\PDO;
 use Utopia\Database\PDOStatement;
 
@@ -15,11 +13,7 @@ class PDOTest extends TestCase
     public function test_method_call_is_forwarded_to_pdo(): void
     {
         $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
-
-        // Use Reflection to replace the internal PDO instance with a mock
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoWrapper = new PDOTestConnection($dsn, null, null);
 
         // Create a mock for the internal \PDO object.
         $pdoMock = $this->getMockBuilder(\PDO::class)
@@ -34,7 +28,7 @@ class PDOTest extends TestCase
             ->with('SELECT 1')
             ->willReturn($pdoStatementStub);
 
-        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+        $pdoWrapper->useConnection($pdoMock);
 
         $result = $pdoWrapper->query('SELECT 1');
 
@@ -44,7 +38,7 @@ class PDOTest extends TestCase
     public function test_lost_connection_retries_call(): void
     {
         $dsn = 'sqlite::memory:';
-        $pdoWrapper = $this->getMockBuilder(PDO::class)
+        $pdoWrapper = $this->getMockBuilder(PDOTestConnection::class)
             ->setConstructorArgs([$dsn, null, null, []])
             ->onlyMethods(['reconnect'])
             ->getMock();
@@ -66,14 +60,12 @@ class PDOTest extends TestCase
                 return $pdoStatementStub;
             });
 
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+        $pdoWrapper->useConnection($pdoMock);
 
         $pdoWrapper->expects($this->once())
             ->method('reconnect')
-            ->willReturnCallback(function () use ($pdoWrapper, $pdoMock, $pdoProperty) {
-                $pdoProperty->setValue($pdoWrapper, $pdoMock);
+            ->willReturnCallback(function () use ($pdoWrapper, $pdoMock) {
+                $pdoWrapper->useConnection($pdoMock);
             });
 
         $result = $pdoWrapper->query('SELECT 1');
@@ -84,10 +76,7 @@ class PDOTest extends TestCase
     public function test_non_lost_connection_exception_is_rethrown(): void
     {
         $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
-
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoWrapper = new PDOTestConnection($dsn, null, null);
 
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
@@ -98,7 +87,7 @@ class PDOTest extends TestCase
             ->with('SELECT 1')
             ->will($this->throwException(new \Exception('Other error')));
 
-        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+        $pdoWrapper->useConnection($pdoMock);
 
         $this->expectException(\Exception::class);
         $this->expectExceptionMessage('Other error');
@@ -109,14 +98,10 @@ class PDOTest extends TestCase
     public function test_reconnect_creates_new_pdo_instance(): void
     {
         $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
-
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
-
-        $oldPDO = $pdoProperty->getValue($pdoWrapper);
+        $pdoWrapper = new PDOTestConnection($dsn, null, null);
+        $oldPDO = $pdoWrapper->connection();
         $pdoWrapper->reconnect();
-        $newPDO = $pdoProperty->getValue($pdoWrapper);
+        $newPDO = $pdoWrapper->connection();
 
         $this->assertNotSame($oldPDO, $newPDO, 'Reconnect should create a new PDO instance');
     }
@@ -124,10 +109,7 @@ class PDOTest extends TestCase
     public function test_method_call_for_prepare(): void
     {
         $dsn = 'sqlite::memory:';
-        $pdoWrapper = new PDO($dsn, null, null);
-
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
+        $pdoWrapper = new PDOTestConnection($dsn, null, null);
 
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
@@ -140,7 +122,7 @@ class PDOTest extends TestCase
             ->with('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY])
             ->willReturn($pdoStatementStub);
 
-        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+        $pdoWrapper->useConnection($pdoMock);
 
         $result = $pdoWrapper->prepare('SELECT * FROM table', [\PDO::ATTR_CURSOR => \PDO::CURSOR_FWDONLY]);
 
@@ -149,7 +131,7 @@ class PDOTest extends TestCase
 
     public function testPrepareNativeReconnectsOutsideTransaction(): void
     {
-        $pdoWrapper = $this->getMockBuilder(PDO::class)
+        $pdoWrapper = $this->getMockBuilder(PDOTestConnection::class)
             ->setConstructorArgs(['sqlite::memory:', null, null, []])
             ->onlyMethods(['reconnect'])
             ->getMock();
@@ -173,9 +155,7 @@ class PDOTest extends TestCase
                 return $statement;
             });
 
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+        $pdoWrapper->useConnection($pdoMock);
 
         $pdoWrapper->expects($this->once())->method('reconnect');
 
@@ -184,7 +164,7 @@ class PDOTest extends TestCase
 
     public function testPrepareNativeThrowsWhenNativePrepareReturnsFalse(): void
     {
-        $pdoWrapper = new PDO('sqlite::memory:', null, null);
+        $pdoWrapper = new PDOTestConnection('sqlite::memory:', null, null);
 
         $pdoMock = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
@@ -194,9 +174,7 @@ class PDOTest extends TestCase
             ->with('INVALID', [])
             ->willReturn(false);
 
-        $reflection = new ReflectionClass($pdoWrapper);
-        $pdoProperty = $reflection->getProperty('pdo');
-        $pdoProperty->setValue($pdoWrapper, $pdoMock);
+        $pdoWrapper->useConnection($pdoMock);
 
         $this->expectException(\PDOException::class);
         $this->expectExceptionMessage('Failed to prepare statement: INVALID');
@@ -219,7 +197,7 @@ class PDOTest extends TestCase
 
     public function testCallRetriedAfterALostConnectionRunsOnTheConfiguredSession(): void
     {
-        $pdo = new PDO('sqlite::memory:', null, null);
+        $pdo = new PDOTestConnection('sqlite::memory:', null, null);
         $pdo->configure('marker', 'CREATE TEMP TABLE marker AS SELECT 7 AS value');
 
         $lost = $this->getMockBuilder(\PDO::class)
@@ -229,7 +207,7 @@ class PDOTest extends TestCase
         $lost->expects($this->once())
             ->method('query')
             ->willThrowException(new PDOException('SQLSTATE[HY000]: General error: 2006 MySQL server has gone away'));
-        (new ReflectionProperty(PDO::class, 'pdo'))->setValue($pdo, $lost);
+        $pdo->useConnection($lost);
 
         $statement = $pdo->query('SELECT value FROM temp.marker');
 
@@ -239,12 +217,11 @@ class PDOTest extends TestCase
 
     public function testReconnectKeepsTheLostConnectionWhenTheSessionCannotBeReplayed(): void
     {
-        $pdo = new PDO('sqlite::memory:', null, null);
+        $pdo = new PDOTestConnection('sqlite::memory:', null, null);
         $pdo->exec('CREATE TEMP TABLE local (value INTEGER)');
         $pdo->configure('row', 'INSERT INTO temp.local VALUES (1)');
 
-        $connection = new ReflectionProperty(PDO::class, 'pdo');
-        $lost = $connection->getValue($pdo);
+        $lost = $pdo->connection();
 
         $failure = null;
         try {
@@ -254,7 +231,7 @@ class PDOTest extends TestCase
         }
 
         $this->assertInstanceOf(PDOException::class, $failure, 'The new connection has no temp.local to replay into');
-        $this->assertSame($lost, $connection->getValue($pdo), 'A connection missing the configured session must never be used');
+        $this->assertSame($lost, $pdo->connection(), 'A connection missing the configured session must never be used');
     }
 
     public function testReconnectReplaysAttributes(): void

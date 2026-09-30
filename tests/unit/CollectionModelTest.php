@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Attribute;
 use Utopia\Database\Attribute\Boolean;
@@ -355,5 +356,58 @@ class CollectionModelTest extends TestCase
 
         $this->assertSame([], $collection->getAttribute(Document::PERMISSIONS));
         $this->assertSame([], $collection->permissions);
+    }
+
+    public function testFromArrayCoercesNonStringIdAndName(): void
+    {
+        $withoutId = Collection::fromArray([Document::ID => 5]);
+
+        $this->assertSame('', $withoutId->id);
+        $this->assertSame('', $withoutId->name);
+
+        $withoutName = Collection::fromArray([Document::ID => 'posts', 'name' => ['Posts']]);
+
+        $this->assertSame('posts', $withoutName->id);
+        $this->assertSame('posts', $withoutName->name);
+    }
+
+    public function testUnknownPropertyReadsTheAttribute(): void
+    {
+        $collection = new Collection(id: 'posts', metadata: ['search' => 'title']);
+
+        $this->assertSame('title', $collection->search);
+        $this->assertNull($collection->missing);
+    }
+
+    public function testConstructorRejectsAnAttributeThatIsNotAModel(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Collection attributes must be Attribute models');
+
+        new Collection(id: 'posts', attributes: ['title']); // @phpstan-ignore argument.type
+    }
+
+    public function testFromArrayRejectsAnAttributeThatIsNotAModel(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Collection attributes must be Attribute models');
+
+        Collection::fromArray([Document::ID => 'posts', 'attributes' => ['title']]);
+    }
+
+    public function testConstructorRejectsAnIndexThatIsNotAModel(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Collection indexes must be Index models');
+
+        new Collection(id: 'posts', indexes: ['titleIndex']); // @phpstan-ignore argument.type
+    }
+
+    public function testFromArrayRejectsAnIndexThatIsNotAModel(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Collection indexes must be Index models');
+
+        Collection::fromArray([Document::ID => 'posts', 'indexes' => ['titleIndex']]);
     }
 }

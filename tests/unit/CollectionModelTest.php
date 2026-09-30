@@ -315,4 +315,45 @@ class CollectionModelTest extends TestCase
             $this->assertSame($definition, $collection->attributes[0]->toDocument()->getArrayCopy(), $path);
         }
     }
+
+    public function testPropertyWritesStoreTheirAttributes(): void
+    {
+        $attributes = [Attribute::string(key: 'title', size: 64)];
+        $indexes = [Index::key(key: 'titleIndex', attributes: ['title'])];
+        $permissions = [Permission::read(Role::any())];
+
+        $collection = new Collection(id: 'before');
+        $collection->id = 'after';
+        $collection->name = 'Renamed';
+        $collection->attributes = $attributes;
+        $collection->indexes = $indexes;
+        $collection->permissions = $permissions;
+        $collection->documentSecurity = false;
+        $collection->search = 'title';
+
+        $this->assertSame('after', $collection->getId());
+        $this->assertSame('Renamed', $collection->getAttribute('name'));
+        $this->assertSame($attributes, $collection->getAttribute('attributes'));
+        $this->assertSame($indexes, $collection->getAttribute('indexes'));
+        $this->assertSame($permissions, $collection->getPermissions());
+        $this->assertFalse($collection->getAttribute('documentSecurity'));
+        $this->assertSame('title', $collection->getAttribute('search'));
+
+        $this->assertSame('after', $collection->id);
+        $this->assertSame('Renamed', $collection->name);
+        $this->assertSame($attributes, $collection->attributes);
+        $this->assertSame($indexes, $collection->indexes);
+        $this->assertSame($permissions, $collection->permissions);
+        $this->assertFalse($collection->documentSecurity);
+        $this->assertSame('title', $collection->search);
+    }
+
+    public function testAssigningNullPermissions(): void
+    {
+        $collection = new Collection(id: 'posts', permissions: [Permission::read(Role::any())]);
+        $collection->permissions = null;
+
+        $this->assertSame([], $collection->getAttribute(Document::PERMISSIONS));
+        $this->assertSame([], $collection->permissions);
+    }
 }

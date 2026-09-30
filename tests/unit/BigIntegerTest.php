@@ -311,6 +311,14 @@ final class BigIntegerTest extends TestCase
         $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateSubDays(1)));
     }
 
+    public function testRedisKeepsAnUnparsableDate(): void
+    {
+        $adapter = self::redisOperators();
+
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateAddDays(1)));
+        $this->assertSame('not-a-date', $adapter->apply('not-a-date', Operator::dateSubDays(1)));
+    }
+
     private static function memoryOperators(): Memory
     {
         return new class () extends Memory {

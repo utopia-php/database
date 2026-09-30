@@ -25,6 +25,7 @@ use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Method;
 
 #[RequiresPhpExtension('redis')]
 final class RedisAdapterPathsTest extends TestCase
@@ -54,6 +55,9 @@ final class RedisAdapterPathsTest extends TestCase
 
     /** @var list<mixed> */
     private array $queued = [];
+
+    /** @var list<string> */
+    private array $hashWrites = [];
 
     protected function setUp(): void
     {
@@ -252,6 +256,125 @@ final class RedisAdapterPathsTest extends TestCase
         $database->skipValidation(fn (): array => $database->find(self::NOTES, [Query::lessThan('meta', 'x')]));
     }
 
+    public function testSchemaChangesOnACollectionWithoutStorage(): void
+    {
+        $adapter = $this->adapter();
+
+        $this->assertTrue($adapter->deleteIndex('missing', 'by_title'));
+        $this->assertTrue($adapter->createRelationship(new Relationship(collection: 'missing', relatedCollection: 'gone', type: RelationType::OneToOne, twoWay: true, key: 'partner', twoWayKey: 'partnerOf')));
+        $this->assertSame(0, $adapter->getSizeOfCollection('missing'));
+        $this->assertSame([], $this->hashWrites, 'A collection without storage must not be written to');
+
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('Collection not found');
+        $adapter->renameIndex('missing', 'by_title', 'by_name');
+    }
+
+    public function testRenamingAnIndexTheCollectionDoesNotRecordWritesNothing(): void
+    {
+        $adapter = $this->adapter();
+        $this->createNotes($adapter);
+        $adapter->createIndex(self::NOTES, Index::key(key: 'by_title', attributes: ['title']));
+        $this->hashWrites = [];
+
+        $this->assertTrue($adapter->renameIndex(self::NOTES, 'absent', 'other'));
+        $this->assertSame([], $this->hashWrites);
+
+        $this->assertTrue($adapter->renameIndex(self::NOTES, 'by_title', 'by_name'));
+        $this->assertCount(1, $this->hashWrites);
+    }
+
+    public function testGetSequencesBackFillsOnlyTheDocumentsThatLackOne(): void
+    {
+        $adapter = $this->adapter();
+        $this->createNotes($adapter);
+        $stored = $adapter->createDocument($this->notes(), new Document(['$id' => 'stored', '$permissions' => [], 'title' => 'a']));
+
+        $this->assertSame([], $adapter->getSequences(self::NOTES, []));
+
+        $documents = $adapter->getSequences(self::NOTES, [
+            new Document(['$id' => 'stored']),
+            new Document(['$id' => 'missing']),
+            new Document(['$id' => 'given', '$sequence' => '99']),
+        ]);
+
+        $this->assertSame($stored->getSequence(), $documents[0]->getSequence());
+        $this->assertEmpty($documents[1]->getSequence());
+        $this->assertSame('99', $documents[2]->getSequence());
+
+        $complete = $adapter->getSequences(self::NOTES, [new Document(['$id' => 'given', '$sequence' => '99'])]);
+        $this->assertSame('99', $complete[0]->getSequence());
+    }
+
+    public function testGetSequencesReportsAFailingPipeline(): void
+    {
+        $client = self::createStub(Redis::class);
+        $client->method('multi')->willReturnSelf();
+        $client->method('get')->willReturnSelf();
+        $client->method('exec')->willThrowException(new \RedisException('connection lost'));
+
+        $this->expectException(TransactionException::class);
+        $this->expectExceptionMessage('Failed to load sequences: connection lost');
+        (new RedisAdapter($client))->getSequences(self::NOTES, [new Document(['$id' => 'first'])]);
+    }
+
+    public function testIncrementGuardsOfTheAdapter(): void
+    {
+        $adapter = $this->adapter();
+        $adapter->createCollection(self::NOTES, [Attribute::double(key: 'count')]);
+        $adapter->createDocument($this->notes(), new Document(['$id' => 'whole', '$permissions' => [], 'count' => 10]));
+        $adapter->createDocument($this->notes(), new Document(['$id' => 'fraction', '$permissions' => [], 'count' => 10.5]));
+
+        foreach (['whole' => 10, 'fraction' => 10.5] as $id => $stored) {
+            $this->assertTrue($adapter->increaseDocumentAttribute(self::NOTES, $id, 'count', 1, '2026-01-01 00:00:00.000', max: 5));
+            $this->assertTrue($adapter->increaseDocumentAttribute(self::NOTES, $id, 'count', -1, '2026-01-01 00:00:00.000', min: 20));
+            $this->assertSame($stored, $adapter->getDocument($this->notes(), $id)->getAttribute('count'), $id);
+        }
+
+        $this->expectException(NotFoundException::class);
+        $this->expectExceptionMessage('Document not found');
+        $adapter->increaseDocumentAttribute(self::NOTES, 'vanished', 'count', 1, '2026-01-01 00:00:00.000');
+    }
+
+    public function testRenamingAnAttributeOnAnEmptyCollectionOrToItsOwnName(): void
+    {
+        $adapter = $this->adapter();
+        $this->createNotes($adapter);
+
+        $this->assertTrue($adapter->renameAttribute(self::NOTES, 'title', 'heading'));
+        $adapter->createDocument($this->notes(), new Document(['$id' => 'first', '$permissions' => [], 'heading' => 'kept']));
+
+        $this->assertTrue($adapter->renameAttribute(self::NOTES, 'heading', 'heading'));
+        $this->assertSame('kept', $adapter->getDocument($this->notes(), 'first')->getAttribute('heading'));
+    }
+
+    public function testUnvalidatedNullCandidateAndUnsupportedMethod(): void
+    {
+        $adapter = $this->adapter();
+        $this->createNotes($adapter);
+        foreach (['first' => 'x', 'second' => 'y'] as $id => $title) {
+            $adapter->createDocument($this->notes(), new Document(['$id' => $id, '$permissions' => [], 'title' => $title]));
+        }
+
+        $this->assertSame([], $adapter->find($this->notes(), [new Query(Method::NotEqual, 'title', [null, 'x'])]), 'A null candidate makes NOT IN unknown for every row');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('Query method not supported by Redis adapter: exists');
+        $adapter->find($this->notes(), [Query::exists(['title'])]);
+    }
+
+    public function testUniqueIndexComparesArrayValuesByContent(): void
+    {
+        $adapter = $this->adapter();
+        $adapter->createCollection(self::NOTES, [Attribute::string(key: 'tags', size: 16, array: true)]);
+        $adapter->createIndex(self::NOTES, Index::unique(key: 'unique_tags', attributes: ['tags']));
+        $adapter->createDocument($this->notes(), new Document(['$id' => 'first', '$permissions' => [], 'tags' => ['a', 'b']]));
+        $adapter->createDocument($this->notes(), new Document(['$id' => 'other', '$permissions' => [], 'tags' => ['b', 'a']]));
+
+        $this->expectException(DuplicateException::class);
+        $adapter->createDocument($this->notes(), new Document(['$id' => 'second', '$permissions' => [], 'tags' => ['a', 'b']]));
+    }
+
     private function petsDatabase(RelationType $type, string $key, string $twoWayKey, string $from = 'owners', string $to = 'pets'): Database
     {
         $database = $this->database();
@@ -426,6 +549,7 @@ final class RedisAdapterPathsTest extends TestCase
             \array_values(\array_unique(\array_merge(...\array_map($this->members(...), $keys)))),
         ));
         $client->method('hSet')->willReturnCallback(function (string $key, string $field, mixed $value) use ($client): mixed {
+            $this->hashWrites[] = $key.' '.$field;
             $added = (int) ! isset($this->hashes[$key][$field]);
             $this->hashes[$key][$field] = $this->text($value);
 

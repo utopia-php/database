@@ -16,6 +16,7 @@ use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
+use Utopia\Database\OperatorType;
 use Utopia\Database\Relationship;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
@@ -254,6 +255,79 @@ final class MongoAdapterPathsTest extends TestCase
         $this->assertSame(9007199254740993, $after->getAttribute('count'));
     }
 
+    public function testReconnectReconnectsTheClient(): void
+    {
+        $adapter = $this->adapter();
+        $connections = \count($this->argumentsOf('connect'));
+
+        $adapter->reconnect();
+
+        $this->assertCount($connections + 1, $this->argumentsOf('connect'));
+    }
+
+    public function testOperatorsRefuseOperandsOfTheWrongType(): void
+    {
+        $cases = [
+            'dateAddDays' => [new Operator(OperatorType::DateAddDays, '', ['5']), 'Invalid integer operand for operator dateAddDays'],
+            'arrayInsert' => [new Operator(OperatorType::ArrayInsert, '', ['1', 'x']), 'Invalid integer operand for operator arrayInsert'],
+            'arrayFilter' => [new Operator(OperatorType::ArrayFilter, '', [5]), 'Invalid string operand for operator arrayFilter'],
+        ];
+
+        foreach ($cases as $case => [$operator, $message]) {
+            try {
+                $this->adapter()->updateDocument(new Document(['$id' => 'books']), 'first', new Document(['value' => $operator]), true);
+                $this->fail("{$case}: an operand of the wrong type must be refused");
+            } catch (DatabaseException $exception) {
+                $this->assertSame($message, $exception->getMessage(), $case);
+            }
+        }
+
+        $this->assertSame([], $this->argumentsOf('query'), 'No update may reach the server');
+    }
+
+    public function testAReadEndingOnAFullBatchKillsItsCursor(): void
+    {
+        $this->replies['find'] = static fn (): stdClass => (object) ['cursor' => (object) [
+            'firstBatch' => \array_map(static fn (int $index): object => (object) [Storage::UID => 'row'.$index], \range(1, 3)),
+            'id' => 7,
+        ]];
+        $this->replies['getMore'] = static fn (): stdClass => (object) ['cursor' => (object) ['nextBatch' => [], 'id' => 7]];
+
+        $documents = $this->adapter()->find(new Document(['$id' => 'books']), limit: null);
+
+        $this->assertCount(3, $documents);
+        $this->assertSame([['killCursors' => self::NAMESPACE.'_books', 'cursors' => [7]]], \array_map(static fn (array $arguments): mixed => $arguments[0] ?? null, $this->argumentsOf('query')));
+    }
+
+    public function testResponsesWithoutACursorIdEndTheRead(): void
+    {
+        $this->replies['find'] = static fn (): stdClass => (object) ['cursor' => (object) ['firstBatch' => [(object) [Storage::UID => 'first']]]];
+
+        $this->assertCount(1, $this->adapter()->find(new Document(['$id' => 'books']), limit: null));
+        $this->assertSame([], $this->argumentsOf('getMore'));
+
+        $this->calls = [];
+        $this->replies['find'] = static fn (): stdClass => (object) ['cursor' => (object) ['firstBatch' => [(object) [Storage::UID => 'first']], 'id' => 7]];
+        $this->replies['getMore'] = static fn (): stdClass => (object) ['cursor' => (object) ['nextBatch' => [(object) [Storage::UID => 'second']]]];
+
+        $this->assertCount(2, $this->adapter()->find(new Document(['$id' => 'books']), limit: null));
+        $this->assertCount(1, $this->argumentsOf('getMore'));
+        $this->assertSame([], $this->argumentsOf('query'), 'A cursor the server closed must not be killed');
+    }
+
+    public function testDollarPrefixedUserKeyRoundTrips(): void
+    {
+        $this->replies['find'] = static fn (): stdClass => self::batch([(object) [Storage::UID => 'first', '_custom' => 'x']]);
+
+        $created = $this->adapter()->createDocument(new Document(['$id' => 'books']), new Document(['$id' => 'first', '$permissions' => [], '$custom' => 'x']));
+
+        $inserted = $this->argumentsOf('insert')[0][1] ?? null;
+        $this->assertIsArray($inserted);
+        $this->assertSame('x', $inserted['_custom'] ?? null);
+        $this->assertArrayNotHasKey('$custom', $inserted);
+        $this->assertSame('x', $created->getAttribute('$custom'));
+    }
+
     /**
      * @param  list<mixed>  $arguments
      * @return array<mixed>
@@ -360,6 +434,19 @@ final class MongoAdapterPathsTest extends TestCase
                 $reply = ($this->record)('createIndexes', [$collection, $indexes, $options]);
 
                 return \is_bool($reply) ? $reply : true;
+            }
+
+            /**
+             * @param  array<mixed>  $document
+             * @param  array<mixed>  $options
+             * @return array<mixed>
+             */
+            #[\Override]
+            public function insert(string $collection, array $document, array $options = []): array
+            {
+                ($this->record)('insert', [$collection, $document, $options]);
+
+                return $document;
             }
 
             /**

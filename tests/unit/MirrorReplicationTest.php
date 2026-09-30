@@ -21,9 +21,13 @@ use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Mirror;
 use Utopia\Database\Query;
+use Utopia\Database\Relationship;
+use Utopia\Database\RelationType;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Schema\IndexType;
 
 use function Swoole\Coroutine\run;
 
@@ -416,6 +420,59 @@ final class MirrorReplicationTest extends TestCase
     }
 
     /**
+     * @return iterable<string, array{Closure(Mirror): mixed}>
+     */
+    public static function schemaChanges(): iterable
+    {
+        yield 'deleteAttribute' => [static fn (Mirror $mirror): bool => $mirror->deleteAttribute(self::NOTES, 'views')];
+        yield 'renameAttribute' => [static fn (Mirror $mirror): bool => $mirror->renameAttribute(self::NOTES, 'views', 'count')];
+        yield 'deleteCollection' => [static fn (Mirror $mirror): bool => $mirror->deleteCollection(self::NOTES)];
+        yield 'updateCollection' => [static fn (Mirror $mirror): Document => $mirror->updateCollection(self::NOTES, [Permission::create(Role::any())], false)];
+        yield 'createIndex' => [static fn (Mirror $mirror): bool => $mirror->createIndex(self::NOTES, new Index(key: 'views_index', type: IndexType::Key, attributes: ['views']))];
+        yield 'updateAttributeRequired' => [static fn (Mirror $mirror): Document => $mirror->updateAttributeRequired(self::NOTES, 'title', false)];
+        yield 'createRelationship' => [static fn (Mirror $mirror): bool => $mirror->createRelationship(new Relationship(
+            collection: self::SECRETS,
+            relatedCollection: self::NOTES,
+            type: RelationType::ManyToOne,
+            key: 'note',
+        ))];
+    }
+
+    /**
+     * @param  Closure(Mirror): mixed  $change
+     */
+    #[DataProvider('schemaChanges')]
+    public function testASchemaChangeWaitsForTheQueuedReplicationsOfItsCollection(Closure $change): void
+    {
+        $this->delays = ['v0' => 0.03];
+
+        $this->inCoroutine(function () use ($change): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'v0', 'views' => 1])]);
+            $change($this->mirror);
+        });
+
+        $this->assertSame([], $this->errors);
+        $this->assertSame(['first', 'v0'], $this->titlesWritten()[0] ?? null, 'The queued write reaches the destination before the schema change');
+    }
+
+    public function testASchemaChangeDoesNotWaitForAnotherCollectionsReplications(): void
+    {
+        $this->authorization->skip(fn (): bool => $this->mirror->createAttribute(self::SECRETS, Attribute::integer(key: 'extra')));
+        $this->delays = ['slow' => 0.05];
+        $writesBeforeTheChangeReturned = null;
+
+        $this->inCoroutine(function () use (&$writesBeforeTheChangeReturned): void {
+            $this->mirror->createDocuments(self::NOTES, [new Document([Document::ID => 'first', 'title' => 'slow'])]);
+            $this->mirror->deleteAttribute(self::SECRETS, 'extra');
+            $writesBeforeTheChangeReturned = $this->writesOf('first');
+        });
+
+        $this->assertSame([], $writesBeforeTheChangeReturned);
+        $this->assertSame([], $this->errors);
+        $this->assertSame([['first', 'slow']], $this->writesOf('first'));
+    }
+
+    /**
      * @return list<array{string, string}>
      */
     private function titlesWritten(): array
@@ -423,6 +480,17 @@ final class MirrorReplicationTest extends TestCase
         return \array_values(\array_filter(
             $this->titlesWrittenAndLocked(),
             static fn (array $write): bool => $write[1] !== self::LOCKED,
+        ));
+    }
+
+    /**
+     * @return list<array{string, string}>
+     */
+    private function writesOf(string $id): array
+    {
+        return \array_values(\array_filter(
+            $this->titlesWritten(),
+            static fn (array $write): bool => $write[0] === $id,
         ));
     }
 

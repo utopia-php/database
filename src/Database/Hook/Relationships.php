@@ -56,11 +56,17 @@ class Relationships implements Hook
      */
     private Value $inBatchPopulation;
 
-    /** @var array<string> */
-    private array $writeStack = [];
+    /**
+     * @var array<int, non-empty-list<string>> The collections of each coroutine's relationship writes in progress,
+     *                                         innermost last, by coroutine id
+     */
+    private array $writeStacks = [];
 
-    /** @var array<Document> */
-    private array $deleteStack = [];
+    /**
+     * @var array<int, non-empty-list<Document>> The relationships of each coroutine's cascading deletes in progress,
+     *                                           innermost last, by coroutine id
+     */
+    private array $deleteStacks = [];
 
     /**
      * @param Database $db The database instance used for relationship operations
@@ -228,7 +234,7 @@ class Relationships implements Hook
      */
     public function getWriteStackCount(): int
     {
-        return \count($this->writeStack);
+        return \count($this->writeStacks[$this->coroutine()] ?? []);
     }
 
     /**
@@ -283,7 +289,9 @@ class Relationships implements Hook
             Attribute::isRelationship(...)
         );
 
-        $stackCount = \count($this->writeStack);
+        $coroutine = $this->coroutine();
+        $writeStack = $this->writeStacks[$coroutine] ?? [];
+        $stackCount = \count($writeStack);
 
         foreach ($relationships as $relationship) {
             /** @var string $key */
@@ -296,13 +304,13 @@ class Relationships implements Hook
             $twoWayKey = $rel->twoWayKey;
             $side = $rel->side;
 
-            if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $this->writeStack[$stackCount - 1] !== $relatedCollection->getId()) {
+            if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$stackCount - 1] !== $relatedCollection->getId()) {
                 $document->removeAttribute($key);
 
                 continue;
             }
 
-            $this->writeStack[] = $collection->getId();
+            $this->writeStacks[$coroutine][] = $collection->getId();
 
             try {
                 $value = $this->coerceToDocument($document, $key, $value);
@@ -412,7 +420,7 @@ class Relationships implements Hook
                     throw new RelationshipException('Invalid relationship value. Must be either a document, document ID, or an array of documents or document IDs.');
                 }
             } finally {
-                \array_pop($this->writeStack);
+                $this->leaveWrite($coroutine);
             }
         }
 
@@ -437,7 +445,9 @@ class Relationships implements Hook
             Attribute::isRelationship(...)
         );
 
-        $stackCount = \count($this->writeStack);
+        $coroutine = $this->coroutine();
+        $writeStack = $this->writeStacks[$coroutine] ?? [];
+        $stackCount = \count($writeStack);
 
         foreach ($relationships as $index => $relationship) {
             /** @var string $key */
@@ -484,13 +494,13 @@ class Relationships implements Hook
                 continue;
             }
 
-            if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $this->writeStack[$stackCount - 1] !== $relatedCollection->getId()) {
+            if ($stackCount >= Database::RELATION_MAX_DEPTH - 1 && $writeStack[$stackCount - 1] !== $relatedCollection->getId()) {
                 $document->removeAttribute($key);
 
                 continue;
             }
 
-            $this->writeStack[] = $collection->getId();
+            $this->writeStacks[$coroutine][] = $collection->getId();
 
             try {
                 switch ($relationType) {
@@ -853,7 +863,7 @@ class Relationships implements Hook
                         break;
                 }
             } finally {
-                \array_pop($this->writeStack);
+                $this->leaveWrite($coroutine);
             }
         }
 
@@ -936,7 +946,7 @@ class Relationships implements Hook
                 case ForeignKeyAction::Cascade:
                     $unwritten = $holdsKey || ($relationType === RelationType::ManyToMany && $side === RelationSide::Child);
 
-                    foreach ($this->deleteStack as $processedRelationship) {
+                    foreach ($this->deleteStacks[$this->coroutine()] ?? [] as $processedRelationship) {
                         /** @var string $existingKey */
                         $existingKey = $processedRelationship['key'];
                         /** @var string $existingCollection */
@@ -2342,13 +2352,30 @@ class Relationships implements Hook
      */
     private function cascade(Document $relationship, callable $callback): void
     {
-        $this->deleteStack[] = $relationship;
+        $coroutine = $this->coroutine();
+        $this->deleteStacks[$coroutine][] = $relationship;
 
         try {
             $callback();
         } finally {
-            \array_pop($this->deleteStack);
+            \array_pop($this->deleteStacks[$coroutine]);
+            if ($this->deleteStacks[$coroutine] === []) {
+                unset($this->deleteStacks[$coroutine]);
+            }
         }
+    }
+
+    private function leaveWrite(int $coroutine): void
+    {
+        \array_pop($this->writeStacks[$coroutine]);
+        if ($this->writeStacks[$coroutine] === []) {
+            unset($this->writeStacks[$coroutine]);
+        }
+    }
+
+    private function coroutine(): int
+    {
+        return \extension_loaded('swoole') ? Coroutine::getCid() : -1;
     }
 
     /**

@@ -346,6 +346,10 @@ have to make, with the 7.x and 8.0 forms side by side.
 - A nested one-to-one write that throws no longer leaves an entry on the relationship write stack. Before, every
   later write on the same `Database` treated its nested relationships as one level deeper and dropped the deepest
   ones without an error.
+- Coroutines sharing a `Database` keep their own relationship write and cascade stacks (also in 7.x). Before, a
+  coroutine in the middle of a nested relationship write made another coroutine's nested writes look deeper, so their
+  deepest related documents were dropped without an error, and a coroutine in the middle of a cascading delete could
+  stop another coroutine's cascade, leaving its related documents behind.
 - A filter on a nested relationship path (for example `Query::equal('children.tags.name', [...])`) no longer throws
   `Exception\Query` when a step of the path matches more documents than `getMaxQueryValues()`: each step reads its
   matches in chunks within the limit. A path that passes through the parent side of a one-to-many or the child side

@@ -575,6 +575,9 @@ preserve-sequence and skip-duplicates toggles, and the request timestamp. `Hook\
 Relationship population reads its chunks of related ids concurrently only on `Adapter\Pool`, inside a coroutine and
 outside a transaction; elsewhere it reads them one after another. Related documents are merged in chunk order.
 
+Each coroutine sharing a handle tracks its own relationship writes and cascading deletes, so a nested write or a
+cascade in one coroutine never cuts another coroutine's short.
+
 ## Errors
 
 - **Unique index violations.** Every adapter now reports a unique index violation as

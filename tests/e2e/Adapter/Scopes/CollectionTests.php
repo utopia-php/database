@@ -1906,6 +1906,37 @@ trait CollectionTests
         }
     }
 
+    public function testPostgresAggregateOverATypeWithoutTheFunctionIsAQueryError(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->hasFeature(Postgres::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collection = 'maxOverBoolean';
+        $database->createCollection(new Collection(id: $collection, attributes: [Attribute::boolean(key: 'active')], permissions: [
+            Permission::read(Role::any()),
+            Permission::create(Role::any()),
+        ]));
+        $database->createDocument($collection, new Document([
+            '$permissions' => [Permission::read(Role::any())],
+            'active' => true,
+        ]));
+
+        try {
+            $database->skipValidation(fn () => $database->find($collection, [Query::max('active', 'most')]));
+            $this->fail('Expected QueryException for max() over a boolean attribute');
+        } catch (QueryException $e) {
+            $this->assertSame('Query applies a function or operator the attribute type does not support', $e->getMessage());
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
     private function dropCollectionTable(Database $database, string $collection): void
     {
         $table = $database->getNamespace().'_'.$collection;

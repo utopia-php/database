@@ -1670,6 +1670,10 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             return new CharacterException('Invalid character', $e->getCode(), $e);
         }
 
+        if ($e->getCode() === '42883' && isset($e->errorInfo[1]) && $e->errorInfo[1] === 7) {
+            return new QueryException('Query applies a function or operator the attribute type does not support', $e->getCode(), $e);
+        }
+
         return $e;
     }
 

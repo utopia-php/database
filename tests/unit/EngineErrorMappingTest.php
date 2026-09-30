@@ -179,6 +179,24 @@ final class EngineErrorMappingTest extends TestCase
         $this->assertSame('Attribute not found', $error->getMessage());
     }
 
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function undefinedFunctionProvider(): array
+    {
+        return [
+            'max over a boolean' => ["SQLSTATE[42883]: Undefined function: 7 ERROR:  function max(boolean) does not exist\nLINE 1: SELECT MAX(\"main\".\"active\") AS \"most\" FROM ...\nHINT:  No function matches the given name and argument types. You might need to add explicit type casts."],
+            'min over JSONB' => ['SQLSTATE[42883]: Undefined function: 7 ERROR:  function min(jsonb) does not exist'],
+            'an operator on mismatched types' => ['SQLSTATE[42883]: Undefined function: 7 ERROR:  operator does not exist: character varying + integer'],
+        ];
+    }
+
+    #[DataProvider('undefinedFunctionProvider')]
+    public function testPostgresUndefinedFunctionIsAQueryError(string $message): void
+    {
+        $this->assertMapped(self::postgres(), self::engineError('42883', 7, $message), QueryException::class, 'Query applies a function or operator the attribute type does not support');
+    }
+
     public function testPostgresDistinctReadOrderedByAnUnselectedAttributeIsAQueryErrorInAnyLanguage(): void
     {
         $error = self::engineError('42P10', 7, "SQLSTATE[42P10]: Invalid column reference: 7 FEHLER:  bei SELECT DISTINCT m\u{FC}ssen ORDER-BY-Ausdr\u{FC}cke in der Select-Liste erscheinen\nLINE 1: ...\"main\" ORDER BY \"main\".\"price\" ASC");

@@ -3,7 +3,6 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Attribute;
 use Utopia\Database\Document;
@@ -11,18 +10,25 @@ use Utopia\Query\Schema\ColumnType;
 
 final class PostgresSpatialCacheTest extends TestCase
 {
+    /**
+     * @var list<string>
+     */
+    private array $statements = [];
+
+    /**
+     * @var list<mixed>
+     */
+    private array $bindings = [];
+
     public function testSpatialCacheRescansWhenAttributeSetChanges(): void
     {
-        $adapter = new Postgres($this->createStub(\PDO::class));
-        $adapter->setDatabase('database');
-        $adapter->setNamespace('namespace');
-        $getSpatialAttributes = new ReflectionMethod($adapter, 'getSpatialAttributes');
+        $adapter = $this->adapter();
 
         $before = new Document([
             '$id' => 'places',
             'attributes' => [new Document(['$id' => 'name', 'key' => 'name', 'type' => ColumnType::String->value])],
         ]);
-        $this->assertSame([], $getSpatialAttributes->invoke($adapter, $before));
+        $this->assertStringNotContainsString('ST_GeomFromText', $this->insert($adapter, $before, ['name' => 'x', 'loc' => [0.0, 0.0]]));
 
         $after = new Document([
             '$id' => 'places',
@@ -31,16 +37,12 @@ final class PostgresSpatialCacheTest extends TestCase
                 new Document(['$id' => 'loc', 'key' => 'loc', 'type' => ColumnType::Point->value]),
             ],
         ]);
-        $this->assertSame(['loc'], $getSpatialAttributes->invoke($adapter, $after));
+        $this->assertStringContainsString('VALUES (?, ?, ST_GeomFromText(?, 4326), ?', $this->insert($adapter, $after, ['name' => 'x', 'loc' => [0.0, 0.0]]));
+        $this->assertSame(['x', 'POINT(0 0)'], \array_slice($this->bindings, 1, 2));
     }
 
     public function testSpatialAttributesFromTypedObjectsAndEnums(): void
     {
-        $adapter = new Postgres($this->createStub(\PDO::class));
-        $adapter->setDatabase('database');
-        $adapter->setNamespace('namespace');
-        $getSpatialAttributes = new ReflectionMethod($adapter, 'getSpatialAttributes');
-
         $collection = new Document([
             '$id' => 'mixed',
             'attributes' => [
@@ -51,17 +53,34 @@ final class PostgresSpatialCacheTest extends TestCase
             ],
         ]);
 
-        $this->assertSame(['loc', 'route', 'area'], $getSpatialAttributes->invoke($adapter, $collection));
+        $statement = $this->insert($this->adapter(), $collection, [
+            'loc' => [0.0, 0.0],
+            'route' => [[0.0, 0.0], [1.0, 1.0]],
+            'area' => 'POLYGON((0 0, 1 0, 1 1, 0 0))',
+            'name' => 'x',
+        ]);
+
+        $this->assertStringContainsString('VALUES (?, ST_GeomFromText(?, 4326), ST_GeomFromText(?, 4326), ST_GeomFromText(?, 4326), ?,', $statement);
     }
 
     public function testSpatialWriteValueEncoding(): void
     {
-        $adapter = new Postgres($this->createStub(\PDO::class));
-        $encodeSpatialWriteValue = new ReflectionMethod($adapter, 'encodeSpatialWriteValue');
+        $collection = new Document([
+            '$id' => 'shapes',
+            'attributes' => [
+                Attribute::point(key: 'origin'),
+                Attribute::linestring(key: 'path'),
+                Attribute::point(key: 'wellKnown'),
+            ],
+        ]);
 
-        $this->assertSame('POINT(0 0)', $encodeSpatialWriteValue->invoke($adapter, [0.0, 0.0]));
-        $this->assertSame('LINESTRING(0 0, 1 1)', $encodeSpatialWriteValue->invoke($adapter, [[0.0, 0.0], [1.0, 1.0]]));
-        $this->assertSame('POINT(0 0)', $encodeSpatialWriteValue->invoke($adapter, 'POINT(0 0)'));
+        $this->insert($this->adapter(), $collection, [
+            'origin' => [0.0, 0.0],
+            'path' => [[0.0, 0.0], [1.0, 1.0]],
+            'wellKnown' => 'POINT(0 0)',
+        ]);
+
+        $this->assertSame(['POINT(0 0)', 'LINESTRING(0 0, 1 1)', 'POINT(0 0)'], \array_slice($this->bindings, 1, 3));
     }
 
     public function testAttributeWidthAcceptsDocumentAndTypedAttributes(): void
@@ -79,5 +98,44 @@ final class PostgresSpatialCacheTest extends TestCase
         ]);
 
         $this->assertGreaterThan(0, $adapter->getAttributeWidth($collection));
+    }
+
+    private function adapter(): Postgres
+    {
+        $statement = self::createStub(\PDOStatement::class);
+        $statement->method('bindValue')->willReturnCallback(function (int|string $position, mixed $value): bool {
+            $this->bindings[] = $value;
+
+            return true;
+        });
+        $statement->method('execute')->willReturn(true);
+        $pdo = self::createStub(\PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use ($statement): \PDOStatement {
+            $this->statements[] = $query;
+
+            return $statement;
+        });
+        $pdo->method('lastInsertId')->willReturn('1');
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+
+        return $adapter;
+    }
+
+    /**
+     * @param  array<string, mixed>  $attributes
+     */
+    private function insert(Postgres $adapter, Document $collection, array $attributes): string
+    {
+        $this->statements = [];
+        $this->bindings = [];
+
+        $adapter->createDocument($collection, new Document(['$id' => 'document', '$permissions' => [], ...$attributes]));
+
+        $this->assertNotSame([], $this->statements);
+
+        return $this->statements[0];
     }
 }

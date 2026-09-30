@@ -153,6 +153,14 @@ final class RedisLeasableCache implements CacheAdapter, Leasable
         $this->corruptingFieldWrites = true;
     }
 
+    /**
+     * Drop a key with its generation, as Redis does when it evicts the key under memory pressure.
+     */
+    public function evict(string $key): void
+    {
+        unset($this->fields[$key], $this->generations[$key]);
+    }
+
     private function field(string $key, string $hash): string
     {
         return $hash === '' ? $key : $hash;

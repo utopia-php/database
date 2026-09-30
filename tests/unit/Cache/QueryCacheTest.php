@@ -243,13 +243,13 @@ class QueryCacheTest extends TestCase
                         && \is_array($documents[0] ?? null)
                         && ($documents[0]['$id'] ?? null) === 'doc1';
                 }),
-                'field',
+                'slot',
                 '7',
             )
             ->willReturnArgument(1);
 
         $this->assertTrue($queryCache->set(
-            new Entry('entry-key', 'users', 'field', 'epoch'),
+            new Entry('entry-key', 'users', 'field', 'epoch', 'slot'),
             [new Document(['$id' => 'doc1', 'name' => 'Alice'])],
             '7',
         ));
@@ -702,10 +702,10 @@ class QueryCacheTest extends TestCase
     public function testInvalidationsAndFillsKeepTheKeyCountBounded(): void
     {
         $adapter = new RedisLeasableCache();
-        $queryCache = new QueryCache(new Cache($adapter));
+        $queryCache = new QueryCache(new Cache($adapter), slots: 4);
         $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
         $keys = [];
-        $fields = [];
 
         for ($cycle = 1; $cycle <= 20; $cycle++) {
             $entry = $queryCache->getEntry($scope, 'users', [Query::limit($cycle)]);
@@ -715,12 +715,69 @@ class QueryCacheTest extends TestCase
             $this->assertSame(['cycle-'.$cycle], $this->ids($queryCache->get($entry) ?? []));
             $queryCache->invalidateCollection($scope, 'users');
             $keys[$cycle] = \count($adapter->keys());
-            $fields[$cycle] = $this->countFields($adapter);
+            $this->assertLessThanOrEqual(4, \count($adapter->list($key)), 'Redis keeps no expiry on the hash, so its slot count must bound what fills leave behind');
         }
 
         $this->assertSame($keys[1], $keys[20], 'A purged key stays behind in Redis, so fills and invalidations must reuse the same keys (7.3.12 has no query cache; the per-epoch entry keys added one key per cycle)');
-        $this->assertSame($fields[1], $fields[20], 'An invalidation must clear the fields the previous epoch filled');
         $this->assertNotNull($queryCache->getEntry($scope, 'users', [Query::limit(1)]));
+    }
+
+    public function testAnInvalidationRetiresCachedResultsWithoutDeletingThem(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+        for ($query = 1; $query <= 50; $query++) {
+            $entry = $queryCache->getEntry($scope, 'users', [Query::limit($query)]);
+            $this->assertNotNull($entry);
+            $this->assertTrue($queryCache->set($entry, [new Document(['$id' => 'old-'.$query])], $queryCache->getGeneration($entry)));
+        }
+        $fields = \count($adapter->list($key));
+
+        $queryCache->invalidateCollection($scope, 'users');
+
+        $this->assertSame($fields, \count($adapter->list($key)), 'A write must not delete the scope\'s cached results: on Redis that is one command blocking in proportion to them, inside the write\'s transaction');
+        for ($query = 1; $query <= 50; $query++) {
+            $entry = $queryCache->getEntry($scope, 'users', [Query::limit($query)]);
+            $this->assertNotNull($entry);
+            $this->assertNull($queryCache->get($entry), 'The new epoch must retire every result the previous one filled');
+        }
+    }
+
+    public function testQueriesSharingASlotNeverServeEachOther(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter), slots: 1);
+        $scope = new Scope(namespace: 'ns');
+        $first = $queryCache->getEntry($scope, 'users', [Query::limit(1)], 'role:user-a');
+        $second = $queryCache->getEntry($scope, 'users', [Query::limit(2)], 'role:user-b');
+        $this->assertNotNull($first);
+        $this->assertNotNull($second);
+
+        $this->assertTrue($queryCache->set($first, [new Document(['$id' => 'private-a'])], $queryCache->getGeneration($first)));
+        $this->assertTrue($queryCache->set($second, [new Document(['$id' => 'private-b'])], $queryCache->getGeneration($second)));
+
+        $this->assertNull($queryCache->get($first), 'The second query took the only slot, so the first must miss instead of being served its rows');
+        $this->assertSame(['private-b'], $this->ids($queryCache->get($second) ?? []));
+    }
+
+    public function testAResultFilledBeforeTheFirstWriteIsNeverServedAfterTheEpochIsLost(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+        $before = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNotNull($before);
+        $this->assertTrue($queryCache->set($before, [new Document(['$id' => 'stale'])], $queryCache->getGeneration($before)));
+
+        $queryCache->invalidateCollection($scope, 'users');
+        $adapter->evict($key.'#epoch');
+        $adapter->evict($key.'#started');
+
+        $entry = $queryCache->getEntry($scope, 'users', []);
+        $this->assertNull($entry === null ? null : $queryCache->get($entry), 'An evicted epoch must not bring back the initial epoch a result was filled under before the first write');
     }
 
     public function testAFillUnderARetiredEpochIsNeverServed(): void
@@ -879,10 +936,10 @@ class QueryCacheTest extends TestCase
         $cache->method('load')->willReturn(['version' => 1, 'epoch' => 'epoch', 'field' => 'field', 'documents' => []]);
         $cache->expects($this->once())
             ->method('purge')
-            ->with('entry-key', 'field')
+            ->with('entry-key', 'slot')
             ->willReturn(true);
 
-        $this->assertNull($queryCache->get(new Entry('entry-key', 'users', 'field', 'epoch')));
+        $this->assertNull($queryCache->get(new Entry('entry-key', 'users', 'field', 'epoch', 'slot')));
     }
 
     public function testInvalidationPropagatesAnOwnerRegistrationFailure(): void

@@ -555,11 +555,12 @@ not change anything for an upgrade from 7.x.
     no longer block the collection's cache while they run. `updateDocument()` invalidates the cache once instead of
     twice.
   - Reads and writes no longer leave a key behind in Redis each: a document has one key, with a field per selection,
-    as in 7.x, and a collection's `find()` results live in one hash, cleared on every invalidation. On the Redis
-    adapters a collection's batch and schema invalidations register as fields of one `#owners` key; adapters that
-    store no fields keep a key per invalidation, which their purge deletes. On Redis, keys matching `*#owner:*`,
-    document entries whose key ends in `:<hash>#<epoch>` and query-cache keys matching `*:qcache:*#active:*` left by
-    earlier builds are no longer read and can be deleted.
+    as in 7.x, and a collection's `find()` results live in one hash of at most `QueryCache`'s `slots` fields (1024
+    by default), which an invalidation retires by epoch without deleting them, so a write costs the same whatever
+    the collection has cached. On the Redis adapters a collection's batch and schema invalidations register as
+    fields of one `#owners` key; adapters that store no fields keep a key per invalidation, which their purge
+    deletes. On Redis, keys matching `*#owner:*`, document entries whose key ends in `:<hash>#<epoch>` and
+    query-cache keys matching `*:qcache:*#active:*` left by earlier builds are no longer read and can be deleted.
   - Cache lookups cost one round trip again: a cached `getDocument()` is two round trips (was 12) and
     `getCollection()`, `find()`, `count()` and `sum()` one (was 6) before their query; single-document writes are
     back at or below 7.x's (create 3, update and delete 4, increase and decrease 4).

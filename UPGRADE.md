@@ -665,12 +665,15 @@ outside a transaction; elsewhere it reads them one after another. Related docume
   first read afterwards also reads the definition from the database once.
 - Use a cache adapter with generations (`Utopia\Cache\Feature\Leasable`) for the document cache too: without them a
   read that overlaps a write can cache the previous row until the next write or the TTL.
-- **Query cache layout.** `find()` results are cached in one hash per collection scope, one field per query and role
-  context, whose value records the epoch it was filled under. An invalidation clears the hash, so the number of keys
-  no longer grows with writes; on Redis a collection scope keeps one key holding its generation. All of a
-  collection's results share one key: under Redis Cluster they live on one slot, and an invalidation rejects every
-  in-flight fill of that collection. On a cache without fields (Memory, Filesystem) a collection scope holds one
-  result at a time.
+- **Query cache layout.** `find()` results are cached in one hash per collection scope. Each query and role context
+  maps to one of `slots` fields (`new QueryCache($cache, slots: $count)`, 1024 by default), and the value records the
+  query and the epoch it was filled under, so a hit needs both to match. An invalidation publishes a new epoch and
+  deletes nothing: an older result stays until a fill of its slot replaces it. The number of keys and fields no
+  longer grows with writes or with distinct queries, and a write's cost does not depend on how many results are
+  cached. A collection scope keeps at most `slots` results, so its memory is bounded by `slots` times its largest
+  result, and queries sharing a slot evict each other. All of a collection's results share one key: under Redis
+  Cluster they live on one slot, and an invalidation rejects every in-flight fill of that collection. On a cache
+  without fields (Memory, Filesystem) a collection scope holds one result at a time.
 - **Abandoned writes.** A write that blocks a collection's cache and never finishes its invalidation (a worker killed
   mid-transaction) no longer keeps that cache off until a flush. For the document cache the limit is
   `$database->setCacheWriterTimeout($seconds)`, for the query cache `new QueryCache($cache, $cacheName,

@@ -153,6 +153,9 @@ final class ReadWritePoolMetadataTest extends TestCase
         $primary->method('withTransaction')->willReturnCallback(
             static fn (callable $callback): mixed => $callback(),
         );
+        $primary->method('withTenant')->willReturnCallback(
+            static fn (int|string|null $tenant, callable $callback): mixed => $callback(),
+        );
         $replica->expects($this->once())->method('ping')->willReturn(true);
         $primary->expects($this->never())->method('ping');
 

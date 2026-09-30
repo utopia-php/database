@@ -421,6 +421,9 @@ class ReadWritePoolTest extends TestCase
         $this->writeAdapter->method('withTransaction')->willReturnCallback(
             static fn (callable $callback): mixed => $callback(),
         );
+        $this->writeAdapter->method('withTenant')->willReturnCallback(
+            static fn (int|string|null $tenant, callable $callback): mixed => $callback(),
+        );
         $this->writeAdapter->method('createDocument')->willReturn(new Document());
         $writeAdapter->expects($this->once())->method('find')->willReturn([]);
         $readAdapter->expects($this->never())->method('find');
@@ -438,6 +441,9 @@ class ReadWritePoolTest extends TestCase
 
         $this->writeAdapter->method('withTransaction')->willReturnCallback(
             static fn (callable $callback): mixed => $callback(),
+        );
+        $this->writeAdapter->method('withTenant')->willReturnCallback(
+            static fn (int|string|null $tenant, callable $callback): mixed => $callback(),
         );
         $this->writeAdapter->method('createDocument')->willReturn(new Document());
         $writeAdapter->expects($this->once())->method('find')->willReturn([]);

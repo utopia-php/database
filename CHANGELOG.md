@@ -301,6 +301,8 @@ have to make, with the 7.x and 8.0 forms side by side.
 ### Removed
 
 - `Database::on()`, `Database::before()`, `Mirror::on()` and `Adapter::before()`.
+- The protected `Adapter\Pool::$pinnedAdapter` property. A subclass reads the connection the calling coroutine's
+  transaction pinned through `pin()`. See [Pools and profiling](UPGRADE.md#pools-and-profiling).
 - The `Database::VAR_*`, `INDEX_*`, `ORDER_*`, `PERMISSION_*`, `RELATION_*`, `CURSOR_*` and `EVENT_*` constants, the
   `Query::TYPE_*` constants (except `TYPE_ELEM_MATCH`), the `Operator::TYPE_*` constants and the
   `Document::SET_TYPE_*` constants, replaced by enums. See [Constants are now enums](UPGRADE.md#constants-are-now-enums).
@@ -350,6 +352,11 @@ have to make, with the 7.x and 8.0 forms side by side.
   coroutine in the middle of a nested relationship write made another coroutine's nested writes look deeper, so their
   deepest related documents were dropped without an error, and a coroutine in the middle of a cascading delete could
   stop another coroutine's cascade, leaving its related documents behind.
+- `Adapter\Pool` pins a transaction's connection for the coroutine that opened the transaction and the coroutines it
+  starts (also in 7.x). Before, every coroutine sharing the handle ran its statements on that connection while the
+  transaction was open, so they were committed or rolled back with it and their own `withTransaction()` became a
+  savepoint in it. Each call on the pinned connection also runs under its own coroutine's tenant; before, two
+  coroutines with different `withTenant()` scopes overwrote each other's tenant on it.
 - A filter on a nested relationship path (for example `Query::equal('children.tags.name', [...])`) no longer throws
   `Exception\Query` when a step of the path matches more documents than `getMaxQueryValues()`: each step reads its
   matches in chunks within the limit. A path that passes through the parent side of a one-to-many or the child side

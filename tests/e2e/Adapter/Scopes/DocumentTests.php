@@ -21,6 +21,7 @@ use Utopia\Database\Exception\Character as CharacterException;
 use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
 use Utopia\Database\Exception\Type as TypeException;
@@ -9695,6 +9696,49 @@ trait DocumentTests
 
                 $this->assertSame($expected, $ids, $case);
                 $this->assertSame(\count($expected), $database->count($collection, [$countQuery]), $case);
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
+
+    public function testDistinctIsRefusedWhereTheAdapterCannotDeduplicate(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        $collection = 'distinct_capability';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: [Attribute::string(key: 'colour', size: 32, required: false)],
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+
+        try {
+            foreach (['first', 'second'] as $id) {
+                $database->createDocument($collection, new Document(['$id' => $id, 'colour' => 'red']));
+            }
+
+            $read = fn (): array => $database->skipValidation(fn (): array => $database->find($collection, [
+                Query::select(['colour']),
+                Query::distinct(),
+            ]));
+
+            if ($database->getAdapter()->supports(Capability::Aggregations)) {
+                $this->assertSame(['red'], \array_map(fn (Document $row): mixed => $row->getAttribute('colour'), $read()));
+
+                return;
+            }
+
+            try {
+                $read();
+                $this->fail('A distinct() read must be refused where the adapter cannot deduplicate rows');
+            } catch (QueryException $exception) {
+                $this->assertSame('Distinct queries are not supported by this adapter', $exception->getMessage());
             }
         } finally {
             $database->deleteCollection($collection);

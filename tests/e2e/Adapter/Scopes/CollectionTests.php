@@ -5,6 +5,7 @@ namespace Tests\E2E\Adapter\Scopes;
 use Exception;
 use PHPUnit\Framework\Attributes\Depends;
 use Tests\E2E\Adapter\Support\EventRecorder;
+use Throwable;
 use Utopia\Cache\Adapter\None as NoneCache;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Feature;
@@ -1988,5 +1989,132 @@ trait CollectionTests
         $this->assertTrue($database->deleteCollection($collection));
         $this->assertTrue($database->getCollection($collection)->isEmpty());
         $this->assertFalse($database->exists(collection: Storage::permissionsTable($collection)), 'The permissions table of a collection whose table was gone was left behind');
+    }
+
+    public function testPostgresSharedTablesRefuseAnotherTenantsColumnOfAnotherType(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getSharedTables() || ! $database->getAdapter()->hasFeature(Postgres::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $originalTenant = $database->getTenant();
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $first = $integerTenants ? 401 : 'tenant_401';
+        $second = $integerTenants ? 402 : 'tenant_402';
+        $collection = 'sharedColumnType';
+        $definition = new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]);
+
+        try {
+            $database->setTenant($first);
+            $database->createCollection($definition);
+            $database->createAttribute($collection, Attribute::integer(key: 'age'));
+            $database->createDocument($collection, new Document(['$id' => 'first', 'age' => 7]));
+
+            $database->setTenant($second);
+            $database->createCollection($definition);
+
+            try {
+                $database->createAttribute($collection, Attribute::string(key: 'age', size: 64));
+                $this->fail('A column another tenant stores with another type must be refused');
+            } catch (DuplicateException $e) {
+                $this->assertSame('Attribute exists in the shared table with another type', $e->getMessage());
+            }
+
+            try {
+                $database->createAttributes($collection, [Attribute::string(key: 'label', size: 16), Attribute::string(key: 'age', size: 64)]);
+                $this->fail('A batch holding a column another tenant stores with another type must be refused');
+            } catch (DuplicateException $e) {
+                $this->assertSame('Attribute exists in the shared table with another type', $e->getMessage());
+            }
+
+            $this->assertSame([], $database->getCollection($collection)->getAttribute('attributes', []));
+
+            $this->assertTrue($database->createAttribute($collection, Attribute::integer(key: 'age')));
+            /** @var array<Attribute> $attributes */
+            $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
+            $this->assertSame(['age'], \array_map(static fn (Attribute $attribute): string => $attribute->key, \array_values($attributes)));
+
+            $database->setTenant($first);
+            $this->assertSame(7, $database->getDocument($collection, 'first')->getAttribute('age'));
+        } finally {
+            foreach ([$second, $first] as $tenant) {
+                try {
+                    $database->setTenant($tenant)->deleteCollection($collection);
+                } catch (Throwable) {
+                }
+            }
+            $database->setTenant($originalTenant);
+        }
+    }
+
+    public function testPostgresSharedTablesReuseAnotherTenantsColumnOfTheSameType(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getSharedTables() || ! $database->getAdapter()->hasFeature(Postgres::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $originalTenant = $database->getTenant();
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $tenants = $integerTenants ? [411, 412] : ['tenant_411', 'tenant_412'];
+        $collection = 'sharedColumnSameType';
+        $definition = new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+        ]);
+
+        try {
+            foreach ($tenants as $tenant) {
+                $database->setTenant($tenant);
+                $database->createCollection($definition);
+                $this->assertTrue($database->createAttribute($collection, Attribute::integer(key: 'age')));
+                $this->assertTrue($database->createAttribute($collection, Attribute::string(key: 'name', size: 64)));
+                $this->assertTrue($database->createAttributes($collection, [
+                    Attribute::datetime(key: 'seen'),
+                    Attribute::string(key: 'bio', size: 20000),
+                ]));
+
+                /** @var array<Attribute> $attributes */
+                $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
+                $this->assertSame(['age', 'name', 'seen', 'bio'], \array_map(static fn (Attribute $attribute): string => $attribute->key, \array_values($attributes)));
+
+                $database->createDocument($collection, new Document([
+                    '$id' => 'own',
+                    'age' => 7,
+                    'name' => 'tenant '.$tenant,
+                    'seen' => '2024-05-06T07:08:09.123+00:00',
+                    'bio' => 'about '.$tenant,
+                ]));
+            }
+
+            foreach ($tenants as $tenant) {
+                $database->setTenant($tenant);
+                $document = $database->getDocument($collection, 'own');
+                $this->assertSame(7, $document->getAttribute('age'));
+                $this->assertSame('tenant '.$tenant, $document->getAttribute('name'));
+                $this->assertSame('2024-05-06T07:08:09.123+00:00', $document->getAttribute('seen'));
+                $this->assertSame('about '.$tenant, $document->getAttribute('bio'));
+            }
+        } finally {
+            foreach (\array_reverse($tenants) as $tenant) {
+                try {
+                    $database->setTenant($tenant)->deleteCollection($collection);
+                } catch (Throwable) {
+                }
+            }
+            $database->setTenant($originalTenant);
+        }
     }
 }

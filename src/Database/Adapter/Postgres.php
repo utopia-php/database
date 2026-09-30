@@ -17,6 +17,7 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -53,6 +54,17 @@ use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Feature\Timeouts
 {
     public const MAX_IDENTIFIER_NAME = 63;
+
+    /**
+     * The catalog's format_type() spellings mapped onto getSQLType()'s.
+     *
+     * @var array<string, string>
+     */
+    private const array CATALOG_TYPE_SPELLINGS = [
+        'CHARACTER VARYING' => 'VARCHAR',
+        ' WITHOUT TIME ZONE' => '',
+        ', ' => ',',
+    ];
 
     /**
      * Get the list of capabilities supported by the PostgreSQL adapter.
@@ -461,6 +473,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             }
         }
 
+        $this->refuseSharedColumnsOfAnotherType($collection, [$attribute]);
+
         $schema = $this->createSchemaBuilder();
         $table = $schema->table($this->getSQLTableRaw($collection));
         $this->addTableColumn($table, $attribute->key, $attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
@@ -477,6 +491,64 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         } catch (PDOException $e) {
             throw $this->processException($e);
         }
+    }
+
+    /**
+     * @param  array<Attribute>  $attributes
+     *
+     * @throws DatabaseException
+     */
+    #[\Override]
+    public function createAttributes(string $collection, array $attributes): bool
+    {
+        $this->refuseSharedColumnsOfAnotherType($collection, $attributes);
+
+        return parent::createAttributes($collection, $attributes);
+    }
+
+    /**
+     * @param  array<Attribute>  $attributes
+     *
+     * @throws MismatchException
+     * @throws DatabaseException
+     */
+    private function refuseSharedColumnsOfAnotherType(string $collection, array $attributes): void
+    {
+        if (! $this->sharedTables) {
+            return;
+        }
+
+        $statement = $this->prepareStatement(
+            'SELECT a.attname, format_type(a.atttypid, a.atttypmod) FROM pg_attribute a WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped',
+            Event::CollectionRead,
+        );
+        $statement->bindValue(1, $this->getSQLTable($this->filter($collection)));
+
+        try {
+            $this->execute($statement);
+            /** @var array<string, string> $columns */
+            $columns = $statement->fetchAll(PDO::FETCH_KEY_PAIR);
+            $statement->closeCursor();
+        } catch (PDOException $e) {
+            throw $this->processException($e);
+        }
+
+        foreach ($attributes as $attribute) {
+            $existing = $columns[$this->filter($attribute->key)] ?? null;
+            if ($existing === null) {
+                continue;
+            }
+
+            $requested = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+            if (self::canonicalColumnType($existing) !== self::canonicalColumnType($requested)) {
+                throw new MismatchException('Attribute exists in the shared table with another type');
+            }
+        }
+    }
+
+    private static function canonicalColumnType(string $type): string
+    {
+        return \strtr(\strtoupper($type), self::CATALOG_TYPE_SPELLINGS);
     }
 
     /**
@@ -1455,7 +1527,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
 
         return match ($type) {
             ColumnType::Id => 'BIGINT',
-            ColumnType::String => $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
+            ColumnType::String => $size <= 0 || $size > $this->getMaxVarcharLength() ? 'TEXT' : "VARCHAR({$size})",
             ColumnType::Varchar => "VARCHAR({$size})",
             ColumnType::Text,
             ColumnType::MediumText,

@@ -2,11 +2,13 @@
 
 namespace Tests\Unit\Adapter;
 
+use PDO;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
@@ -14,6 +16,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\Authorization;
 
@@ -114,6 +117,29 @@ final class MemoryAdapterTest extends TestCase
         $database->createDocument('users', new Document(['$id' => 'reuse', 'email' => 'c@example.test']));
         $database->updateDocument('users', 'reuse', new Document(['$id' => 'reused', 'email' => 'c@example.test']));
         $this->assertSame(['a@example.test', 'b@example.test', 'c@example.test'], $this->emails($database));
+    }
+
+    public function testSharedTablesListTenantlessCollections(): void
+    {
+        $listings = [];
+        foreach (['memory' => new Memory(), 'sqlite' => new SQLite(new PDO('sqlite::memory:'))] as $name => $adapter) {
+            $database = $this->database($adapter)
+                ->setSharedTables(true)
+                ->setTenant(null);
+            $database->create();
+            $database->addHook(new Permissions());
+            $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+            $database->createCollection(new Collection(id: 'shared', attributes: [Attribute::string(key: 'name', size: 8)], permissions: $permissions));
+            $database->setTenant(self::TENANT);
+            $database->createCollection(new Collection(id: 'owned', attributes: [Attribute::string(key: 'name', size: 8)], permissions: $permissions));
+
+            $identifiers = \array_map(static fn (Document $collection): string => $collection->getId(), $database->listCollections());
+            \sort($identifiers);
+            $listings[$name] = $identifiers;
+        }
+
+        $this->assertSame(['owned', 'shared'], $listings['sqlite']);
+        $this->assertSame($listings['sqlite'], $listings['memory'], 'Memory must list the collections created without a tenant, as SQL does');
     }
 
     private function database(Adapter $adapter): Database

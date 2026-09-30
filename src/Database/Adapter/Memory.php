@@ -2408,21 +2408,23 @@ class Memory extends Adapter implements Feature\Relationships
         $tenant = $tenantCheck ? $this->getTenant() : null;
         $allowNullTenant = $tenantCheck && $collectionId === Database::METADATA;
 
-        $allowSet = $this->buildPermissionAllowSet($key, $forPermission);
+        $allowSet = $this->buildPermissionAllowSet($key, $forPermission, $tenant);
+        $tenantlessAllowSet = $allowNullTenant ? $this->buildPermissionAllowSet($key, $forPermission, null) : null;
 
         $output = [];
         foreach ($documents as $row) {
+            $rowAllowSet = $allowSet;
             if ($tenantCheck) {
                 $rowTenant = $row[Storage::TENANT] ?? null;
                 if ($allowNullTenant && $rowTenant === null) {
-                    // visible
+                    $rowAllowSet = $tenantlessAllowSet;
                 } elseif ($rowTenant !== $tenant) {
                     continue;
                 }
             }
 
             $rowUid = $row[Storage::UID] ?? '';
-            if ($allowSet !== null && (! \is_string($rowUid) || ! isset($allowSet[$rowUid]))) {
+            if ($rowAllowSet !== null && (! \is_string($rowUid) || ! isset($rowAllowSet[$rowUid]))) {
                 continue;
             }
 
@@ -3077,7 +3079,7 @@ class Memory extends Adapter implements Feature\Relationships
      *
      * @return array<string, true>|null
      */
-    protected function buildPermissionAllowSet(string $key, string $forPermission): ?array
+    protected function buildPermissionAllowSet(string $key, string $forPermission, int|string|null $tenant): ?array
     {
         if (! $this->authorization->getStatus()) {
             return null;
@@ -3089,8 +3091,7 @@ class Memory extends Adapter implements Feature\Relationships
             return $allowed;
         }
 
-        $tenant = $this->getTenant();
-        $tenantBucket = $tenant === null ? '__null__' : (string) $tenant;
+        $tenantBucket = $this->permissionBucket($tenant);
         $buckets = [];
         if ($this->sharedTables) {
             if (isset($this->permissionsByPermission[$key][$forPermission][$tenantBucket])) {

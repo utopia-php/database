@@ -3,6 +3,7 @@
 namespace Tests\Unit\Type;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\FilterRegistry;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
 use Utopia\Database\Adapter\Memory;
@@ -71,8 +72,7 @@ final class CustomTypeTest extends TestCase
         $database = $this->database()->setTypeRegistry($this->registry(new Reversed()));
         $other = $this->database();
 
-        $filters = new \ReflectionProperty(Database::class, 'filters');
-        $previous = $filters->getValue();
+        $previous = FilterRegistry::filters();
 
         try {
             Database::addFilter(
@@ -84,7 +84,7 @@ final class CustomTypeTest extends TestCase
             $this->assertSame('hello', $database->decode($this->notes(), new Document(['body' => 'olleh']))->getAttribute('body'));
             $this->assertSame('global', $other->decode($this->notes(), new Document(['body' => 'olleh']))->getAttribute('body'));
         } finally {
-            $filters->setValue(null, $previous);
+            FilterRegistry::restore($previous, FilterRegistry::defaultsRegistered());
         }
     }
 

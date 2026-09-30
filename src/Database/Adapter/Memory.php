@@ -1400,16 +1400,8 @@ class Memory extends Adapter implements Feature\Relationships
         // post-update, register the new binding.
         $allIndexes = \array_unique([...\array_keys($oldSignatures), ...\array_keys($newSignatures)]);
         foreach ($allIndexes as $indexId) {
-            $this->probeUniqueHash(
-                $key,
-                $indexId,
-                $newSignatures[$indexId] ?? null,
-                $oldSignatures[$indexId] ?? null,
-                $newKey,
-            );
-            // Old key removal: if the docKey changed, also drop any binding
-            // pointing at the old key (the probeUniqueHash above keys against
-            // $newKey, so a stale binding under $oldKey is left untouched).
+            // A rename moves the row to $newKey: release the binding the row
+            // holds under $oldKey first, or a value it keeps reads as taken.
             if ($oldKey !== $newKey) {
                 $oldHash = $oldSignatures[$indexId] ?? null;
                 if ($oldHash !== null
@@ -1420,6 +1412,13 @@ class Memory extends Adapter implements Feature\Relationships
                     });
                 }
             }
+            $this->probeUniqueHash(
+                $key,
+                $indexId,
+                $newSignatures[$indexId] ?? null,
+                $oldSignatures[$indexId] ?? null,
+                $newKey,
+            );
         }
 
         if (! $skipPermissions) {

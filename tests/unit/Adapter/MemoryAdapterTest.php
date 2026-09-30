@@ -11,8 +11,10 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Validator\Authorization;
 
 final class MemoryAdapterTest extends TestCase
@@ -83,6 +85,37 @@ final class MemoryAdapterTest extends TestCase
         $this->assertSame([], $this->readableUnder($database, self::TENANT, self::BOB));
     }
 
+    public function testRenamingKeepsItsUniqueValue(): void
+    {
+        $database = $this->memory();
+        $database->createCollection(new Collection(
+            id: 'users',
+            attributes: [Attribute::string(key: 'email', size: 128)],
+            permissions: $this->everyone(),
+            documentSecurity: false,
+        ));
+        $database->createIndex('users', Index::unique(key: 'emailUnique', attributes: ['email'], lengths: [128]));
+        $database->createDocument('users', new Document(['$id' => 'old', 'email' => 'a@example.test']));
+        $database->createDocument('users', new Document(['$id' => 'other', 'email' => 'b@example.test']));
+
+        $renamed = $database->updateDocument('users', 'old', new Document(['$id' => 'new', 'email' => 'a@example.test']));
+
+        $this->assertSame('new', $renamed->getId());
+        $this->assertTrue($database->getDocument('users', 'old')->isEmpty());
+        $this->assertSame('a@example.test', $database->getDocument('users', 'new')->getAttribute('email'));
+
+        try {
+            $database->createDocument('users', new Document(['$id' => 'copy', 'email' => 'a@example.test']));
+            $this->fail('The renamed document must still hold its unique value');
+        } catch (UniqueException $exception) {
+            $this->assertSame('Document with the requested unique attributes already exists', $exception->getMessage());
+        }
+
+        $database->createDocument('users', new Document(['$id' => 'reuse', 'email' => 'c@example.test']));
+        $database->updateDocument('users', 'reuse', new Document(['$id' => 'reused', 'email' => 'c@example.test']));
+        $this->assertSame(['a@example.test', 'b@example.test', 'c@example.test'], $this->emails($database));
+    }
+
     private function database(Adapter $adapter): Database
     {
         return (new Database($adapter, new Cache(new None())))
@@ -129,6 +162,19 @@ final class MemoryAdapterTest extends TestCase
     }
 
     /**
+     * @return list<string>
+     */
+    private function everyone(): array
+    {
+        return [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+            Permission::delete(Role::any()),
+        ];
+    }
+
+    /**
      * @param  list<string>  $readers
      */
     private function note(array $readers): Document
@@ -149,6 +195,20 @@ final class MemoryAdapterTest extends TestCase
                 $readers,
             ),
         ]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function emails(Database $database): array
+    {
+        $emails = \array_map(
+            static fn (Document $document): string => \is_string($email = $document->getAttribute('email')) ? $email : '',
+            $database->find('users'),
+        );
+        \sort($emails);
+
+        return $emails;
     }
 
     /**

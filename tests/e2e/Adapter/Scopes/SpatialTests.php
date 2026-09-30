@@ -2900,4 +2900,75 @@ trait SpatialTests
 
         return null;
     }
+
+    public function testCreateCollectionWithRequiredSpatialColumns(): void
+    {
+        $database = $this->getDatabase();
+        $adapter = $database->getAdapter();
+
+        if (! $adapter->hasFeature(Feature\Spatial::class)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $shapes = [
+            'location' => [1.5, 2.5],
+            'route' => [[0.0, 0.0], [1.0, 1.0]],
+            'area' => [[[0.0, 0.0], [0.0, 2.0], [2.0, 2.0], [0.0, 0.0]]],
+        ];
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+
+        $declared = 'spatial_required_declared';
+        $database->createCollection(new Collection(id: $declared, attributes: [
+            Attribute::point(key: 'location', required: true),
+            Attribute::linestring(key: 'route', required: true),
+            Attribute::polygon(key: 'area', required: true),
+        ], permissions: $permissions));
+
+        $updated = 'spatial_required_updated';
+        $database->createCollection(new Collection(id: $updated, attributes: [
+            Attribute::point(key: 'location'),
+            Attribute::linestring(key: 'route'),
+            Attribute::polygon(key: 'area'),
+        ], permissions: $permissions));
+
+        try {
+            foreach (\array_keys($shapes) as $key) {
+                $database->updateAttribute($updated, $key, required: true);
+            }
+
+            foreach ([$declared, $updated] as $collection) {
+                foreach (['route', 'area'] as $missing) {
+                    $values = $shapes;
+                    unset($values[$missing]);
+
+                    try {
+                        $database->createDocument($collection, new Document(['$permissions' => [Permission::read(Role::any())], ...$values]));
+                        $this->fail('A document without the required '.$missing.' of '.$collection.' must be rejected');
+                    } catch (StructureException $e) {
+                        $this->assertStringContainsString('Missing required attribute "'.$missing.'"', $e->getMessage());
+                    }
+                }
+
+                $database->createDocument($collection, new Document(['$id' => 'complete', '$permissions' => [Permission::read(Role::any())], ...$shapes]));
+                $this->assertSame($shapes['area'], $database->getDocument($collection, 'complete')->getAttribute('area'));
+
+                if ($adapter->supports(Capability::SpatialIndexNull) || ! $adapter->hasFeature(Feature\SchemaAttributes::class)) {
+                    continue;
+                }
+
+                $nullable = [];
+                foreach ($database->getSchemaAttributes($collection) as $column) {
+                    $nullable[$column->getId()] = $column->getAttribute('isNullable');
+                }
+                foreach (\array_keys($shapes) as $key) {
+                    $this->assertSame('NO', $nullable[$key] ?? null, 'The required '.$key.' column of '.$collection.' must be NOT NULL');
+                }
+            }
+        } finally {
+            $database->deleteCollection($declared);
+            $database->deleteCollection($updated);
+        }
+    }
 }

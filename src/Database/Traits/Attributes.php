@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Helpers\ID;
@@ -158,6 +159,8 @@ trait Attributes
                 if (! $created) {
                     throw new DatabaseException('Failed to create attribute');
                 }
+            } catch (MismatchException $e) {
+                throw $e;
             } catch (DuplicateException) {
                 // Attribute not in metadata (orphan detection above confirmed this).
                 // A DuplicateException from the adapter means the column exists only
@@ -313,6 +316,8 @@ trait Attributes
                 if (! $created) {
                     throw new DatabaseException('Failed to create attributes');
                 }
+            } catch (MismatchException $e) {
+                throw $e;
             } catch (DuplicateException) {
                 // Batch failed because at least one column already exists.
                 // Fallback to per-attribute creation so non-duplicates still land in schema.
@@ -323,6 +328,8 @@ trait Attributes
                             $attr
                         );
                         $created = true;
+                    } catch (MismatchException $e) {
+                        throw $e;
                     } catch (DuplicateException) {
                         // Column already exists in schema — skip
                     }

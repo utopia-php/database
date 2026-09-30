@@ -69,6 +69,62 @@ final class SpatialColumnDefinitionTest extends TestCase
         $this->assertSame($expected, $this->statements);
     }
 
+    public function testMariaDBDefinesSpatialColumnsAlikeOnEveryPath(): void
+    {
+        $adapter = $this->createAdapter(MariaDB::class);
+        $columns = ['`location` POINT NOT NULL', '`route` LINESTRING NULL', '`area` POLYGON NOT NULL'];
+        $attributes = [
+            Attribute::point(key: 'location', required: true),
+            Attribute::linestring(key: 'route'),
+            Attribute::polygon(key: 'area', required: true),
+        ];
+
+        $adapter->createCollection('places', $attributes);
+        foreach ($columns as $column) {
+            $this->assertStringContainsString($column.',', $this->statements[0]);
+        }
+
+        $this->statements = [];
+        foreach ($attributes as $attribute) {
+            $adapter->createAttribute('places', $attribute);
+            $adapter->updateAttribute('places', $attribute);
+        }
+
+        $expected = [];
+        foreach ($columns as $column) {
+            $expected[] = 'ALTER TABLE `database`.`namespace_places` ADD COLUMN '.$column;
+            $expected[] = 'ALTER TABLE `database`.`namespace_places` MODIFY '.$column;
+        }
+        $this->assertSame($expected, $this->statements);
+    }
+
+    public function testMySQLDeclaresRequiredSpatialColumnsNotNullOnCollectionAndUpdatePaths(): void
+    {
+        $adapter = $this->createAdapter(MySQL::class);
+        $columns = ['`location` POINT SRID 4326 NOT NULL', '`route` LINESTRING SRID 4326 NOT NULL', '`area` POLYGON SRID 4326 NOT NULL'];
+        $attributes = [
+            Attribute::point(key: 'location', required: true),
+            Attribute::linestring(key: 'route', required: true),
+            Attribute::polygon(key: 'area', required: true),
+        ];
+
+        $adapter->createCollection('places', $attributes);
+        foreach ($columns as $column) {
+            $this->assertStringContainsString($column.',', $this->statements[0]);
+        }
+
+        $this->statements = [];
+        foreach ($attributes as $attribute) {
+            $adapter->updateAttribute('places', $attribute);
+        }
+
+        $expected = [];
+        foreach ($columns as $column) {
+            $expected[] = 'ALTER TABLE `database`.`namespace_places` MODIFY '.$column;
+        }
+        $this->assertSame($expected, $this->statements);
+    }
+
     /**
      * @param  class-string<SQL>  $adapterClass
      */

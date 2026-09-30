@@ -127,6 +127,23 @@ final class DatabaseGuardsTest extends TestCase
         $this->assertFalse($database->setDropUnknownAttributes(false)->getDropUnknownAttributes());
     }
 
+    public function testSkipRelationshipsWithoutTheHookRunsTheCallback(): void
+    {
+        $database = $this->database(new Memory());
+
+        $this->assertNull($database->getRelationshipHook());
+        $this->assertSame(42, $database->skipRelationships(static fn (): int => 42));
+        $this->assertNull($database->getRelationshipHook(), 'skipping relationships does not install the hook');
+    }
+
+    public function testSkipRelationshipsExistCheckWithoutTheHookRunsTheCallback(): void
+    {
+        $database = $this->database(new Memory());
+
+        $this->assertSame('ran', $database->skipRelationshipsExistCheck(static fn (): string => 'ran'));
+        $this->assertNull($database->getRelationshipHook());
+    }
+
     private function database(Adapter $adapter): Database
     {
         $database = new Database($adapter, new Cache(new None()));

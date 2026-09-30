@@ -2,16 +2,20 @@
 
 namespace Tests\Unit\Adapter;
 
+use PDO;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter;
 use Utopia\Database\Adapter\Feature;
 use Utopia\Database\Adapter\MariaDB;
 use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Pool;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Adapter\Redis;
 use Utopia\Database\Adapter\SQLite;
+use Utopia\Database\Capability;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Validator\Authorization;
@@ -105,6 +109,66 @@ final class FeatureContractTest extends TestCase
         $this->assertArrayHasKey(Feature\ConnectionId::class, $implements);
         $this->assertArrayNotHasKey(Feature\SchemaAttributes::class, $implements);
         $this->assertArrayNotHasKey(Feature\SchemaIndexes::class, $implements);
+    }
+
+    public function testEveryCapabilityIsDeclaredByAnAdapter(): void
+    {
+        $declared = [];
+        foreach ($this->adapters() as $adapter) {
+            foreach (Capability::cases() as $capability) {
+                if ($adapter->supports($capability)) {
+                    $declared[$capability->name] = true;
+                }
+            }
+        }
+
+        $undeclared = \array_values(\array_filter(
+            \array_map(static fn (Capability $capability): string => $capability->name, Capability::cases()),
+            static fn (string $name): bool => ! isset($declared[$name]),
+        ));
+
+        $this->assertSame([], $undeclared, 'Capabilities no adapter declares');
+    }
+
+    public function testSupportsAgreesWithHasFeatureWhereBothExist(): void
+    {
+        $disagreements = [];
+        foreach ($this->adapters() as $name => $adapter) {
+            foreach (Capability::cases() as $capability) {
+                $feature = 'Utopia\\Database\\Adapter\\Feature\\'.$capability->name;
+                if (\interface_exists($feature) && $adapter->supports($capability) !== $adapter->hasFeature($feature)) {
+                    $disagreements[] = "{$name}: Capability::{$capability->name}";
+                }
+            }
+        }
+
+        $this->assertSame([], $disagreements, 'supports() and hasFeature() disagree');
+    }
+
+    /**
+     * @return array<string, Adapter>
+     */
+    private function adapters(): array
+    {
+        $pdo = self::createStub(PDO::class);
+
+        return [
+            'MariaDB' => new MariaDB($pdo),
+            'MySQL' => new MySQL($pdo),
+            'Postgres' => new Postgres($pdo),
+            'SQLite' => new SQLite(new PDO('sqlite::memory:')),
+            'Memory' => new Memory(),
+            'MongoDB' => new class () extends Mongo {
+                public function __construct()
+                {
+                }
+            },
+            'Redis' => new class () extends Redis {
+                public function __construct()
+                {
+                }
+            },
+        ];
     }
 
     /**

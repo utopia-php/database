@@ -45,6 +45,19 @@ class Pool extends Adapter
     protected ?bool $supportForAttributes = null;
 
     /**
+     * Every connection of one pool runs the same adapter, and handles are often built per
+     * request, so the answers are kept per pool rather than per handle.
+     *
+     * @var \WeakMap<UtopiaPool<covariant Adapter>, array<Capability>>|null
+     */
+    private static ?\WeakMap $capabilities = null;
+
+    /**
+     * @var \WeakMap<UtopiaPool<covariant Adapter>, array<class-string, bool>>|null
+     */
+    private static ?\WeakMap $features = null;
+
+    /**
      * @param  UtopiaPool<covariant Adapter>  $pool  The pool to use for connections. Must contain instances of Adapter.
      */
     public function __construct(UtopiaPool $pool)
@@ -148,6 +161,7 @@ class Pool extends Adapter
         $adapter->setTenant($this->getTenant());
         $adapter->setTenantPerDocument($this->getTenantPerDocument());
         $adapter->setAuthorization($this->authorization);
+        $adapter->enableAlterLocks($this->alterLocks);
 
         if ($this->supportForAttributes !== null) {
             $adapter->setSupportForAttributes($this->supportForAttributes);
@@ -188,25 +202,41 @@ class Pool extends Adapter
     /**
      * Check if a specific capability is supported by the pooled adapter.
      *
+     * Answered from the capabilities the pool's connections reported when first asked, except
+     * DefinedAttributes: it reflects the schema mode a connection is in, so it is asked every time.
+     *
      * @param Capability $feature The capability to check
      * @return bool
      */
     public function supports(Capability $feature): bool
     {
-        /** @var bool $result */
-        $result = $this->delegate(__FUNCTION__, \func_get_args());
-        return $result;
+        if ($feature === Capability::DefinedAttributes) {
+            /** @var bool $result */
+            $result = $this->delegate(__FUNCTION__, \func_get_args());
+
+            return $result;
+        }
+
+        return \in_array($feature, $this->capabilities(), true);
     }
 
     /**
-     * Get all capabilities supported by the pooled adapter.
+     * Get all capabilities supported by the pooled adapter, as its connections reported them when first asked.
      *
      * @return array<Capability>
      */
     public function capabilities(): array
     {
+        $remembered = self::$capabilities[$this->pool] ?? null;
+        if ($remembered !== null) {
+            return $remembered;
+        }
+
         /** @var array<Capability> $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
+        self::$capabilities ??= new \WeakMap();
+        self::$capabilities[$this->pool] = $result;
+
         return $result;
     }
 
@@ -215,8 +245,18 @@ class Pool extends Adapter
      */
     public function hasFeature(string $feature): bool
     {
+        $known = self::$features[$this->pool][$feature] ?? null;
+        if ($known !== null) {
+            return $known;
+        }
+
         /** @var bool $result */
         $result = $this->delegate('hasFeature', [$feature]);
+
+        self::$features ??= new \WeakMap();
+        $features = self::$features[$this->pool] ?? [];
+        $features[$feature] = $result;
+        self::$features[$this->pool] = $features;
 
         return $result;
     }
@@ -966,11 +1006,6 @@ class Pool extends Adapter
         /** @var array<string> $result */
         $result = $this->delegate(__FUNCTION__, \func_get_args());
         return $result;
-    }
-
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
-    {
-        return $this->delegate(__FUNCTION__, \func_get_args());
     }
 
     /**

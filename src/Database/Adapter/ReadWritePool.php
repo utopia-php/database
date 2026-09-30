@@ -45,7 +45,6 @@ class ReadWritePool extends Pool
         'castingAfter',
         'setUTCDatetime',
         'quote',
-        'getAttributeProjection',
         'getDocumentSizeLimit',
         'getAttributeWidth',
         'getCountOfAttributes',

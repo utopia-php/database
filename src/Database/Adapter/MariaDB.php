@@ -61,7 +61,6 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
             Capability::PCRE,
             Capability::SpatialIndexOrder,
             Capability::OptionalSpatial,
-            Capability::Upserts,
             Capability::UpsertOnUniqueIndex,
             Capability::UnsignedBigInt,
         ]);

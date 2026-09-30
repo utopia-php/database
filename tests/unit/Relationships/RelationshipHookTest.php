@@ -15,10 +15,12 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Event;
 use Utopia\Database\Exception\Authorization as AuthorizationException;
 use Utopia\Database\Exception\Restricted as RestrictedException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Hook\Lifecycle;
 use Utopia\Database\Hook\Permissions;
 use Utopia\Database\Hook\Relationships;
 use Utopia\Database\Relationship;
@@ -490,6 +492,53 @@ final class RelationshipHookTest extends TestCase
         $this->assertSame(['parent1'], $this->ids($database, 'parent'));
         $this->assertSame(['child1'], $this->ids($database, 'child'));
         $this->assertSame(['grandchild1'], $this->ids($database, 'grandchild'));
+    }
+
+    /**
+     * @param  Closure(): Adapter  $adapter
+     */
+    #[DataProvider('adapters')]
+    public function testUpdateRelationshipFiresStringOptions(Closure $adapter): void
+    {
+        $database = $this->database($adapter);
+        $this->relate($database, Relationship::oneToMany(collection: 'parent', relatedCollection: 'child', twoWay: true, key: 'children', twoWayKey: 'parent', onDelete: ForeignKeyAction::Cascade));
+
+        $updates = new class () implements Lifecycle {
+            /** @var array<string, mixed> */
+            public array $options = [];
+
+            public function handle(Event $event, mixed $data): void
+            {
+                if ($event === Event::AttributeUpdate && $data instanceof Document) {
+                    $this->options[$data->getCollection().'.'.$data->getId()] = $data->getAttribute('options');
+                }
+            }
+        };
+        $database->addHook($updates);
+
+        $this->assertTrue($database->updateRelationship('parent', 'children', newKey: 'kids', onDelete: ForeignKeyAction::SetNull));
+
+        $this->assertSame(
+            [
+                'parent.kids' => [
+                    'relatedCollection' => 'child',
+                    'relationType' => 'oneToMany',
+                    'twoWay' => true,
+                    'twoWayKey' => 'parent',
+                    'onDelete' => 'setNull',
+                    'side' => 'parent',
+                ],
+                'child.parent' => [
+                    'relatedCollection' => 'parent',
+                    'relationType' => 'oneToMany',
+                    'twoWay' => true,
+                    'twoWayKey' => 'kids',
+                    'onDelete' => 'setNull',
+                    'side' => 'child',
+                ],
+            ],
+            $updates->options,
+        );
     }
 
     /**

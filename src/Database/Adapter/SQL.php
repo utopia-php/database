@@ -6184,64 +6184,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return $distance;
     }
 
-    /**
-     * Get the SQL LIKE operator for this adapter.
-     *
-     * @return string
-     */
-    public function getLikeOperator(): string
-    {
-        return 'LIKE';
-    }
-
-    /**
-     * Get the SQL regex matching operator for this adapter.
-     *
-     * @return string
-     */
-    public function getRegexOperator(): string
-    {
-        return 'REGEXP';
-    }
-
-    /**
-     * Get the SQL projection given the selected attributes
-     *
-     * @param  array<string>  $selections
-     *
-     * @throws Exception
-     */
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
-    {
-        if (empty($selections) || \in_array('*', $selections)) {
-            return "{$this->quote($prefix)}.*";
-        }
-
-        // Handle specific selections with spatial conversion where needed
-        $internalKeys = [
-            Document::ID,
-            Document::SEQUENCE,
-            Document::PERMISSIONS,
-            Document::CREATED_AT,
-            Document::UPDATED_AT,
-        ];
-
-        $selections = \array_diff($selections, [...$internalKeys, Document::COLLECTION]);
-
-        foreach ($internalKeys as $internalKey) {
-            $selections[] = $this->getInternalKeyForAttribute($internalKey);
-        }
-
-        $projections = [];
-        foreach ($selections as $selection) {
-            $filteredSelection = $this->filter($selection);
-            $quotedSelection = $this->quote($filteredSelection);
-            $projections[] = "{$this->quote($prefix)}.{$quotedSelection}";
-        }
-
-        return \implode(',', $projections);
-    }
-
     protected function escapeWildcards(string $value): string
     {
         $wildcards = ['%', '_', '[', ']', '^', '-', '.', '*', '+', '?', '(', ')', '{', '}', '|'];

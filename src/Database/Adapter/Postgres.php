@@ -69,28 +69,7 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             Capability::TrigramIndex,
             Capability::POSIX,
             Capability::ObjectIndexes,
-            Capability::Upserts,
         ]);
-    }
-
-    /**
-     * Get the case-insensitive LIKE operator for PostgreSQL.
-     *
-     * @return string
-     */
-    public function getLikeOperator(): string
-    {
-        return 'ILIKE';
-    }
-
-    /**
-     * Get the POSIX regex matching operator for PostgreSQL.
-     *
-     * @return string
-     */
-    public function getRegexOperator(): string
-    {
-        return '~';
     }
 
     /**

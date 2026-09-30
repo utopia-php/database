@@ -11,7 +11,6 @@ class Updated extends Domain
     public function __construct(
         string $collection,
         public readonly Document $document,
-        public readonly ?Document $previous = null,
     ) {
         parent::__construct($collection, Event::DocumentUpdate);
     }

@@ -1977,11 +1977,6 @@ class Memory extends Adapter implements Feature\Relationships
         return [];
     }
 
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
-    {
-        return $selections;
-    }
-
     public function getInternalIndexesKeys(): array
     {
         return [];

@@ -148,7 +148,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::PCRE,
             Capability::Operators,
             Capability::TransactionRetries,
-            Capability::Upserts,
         ]);
     }
 
@@ -3690,8 +3689,9 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     /**
      * @param  array<string>  $selections
+     * @return array<string, int>
      */
-    protected function getAttributeProjection(array $selections, string $prefix = ''): mixed
+    private function getAttributeProjection(array $selections): array
     {
         $projection = [];
 

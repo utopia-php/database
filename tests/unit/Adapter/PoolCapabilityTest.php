@@ -1,0 +1,216 @@
+<?php
+
+namespace Tests\Unit\Adapter;
+
+use PHPUnit\Framework\MockObject\Stub;
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use Utopia\Cache\Adapter\Memory as MemoryCache;
+use Utopia\Cache\Cache;
+use Utopia\Database\Adapter;
+use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\Memory;
+use Utopia\Database\Adapter\Mongo;
+use Utopia\Database\Adapter\Pool;
+use Utopia\Database\Attribute;
+use Utopia\Database\Capability;
+use Utopia\Database\Collection;
+use Utopia\Database\Database;
+use Utopia\Database\Document;
+use Utopia\Database\Helpers\Permission;
+use Utopia\Database\Helpers\Role;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Pools\Pool as UtopiaPool;
+
+final class PoolCapabilityTest extends TestCase
+{
+    private int $checkouts = 0;
+
+    private bool $down = false;
+
+    public function testAWarmCachedReadChecksOutNoConnection(): void
+    {
+        $connections = $this->connections(new Memory());
+        $database = $this->database($connections);
+        $database->disableValidation();
+        $database->getDocument('posts', 'first');
+
+        $this->checkouts = 0;
+        $document = $database->getDocument('posts', 'first');
+
+        $this->assertSame('first', $document->getAttribute('title'));
+        $this->assertSame(0, $this->checkouts);
+    }
+
+    public function testACachedReadSucceedsWhileTheBackingIsDown(): void
+    {
+        $connections = $this->connections(new Memory());
+        $database = $this->database($connections);
+        $database->disableValidation();
+        $database->getDocument('posts', 'first');
+
+        $this->down = true;
+
+        $this->assertSame('first', $database->getDocument('posts', 'first')->getAttribute('title'));
+    }
+
+    public function testAWarmValidatedReadChecksOutOnlyForDefinedAttributes(): void
+    {
+        $memory = new class () extends Memory {
+            /** @var list<string> */
+            public array $asked = [];
+
+            public function supports(Capability $feature): bool
+            {
+                $this->asked[] = $feature->name;
+
+                return parent::supports($feature);
+            }
+        };
+        $database = $this->database($this->connections($memory));
+        $database->getDocument('posts', 'first');
+
+        $this->checkouts = 0;
+        $memory->asked = [];
+        $database->getDocument('posts', 'first');
+
+        $this->assertSame(['DefinedAttributes', 'DefinedAttributes'], $memory->asked);
+        $this->assertSame(2, $this->checkouts);
+    }
+
+    public function testACapabilityQuestionOnAColdPoolChecksOutOnce(): void
+    {
+        $pool = $this->pool($this->connections(new Memory()));
+
+        $this->assertTrue($pool->supports(Capability::Casting));
+        $this->assertFalse($pool->supports(Capability::Hostname));
+        $this->assertSame((new Memory())->capabilities(), $pool->capabilities());
+        $this->assertSame(1, $this->checkouts);
+    }
+
+    public function testEveryHandleOverOnePoolSharesTheAnswers(): void
+    {
+        $connections = $this->connections(new Memory());
+        $this->assertTrue($this->pool($connections)->supports(Capability::Casting));
+
+        $this->checkouts = 0;
+        $this->down = true;
+
+        $handle = $this->pool($connections);
+        $this->assertTrue($handle->supports(Capability::Casting));
+        $this->assertTrue($handle->supports(Capability::Fulltext));
+        $this->assertSame(0, $this->checkouts);
+    }
+
+    public function testFeaturesAreAskedOncePerFeature(): void
+    {
+        $pool = $this->pool($this->connections(new Memory()));
+
+        $this->assertTrue($pool->hasFeature(Feature\Relationships::class));
+        $this->assertFalse($pool->hasFeature(Feature\Spatial::class));
+        $this->assertSame(2, $this->checkouts);
+
+        $this->down = true;
+
+        $this->assertTrue($pool->hasFeature(Feature\Relationships::class));
+        $this->assertFalse($pool->hasFeature(Feature\Spatial::class));
+        $this->assertSame(2, $this->checkouts);
+    }
+
+    public function testDefinedAttributesAlwaysAsksTheConnection(): void
+    {
+        $mongo = new class () extends Mongo {
+            public function __construct()
+            {
+            }
+        };
+        $pool = $this->pool($this->connections($mongo));
+
+        $mongo->setSupportForAttributes(false);
+        $this->assertFalse($pool->supports(Capability::DefinedAttributes));
+
+        $mongo->setSupportForAttributes(true);
+        $this->assertTrue($pool->supports(Capability::DefinedAttributes));
+
+        $this->assertSame(2, $this->checkouts);
+        $this->assertTrue($mongo->supports(Capability::DefinedAttributes), "A handle that never set the schema mode must leave the connection's own");
+    }
+
+    public function testAFailedFirstCheckoutAnswersNothingAndTheNextOneFillsTheAnswers(): void
+    {
+        $pool = $this->pool($this->connections(new Memory()));
+        $this->down = true;
+
+        $caught = null;
+        try {
+            $pool->supports(Capability::Casting);
+        } catch (RuntimeException $exception) {
+            $caught = $exception;
+        }
+        $this->assertSame('backing unreachable', $caught?->getMessage(), 'A capability question with no answer yet must fail while the backing is down');
+
+        $this->down = false;
+        $this->assertTrue($pool->supports(Capability::Casting));
+
+        $this->down = true;
+        $this->assertTrue($pool->supports(Capability::Casting));
+    }
+
+    /**
+     * @return UtopiaPool<Adapter>
+     */
+    private function connections(Adapter $adapter): UtopiaPool
+    {
+        /** @var UtopiaPool<Adapter>&Stub $connections */
+        $connections = self::createStub(UtopiaPool::class);
+        $connections->method('use')->willReturnCallback(
+            function (callable $callback) use ($adapter): mixed {
+                if ($this->down) {
+                    throw new RuntimeException('backing unreachable');
+                }
+
+                $this->checkouts++;
+
+                return $callback($adapter);
+            },
+        );
+
+        return $connections;
+    }
+
+    /**
+     * @param  UtopiaPool<Adapter>  $connections
+     */
+    private function pool(UtopiaPool $connections): Pool
+    {
+        $pool = new Pool($connections);
+        $pool->setAuthorization(new Authorization());
+
+        return $pool;
+    }
+
+    /**
+     * @param  UtopiaPool<Adapter>  $connections
+     */
+    private function database(UtopiaPool $connections): Database
+    {
+        $database = new Database($this->pool($connections), new Cache(new MemoryCache()));
+        $database
+            ->setAuthorization(new Authorization())
+            ->setDatabase('pool_capabilities')
+            ->setNamespace('pool_capabilities_'.\uniqid());
+        $database->create();
+        $database->createCollection(new Collection(
+            id: 'posts',
+            attributes: [Attribute::string(key: 'title', size: 64)],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any())],
+        ));
+        $database->createDocument('posts', new Document([
+            Document::ID => 'first',
+            'title' => 'first',
+            Document::PERMISSIONS => [Permission::read(Role::any())],
+        ]));
+
+        return $database;
+    }
+}

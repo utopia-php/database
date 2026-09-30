@@ -2889,7 +2889,7 @@ trait AttributeTests
 
     private function assertTenantsFindByTheRenamedIndex(Database $database, string $collection, int|string ...$tenants): void
     {
-        foreach ($tenants as $index => $tenant) {
+        foreach (\array_values($tenants) as $index => $tenant) {
             $database->setTenant($tenant);
 
             $this->assertSame(['ageIndex'], $this->getIndexKeys($database, $collection));

@@ -137,7 +137,12 @@ final class MongoAdapterPathsTest extends TestCase
 
         $this->assertTrue($this->adapter()->renameIndex('books', 'by_title', 'by_name'));
         $this->assertSame([[self::NAMESPACE.'_books', ['by_title'], []]], $this->argumentsOf('dropIndexes'));
-        $this->assertSame(['by_name'], \array_map(static fn (array $arguments): mixed => \is_array($arguments[1] ?? null) ? ($arguments[1][0]['name'] ?? null) : null, $this->argumentsOf('createIndexes')));
+        $this->assertSame(['by_name'], \array_map(static function (array $arguments): mixed {
+            $indexes = $arguments[1] ?? null;
+            $first = \is_array($indexes) ? ($indexes[0] ?? null) : null;
+
+            return \is_array($first) ? ($first['name'] ?? null) : null;
+        }, $this->argumentsOf('createIndexes')));
     }
 
     public function testANonNumericPowerExponentIsRefused(): void

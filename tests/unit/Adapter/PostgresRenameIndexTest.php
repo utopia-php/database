@@ -95,7 +95,7 @@ final class PostgresRenameIndexTest extends TestCase
             });
             $statement->method('execute')->willReturnCallback(function () use ($query): bool {
                 if (\preg_match('/^ALTER INDEX IF EXISTS "database"\."([^"]+)" RENAME TO "([^"]+)"$/', $query, $names) === 1) {
-                    $this->indexes = \array_values(\array_map(static fn (string $index): string => $index === $names[1] ? $names[2] : $index, $this->indexes));
+                    $this->indexes = \array_map(static fn (string $index): string => $index === $names[1] ? $names[2] : $index, $this->indexes);
                 }
 
                 return true;
@@ -103,8 +103,14 @@ final class PostgresRenameIndexTest extends TestCase
             $statement->method('fetchAll')->willReturnCallback(function () use ($query, &$bound): array {
                 if (\str_contains($query, 'pg_class')) {
                     $schema = \array_shift($bound);
+                    $names = [];
+                    foreach ($bound as $value) {
+                        if (\is_string($value)) {
+                            $names[] = $value;
+                        }
+                    }
 
-                    return $schema === 'database' ? \array_values(\array_intersect($bound, $this->indexes)) : [];
+                    return $schema === 'database' ? \array_values(\array_intersect($names, $this->indexes)) : [];
                 }
 
                 return \str_contains($query, '_metadata') ? $this->tenants : [];

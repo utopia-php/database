@@ -17,7 +17,6 @@ use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Operator as OperatorException;
 use Utopia\Database\Exception\Query as QueryException;
@@ -31,8 +30,6 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\PermissionType;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\PostgreSQL as PostgreSQLBuilder;
@@ -205,6 +202,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     {
         $namespace = $this->getNamespace();
         $id = $this->filter($name);
+
+        if ($this->sharedTables && $name !== Database::METADATA && $this->completeSharedTable($id, $attributes, $indexes)) {
+            throw new DuplicateException('Collection already exists');
+        }
+
         $tableRaw = $this->getSQLTableRaw($id);
         $permsTableRaw = $this->getSQLTableRaw(Storage::permissionsTable($id));
 
@@ -222,20 +224,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         $table->datetime(Storage::UPDATED_AT, 3)->nullable()->default(null);
 
         foreach ($attributes as $attribute) {
-            if ($attribute->type === ColumnType::Relationship) {
-                $options = $attribute->options ?? [];
-                $relationType = $options['relationType'] ?? null;
-                $twoWay = $options['twoWay'] ?? false;
-                $side = $options['side'] ?? null;
-
-                if (
-                    $relationType === RelationType::ManyToMany->value
-                    || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
-                    || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
-                    || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
-                ) {
-                    continue;
-                }
+            if (! $this->holdsColumn($attribute)) {
+                continue;
             }
 
             $this->addTableColumn(
@@ -507,17 +497,13 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * @param  array<Attribute>  $attributes
+     * @return array<string, string>
      *
-     * @throws MismatchException
      * @throws DatabaseException
      */
-    private function refuseSharedColumnsOfAnotherType(string $collection, array $attributes): void
+    #[\Override]
+    protected function getColumnTypes(string $collection): array
     {
-        if (! $this->sharedTables) {
-            return;
-        }
-
         $statement = $this->prepareStatement(
             'SELECT a.attname, format_type(a.atttypid, a.atttypmod) FROM pg_attribute a WHERE a.attrelid = to_regclass(?) AND a.attnum > 0 AND NOT a.attisdropped',
             Event::CollectionRead,
@@ -533,20 +519,11 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             throw $this->processException($e);
         }
 
-        foreach ($attributes as $attribute) {
-            $existing = $columns[$this->filter($attribute->key)] ?? null;
-            if ($existing === null) {
-                continue;
-            }
-
-            $requested = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
-            if (self::canonicalColumnType($existing) !== self::canonicalColumnType($requested)) {
-                throw new MismatchException('Attribute exists in the shared table with another type');
-            }
-        }
+        return $columns;
     }
 
-    private static function canonicalColumnType(string $type): string
+    #[\Override]
+    protected static function canonicalColumnType(string $type): string
     {
         return \strtr(\strtoupper($type), self::CATALOG_TYPE_SPELLINGS);
     }

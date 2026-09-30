@@ -494,6 +494,10 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     {
         $id = $this->filter($name);
 
+        if ($this->sharedTables && $name !== Database::METADATA && $this->completeSharedTable($id, $attributes, $indexes)) {
+            throw new DuplicateException('Collection already exists');
+        }
+
         /** @var array<string> $attributeStrings */
         $attributeStrings = [];
 

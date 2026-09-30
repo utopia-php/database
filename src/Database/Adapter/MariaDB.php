@@ -30,8 +30,6 @@ use Utopia\Database\OperatorType;
 use Utopia\Database\PDO as DatabasePDO;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
-use Utopia\Database\RelationSide;
-use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Query\Builder\MariaDB as MariaDBBuilder;
 use Utopia\Query\Builder\SQL as SQLBuilder;
@@ -128,6 +126,11 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
     {
         $id = $this->filter($name);
+
+        if ($this->sharedTables && $name !== Database::METADATA && $this->completeSharedTable($id, $attributes, $indexes)) {
+            throw new DuplicateException('Collection already exists');
+        }
+
         $schema = $this->createSchemaBuilder();
         $sharedTables = $this->sharedTables;
 
@@ -148,20 +151,8 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         foreach ($attributes as $attribute) {
             $attrId = $this->filter($attribute->key);
 
-            if ($attribute->type === ColumnType::Relationship) {
-                $options = $attribute->options ?? [];
-                $relationType = $options['relationType'] ?? null;
-                $twoWay = $options['twoWay'] ?? false;
-                $side = $options['side'] ?? null;
-
-                if (
-                    $relationType === RelationType::ManyToMany->value
-                    || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
-                    || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
-                    || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value)
-                ) {
-                    continue;
-                }
+            if (! $this->holdsColumn($attribute)) {
+                continue;
             }
 
             $attrType = $this->getSQLType(
@@ -445,29 +436,50 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
         $storedAttributes = $collection->getAttribute('attributes', []);
         /** @var array<int, array<string, mixed>> $collectionAttributes */
         $collectionAttributes = \is_string($storedAttributes) ? (\json_decode($storedAttributes, true) ?? []) : [];
+
+        $arrays = [];
+        foreach ($collectionAttributes as $collectionAttribute) {
+            $attributeId = $collectionAttribute[Document::ID] ?? '';
+            $arrays[\strtolower(\is_string($attributeId) ? $attributeId : '')] = ! empty($collectionAttribute['array']);
+        }
+
+        return $this->executeCreateIndex($collection->getId(), $index, $arrays);
+    }
+
+    /**
+     * @param  array<Attribute>  $attributes
+     */
+    #[\Override]
+    protected function createDeclaredIndex(string $collection, Index $index, array $attributes): void
+    {
+        $arrays = [];
+        foreach ($attributes as $attribute) {
+            $arrays[\strtolower($attribute->key)] = $attribute->array;
+        }
+
+        $this->executeCreateIndex($collection, $index, $arrays);
+    }
+
+    /**
+     * @param  array<string, bool>  $arrays  Whether each attribute (by lower-cased key) is an array
+     *
+     * @throws DatabaseException
+     */
+    private function executeCreateIndex(string $collection, Index $index, array $arrays): bool
+    {
         $id = $this->filter($index->key);
         $type = $index->type;
-        $attributes = $index->attributes;
         $lengths = $index->lengths;
         $orders = $index->orders;
 
         $schema = $this->createSchemaBuilder();
-        $tableName = $this->getSQLTableRaw($collection->getId());
+        $tableName = $this->getSQLTableRaw($collection);
 
         $columns = [];
-        foreach ($attributes as $i => $key) {
-            $attribute = null;
-            foreach ($collectionAttributes as $collectionAttribute) {
-                $attributeId = $collectionAttribute[Document::ID] ?? '';
-                if (\strtolower(\is_string($attributeId) ? $attributeId : '') === \strtolower($key)) {
-                    $attribute = $collectionAttribute;
-                    break;
-                }
-            }
-
+        foreach ($index->attributes as $i => $key) {
             $columns[] = $this->compileIndexColumn(
                 $this->filter($this->getInternalKeyForAttribute($key)),
-                ! empty($attribute['array']),
+                $arrays[\strtolower($key)] ?? false,
                 (int) ($lengths[$i] ?? 0),
                 $type === IndexType::Fulltext ? '' : Index::direction($orders[$i] ?? null),
             );

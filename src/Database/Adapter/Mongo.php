@@ -92,6 +92,10 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     private const DEFAULT_BATCH_SIZE = 1000;
 
+    private const int INDEX_OPTIONS_CONFLICT = 85;
+
+    private const int INDEX_KEY_SPECS_CONFLICT = 86;
+
     /**
      * Transaction/session state for MongoDB transactions
      *
@@ -606,7 +610,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // already exist for another tenant. Return early to avoid a
         // "Collection Exists" exception from the client.
         if (! $this->inTransaction && ($this->getSharedTables() || $name === Database::METADATA) && $this->exists($this->getNamespace(), $name)) {
-            return true;
+            if ($name === Database::METADATA) {
+                return true;
+            }
+
+            $this->completeSharedCollection($id, $indexes, $attributes);
+
+            throw new DuplicateException('Collection already exists');
         }
 
         // Returns an array/object with the result document
@@ -616,21 +626,25 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         } catch (MongoException $e) {
             // Client throws "Collection Exists" (code 0) if it already exists
             if (\str_contains($e->getMessage(), 'Collection Exists')) {
+                if ($this->getSharedTables() && $name !== Database::METADATA) {
+                    throw new DuplicateException('Collection already exists', $e->getCode(), $e);
+                }
+
                 return true;
             }
             $e = $this->processException($e);
             if ($e instanceof DuplicateException) {
-                if ($this->getSharedTables() || $name === Database::METADATA) {
+                if ($name === Database::METADATA) {
                     return true;
                 }
                 throw $e;
             }
             // Client throws code-0 "Collection Exists" when its pre-check
-            // finds the collection. In shared-tables/metadata context this
-            // is a no-op; otherwise re-throw as DuplicateException so
-            // Database::createCollection() can run orphan reconciliation.
+            // finds the collection. For metadata this is a no-op; otherwise
+            // re-throw as DuplicateException so Database::createCollection()
+            // treats it as another tenant's collection or an orphan.
             if ($e->getCode() === 0 && stripos($e->getMessage(), 'Collection Exists') !== false) {
-                if ($this->getSharedTables() || $name === Database::METADATA) {
+                if ($name === Database::METADATA) {
                     return true;
                 }
                 throw new DuplicateException('Collection already exists', $e->getCode(), $e);
@@ -684,104 +698,14 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         // Only act when $indexes is provided
 
         if (! empty($indexes)) {
-            /**
-             * Each new index has format ['key' => [$attribute => $order], 'name' => $name, 'unique' => $unique]
-             */
-            $newIndexes = [];
-
-            $collectionAttributes = $attributes;
-
-            // using $i and $j as counters to distinguish from $key
-            foreach ($indexes as $i => $index) {
-
-                $key = [];
-                $unique = false;
-                $attributes = $index->attributes;
-                $orders = $index->orders;
-
-                // If sharedTables, always add _tenant as the first key
-                if ($this->shouldAddTenantToIndex($index)) {
-                    $key[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
-                }
-
-                foreach ($attributes as $j => $attribute) {
-                    $attribute = $this->filter($this->getInternalKeyForAttribute((string) $attribute));
-
-                    switch ($index->type) {
-                        case IndexType::Key:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
-                            break;
-                        case IndexType::Fulltext:
-                            // MongoDB fulltext index is just 'text'
-                            $order = 'text';
-                            break;
-                        case IndexType::Unique:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
-                            $unique = true;
-                            break;
-                        case IndexType::Ttl:
-                            $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
-                            break;
-                        default:
-                            // index not supported
-                            return false;
-                    }
-
-                    $key[$attribute] = $order;
-                }
-
-                $newIndexes[$i] = [
-                    'key' => $key,
-                    'name' => $this->filter($index->key),
-                    'unique' => $unique,
-                ];
-
-                if ($index->type === IndexType::Fulltext) {
-                    $newIndexes[$i]['default_language'] = 'none';
-                }
-
-                // Handle TTL indexes
-                if ($index->type === IndexType::Ttl) {
-                    $ttl = $index->ttl;
-                    if ($ttl > 0) {
-                        $newIndexes[$i]['expireAfterSeconds'] = $ttl;
-                    }
-                }
-
-                // Add partial filter for indexes to avoid indexing null values
-                if (in_array($index->type, [
-                    IndexType::Unique,
-                    IndexType::Key,
-                ])) {
-                    $partialFilter = [];
-                    foreach ($attributes as $attr) {
-                        $attr = (string) $attr;
-                        // Find the matching attribute in collectionAttributes to get its type
-                        $attrType = 'string'; // Default fallback
-                        foreach ($collectionAttributes as $collectionAttr) {
-                            if ($collectionAttr->key === $attr) {
-                                $attrType = $this->getMongoTypeCode($collectionAttr->type);
-                                break;
-                            }
-                        }
-
-                        $attr = $this->filter($this->getInternalKeyForAttribute($attr));
-
-                        // Use both $exists: true and $type to exclude nulls and ensure correct type
-                        $partialFilter[$attr] = [
-                            '$exists' => true,
-                            '$type' => $attrType,
-                        ];
-                    }
-                    if (! empty($partialFilter)) {
-                        $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
-                    }
-                }
+            $newIndexes = $this->getCollectionIndexSpecs($indexes, $attributes);
+            if ($newIndexes === null) {
+                return false;
             }
 
             try {
                 $options = $this->getTransactionOptions();
-                $indexesCreated = $this->getClient()->createIndexes($id, \array_values($newIndexes), $options);
+                $indexesCreated = $this->getClient()->createIndexes($id, $newIndexes, $options);
             } catch (Exception $e) {
                 throw $this->processException($e);
             }
@@ -792,6 +716,130 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return true;
+    }
+
+    /**
+     * A later tenant's createCollection() finds the collection another tenant created. Its
+     * definition is its own, so create the indexes it declares that the collection lacks; one
+     * the collection already has under the same name is left as it is.
+     *
+     * @param  array<Index>  $indexes
+     * @param  array<Attribute>  $attributes
+     *
+     * @throws Exception
+     */
+    private function completeSharedCollection(string $collection, array $indexes, array $attributes): void
+    {
+        foreach ($this->getCollectionIndexSpecs($indexes, $attributes) ?? [] as $specification) {
+            try {
+                $this->getClient()->createIndexes($collection, [$specification], $this->getTransactionOptions());
+            } catch (Exception $e) {
+                if (! \in_array($e->getCode(), [self::INDEX_OPTIONS_CONFLICT, self::INDEX_KEY_SPECS_CONFLICT], true)) {
+                    throw $this->processException($e);
+                }
+            }
+        }
+    }
+
+    /**
+     * The createIndexes() specifications of the indexes a createCollection() call declares, or
+     * null when one of them has a type MongoDB cannot index.
+     *
+     * @param  array<Index>  $indexes
+     * @param  array<Attribute>  $attributes
+     * @return list<array<string, mixed>>|null
+     */
+    private function getCollectionIndexSpecs(array $indexes, array $collectionAttributes): ?array
+    {
+        $newIndexes = [];
+
+        foreach ($indexes as $i => $index) {
+
+            $key = [];
+            $unique = false;
+            $attributes = $index->attributes;
+            $orders = $index->orders;
+
+            // If sharedTables, always add _tenant as the first key
+            if ($this->shouldAddTenantToIndex($index)) {
+                $key[Storage::TENANT] = $this->getOrder(OrderDirection::Asc);
+            }
+
+            foreach ($attributes as $j => $attribute) {
+                $attribute = $this->filter($this->getInternalKeyForAttribute((string) $attribute));
+
+                switch ($index->type) {
+                    case IndexType::Key:
+                        $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
+                        break;
+                    case IndexType::Fulltext:
+                        // MongoDB fulltext index is just 'text'
+                        $order = 'text';
+                        break;
+                    case IndexType::Unique:
+                        $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
+                        $unique = true;
+                        break;
+                    case IndexType::Ttl:
+                        $order = $this->getOrder(OrderDirection::tryFrom(Index::direction($orders[$j] ?? null)) ?? OrderDirection::Asc);
+                        break;
+                    default:
+                        return null;
+                }
+
+                $key[$attribute] = $order;
+            }
+
+            $newIndexes[$i] = [
+                'key' => $key,
+                'name' => $this->filter($index->key),
+                'unique' => $unique,
+            ];
+
+            if ($index->type === IndexType::Fulltext) {
+                $newIndexes[$i]['default_language'] = 'none';
+            }
+
+            // Handle TTL indexes
+            if ($index->type === IndexType::Ttl) {
+                $ttl = $index->ttl;
+                if ($ttl > 0) {
+                    $newIndexes[$i]['expireAfterSeconds'] = $ttl;
+                }
+            }
+
+            // Add partial filter for indexes to avoid indexing null values
+            if (in_array($index->type, [
+                IndexType::Unique,
+                IndexType::Key,
+            ])) {
+                $partialFilter = [];
+                foreach ($attributes as $attr) {
+                    $attr = (string) $attr;
+                    // Find the matching attribute in collectionAttributes to get its type
+                    $attrType = 'string'; // Default fallback
+                    foreach ($collectionAttributes as $collectionAttr) {
+                        if ($collectionAttr->key === $attr) {
+                            $attrType = $this->getMongoTypeCode($collectionAttr->type);
+                            break;
+                        }
+                    }
+
+                    $attr = $this->filter($this->getInternalKeyForAttribute($attr));
+
+                    // Use both $exists: true and $type to exclude nulls and ensure correct type
+                    $partialFilter[$attr] = [
+                        '$exists' => true,
+                        '$type' => $attrType,
+                    ];
+                }
+                if (! empty($partialFilter)) {
+                    $newIndexes[$i]['partialFilterExpression'] = $partialFilter;
+                }
+            }
+        }
+
+        return \array_values($newIndexes);
     }
 
     /**

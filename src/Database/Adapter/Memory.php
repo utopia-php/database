@@ -11,6 +11,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Index;
@@ -376,6 +377,10 @@ class Memory extends Adapter implements Feature\Relationships
     {
         $key = $this->key($name);
         if (isset($this->data[$key])) {
+            if ($this->sharedTables && $name !== Database::METADATA) {
+                $this->completeSharedCollection($name, $attributes, $indexes);
+            }
+
             throw new DuplicateException('Collection already exists');
         }
 
@@ -432,6 +437,42 @@ class Memory extends Adapter implements Feature\Relationships
         });
 
         return true;
+    }
+
+    /**
+     * Under shared tables a later tenant's createCollection() finds the collection another
+     * tenant created, as a SQL engine finds the table: add the attributes and indexes its
+     * definition declares that the collection lacks, and refuse an attribute another tenant
+     * keeps with another type.
+     *
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     *
+     * @throws MismatchException
+     * @throws DuplicateException
+     */
+    private function completeSharedCollection(string $name, array $attributes, array $indexes): void
+    {
+        $key = $this->key($name);
+
+        foreach ($attributes as $attribute) {
+            $existing = $this->data[$key]['attributes'][$this->filter($attribute->key)] ?? null;
+            if ($existing !== null && ($existing['type'] ?? null) !== $attribute->type->value) {
+                throw new MismatchException('Attribute exists in the shared table with another type');
+            }
+        }
+
+        foreach ($attributes as $attribute) {
+            if (! isset($this->data[$key]['attributes'][$this->filter($attribute->key)])) {
+                $this->createAttribute($name, $attribute);
+            }
+        }
+
+        foreach ($indexes as $index) {
+            if (! isset($this->data[$key]['indexes'][$this->filter($index->key)])) {
+                $this->createIndex($name, $index);
+            }
+        }
     }
 
     public function deleteCollection(string $id): bool

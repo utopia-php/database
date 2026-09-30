@@ -51,7 +51,8 @@ final class IndexColumnOrderTest extends TestCase
             [Index::key(key: 'tagsfirst', attributes: ['tags', 'status', 'name'], lengths: [255, null, 16], orders: [null, null, Order::Desc])],
         );
 
-        $this->assertStringContainsString($index, $this->statements[0]);
+        $creates = \array_values(\array_filter($this->statements, static fn (string $statement): bool => \str_contains($statement, 'CREATE TABLE')));
+        $this->assertStringContainsString($index, $creates[0] ?? '');
     }
 
     /**

@@ -17,6 +17,7 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Index as IndexException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Helpers\ID;
 use Utopia\Database\Helpers\Permission;
@@ -190,6 +191,8 @@ trait Collections
         try {
             $this->adapter->createCollection($id, $attributes, $indexes);
             $created = true;
+        } catch (MismatchException $e) {
+            throw $e;
         } catch (DuplicateException $e) {
             if ($id === self::METADATA
                 || ($this->adapter->getSharedTables()

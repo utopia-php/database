@@ -19,6 +19,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Event;
 use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
+use Utopia\Database\Exception\Mismatch as MismatchException;
 use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Timeout as TimeoutException;
@@ -672,6 +673,170 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * @throws DatabaseException
      */
     abstract protected function getColumnNames(string $collection): array;
+
+    /**
+     * Under shared tables a later tenant's createCollection() finds the table another tenant
+     * created. Its definition is its own, so add the columns and indexes it declares that the
+     * table lacks. A column another tenant stores with another type is refused before any DDL.
+     *
+     * @param  array<Attribute>  $attributes
+     * @param  array<Index>  $indexes
+     * @return bool False when the table does not exist yet
+     *
+     * @throws MismatchException
+     * @throws DatabaseException
+     */
+    protected function completeSharedTable(string $collection, array $attributes, array $indexes): bool
+    {
+        $columns = \array_change_key_case($this->getColumnTypes($collection));
+        if ($columns === []) {
+            return false;
+        }
+
+        $declared = \array_values(\array_filter($attributes, $this->holdsColumn(...)));
+        $this->refuseColumnsOfAnotherType($columns, $declared);
+
+        $missing = \array_values(\array_filter(
+            $declared,
+            fn (Attribute $attribute): bool => ! isset($columns[\strtolower($this->filter($attribute->key))]),
+        ));
+        if ($missing !== []) {
+            $this->createAttributes($collection, $missing);
+        }
+
+        foreach ($indexes as $index) {
+            try {
+                $this->createDeclaredIndex($collection, $index, $attributes);
+            } catch (MismatchException $error) {
+                throw $error;
+            } catch (DuplicateException) {
+                // Another tenant's collection declares this index as well
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Create an index a createCollection() call declares, before the collection's metadata exists.
+     *
+     * @param  array<Attribute>  $attributes  The attributes the same call declares
+     *
+     * @throws DatabaseException
+     */
+    protected function createDeclaredIndex(string $collection, Index $index, array $attributes): void
+    {
+        $types = [];
+        foreach ($index->attributes as $indexAttribute) {
+            $base = \explode('.', $indexAttribute, 2)[0];
+            foreach ($attributes as $attribute) {
+                if ($attribute->key === $base) {
+                    $types[$indexAttribute] = $attribute->type->value;
+                }
+            }
+        }
+
+        $this->createIndex($collection, $index, $types);
+    }
+
+    /**
+     * Whether createCollection() gives the attribute a column: a relationship keeps its key on
+     * one side only, and a many-to-many one keeps it in the junction collection.
+     */
+    protected function holdsColumn(Attribute $attribute): bool
+    {
+        if ($attribute->type !== ColumnType::Relationship) {
+            return true;
+        }
+
+        $options = $attribute->options ?? [];
+        $relationType = $options['relationType'] ?? null;
+        $twoWay = $options['twoWay'] ?? false;
+        $side = $options['side'] ?? null;
+
+        return ! ($relationType === RelationType::ManyToMany->value
+            || ($relationType === RelationType::OneToOne->value && ! $twoWay && $side === RelationSide::Child->value)
+            || ($relationType === RelationType::OneToMany->value && $side === RelationSide::Parent->value)
+            || ($relationType === RelationType::ManyToOne->value && $side === RelationSide::Child->value));
+    }
+
+    /**
+     * Under shared tables another tenant may have created a column of the same name: refuse one
+     * of another type, as reusing it would record a type the column does not have.
+     *
+     * @param  array<Attribute>  $attributes
+     *
+     * @throws MismatchException
+     * @throws DatabaseException
+     */
+    protected function refuseSharedColumnsOfAnotherType(string $collection, array $attributes): void
+    {
+        if (! $this->sharedTables) {
+            return;
+        }
+
+        $this->refuseColumnsOfAnotherType(\array_change_key_case($this->getColumnTypes($collection)), $attributes);
+    }
+
+    /**
+     * @param  array<string, string>  $columns  Lower-cased column name to type
+     * @param  array<Attribute>  $attributes
+     *
+     * @throws MismatchException
+     * @throws DatabaseException
+     */
+    private function refuseColumnsOfAnotherType(array $columns, array $attributes): void
+    {
+        foreach ($attributes as $attribute) {
+            $existing = $columns[\strtolower($this->filter($attribute->key))] ?? '';
+            if ($existing === '') {
+                continue;
+            }
+
+            $requested = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
+            if (static::canonicalColumnType($existing) !== static::canonicalColumnType($requested)) {
+                throw new MismatchException('Attribute exists in the shared table with another type');
+            }
+        }
+    }
+
+    /**
+     * The physical column types of a collection's table by column name, empty when the table
+     * does not exist. An engine that does not report types gives each column an empty type.
+     *
+     * @return array<string, string>
+     *
+     * @throws DatabaseException
+     */
+    protected function getColumnTypes(string $collection): array
+    {
+        if (! $this instanceof Feature\SchemaAttributes) {
+            return \array_fill_keys($this->getColumnNames($collection), '');
+        }
+
+        $types = [];
+        foreach ($this->getSchemaAttributes($collection) as $column) {
+            $type = $column->getAttribute('columnType', '');
+            $types[$column->getId()] = \is_string($type) ? $type : '';
+        }
+
+        return $types;
+    }
+
+    /**
+     * One spelling per column type: engines report integer display widths (int(11)), spatial
+     * types without their SRID or nullability, and MariaDB's JSON as LONGTEXT.
+     */
+    protected static function canonicalColumnType(string $type): string
+    {
+        $canonical = \preg_replace(
+            ['/\s+/', '/ (NOT )?NULL$/', '/^(POINT|LINESTRING|POLYGON)\b.*$/', '/\b(TINYINT|SMALLINT|MEDIUMINT|INT|INTEGER|BIGINT)\(\d+\)/'],
+            [' ', '', '$1', '$1'],
+            \strtoupper(\trim($type)),
+        ) ?? $type;
+
+        return $canonical === 'JSON' ? 'LONGTEXT' : $canonical;
+    }
 
     /**
      * Get Document

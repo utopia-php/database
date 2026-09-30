@@ -410,8 +410,9 @@ trait Documents
         if ($this->validate) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
+            $supportForJoins = $this->adapter->supports(Capability::Joins);
             $validator = $joinedCollections === []
-                ? new DocumentValidator($attributes, $supportForAttributes, sharedTables: $this->adapter->getSharedTables())
+                ? new DocumentValidator($attributes, $supportForAttributes, sharedTables: $this->adapter->getSharedTables(), supportForJoins: $supportForJoins)
                 : new DocumentValidator(
                     attributes: $attributes,
                     supportForAttributes: $supportForAttributes,
@@ -421,6 +422,7 @@ trait Documents
                     maxAllowedDate: $this->adapter->getMaxDateTime(),
                     supportUnsignedBigInt: $this->adapter->supports(Capability::UnsignedBigInt),
                     sharedTables: $this->adapter->getSharedTables(),
+                    supportForJoins: $supportForJoins,
                 );
             $validator->setJoinedCollections($joinedCollections);
             if (! $validator->isValid($queries)) {

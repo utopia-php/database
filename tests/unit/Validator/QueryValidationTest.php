@@ -8,6 +8,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Utopia\Cache\Adapter\None as NoCache;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\Memory;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -383,6 +384,28 @@ final class QueryValidationTest extends TestCase
         }
 
         $this->assertTrue($disabled->isValid([Query::select(['name'])]), $disabled->getDescription());
+    }
+
+    /**
+     * getDocument() builds its query validator with the adapter's join support, so on an adapter
+     * without joins a join is refused by validation, as find() refuses it.
+     */
+    public function testGetDocumentRefusesAJoinOnAnAdapterWithoutJoins(): void
+    {
+        $database = new Database(new Memory(), new Cache(new NoCache()));
+        $database
+            ->setDatabase('query_validation')
+            ->setNamespace('query_validation_'.\uniqid())
+            ->setAuthorization(new Authorization());
+        $database->create();
+
+        $permissions = [Permission::create(Role::any()), Permission::read(Role::any())];
+        $database->createCollection(new Collection(id: 'customers', attributes: [Attribute::string(key: 'name', size: 32)], permissions: $permissions, documentSecurity: false));
+        $database->createCollection(new Collection(id: 'notes', attributes: [Attribute::string(key: 'customerId', size: 32)], permissions: $permissions, documentSecurity: false));
+        $database->createDocument('customers', new Document(['$id' => 'c1', 'name' => 'Ann']));
+
+        $this->assertInvalidQuery('Invalid query method: join', fn (): mixed => $database->getDocument('customers', 'c1', [Query::join('notes', '$id', 'customerId', '=', 'note')]));
+        $this->assertSame('Ann', $database->getDocument('customers', 'c1', [Query::select(['name'])])->getAttribute('name'));
     }
 
     /**

@@ -92,21 +92,32 @@ final class RelationshipSchemaTest extends TestCase
      */
     private function attributeKeys(Database $database, string $collection): array
     {
-        return \array_map(
+        return \array_values(\array_map(
             static fn (Attribute $attribute): string => $attribute->key,
-            $database->getCollection($collection)->getAttribute('attributes', []),
-        );
+            $this->attributes($database, $collection),
+        ));
     }
 
     private function relationship(Database $database, string $collection, string $key): Relationship
     {
-        foreach ($database->getCollection($collection)->getAttribute('attributes', []) as $attribute) {
+        foreach ($this->attributes($database, $collection) as $attribute) {
             if ($attribute->key === $key) {
                 return Relationship::fromArray(['collection' => $collection] + $attribute->getArrayCopy());
             }
         }
 
         $this->fail("{$collection} has no relationship {$key}");
+    }
+
+    /**
+     * @return array<Attribute>
+     */
+    private function attributes(Database $database, string $collection): array
+    {
+        /** @var array<Attribute> $attributes */
+        $attributes = $database->getCollection($collection)->getAttribute('attributes', []);
+
+        return $attributes;
     }
 
     private function database(Adapter $adapter): Database

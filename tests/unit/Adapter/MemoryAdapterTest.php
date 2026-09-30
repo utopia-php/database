@@ -25,6 +25,10 @@ final class MemoryAdapterTest extends TestCase
 
     private const string BOB = 'bob';
 
+    private const int TENANT = 1;
+
+    private const int OTHER_TENANT = 2;
+
     private Authorization $authorization;
 
     protected function setUp(): void
@@ -46,6 +50,39 @@ final class MemoryAdapterTest extends TestCase
         $this->assertSame([self::DOCUMENT], $this->readableBy($database, self::BOB));
     }
 
+    public function testRevokeUnderOneTenantKeepsAnotherTenantsGrants(): void
+    {
+        $database = $this->sharedNotes();
+
+        $database->withTenant(self::TENANT, fn (): Document => $database->updateDocument(self::COLLECTION, self::DOCUMENT, $this->readers([])));
+
+        $this->assertSame([], $this->readableUnder($database, self::TENANT, self::ALICE));
+        $this->assertSame([self::DOCUMENT], $this->readableUnder($database, self::OTHER_TENANT, self::ALICE), 'A revoke under one tenant must keep another tenant\'s grants');
+        $this->assertSame([self::DOCUMENT], $this->readableUnder($database, self::OTHER_TENANT, self::BOB));
+
+        $database->withTenant(self::OTHER_TENANT, fn (): Document => $database->updateDocument(self::COLLECTION, self::DOCUMENT, $this->readers([self::ALICE])));
+
+        $this->assertSame([self::DOCUMENT], $this->readableUnder($database, self::OTHER_TENANT, self::ALICE));
+        $this->assertSame([], $this->readableUnder($database, self::OTHER_TENANT, self::BOB), 'The second tenant\'s own revoke must remove its grant');
+        $this->assertSame([], $this->readableUnder($database, self::TENANT, self::BOB));
+    }
+
+    public function testDeleteUnderOneTenantKeepsAnotherTenantsGrants(): void
+    {
+        $database = $this->sharedNotes();
+
+        $database->withTenant(self::TENANT, fn (): bool => $database->deleteDocument(self::COLLECTION, self::DOCUMENT));
+
+        $this->assertSame([self::DOCUMENT], $this->readableUnder($database, self::OTHER_TENANT, self::ALICE), 'A delete under one tenant must keep another tenant\'s grants');
+
+        $database->withTenant(self::OTHER_TENANT, fn (): bool => $database->deleteDocument(self::COLLECTION, self::DOCUMENT));
+        $database->withTenant(self::OTHER_TENANT, fn (): Document => $database->createDocument(self::COLLECTION, $this->note([self::BOB])));
+
+        $this->assertSame([], $this->readableUnder($database, self::OTHER_TENANT, self::ALICE), 'The second tenant\'s own delete must remove its grants');
+        $this->assertSame([self::DOCUMENT], $this->readableUnder($database, self::OTHER_TENANT, self::BOB));
+        $this->assertSame([], $this->readableUnder($database, self::TENANT, self::BOB));
+    }
+
     private function database(Adapter $adapter): Database
     {
         return (new Database($adapter, new Cache(new None())))
@@ -58,6 +95,21 @@ final class MemoryAdapterTest extends TestCase
     {
         $database = $this->database(new Memory());
         $database->create();
+
+        return $database;
+    }
+
+    private function sharedNotes(): Database
+    {
+        $database = $this->database(new Memory())
+            ->setSharedTables(true)
+            ->setTenant(null);
+        $database->create();
+        $this->createNotes($database);
+
+        foreach ([self::TENANT, self::OTHER_TENANT] as $tenant) {
+            $database->withTenant($tenant, fn (): Document => $database->createDocument(self::COLLECTION, $this->note([self::ALICE, self::BOB])));
+        }
 
         return $database;
     }
@@ -97,6 +149,14 @@ final class MemoryAdapterTest extends TestCase
                 $readers,
             ),
         ]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function readableUnder(Database $database, int $tenant, string $reader): array
+    {
+        return $database->withTenant($tenant, fn (): array => $this->readableBy($database, $reader));
     }
 
     /**

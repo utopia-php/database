@@ -25,8 +25,8 @@ final class StructureFormatTest extends TestCase
         $this->received = [];
         Structure::addFormat(self::FORMAT, function (mixed $attribute): Text {
             $this->received[] = $attribute;
-            /** @var array<string, mixed> $attribute */
-            $size = $attribute['formatOptions']['maximum'] ?? 0;
+            $options = \is_array($attribute) ? ($attribute['formatOptions'] ?? []) : [];
+            $size = \is_array($options) ? ($options['maximum'] ?? 0) : 0;
 
             return new Text(\is_int($size) ? $size : 0);
         }, ColumnType::String);

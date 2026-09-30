@@ -5199,4 +5199,50 @@ trait OperatorTests
 
         $database->deleteCollection($collectionId);
     }
+
+    public function testPowerWithANumericTextExponent(): void
+    {
+        $database = static::getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::Operators)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $collectionId = 'j47a_power_numeric_text';
+        if ($database->exists($database->getDatabase(), $collectionId)) {
+            $database->deleteCollection($collectionId);
+        }
+        $database->createCollection(new Collection(id: $collectionId, permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())], documentSecurity: false));
+        $database->createAttribute($collectionId, Attribute::integer(key: 'count'));
+        $database->createAttribute($collectionId, Attribute::double(key: 'ratio'));
+
+        try {
+            $database->createDocument($collectionId, new Document(['$id' => 'first', 'count' => 3, 'ratio' => 1.5]));
+
+            $updated = $database->updateDocument($collectionId, 'first', new Document([
+                'count' => Operator::power('2'),
+                'ratio' => Operator::power('2'),
+            ]));
+            $this->assertSame(9, $updated->getAttribute('count'));
+            $this->assertEquals(2.25, $updated->getAttribute('ratio'));
+
+            $updated = $database->updateDocument($collectionId, 'first', new Document(['count' => Operator::power('2', '50')]));
+            $this->assertSame(9, $updated->getAttribute('count'));
+
+            try {
+                $database->updateDocument($collectionId, 'first', new Document(['count' => Operator::power('two')]));
+                $this->fail('A non-numeric exponent must be refused');
+            } catch (StructureException $error) {
+                $this->assertStringContainsString('value must be numeric', $error->getMessage());
+            }
+
+            $fetched = $database->getDocument($collectionId, 'first');
+            $this->assertSame(9, $fetched->getAttribute('count'));
+            $this->assertEquals(2.25, $fetched->getAttribute('ratio'));
+        } finally {
+            $database->deleteCollection($collectionId);
+        }
+    }
 }

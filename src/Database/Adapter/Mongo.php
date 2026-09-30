@@ -2114,31 +2114,32 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         $max = $max === null ? null : $this->normalizeAtomicNumber($max, 'maximum');
 
         $attribute = $this->filter($attribute);
+        $current = ['$ifNull' => ['$'.$attribute, 0]];
         $filters = [Storage::UID => $id];
         $filters = $this->applyTenantFilter($filters, $collection);
 
-        if ($max !== null || $min !== null) {
-            /** @var array<string, int|float> $attributeFilter */
-            $attributeFilter = [];
-            if ($max !== null) {
-                $attributeFilter['$lte'] = $max;
-            }
-            if ($min !== null) {
-                $attributeFilter['$gte'] = $min;
-            }
-            $filters[$attribute] = $attributeFilter;
+        $bounds = [];
+        if ($max !== null) {
+            $bounds[] = ['$lte' => [$current, $max]];
+        }
+        if ($min !== null) {
+            $bounds[] = ['$gte' => [$current, $min]];
+        }
+        if ($bounds !== []) {
+            $filters['$expr'] = \count($bounds) === 1 ? $bounds[0] : ['$and' => $bounds];
         }
 
-        $options = $this->getTransactionOptions();
+        $pipeline = [['$set' => [
+            $attribute => ['$add' => [$current, $value]],
+            Storage::UPDATED_AT => ['$literal' => $this->toMongoDatetime($updatedAt)],
+        ]]];
+
         try {
-            $this->client->update(
+            $this->updateWithPipeline(
                 $this->getNamespace().'_'.$this->filter($collection),
                 $filters,
-                [
-                    '$inc' => [$attribute => $value],
-                    '$set' => [Storage::UPDATED_AT => $this->toMongoDatetime($updatedAt)],
-                ],
-                options: $options
+                $pipeline,
+                $this->getTransactionOptions(),
             );
         } catch (MongoException $e) {
             throw $this->processException($e);

@@ -1384,12 +1384,13 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $documentIds = [];
         $tenants = [];
+        $keyedByTenant = $this->sharedTables && $this->tenantPerDocument;
 
         foreach ($documents as $document) {
             if (empty($document->getSequence())) {
                 $documentIds[] = $document->getId();
 
-                if ($this->sharedTables && $this->tenantPerDocument) {
+                if ($keyedByTenant) {
                     $tenant = $document->getTenant();
                     if (! \in_array($tenant, $tenants, true)) {
                         $tenants[] = $tenant;
@@ -1403,19 +1404,33 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         $builder = $this->newBuilder($collection, tenants: $tenants);
-        $builder->select([Storage::UID, Storage::SEQUENCE]);
+        $builder->select($keyedByTenant
+            ? [Storage::UID, Storage::SEQUENCE, Storage::TENANT]
+            : [Storage::UID, Storage::SEQUENCE]);
         $builder->filter([BaseQuery::equal(Storage::UID, $documentIds)]);
 
         $result = $builder->build();
         $stmt = $this->executeResult($result, Event::DocumentRead);
         $this->execute($stmt);
-        /** @var array<string, mixed> $sequences */
-        $sequences = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // Fetch as [documentId => sequence]
+
+        $sequenceKey = static fn (mixed $tenant, mixed $id): string => (\is_scalar($tenant) ? (string) $tenant : '')."\0".(\is_scalar($id) ? (string) $id : '');
+
+        if ($keyedByTenant) {
+            $sequences = [];
+            /** @var array<string, mixed> $row */
+            foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $sequences[$sequenceKey($row[Storage::TENANT] ?? null, $row[Storage::UID] ?? null)] = $row[Storage::SEQUENCE] ?? null;
+            }
+        } else {
+            /** @var array<string, mixed> $sequences */
+            $sequences = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        }
         $stmt->closeCursor();
 
         foreach ($documents as $document) {
-            if (isset($sequences[$document->getId()])) {
-                $document[Document::SEQUENCE] = $sequences[$document->getId()];
+            $key = $keyedByTenant ? $sequenceKey($document->getTenant(), $document->getId()) : $document->getId();
+            if (isset($sequences[$key])) {
+                $document[Document::SEQUENCE] = $sequences[$key];
             }
         }
 
@@ -1435,15 +1450,17 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $attribute = $this->filter($attribute);
 
         $builder = $this->newBuilder($name);
-        $builder->setRaw($attribute, $this->quote($attribute).' + ?', [$value]);
+        $builder->setRaw($attribute, 'COALESCE('.$this->quote($attribute).', 0) + ?', [$value]);
         $builder->set([Storage::UPDATED_AT => $updatedAt]);
 
         $filters = [BaseQuery::equal(Storage::UID, [$id])];
         if ($max !== null) {
-            $filters[] = BaseQuery::lessThanEqual($attribute, $max);
+            $withinMaximum = BaseQuery::lessThanEqual($attribute, $max);
+            $filters[] = (float) $max >= 0 ? BaseQuery::or([$withinMaximum, BaseQuery::isNull($attribute)]) : $withinMaximum;
         }
         if ($min !== null) {
-            $filters[] = BaseQuery::greaterThanEqual($attribute, $min);
+            $withinMinimum = BaseQuery::greaterThanEqual($attribute, $min);
+            $filters[] = (float) $min <= 0 ? BaseQuery::or([$withinMinimum, BaseQuery::isNull($attribute)]) : $withinMinimum;
         }
         $builder->filter($filters);
 

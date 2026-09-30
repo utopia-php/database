@@ -9700,4 +9700,44 @@ trait DocumentTests
             $database->deleteCollection($collection);
         }
     }
+
+    public function testIncreaseAndDecreaseWithAFractionalBoundOnAnInteger(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $collection = 'fractional_bound_'.uniqid();
+
+        $database->createCollection(new Collection(id: $collection, permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false));
+        $database->createAttribute($collection, Attribute::integer(key: 'count', required: true));
+        $database->createDocument($collection, new Document(['$id' => 'counter', 'count' => 100]));
+
+        try {
+            $this->assertSame(101, $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.4)->getAttribute('count'));
+            $this->assertSame(102, $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.4)->getAttribute('count'));
+
+            try {
+                $database->increaseDocumentAttribute($collection, 'counter', 'count', 1, 102.4);
+                $this->fail('An increase past a fractional maximum was accepted');
+            } catch (LimitException $error) {
+                $this->assertSame('Attribute value exceeds maximum limit: 102.4', $error->getMessage());
+            }
+            $this->assertSame(102, $database->getDocument($collection, 'counter')->getAttribute('count'));
+
+            $this->assertSame(101, $database->decreaseDocumentAttribute($collection, 'counter', 'count', 1, 100.5)->getAttribute('count'));
+
+            try {
+                $database->decreaseDocumentAttribute($collection, 'counter', 'count', 1, 100.5);
+                $this->fail('A decrease past a fractional minimum was accepted');
+            } catch (LimitException $error) {
+                $this->assertSame('Attribute value exceeds minimum limit: 100.5', $error->getMessage());
+            }
+            $this->assertSame(101, $database->getDocument($collection, 'counter')->getAttribute('count'));
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

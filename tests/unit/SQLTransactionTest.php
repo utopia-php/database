@@ -4,11 +4,8 @@ namespace Tests\Unit;
 
 use PDOException;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
-use ReflectionProperty;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
-use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
 final class SQLTransactionTest extends TestCase
@@ -64,9 +61,6 @@ final class SQLTransactionTest extends TestCase
 
     public function testPostgresStartTransactionRecoversFromDesyncedRollback(): void
     {
-        $method = new ReflectionMethod(Postgres::class, 'startTransaction');
-        $this->assertSame(SQL::class, $method->getDeclaringClass()->getName());
-
         $pdo = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
@@ -109,16 +103,19 @@ final class SQLTransactionTest extends TestCase
 
     public function testPostgresRollbackPreservesFalseResultFailure(): void
     {
+        $statement = self::createStub(\PDOStatement::class);
+        $statement->method('execute')->willReturn(true);
         $pdo = $this->getMockBuilder(\PDO::class)
             ->disableOriginalConstructor()
             ->getMock();
+        $pdo->method('prepare')->willReturn($statement);
+        $pdo->method('beginTransaction')->willReturn(true);
         $pdo->expects($this->once())
             ->method('rollBack')
             ->willReturn(false);
 
         $adapter = new Postgres($pdo);
-        $inTransaction = new ReflectionProperty(SQL::class, 'inTransaction');
-        $inTransaction->setValue($adapter, 1);
+        $this->assertTrue($adapter->startTransaction());
 
         $this->expectException(TransactionException::class);
         $this->expectExceptionMessage('Failed to rollback transaction');

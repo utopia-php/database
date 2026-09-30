@@ -9883,4 +9883,121 @@ trait DocumentTests
         return ($driver instanceof PDO || $driver instanceof DatabasePDO)
             && $driver->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql';
     }
+
+    public function testStringThatReadsLikeWktRoundTripsUnchanged(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+
+        if (! $database->getAdapter()->supports(Capability::DefinedAttributes)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $spatial = $database->getAdapter()->hasFeature(Feature\Spatial::class);
+        $upserts = $database->getAdapter()->hasFeature(Feature\Upserts::class);
+        $position = [3.0, 4.0];
+        $answers = [
+            'point' => 'POINT(1 2)',
+            'point with trailing text' => 'POINT(1 2) is my answer',
+            'linestring' => 'LINESTRING(0 0,1 1)',
+            'polygon' => 'POLYGON((0 0,1 1,1 0,0 0))',
+            'lowercase point' => 'point (1 2)',
+        ];
+
+        $attributes = [Attribute::string(key: 'answer', size: 255)];
+        if ($spatial) {
+            $attributes[] = Attribute::point(key: 'position', required: true);
+        }
+
+        $collection = 'wkt_text_round_trip';
+        $database->createCollection(new Collection(
+            id: $collection,
+            attributes: $attributes,
+            permissions: [
+                Permission::create(Role::any()),
+                Permission::read(Role::any()),
+                Permission::update(Role::any()),
+            ],
+            documentSecurity: false,
+        ));
+
+        $document = function (string $id, ?string $answer) use ($spatial, $position): Document {
+            $attributes = ['$id' => $id, 'answer' => $answer];
+            if ($spatial) {
+                $attributes['position'] = $position;
+            }
+
+            return new Document($attributes);
+        };
+
+        $assertStored = function (string $id, ?string $answer, string $case) use ($database, $collection, $spatial, $position): void {
+            $stored = $database->getDocument($collection, $id);
+            $this->assertSame($answer, $stored->getAttribute('answer'), $case);
+            if ($spatial) {
+                $this->assertEquals($position, $stored->getAttribute('position'), $case);
+            }
+            if ($answer !== null) {
+                $found = $database->find($collection, [Query::equal('answer', [$answer]), Query::equal('$id', [$id])]);
+                $this->assertCount(1, $found, $case.' is stored as the text itself');
+            }
+        };
+
+        try {
+            foreach ($answers as $case => $answer) {
+                $single = 'single_'.\str_replace(' ', '_', $case);
+                $created = $database->createDocument($collection, $document($single, $answer));
+                $this->assertSame($answer, $created->getAttribute('answer'), 'createDocument '.$case);
+                $assertStored($single, $answer, 'createDocument '.$case);
+
+                $database->updateDocument($collection, $single, new Document(['answer' => 'plain '.$answer]));
+                $assertStored($single, 'plain '.$answer, 'updateDocument away from '.$case);
+                $database->updateDocument($collection, $single, new Document(['answer' => $answer]));
+                $assertStored($single, $answer, 'updateDocument '.$case);
+
+                $batch = 'batch_'.\str_replace(' ', '_', $case);
+                $count = $database->createDocuments($collection, [
+                    $document($batch, $answer),
+                    $document($batch.'_plain', 'plain text'),
+                    $document($batch.'_null', null),
+                ]);
+                $this->assertSame(3, $count, 'createDocuments '.$case);
+                $assertStored($batch, $answer, 'createDocuments '.$case);
+                $assertStored($batch.'_plain', 'plain text', 'createDocuments sibling of '.$case);
+                $assertStored($batch.'_null', null, 'createDocuments null sibling of '.$case);
+
+                $database->updateDocuments($collection, new Document(['answer' => $answer]), [
+                    Query::equal('$id', [$batch.'_plain', $batch.'_null']),
+                ]);
+                $assertStored($batch.'_plain', $answer, 'updateDocuments '.$case);
+                $assertStored($batch.'_null', $answer, 'updateDocuments '.$case);
+
+                if ($upserts) {
+                    $upserted = 'upsert_'.\str_replace(' ', '_', $case);
+                    $database->upsertDocuments($collection, [
+                        $document($upserted, $answer),
+                        $document($batch, 'plain text'),
+                    ]);
+                    $assertStored($upserted, $answer, 'upsertDocuments insert '.$case);
+                    $assertStored($batch, 'plain text', 'upsertDocuments update beside '.$case);
+
+                    $database->upsertDocuments($collection, [$document($batch, $answer)]);
+                    $assertStored($batch, $answer, 'upsertDocuments update '.$case);
+                }
+            }
+
+            if ($spatial) {
+                try {
+                    $database->createDocument($collection, new Document(['$id' => 'not_a_point', 'answer' => 'x', 'position' => 'not a point']));
+                    $this->fail('A point attribute given text that is not WKT is refused');
+                } catch (StructureException $error) {
+                    $this->assertStringContainsString('position', $error->getMessage());
+                }
+                $this->assertTrue($database->getDocument($collection, 'not_a_point')->isEmpty());
+            }
+        } finally {
+            $database->deleteCollection($collection);
+        }
+    }
 }

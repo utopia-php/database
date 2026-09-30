@@ -926,7 +926,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
 
-        $spatialAttributes = $this->expandSpatialAttributes($spatialAttributes, $documents);
         $spatialMap = \array_fill_keys($spatialAttributes, true);
 
         foreach ($spatialAttributes as $spatialColumn) {
@@ -1182,7 +1181,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
 
-            if (isset($spatialMap[$attribute]) || $this->isSpatialWkt($value)) {
+            if (isset($spatialMap[$attribute])) {
                 $spatialRows[$this->filter($attribute)] = $this->encodeSpatialWriteValue($value);
 
                 continue;
@@ -3280,11 +3279,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         return "'axis-order=long-lat'";
     }
 
-    protected function isSpatialWkt(mixed $value): bool
-    {
-        return \is_string($value) && \preg_match('/^(POINT|LINESTRING|POLYGON)\s*\(/i', $value) === 1;
-    }
-
     /**
      * @param  array<mixed>  $geometry
      *
@@ -3718,11 +3712,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     ): void {
         $builder = $this->createBuilder()->into($this->getSQLTableRaw($name));
 
-        $spatialAttributes = $this->expandSpatialAttributes(
-            $spatialAttributes,
-            \array_map(static fn (Change $change) => $change->getNew(), $changes),
-        );
-
         foreach ($spatialAttributes as $spatialCol) {
             $builder->insertColumnExpression($spatialCol, $this->getSpatialGeomFromText('?'));
         }
@@ -3795,7 +3784,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $row = [];
             foreach ($allColumnNames as $key) {
                 $value = $docAttrs[$key] ?? null;
-                if (isset($spatialMap[$key]) || $this->isSpatialWkt($value)) {
+                if (isset($spatialMap[$key])) {
                     $value = $this->encodeSpatialWriteValue($value);
                 } elseif (\is_array($value)) {
                     $value = \json_encode($value);
@@ -5634,7 +5623,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 continue;
             }
             $value = $attributes[$key] ?? null;
-            if (isset($spatialMap[$key]) || $this->isSpatialWkt($value)) {
+            if (isset($spatialMap[$key])) {
                 $value = $this->encodeSpatialWriteValue($value);
             } elseif (\is_array($value)) {
                 $value = \json_encode($value);
@@ -5695,45 +5684,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             \is_string($key) ? $key : null,
             \is_string($type) ? $type : null,
         ];
-    }
-
-    /**
-     * @param  list<string>  $spatialAttributes
-     * @param  array<Document>  $documents
-     * @return list<string>
-     */
-    protected function expandSpatialAttributes(array $spatialAttributes, array $documents): array
-    {
-        $spatialMap = \array_fill_keys($spatialAttributes, true);
-        foreach ($documents as $document) {
-            foreach ($document->getAttributes() as $key => $value) {
-                if (! isset($spatialMap[$key]) && $this->isSpatialWkt($value)) {
-                    $spatialAttributes[] = $key;
-                    $spatialMap[$key] = true;
-                }
-            }
-        }
-
-        return $spatialAttributes;
-    }
-
-    protected function isSpatialWriteValue(mixed $value): bool
-    {
-        if ($this->isSpatialWkt($value)) {
-            return true;
-        }
-
-        if (! \is_array($value) || $value === []) {
-            return false;
-        }
-
-        try {
-            $this->convertArrayToWKT($value);
-
-            return true;
-        } catch (DatabaseException) {
-            return false;
-        }
     }
 
     protected function encodeSpatialWriteValue(mixed $value): mixed

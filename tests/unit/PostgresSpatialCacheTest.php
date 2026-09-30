@@ -54,19 +54,13 @@ final class PostgresSpatialCacheTest extends TestCase
         $this->assertSame(['loc', 'route', 'area'], $getSpatialAttributes->invoke($adapter, $collection));
     }
 
-    public function testSpatialWriteValueDetection(): void
+    public function testSpatialWriteValueEncoding(): void
     {
         $adapter = new Postgres($this->createStub(\PDO::class));
-        $isSpatialWriteValue = new ReflectionMethod($adapter, 'isSpatialWriteValue');
         $encodeSpatialWriteValue = new ReflectionMethod($adapter, 'encodeSpatialWriteValue');
 
-        $this->assertTrue($isSpatialWriteValue->invoke($adapter, 'POINT(0 0)'));
-        $this->assertTrue($isSpatialWriteValue->invoke($adapter, [0.0, 0.0]));
-        $this->assertTrue($isSpatialWriteValue->invoke($adapter, [[0.0, 0.0], [1.0, 1.0]]));
-        $this->assertFalse($isSpatialWriteValue->invoke($adapter, 'description'));
-        $this->assertFalse($isSpatialWriteValue->invoke($adapter, ['foo' => 'bar']));
-
         $this->assertSame('POINT(0 0)', $encodeSpatialWriteValue->invoke($adapter, [0.0, 0.0]));
+        $this->assertSame('LINESTRING(0 0, 1 1)', $encodeSpatialWriteValue->invoke($adapter, [[0.0, 0.0], [1.0, 1.0]]));
         $this->assertSame('POINT(0 0)', $encodeSpatialWriteValue->invoke($adapter, 'POINT(0 0)'));
     }
 

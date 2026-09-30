@@ -456,17 +456,7 @@ class Permissions extends Interceptor
      */
     private function currentPermissions(array $map, string $documentId): array
     {
-        if (\array_key_exists($documentId, $map)) {
-            return $map[$documentId];
-        }
-
-        foreach ($map as $storedId => $permissions) {
-            if (\strcasecmp((string) $storedId, $documentId) === 0) {
-                return $permissions;
-            }
-        }
-
-        return $this->emptyPermissions();
+        return $map[$documentId] ?? $this->emptyPermissions();
     }
 
     /**

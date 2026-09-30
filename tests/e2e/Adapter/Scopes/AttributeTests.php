@@ -6,6 +6,7 @@ use Exception;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Throwable;
 use Utopia\Database\Adapter\Feature;
+use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Attribute;
 use Utopia\Database\Capability;
 use Utopia\Database\Collection;
@@ -18,6 +19,7 @@ use Utopia\Database\Exception\Conflict as ConflictException;
 use Utopia\Database\Exception\Dependency as DependencyException;
 use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Exception\Limit as LimitException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Exception\Structure as StructureException;
 use Utopia\Database\Exception\Truncate as TruncateException;
@@ -2666,5 +2668,165 @@ trait AttributeTests
         } catch (Throwable $e) {
             $this->assertInstanceOf(DatabaseException::class, $e);
         }
+    }
+
+    public function testSharedTablesTenantsRenameAnAttributeInTurn(): void
+    {
+        $this->runSharedRename(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            foreach ([$first, $second] as $tenant) {
+                $database->setTenant($tenant);
+                $this->assertTrue($database->renameAttribute($collection, 'age', 'years'));
+                $this->assertSame('fullName', $database->updateAttribute($collection, 'name', size: 128, newKey: 'fullName')->getId());
+            }
+
+            foreach ([$first, $second] as $index => $tenant) {
+                $database->setTenant($tenant);
+                $document = $database->getDocument($collection, 'user');
+
+                $this->assertSame(['years', 'fullName', 'nick'], $this->getSharedRenameKeys($database, $collection));
+                $this->assertSame(($index + 1) * 10, $document->getAttribute('years'));
+                $this->assertSame('name'.$index, $document->getAttribute('fullName'));
+                $this->assertFalse($document->offsetExists('age'));
+                $this->assertFalse($document->offsetExists('name'));
+
+                $database->updateDocument($collection, 'user', new Document(['years' => ($index + 1) * 100]));
+                $this->assertSame(($index + 1) * 100, $database->getDocument($collection, 'user')->getAttribute('years'));
+            }
+        });
+    }
+
+    public function testSharedTablesTenantsRenameAnIndexInTurn(): void
+    {
+        $this->runSharedRename(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            foreach ([$first, $second] as $tenant) {
+                $database->setTenant($tenant);
+                $this->assertTrue($database->renameIndex($collection, 'byAge', 'ageIndex'));
+            }
+
+            foreach ([$first, $second] as $index => $tenant) {
+                $database->setTenant($tenant);
+                $indexes = $database->getCollection($collection)->indexes;
+
+                $this->assertSame(['ageIndex'], \array_map(static fn (Index $value): string => $value->key, \array_values($indexes)));
+                $this->assertSame(['user'], \array_map(
+                    static fn (Document $document): string => $document->getId(),
+                    $database->find($collection, [Query::equal('age', [($index + 1) * 10])]),
+                ));
+            }
+        });
+    }
+
+    public function testSharedTablesRenameOfAMissingAttributeIsNotFound(): void
+    {
+        $this->runSharedRename(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            $database->setTenant($first);
+            $database->renameAttribute($collection, 'age', 'years');
+
+            $database->setTenant($second);
+            try {
+                $database->renameAttribute($collection, 'missing', 'found');
+                $this->fail('Renaming an attribute the collection does not have must be refused');
+            } catch (NotFoundException $error) {
+                $this->assertSame('Attribute not found', $error->getMessage());
+            }
+
+            $this->assertSame(['age', 'name', 'nick'], $this->getSharedRenameKeys($database, $collection));
+        });
+    }
+
+    public function testSharedTablesRenameOntoAnotherTenantsAttributeIsRefused(): void
+    {
+        $this->runSharedRename(function (Database $database, string $collection, int|string $first, int|string $second): void {
+            $database->setTenant($second);
+            $database->createAttribute($collection, Attribute::string(key: 'title', size: 32));
+            $database->updateDocument($collection, 'user', new Document(['title' => 'title1']));
+
+            $database->setTenant($first);
+            try {
+                $database->renameAttribute($collection, 'nick', 'title');
+                $this->fail('A rename onto another tenant\'s column must be refused while the old column holds values');
+            } catch (DuplicateException $error) {
+                $this->assertSame('Attribute already exists', $error->getMessage());
+            }
+
+            try {
+                $database->updateAttribute($collection, 'nick', newKey: 'title');
+                $this->fail('A key update onto another tenant\'s column must be refused while the old column holds values');
+            } catch (DuplicateException $error) {
+                $this->assertSame('Attribute already exists', $error->getMessage());
+            }
+
+            $this->assertSame(['age', 'name', 'nick'], $this->getSharedRenameKeys($database, $collection));
+            $this->assertSame('nick0', $database->getDocument($collection, 'user')->getAttribute('nick'));
+
+            $database->setTenant($second);
+            $document = $database->getDocument($collection, 'user');
+            $this->assertSame('nick1', $document->getAttribute('nick'));
+            $this->assertSame('title1', $document->getAttribute('title'));
+        });
+    }
+
+    /**
+     * @param  callable(Database, string, int|string, int|string): void  $scenario
+     */
+    private function runSharedRename(callable $scenario): void
+    {
+        $database = $this->getDatabase();
+
+        if (! $database->getSharedTables() || ! $database->getAdapter() instanceof SQL) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $originalTenant = $database->getTenant();
+        $integerTenants = $database->getAdapter()->getIdAttributeType() === ColumnType::Integer->value;
+        $tenants = $integerTenants ? [501, 502] : ['tenant_501', 'tenant_502'];
+        $collection = 'sharedRename_'.\uniqid();
+        $definition = new Collection(id: $collection, attributes: [
+            Attribute::integer(key: 'age'),
+            Attribute::string(key: 'name', size: 64),
+            Attribute::string(key: 'nick', size: 64),
+        ], indexes: [
+            Index::key(key: 'byAge', attributes: ['age']),
+        ], permissions: [
+            Permission::create(Role::any()),
+            Permission::read(Role::any()),
+            Permission::update(Role::any()),
+        ], documentSecurity: false);
+
+        try {
+            foreach ($tenants as $index => $tenant) {
+                $database->setTenant($tenant);
+                $database->createCollection($definition);
+                $database->createDocument($collection, new Document([
+                    Document::ID => 'user',
+                    'age' => ($index + 1) * 10,
+                    'name' => 'name'.$index,
+                    'nick' => 'nick'.$index,
+                ]));
+            }
+
+            $scenario($database, $collection, ...$tenants);
+        } finally {
+            foreach (\array_reverse($tenants) as $tenant) {
+                try {
+                    $database->setTenant($tenant)->deleteCollection($collection);
+                } catch (Throwable) {
+                }
+            }
+            $database->setTenant($originalTenant);
+        }
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function getSharedRenameKeys(Database $database, string $collection): array
+    {
+        return \array_map(
+            static fn (Attribute $attribute): string => $attribute->key,
+            \array_values($database->getCollection($collection)->attributes),
+        );
     }
 }

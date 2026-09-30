@@ -1540,14 +1540,6 @@ class Redis extends Adapter implements
         return '0';
     }
 
-    /**
-     * @param array<int, string> $selections
-     */
-    protected function getAttributeProjection(array $selections, string $prefix): mixed
-    {
-        return $selections;
-    }
-
     protected function execute(mixed $stmt): bool
     {
         return true;

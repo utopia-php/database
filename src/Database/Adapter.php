@@ -1097,13 +1097,6 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * Get an attribute projection given a list of selected attributes
-     *
-     * @param  array<string>  $selections
-     */
-    abstract protected function getAttributeProjection(array $selections, string $prefix): mixed;
-
-    /**
      * Get all selected attributes from queries
      *
      * @param  array<Query>  $queries

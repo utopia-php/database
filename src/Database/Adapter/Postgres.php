@@ -73,26 +73,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * Get the case-insensitive LIKE operator for PostgreSQL.
-     *
-     * @return string
-     */
-    public function getLikeOperator(): string
-    {
-        return 'ILIKE';
-    }
-
-    /**
-     * Get the POSIX regex matching operator for PostgreSQL.
-     *
-     * @return string
-     */
-    public function getRegexOperator(): string
-    {
-        return '~';
-    }
-
-    /**
      * Get the PostgreSQL backend process ID as the connection identifier.
      *
      * @return string

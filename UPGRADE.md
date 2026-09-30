@@ -466,6 +466,9 @@ $database->removeTransform(Label::class);
 - The protected `$listeners` and `$silentListeners` properties are gone. Registered lifecycle hooks are in the
   protected `$lifecycleHooks`; to silence or test for silence, use `silent()` and the protected
   `areEventsSilenced()`.
+- The protected `decodeAttribute()` applies the filter it is given. `decode()` reads `disableFilters()` and
+  `skipFilters()` once per document and calls it only for the filters they leave enabled, so an override that relied
+  on the method returning the value unchanged while filters are disabled no longer has to check.
 
 ## Relationships
 

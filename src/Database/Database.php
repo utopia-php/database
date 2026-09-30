@@ -2064,6 +2064,9 @@ class Database
             ? \array_fill_keys($selections, true)
             : null;
 
+        $filtering = null;
+        $disabledFilters = null;
+
         $hasRelationshipSelections = false;
         if ($selectionsMap !== null && $relationshipKeys !== []) {
             foreach ($selections as $selection) {
@@ -2116,11 +2119,18 @@ class Database
             $filterCount = \count($filters);
 
             if ($filterCount > 0 && ($selected || $hasRelationshipSelections)) {
-                foreach ($value as $index => $node) {
-                    for ($i = $filterCount - 1; $i >= 0; $i--) {
-                        $node = $this->decodeAttribute($filters[$i], $node, $document, $key);
+                $filtering ??= $this->filter;
+                $disabledFilters ??= $this->disabledFilters ?? [];
+
+                if ($filtering) {
+                    foreach ($value as $index => $node) {
+                        for ($i = $filterCount - 1; $i >= 0; $i--) {
+                            if (! isset($disabledFilters[$filters[$i]])) {
+                                $node = $this->decodeAttribute($filters[$i], $node, $document, $key);
+                            }
+                        }
+                        $value[$index] = $node;
                     }
-                    $value[$index] = $node;
                 }
             }
 
@@ -3312,14 +3322,6 @@ class Database
      */
     protected function decodeAttribute(string $filter, mixed $value, Document $document, string $attribute): mixed
     {
-        if (! $this->filter) {
-            return $value;
-        }
-
-        if (! \is_null($this->disabledFilters) && isset($this->disabledFilters[$filter])) {
-            return $value;
-        }
-
         if (\array_key_exists($filter, $this->instanceFilters)) {
             return $this->instanceFilters[$filter]['decode']($value, $document, $this, $attribute);
         }

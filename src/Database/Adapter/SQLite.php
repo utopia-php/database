@@ -1559,12 +1559,7 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         }
 
         if ($type === ColumnType::Varchar) {
-            if ($size <= 0) {
-                throw new DatabaseException('VARCHAR size '.$size.' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
-            if ($size > $this->getMaxVarcharLength()) {
-                throw new DatabaseException('VARCHAR size '.$size.' exceeds maximum varchar length '.$this->getMaxVarcharLength().'. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
+            $this->assertVarcharSize($size);
 
             return "VARCHAR({$size})";
         }

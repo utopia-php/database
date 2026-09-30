@@ -2944,12 +2944,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($type === ColumnType::Varchar) {
-            if ($size <= 0) {
-                throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
-            if ($size > $this->getMaxVarcharLength()) {
-                throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
-            }
+            $this->assertVarcharSize($size);
 
             return "VARCHAR({$size})";
         }
@@ -3896,6 +3891,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $table->json($filteredId)->nullable();
         }
 
+        if ($type === ColumnType::Varchar) {
+            $this->assertVarcharSize($size);
+        }
+
         $column = match ($type) {
             ColumnType::String => match (true) {
                 $size > 16777215 => $table->longText($filteredId),
@@ -3934,6 +3933,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $column->nullable();
 
         return $column;
+    }
+
+    /**
+     * @throws DatabaseException
+     */
+    protected function assertVarcharSize(int $size): void
+    {
+        if ($size <= 0) {
+            throw new DatabaseException('VARCHAR size ' . $size . ' is invalid; must be > 0. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+        }
+        if ($size > $this->getMaxVarcharLength()) {
+            throw new DatabaseException('VARCHAR size ' . $size . ' exceeds maximum varchar length ' . $this->getMaxVarcharLength() . '. Use TEXT, MEDIUMTEXT, or LONGTEXT instead.');
+        }
     }
 
     /**

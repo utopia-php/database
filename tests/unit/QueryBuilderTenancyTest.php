@@ -16,6 +16,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Query as QueryException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
@@ -360,6 +361,40 @@ final class QueryBuilderTenancyTest extends TestCase
         $this->assertStringContainsString("{$quote}1db{$quote}.", $sql);
         $this->assertStringContainsString($tenant('9x'), $sql);
         $this->assertStringEndsWith(" WHERE {$missing($raw(self::AUTHORS))} AND {$missing('9x')}", $sql);
+    }
+
+    #[DataProvider('dialects')]
+    public function testAnEmptyDatabaseIsRefusedWithALibraryException(SQL $adapter, string $quote): void
+    {
+        $adapter->setDatabase('');
+        $adapter->setNamespace('capture');
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $builder = $adapter->getBuilder(self::AUTHORS)
+            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'Review.authorId', '=', 'Review');
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid column name: '.$this->rawTable($adapter, self::AUTHORS).'._uid');
+
+        $builder->build();
+    }
+
+    #[DataProvider('dialects')]
+    public function testARawJoinAliasWithASpaceIsRefusedWithALibraryException(SQL $adapter, string $quote): void
+    {
+        $adapter->setDatabase('builder');
+        $adapter->setNamespace('capture');
+        $adapter->setSharedTables(true);
+        $adapter->setTenant(7);
+
+        $builder = $adapter->getBuilder(self::AUTHORS)
+            ->rightJoin($this->rawTable($adapter, self::REVIEWS), $this->rawTable($adapter, self::AUTHORS).'.authorId', 'x y.authorId', '=', 'x y');
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('Invalid column name: x y._uid');
+
+        $builder->build();
     }
 
     /**

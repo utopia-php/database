@@ -21,10 +21,10 @@ final class SQLiteDigitLeadingNamespaceTest extends TestCase
 {
     private const string COLLECTION = 'posts';
 
-    #[DataProvider('namespaces')]
-    public function testDocumentSecurityReadsWorkUnderTheNamespace(string $namespace): void
+    #[DataProvider('names')]
+    public function testDocumentSecurityReadsWorkUnderTheNames(string $schema, string $namespace): void
     {
-        $database = $this->database($namespace);
+        $database = $this->database($schema, $namespace);
 
         $this->assertSame(['public'], \array_map(
             static fn (Document $document): string => $document->getId(),
@@ -36,23 +36,23 @@ final class SQLiteDigitLeadingNamespaceTest extends TestCase
     }
 
     /**
-     * @return iterable<string, array{string}>
+     * @return iterable<string, array{string, string}>
      */
-    public static function namespaces(): iterable
+    public static function names(): iterable
     {
-        yield 'a leading letter' => ['ns1'];
-        yield 'a leading digit' => ['1ns'];
-        yield 'a leading hyphen' => ['-ns'];
+        yield 'a leading letter' => ['digit_leading', 'ns1'];
+        yield 'a leading digit' => ['1db', '1ns'];
+        yield 'a leading hyphen' => ['-db', '-ns'];
     }
 
-    private function database(string $namespace): Database
+    private function database(string $schema, string $namespace): Database
     {
         $authorization = new Authorization();
         $authorization->addRole(Role::any()->toString());
 
-        $database = (new Database(new SQLite(new PDO('sqlite::memory:', null, null, SQLite::getPDOAttributes())), new Cache(new None())))
+        $database = (new Database(new SQLite(new PDO('sqlite::memory:')), new Cache(new None())))
             ->setAuthorization($authorization)
-            ->setDatabase('digit_leading')
+            ->setDatabase($schema)
             ->setNamespace($namespace)
             ->addHook(new Permissions());
         $database->create();

@@ -6,6 +6,7 @@ use Closure;
 use InvalidArgumentException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Hook\AllowNullColumn;
 use Utopia\Database\Hook\PermissionFilter;
 use Utopia\Query\Builder\Condition;
@@ -23,7 +24,7 @@ final class ColumnNameTest extends TestCase
     #[DataProvider('invalidColumns')]
     public function testWrapRejectsAColumnOutsideTheIdentifierPattern(string $column): void
     {
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Invalid column name: '.$column);
 
         AllowNullColumn::wrap(new Condition('x = 1'), $column);
@@ -86,7 +87,7 @@ final class ColumnNameTest extends TestCase
     {
         $filter = new PermissionFilter(['any'], static fn (string $table): string => $table.' perms');
 
-        $this->expectException(InvalidArgumentException::class);
+        $this->expectException(DatabaseException::class);
         $this->expectExceptionMessage('Invalid permissions table name: posts perms');
 
         $filter->filter('posts');

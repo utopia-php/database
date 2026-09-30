@@ -52,7 +52,6 @@ enum Capability
     case TrigramIndex;
     case UniqueIndex;
     case UpdateLock;
-    case Upserts;
     case UpsertOnUniqueIndex;
     case UnsignedBigInt;
     case Vectors;
@@ -60,7 +59,4 @@ enum Capability
     case Aggregations;
     case StatisticalAggregates;
     case BitwiseAggregates;
-    case Subqueries;
-    case CTEs;
-    case WindowFunctions;
 }

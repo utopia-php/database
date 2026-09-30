@@ -148,7 +148,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
             Capability::PCRE,
             Capability::Operators,
             Capability::TransactionRetries,
-            Capability::Upserts,
         ]);
     }
 

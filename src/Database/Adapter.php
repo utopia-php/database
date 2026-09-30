@@ -1077,9 +1077,7 @@ abstract class Adapter implements Feature\Attributes, Feature\Collections, Featu
     }
 
     /**
-     * Run all write hooks concurrently when more than one is registered,
-     * otherwise run sequentially. The provided callable receives a single
-     * Write hook instance.
+     * Run the callable once per registered write hook, in registration order.
      *
      * @param callable(Write): void $fn
      */

@@ -25,6 +25,7 @@ use Utopia\Database\Operator;
 use Utopia\Database\OperatorType;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Database\Validator\BigInt;
+use Utopia\Mongo\Client;
 use Utopia\Query\Schema\ColumnType;
 
 final class BigIntegerTest extends TestCase
@@ -234,7 +235,22 @@ final class BigIntegerTest extends TestCase
 
     public function testMongoRejectsUnsignedArithmeticBeforeBsonCoercion(): void
     {
-        $adapter = (new \ReflectionClass(Mongo::class))->newInstanceWithoutConstructor();
+        $adapter = new Mongo(new class () extends Client {
+            public function __construct()
+            {
+            }
+
+            #[\Override]
+            public function connect(): self
+            {
+                return $this;
+            }
+
+            #[\Override]
+            public function close(): void
+            {
+            }
+        });
 
         $this->expectException(TypeException::class);
         $this->expectExceptionMessage('outside the signed 64-bit integer range');

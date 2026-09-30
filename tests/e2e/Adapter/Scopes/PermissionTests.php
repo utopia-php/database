@@ -188,7 +188,7 @@ trait PermissionTests
         );
     }
 
-    public function testTenantPerDocumentUpsertWithNoTenantSelectedRevokesUnderTheDocumentsTenant(): void
+    public function testTenantPerDocumentUpsertWithoutASelectedTenantAppliesPermissionsUnderTheDocumentTenant(): void
     {
         $this->withTenantPerDocumentNotes('tpdRevokeNoTenant', function (Database $database): void {
             $database->upsertDocuments('notes', [$this->tenantPerDocumentNote(5, ['alice'])]);
@@ -197,7 +197,7 @@ trait PermissionTests
         });
     }
 
-    public function testTenantPerDocumentUpsertUnderAnotherTenantRevokesOnlyTheDocumentsOwnGrant(): void
+    public function testTenantPerDocumentUpsertUnderAnotherSelectedTenantAppliesPermissionsUnderTheDocumentTenant(): void
     {
         $this->withTenantPerDocumentNotes('tpdRevokeOtherTenant', function (Database $database): void {
             $database->withTenant(
@@ -209,7 +209,7 @@ trait PermissionTests
         });
     }
 
-    public function testTenantPerDocumentUpsertBatchAcrossTenantsRevokesOnlyWhereTheDocumentRevoked(): void
+    public function testTenantPerDocumentUpsertBatchAppliesPermissionsPerDocumentTenant(): void
     {
         $this->withTenantPerDocumentNotes('tpdRevokeBatch', function (Database $database): void {
             $database->upsertDocuments('notes', [
@@ -221,7 +221,7 @@ trait PermissionTests
         });
     }
 
-    public function testTenantPerDocumentRolledBackUpsertKeepsTheGrantUnderTheDocumentsTenant(): void
+    public function testTenantPerDocumentRolledBackUpsertRestoresPermissionsUnderTheDocumentTenant(): void
     {
         $this->withTenantPerDocumentNotes('tpdRevokeRollback', function (Database $database): void {
             try {

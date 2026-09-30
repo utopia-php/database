@@ -4650,7 +4650,7 @@ trait RelationshipTests
         }
     }
 
-    public function testLinkingARelatedDocumentThroughANestedUpdateWithoutUpdatePermissionIsRejected(): void
+    public function testNestedUpdateCannotLinkARelatedDocumentWithoutUpdatePermission(): void
     {
         /** @var Database $database */
         $database = $this->getDatabase();

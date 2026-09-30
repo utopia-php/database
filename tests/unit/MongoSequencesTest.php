@@ -25,7 +25,7 @@ final class MongoSequencesTest extends TestCase
      */
     private array $filters = [];
 
-    public function testSameIdUnderTwoTenantsKeepsEachTenantsSequence(): void
+    public function testSequencesResolvePerTenantForTheSameId(): void
     {
         $adapter = $this->createAdapter(sharedTables: true, tenant: null);
         $this->rows = [
@@ -59,7 +59,7 @@ final class MongoSequencesTest extends TestCase
         $this->assertSame('sequence-second', $second->getSequence());
     }
 
-    public function testRowOfAnotherTenantIsNotMatched(): void
+    public function testSequenceResolvesOnlyWithinTheDocumentTenant(): void
     {
         $adapter = $this->createAdapter(sharedTables: true, tenant: 1);
         $this->rows = [

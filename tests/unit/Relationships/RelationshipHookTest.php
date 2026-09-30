@@ -307,7 +307,7 @@ final class RelationshipHookTest extends TestCase
      * @param  Closure(): Adapter  $adapter
      */
     #[DataProvider('adapters')]
-    public function testLinkingAChildThroughANestedUpdateWithoutUpdatePermissionIsRejected(Closure $adapter): void
+    public function testNestedUpdateCannotLinkAChildWithoutUpdatePermission(Closure $adapter): void
     {
         $database = $this->database($adapter);
         $this->relate(

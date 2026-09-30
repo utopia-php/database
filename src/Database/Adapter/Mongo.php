@@ -110,6 +110,13 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
 
     protected bool $supportForAttributes = true;
 
+    private const array PREFIX_SWAPPED_KEYS = ['permissions', 'createdAt', 'updatedAt', 'collection'];
+
+    /**
+     * @var list<array{'$id': string, type: ColumnType, array: bool}>|null
+     */
+    private static ?array $internalAttributeArrays = null;
+
     /**
      * Constructor.
      *
@@ -3016,10 +3023,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         /** @var array<int, array<string, mixed>> $cbAttributes */
         $cbAttributes = \is_array($rawCbAttributes) ? $rawCbAttributes : [];
 
-        $internalCbAttributeArrays = \array_map(
-            fn (Attribute $a) => [Document::ID => $a->key, 'type' => $a->type, 'array' => $a->array],
-            Database::internalAttributes()
-        );
+        $internalCbAttributeArrays = self::getInternalAttributeArrays();
 
         /** @var array<int, array<string, mixed>> $attributes */
         $attributes = \array_merge($cbAttributes, $internalCbAttributeArrays);
@@ -3142,10 +3146,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         /** @var array<int, array<string, mixed>> $collectionAttributes */
         $collectionAttributes = \is_array($rawCollectionAttributes) ? $rawCollectionAttributes : [];
 
-        $internalAttributeArrays = \array_map(
-            fn (Attribute $a) => [Document::ID => $a->key, 'type' => $a->type, 'array' => $a->array],
-            Database::internalAttributes()
-        );
+        $internalAttributeArrays = self::getInternalAttributeArrays();
 
         /** @var array<int, array<string, mixed>> $attributes */
         $attributes = \array_merge($collectionAttributes, $internalAttributeArrays);
@@ -3234,6 +3235,17 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $document;
+    }
+
+    /**
+     * @return list<array{'$id': string, type: ColumnType, array: bool}>
+     */
+    private static function getInternalAttributeArrays(): array
+    {
+        return self::$internalAttributeArrays ??= \array_map(
+            fn (Attribute $attribute): array => [Document::ID => $attribute->key, 'type' => $attribute->type, 'array' => $attribute->array],
+            Database::internalAttributes()
+        );
     }
 
     /**
@@ -3360,13 +3372,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
      */
     protected function replaceChars(string $from, string $to, array $array): array
     {
-        $filter = [
-            \substr(Document::PERMISSIONS, 1),
-            \substr(Document::CREATED_AT, 1),
-            \substr(Document::UPDATED_AT, 1),
-            \substr(Document::COLLECTION, 1),
-        ];
-
         // First pass: recursively process array values and collect keys to rename
         $keysToRename = [];
         foreach ($array as $k => $v) {
@@ -3375,11 +3380,15 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
                 $array[$k] = $this->replaceChars($from, $to, $v);
             }
 
+            if (\is_int($k)) {
+                continue;
+            }
+
             $newKey = $k;
 
             // Handle key replacement for filtered attributes
             $clean_key = str_replace($from, '', $k);
-            if (in_array($clean_key, $filter)) {
+            if (in_array($clean_key, self::PREFIX_SWAPPED_KEYS)) {
                 $newKey = str_replace($from, $to, $k);
             } elseif (\str_starts_with($k, $from) && ! in_array($k, [Document::ID, Document::SEQUENCE, Document::TENANT, Storage::UID, Storage::SEQUENCE, Storage::TENANT])) {
                 // Handle any other key starting with the 'from' char (e.g. user-defined $-prefixed keys)
@@ -3761,10 +3770,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $projection = [];
 
-        $internalKeys = \array_map(
-            fn (Attribute $attr) => $attr->key,
-            Database::internalAttributes()
-        );
+        $internalKeys = \array_column(self::getInternalAttributeArrays(), Document::ID);
 
         foreach ($selections as $selection) {
             // Skip internal attributes since all are selected by default

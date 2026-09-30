@@ -104,6 +104,11 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     protected bool $supportForAttributes = true;
 
     /**
+     * @var list<array{'$id': string, type: ColumnType, array: bool}>|null
+     */
+    private static ?array $internalAttributeArrays = null;
+
+    /**
      * Constructor.
      *
      * Set connection and settings
@@ -2963,10 +2968,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         /** @var array<int, array<string, mixed>> $cbAttributes */
         $cbAttributes = \is_array($rawCbAttributes) ? $rawCbAttributes : [];
 
-        $internalCbAttributeArrays = \array_map(
-            fn (Attribute $a) => [Document::ID => $a->key, 'type' => $a->type, 'array' => $a->array],
-            Database::internalAttributes()
-        );
+        $internalCbAttributeArrays = self::getInternalAttributeArrays();
 
         /** @var array<int, array<string, mixed>> $attributes */
         $attributes = \array_merge($cbAttributes, $internalCbAttributeArrays);
@@ -3089,10 +3091,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         /** @var array<int, array<string, mixed>> $collectionAttributes */
         $collectionAttributes = \is_array($rawCollectionAttributes) ? $rawCollectionAttributes : [];
 
-        $internalAttributeArrays = \array_map(
-            fn (Attribute $a) => [Document::ID => $a->key, 'type' => $a->type, 'array' => $a->array],
-            Database::internalAttributes()
-        );
+        $internalAttributeArrays = self::getInternalAttributeArrays();
 
         /** @var array<int, array<string, mixed>> $attributes */
         $attributes = \array_merge($collectionAttributes, $internalAttributeArrays);
@@ -3181,6 +3180,17 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
         }
 
         return $document;
+    }
+
+    /**
+     * @return list<array{'$id': string, type: ColumnType, array: bool}>
+     */
+    private static function getInternalAttributeArrays(): array
+    {
+        return self::$internalAttributeArrays ??= \array_map(
+            fn (Attribute $attribute): array => [Document::ID => $attribute->key, 'type' => $attribute->type, 'array' => $attribute->array],
+            Database::internalAttributes()
+        );
     }
 
     /**
@@ -3695,10 +3705,7 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     {
         $projection = [];
 
-        $internalKeys = \array_map(
-            fn (Attribute $attr) => $attr->key,
-            Database::internalAttributes()
-        );
+        $internalKeys = \array_column(self::getInternalAttributeArrays(), Document::ID);
 
         foreach ($selections as $selection) {
             // Skip internal attributes since all are selected by default

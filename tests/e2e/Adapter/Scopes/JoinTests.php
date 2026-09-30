@@ -7856,7 +7856,7 @@ trait JoinTests
             $rejected += [
                 'a joined string' => [$customers, 'purchase.status', [$purchase], $numeric.'purchase.status'],
                 'an unknown joined attribute' => [$customers, 'purchase.nothing', [$purchase], $notFound.'purchase.nothing'],
-                'an attribute only a join declares, unqualified' => [$customers, 'amount', [$purchase], $notFound.'amount'],
+                'a string only a join declares, unqualified' => [$customers, 'status', [$purchase], $numeric.'status'],
             ];
         }
 
@@ -7872,6 +7872,7 @@ trait JoinTests
         $this->assertSame(157, $database->sum($orders, 'amount'));
         if ($joins) {
             $this->assertSame(157, $database->sum($customers, 'purchase.amount', [$purchase]));
+            $this->assertSame(157, $database->sum($customers, 'amount', [$purchase]));
         }
 
         $this->cleanupAggCollections($database, $collections);

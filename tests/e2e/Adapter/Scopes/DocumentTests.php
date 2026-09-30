@@ -8634,7 +8634,9 @@ trait DocumentTests
             $this->assertEquals('Invalid document structure: Unknown attribute: "unknown"', $e->getMessage());
         }
 
+        $this->assertSame(false, $database->getDropUnknownAttributes());
         $database->setDropUnknownAttributes(true);
+        $this->assertSame(true, $database->getDropUnknownAttributes());
 
         try {
             $collection = $database->getCollection(__FUNCTION__);
@@ -8694,6 +8696,8 @@ trait DocumentTests
         } finally {
             $database->setDropUnknownAttributes(false);
         }
+
+        $this->assertSame(false, $database->getDropUnknownAttributes());
     }
 
     public function testCreateDocumentWithBigIntType(): void

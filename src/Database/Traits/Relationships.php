@@ -564,6 +564,39 @@ trait Relationships
                 $this->withRetries(fn () => $this->purgeCachedCollection($junction));
             }
         } catch (Throwable $e) {
+            $restores = [
+                fn () => $this->updateAttributeMeta($collection->getId(), $actualNewKey, function ($attribute) use ($id, $oldRel) {
+                    $attribute->setAttribute(Document::ID, $id);
+                    $attribute->setAttribute('key', $id);
+                    $attribute->setAttribute('options', $oldRel->toDocument()->getArrayCopy());
+                }, triggerEvent: false),
+                fn () => $this->updateAttributeMeta($relatedCollection->getId(), $actualNewTwoWayKey, function (Document $twoWayAttribute) use ($oldTwoWayKey, $id, $oldRel) {
+                    /** @var array<string, mixed> $options */
+                    $options = $twoWayAttribute->getAttribute('options', []);
+                    $options['twoWayKey'] = $id;
+                    $options['twoWay'] = $oldRel->twoWay;
+                    $options['onDelete'] = $oldRel->onDelete->value;
+                    $twoWayAttribute->setAttribute(Document::ID, $oldTwoWayKey);
+                    $twoWayAttribute->setAttribute('key', $oldTwoWayKey);
+                    $twoWayAttribute->setAttribute('options', $options);
+                }, triggerEvent: false),
+                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRel->side), $actualNewKey, function ($junctionAttribute) use ($id) {
+                    $junctionAttribute->setAttribute(Document::ID, $id);
+                    $junctionAttribute->setAttribute('key', $id);
+                }, triggerEvent: false),
+                fn () => $this->updateAttributeMeta($this->getJunctionCollection($collection, $relatedCollection, $oldRel->side), $actualNewTwoWayKey, function ($junctionAttribute) use ($oldTwoWayKey) {
+                    $junctionAttribute->setAttribute(Document::ID, $oldTwoWayKey);
+                    $junctionAttribute->setAttribute('key', $oldTwoWayKey);
+                }, triggerEvent: false),
+            ];
+            foreach (\array_slice($restores, 0, \count($updatedAttributes)) as $restore) {
+                try {
+                    $restore();
+                } catch (Throwable) {
+                    // Best effort
+                }
+            }
+
             if ($adapterUpdated) {
                 try {
                     $reverseRelModel = new Relationship(
@@ -581,7 +614,7 @@ trait Relationships
                         $id,
                         $oldTwoWayKey
                     );
-                } catch (Throwable $e) {
+                } catch (Throwable) {
                     // Ignore
                 }
             }
@@ -658,6 +691,29 @@ trait Relationships
                     throw new RelationshipException('Invalid relationship type.');
             }
         } catch (Throwable $e) {
+            // Reverse adapter update
+            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
+                try {
+                    $reverseRelModel2 = new Relationship(
+                        collection: $collection->getId(),
+                        relatedCollection: $relatedCollection->getId(),
+                        type: $oldRel->type,
+                        twoWay: $oldRel->twoWay,
+                        key: $actualNewKey,
+                        twoWayKey: $actualNewTwoWayKey,
+                        onDelete: $oldRel->onDelete,
+                        side: $oldRel->side,
+                    );
+                    $this->adapter->updateRelationship(
+                        $reverseRelModel2,
+                        $id,
+                        $oldTwoWayKey
+                    );
+                } catch (Throwable) {
+                    // Best effort
+                }
+            }
+
             // Reverse completed index renames
             foreach (\array_reverse($indexRenamesCompleted) as [$coll, $from, $to]) {
                 try {
@@ -708,29 +764,6 @@ trait Relationships
                         $attr->setAttribute(Document::ID, $oldTwoWayKey);
                         $attr->setAttribute('key', $oldTwoWayKey);
                     }, triggerEvent: false);
-                } catch (Throwable) {
-                    // Best effort
-                }
-            }
-
-            // Reverse adapter update
-            if ($adapterUpdated && $this->adapter->hasFeature(Feature\Relationships::class)) {
-                try {
-                    $reverseRelModel2 = new Relationship(
-                        collection: $collection->getId(),
-                        relatedCollection: $relatedCollection->getId(),
-                        type: $oldRel->type,
-                        twoWay: $oldRel->twoWay,
-                        key: $actualNewKey,
-                        twoWayKey: $actualNewTwoWayKey,
-                        onDelete: $oldRel->onDelete,
-                        side: $oldRel->side,
-                    );
-                    $this->adapter->updateRelationship(
-                        $reverseRelModel2,
-                        $id,
-                        $oldTwoWayKey
-                    );
                 } catch (Throwable) {
                     // Best effort
                 }

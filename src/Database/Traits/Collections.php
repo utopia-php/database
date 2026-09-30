@@ -239,8 +239,8 @@ trait Collections
             if ($created) {
                 try {
                     $this->cleanupCollection($id);
-                } catch (Throwable $e) {
-                    Console::error("Failed to rollback collection '{$id}': ".$e->getMessage());
+                } catch (Throwable $cleanupError) {
+                    Console::error("Failed to rollback collection '{$id}': ".$cleanupError->getMessage());
                 }
             }
             throw new DatabaseException("Failed to create collection metadata for '{$id}': ".$e->getMessage(), previous: $e);
@@ -514,6 +514,10 @@ trait Collections
         /** @var array<Index> $currentIndexes */
         $currentIndexes = $currentCollection->isEmpty() ? [] : $currentCollection->getAttribute('indexes', []);
 
+        if ($id === self::METADATA) {
+            $this->purgeCachedCollection($id);
+        }
+
         $schemaDeleted = false;
         try {
             $this->adapter->deleteCollection($id);
@@ -542,7 +546,9 @@ trait Collections
             }
         }
 
-        $this->purgeCachedCollection($id);
+        if ($id !== self::METADATA) {
+            $this->purgeCachedCollection($id);
+        }
 
         if ($deleted) {
             $this->triggerHooks(Event::CollectionDelete, $collection);

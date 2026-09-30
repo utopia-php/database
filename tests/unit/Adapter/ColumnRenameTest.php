@@ -109,18 +109,22 @@ final class ColumnRenameTest extends TestCase
 
         $this->assertCount(3, $this->statements);
         $this->assertStringStartsWith(self::POSTGRES_CATALOG, $this->statements[0]);
-        $this->assertSame(self::POSTGRES_RENAME, $this->statements[1]);
-        $this->assertStringStartsWith(self::POSTGRES_RETYPE, $this->statements[2]);
+        $this->assertStringStartsWith('ALTER TABLE "database"."namespace_users" ALTER COLUMN "age" TYPE INTEGER', $this->statements[1], 'The type changes before the rename, so a refused change leaves the column under its old key');
+        $this->assertSame(self::POSTGRES_RENAME, $this->statements[2]);
     }
 
     public function testPostgresUpdateAttributeRefusesATargetThatExistsBesideTheOldColumn(): void
     {
         $adapter = $this->createPostgres(['_id', 'age', 'years'], $this->postgresError('42701', 'column "years" of relation "namespace_users" already exists'));
 
-        $this->expectException(DuplicateException::class);
-        $this->expectExceptionMessage('Attribute already exists');
+        try {
+            $adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'years');
+            $this->fail('A target beside the old column must be refused');
+        } catch (DuplicateException $error) {
+            $this->assertSame('Attribute already exists', $error->getMessage());
+        }
 
-        $adapter->updateAttribute('users', Attribute::integer(key: 'age', required: true), 'years');
+        $this->assertCount(1, $this->statements, 'The refusal must come before any DDL');
     }
 
     public function testPostgresReadsNoCatalogWithoutARename(): void

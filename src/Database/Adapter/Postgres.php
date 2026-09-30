@@ -550,43 +550,23 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         $schema = $this->createSchemaBuilder();
-
-        if (! empty($newKey) && $this->isRenamed($collection, $id, $newKey)) {
-            $id = $newKey;
-            $newKey = null;
-        }
-
-        // Rename column first if needed
-        if (! empty($newKey) && $id !== $newKey) {
-            $newKey = $this->filter($newKey);
-
-            $renameTable = $schema->table($this->getSQLTableRaw($collection));
-            $renameTable->renameColumn($id, $newKey);
-            $renameResult = $renameTable->alter();
-
-            $sql = $renameResult->query;
-
-            try {
-                $result = $this->executeStatement($sql, Event::AttributeUpdate);
-            } catch (PDOException $e) {
-                throw $this->processException($e);
-            }
-
-            // Rename mutates the schema. Invalidate now so a subsequent
-            // alterColumnType failure can't leave the cache pointing at the
-            // pre-rename column id.
-            $this->invalidateSpatialAttributesCache($collection);
-
-            if (! $result) {
-                return false;
-            }
-
-            $id = $newKey;
-        }
-
-        // Modify column type using schema builder's alterColumnType
-        $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
         $tableRaw = $this->getSQLTableRaw($name);
+
+        // The type changes before the rename, so a change the stored values refuse leaves the
+        // column under the key the metadata still has.
+        $renameTo = null;
+        if (! empty($newKey) && $id !== $newKey) {
+            $columns = $this->getColumnNames($collection);
+            if (! \in_array($id, $columns, true) && \in_array($newKey, $columns, true)) {
+                $id = $newKey;
+            } elseif (\in_array($newKey, $columns, true)) {
+                throw new DuplicateException('Attribute already exists');
+            } else {
+                $renameTo = $newKey;
+            }
+        }
+
+        $sqlType = $this->getSQLType($attribute->type, $attribute->size, $attribute->signed, $attribute->array, $attribute->required);
 
         if ($sqlType == 'TIMESTAMP(3)') {
             $result = $schema->alterColumnType($tableRaw, $id, 'TIMESTAMP(3)', $this->quote($id).'::TIMESTAMP(3)');
@@ -594,10 +574,8 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             $result = $schema->alterColumnType($tableRaw, $id, $sqlType);
         }
 
-        $sql = $result->query;
-
         try {
-            $ok = $this->executeStatement($sql, Event::AttributeUpdate);
+            $ok = $this->executeStatement($result->query, Event::AttributeUpdate);
 
             // Postgres carries NOT NULL through ALTER COLUMN ... TYPE, so an
             // attribute that stops being required keeps a constraint its
@@ -607,6 +585,12 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
             if ($ok && ! $attribute->required) {
                 $nullable = $schema->alterColumnNullable($tableRaw, $id, true);
                 $ok = $this->executeStatement($nullable->query, Event::AttributeUpdate);
+            }
+
+            if ($ok && $renameTo !== null) {
+                $renameTable = $schema->table($tableRaw);
+                $renameTable->renameColumn($id, $renameTo);
+                $ok = $this->executeStatement($renameTable->alter()->query, Event::AttributeUpdate);
             }
 
             $this->invalidateSpatialAttributesCache($collection);

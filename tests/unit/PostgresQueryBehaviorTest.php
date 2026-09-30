@@ -2,14 +2,12 @@
 
 namespace Tests\Unit;
 
-use Exception;
 use PDOException;
 use PHPUnit\Framework\TestCase;
-use ReflectionMethod;
 use Utopia\Database\Adapter\Postgres;
 use Utopia\Database\Document;
 use Utopia\Database\Exception\Limit as LimitException;
-use Utopia\Database\Hook\PermissionFilter;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\Authorization;
@@ -20,28 +18,21 @@ final class PostgresQueryBehaviorTest extends TestCase
 {
     public function testPermissionHookFiltersTheRowJsonbColumn(): void
     {
-        $adapter = new Postgres($this->pdo());
-        $hookFactory = new ReflectionMethod($adapter, 'newPermissionHook');
-        $hook = $hookFactory->invoke($adapter, 'movies', ['any', 'user:1'], 'read', 'document.'.Storage::UID);
-        $this->assertInstanceOf(PermissionFilter::class, $hook);
-        $condition = $hook->filter('ignored');
+        [$sql, $bindings] = $this->capturePermissionFilteredFind(['any', 'user:1']);
 
-        $this->assertSame(
-            '("document"."'.Storage::PERMISSIONS.'" @> ?::jsonb OR "document"."'.Storage::PERMISSIONS.'" @> ?::jsonb)',
-            $condition->expression
+        $this->assertStringContainsString(
+            'WHERE ("'.Storage::PERMISSIONS.'" @> ?::jsonb OR "'.Storage::PERMISSIONS.'" @> ?::jsonb)',
+            $sql
         );
-        $this->assertSame(['["read(\\"any\\")"]', '["read(\\"user:1\\")"]'], $condition->bindings);
+        $this->assertSame(['["read(\\"any\\")"]', '["read(\\"user:1\\")"]', 25], $bindings);
     }
 
     public function testPermissionHookRejectsEmptyRoles(): void
     {
-        $adapter = new Postgres($this->pdo());
-        $hookFactory = new ReflectionMethod($adapter, 'newPermissionHook');
-        $hook = $hookFactory->invoke($adapter, 'movies', []);
-        $this->assertInstanceOf(PermissionFilter::class, $hook);
+        [$sql, $bindings] = $this->capturePermissionFilteredFind([]);
 
-        $this->assertSame('1 = 0', $hook->filter('ignored')->expression);
-        $this->assertSame([], $hook->filter('ignored')->bindings);
+        $this->assertStringContainsString('WHERE 1 = 0', $sql);
+        $this->assertSame([25], $bindings);
     }
 
     public function testCreateCollectionStoresJsonbPermissionsWithGinIndex(): void
@@ -253,20 +244,72 @@ final class PostgresQueryBehaviorTest extends TestCase
 
     public function testInvalidPowerArgumentIsTranslatedToLimitException(): void
     {
-        $pdoException = new PDOException('zero raised to a negative power is undefined');
-        $code = new \ReflectionProperty(Exception::class, 'code');
-        $code->setValue($pdoException, '2201F');
+        $pdoException = new class ('zero raised to a negative power is undefined', '2201F') extends PDOException {
+            public function __construct(string $message, string $state)
+            {
+                parent::__construct($message);
+                $this->code = $state;
+            }
+        };
         $pdoException->errorInfo = ['2201F', 7, 'zero raised to a negative power is undefined'];
 
-        $process = new ReflectionMethod(Postgres::class, 'processException');
-        $exception = $process->invoke(new Postgres($this->pdo()), $pdoException);
+        $statement = self::createStub(\PDOStatement::class);
+        $statement->method('execute')->willThrowException($pdoException);
+        $pdo = self::createStub(\PDO::class);
+        $pdo->method('prepare')->willReturn($statement);
 
-        $this->assertInstanceOf(LimitException::class, $exception);
-        $this->assertSame($pdoException, $exception->getPrevious());
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+
+        try {
+            $adapter->updateDocuments(
+                new Document([Document::ID => 'scores', 'attributes' => []]),
+                new Document(['value' => Operator::power(-1)]),
+                [new Document([Document::ID => 'first', Document::SEQUENCE => '1'])],
+            );
+            $this->fail('The update succeeded');
+        } catch (LimitException $exception) {
+            $this->assertSame($pdoException, $exception->getPrevious());
+        }
     }
 
-    private function pdo(): \PDO
+    /**
+     * @param  list<string>  $roles
+     * @return array{string, list<mixed>}
+     */
+    private function capturePermissionFilteredFind(array $roles): array
     {
-        return self::createStub(\PDO::class);
+        $bindings = [];
+        $statement = self::createStub(\PDOStatement::class);
+        $statement->method('bindValue')->willReturnCallback(function (int $position, mixed $value) use (&$bindings): bool {
+            $bindings[] = $value;
+
+            return true;
+        });
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+
+        $sql = '';
+        $pdo = self::createStub(\PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use (&$sql, $statement): \PDOStatement {
+            $sql = $query;
+
+            return $statement;
+        });
+
+        $adapter = new Postgres($pdo);
+        $adapter->setDatabase('database');
+        $adapter->setNamespace('namespace');
+        $authorization = new Authorization();
+        $authorization->cleanRoles();
+        foreach ($roles as $role) {
+            $authorization->addRole($role);
+        }
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(new Document([Document::ID => 'movies', 'documentSecurity' => true]));
+
+        return [$sql, $bindings];
     }
 }

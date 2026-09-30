@@ -2,11 +2,13 @@
 
 namespace Tests\Unit;
 
+use Closure;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
-use ReflectionMethod;
+use stdClass;
 use Utopia\Database\Adapter\Mongo;
 use Utopia\Database\Document;
+use Utopia\Database\Query;
+use Utopia\Mongo\Client;
 use Utopia\Query\Schema\ColumnType;
 
 final class MongoResultDecodingTest extends TestCase
@@ -126,16 +128,51 @@ final class MongoResultDecodingTest extends TestCase
 
     public function testProjectionSkipsInternalAttributes(): void
     {
-        $adapter = (new ReflectionClass(Mongo::class))->newInstanceWithoutConstructor();
-        $project = new ReflectionMethod(Mongo::class, 'getAttributeProjection');
+        $projections = [];
+        $client = new class (function (mixed $projection) use (&$projections): void {
+            $projections[] = $projection;
+        }) extends Client {
+            /**
+             * @param  Closure(mixed): void  $record
+             */
+            public function __construct(private readonly Closure $record)
+            {
+            }
 
-        $this->assertSame([
+            #[\Override]
+            public function connect(): self
+            {
+                return $this;
+            }
+
+            #[\Override]
+            public function close(): void
+            {
+            }
+
+            /**
+             * @param  array<mixed>  $filters
+             * @param  array<mixed>  $options
+             */
+            #[\Override]
+            public function find(string $collection, array $filters = [], array $options = []): stdClass
+            {
+                ($this->record)($options['projection'] ?? null);
+
+                return (object) ['cursor' => (object) ['firstBatch' => [], 'id' => 0]];
+            }
+        };
+
+        $adapter = new Mongo($client);
+        $adapter->getDocument(new Document(['$id' => 'movies']), 'movie1', [Query::select(['name', '$id', '$createdAt'])]);
+
+        $this->assertSame([[
             'name' => 1,
             '_uid' => 1,
             '_id' => 1,
             '_createdAt' => 1,
             '_updatedAt' => 1,
             '_permissions' => 1,
-        ], $project->invoke($adapter, ['name', '$id', '$createdAt']));
+        ]], $projections);
     }
 }

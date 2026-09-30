@@ -107,6 +107,29 @@ final class DocumentWriteMinorsTest extends TestCase
         $this->assertSame(1, $database->getDocument(self::COLLECTION, 'first')->getAttribute('counter'));
     }
 
+    public function testBulkUpdateHandsOnNextDecodedValuesWithASelect(): void
+    {
+        $database = $this->database(new SQLite(new PDO('sqlite::memory:')));
+        $database->createDocument(self::COLLECTION, new Document(['$id' => 'first', 'name' => 'one', 'counter' => 1, 'data' => ['k' => 1]]));
+        /** @var list<Document> $handed */
+        $handed = [];
+
+        $database->updateDocuments(
+            self::COLLECTION,
+            new Document(['data' => ['k' => 2]]),
+            [Query::select(['counter'])],
+            onNext: function (Document $document) use (&$handed): void {
+                $handed[] = $document;
+            },
+        );
+
+        $this->assertCount(1, $handed);
+        $this->assertSame(['k' => 2], $handed[0]->getAttribute('data'));
+        $this->assertSame(1, $handed[0]->getAttribute('counter'));
+        $this->assertFalse($handed[0]->offsetExists('name'));
+        $this->assertSame(['k' => 2], $database->getDocument(self::COLLECTION, 'first')->getAttribute('data'));
+    }
+
     /**
      * @return list<array<string, mixed>>
      */

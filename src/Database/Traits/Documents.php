@@ -1585,6 +1585,9 @@ trait Documents
             $adapterData[$key] = $value;
         }
         $selections = $this->validateSelections($collection, $grouped['selections']);
+        $decodedKeys = $selections === []
+            ? []
+            : \array_values(\array_unique([...$selections, ...\array_map(\strval(...), \array_keys($adapterData))]));
         $adapterUpdates = $this->castingBefore($collection, new Document($adapterData));
 
         $originalLimit = $limit;
@@ -1692,7 +1695,7 @@ trait Documents
             $batch = \array_map(
                 fn (Document $doc) => $hasOperators
                     ? $this->castingAfter($collection, $doc)
-                    : $this->decode($collection, $this->castingAfter($collection, $doc), $selections),
+                    : $this->decode($collection, $this->castingAfter($collection, $doc), $decodedKeys),
                 $batch
             );
 

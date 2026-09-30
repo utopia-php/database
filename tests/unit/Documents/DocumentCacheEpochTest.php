@@ -778,7 +778,7 @@ final class FailDocumentEpochMemory extends MemoryCache
     }
 
     #[\Override]
-    public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+    public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
     {
         if (\str_ends_with($key, '#epoch') && \is_string($data)) {
             if ($this->failingBlocks && \str_starts_with($data, 'blocked:')) {

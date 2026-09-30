@@ -9,7 +9,7 @@ use Utopia\Cache\Cache;
  *
  * A Redis purge keeps the purged key, holding its generation, with no expiry, so a key per token would outlive
  * every write. Tokens are fields of one hash per collection instead. An adapter that keeps no fields lists none,
- * and gives each token a key of its own, which its purge deletes.
+ * and gives each token a key of its own, which its purge deletes. Once a cache lists a field it is not listed again.
  */
 final readonly class Owners
 {
@@ -42,7 +42,17 @@ final readonly class Owners
 
     private function isField(string $owners, string $token): bool
     {
-        return \in_array($token, $this->cache->list($owners), true);
+        if (Fields::kept($this->cache)) {
+            return true;
+        }
+
+        if (! \in_array($token, $this->cache->list($owners), true)) {
+            return false;
+        }
+
+        Fields::remember($this->cache);
+
+        return true;
     }
 
     private function getOwnersKey(string $key): string

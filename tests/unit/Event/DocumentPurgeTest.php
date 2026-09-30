@@ -476,7 +476,7 @@ final class DocumentPurgeTest extends TestCase
             }
 
             #[\Override]
-            public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
             {
                 if ($this->failing) {
                     throw $this->failure;

@@ -312,7 +312,7 @@ final class TransactionCacheReadTest extends TestCase
                 return $this->cache->load($key, $ttl, $hash);
             }
 
-            public function save(string $key, array|string $data, string $hash = ''): bool|string|array
+            public function save(string $key, array|string $data, string $hash = '', int $ttl = 0): bool|string|array
             {
                 ($this->onFill)();
 

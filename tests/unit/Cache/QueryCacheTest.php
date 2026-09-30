@@ -823,6 +823,99 @@ class QueryCacheTest extends TestCase
         $queryCache->invalidateCollection(new Scope(), 'users');
     }
 
+    public function testAFlushedWriterLeavesAnotherWritersTombstoneInPlace(): void
+    {
+        $adapter = new OwnershipCache();
+        $queryCache = new QueryCache(new Cache($adapter));
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+
+        $queryCache->blockCollection($key, 'first');
+        $this->assertTrue($adapter->flush());
+        $queryCache->blockCollection($key, 'second');
+
+        $queryCache->activateCollection($key, 'first');
+
+        $this->assertNull($queryCache->getEntry($scope, 'users', []), 'A writer whose registration was flushed away must not enable the cache while another writer is in flight');
+        $this->assertStringStartsWith('blocked:second@', $this->epochOf($adapter, $key));
+
+        $queryCache->activateCollection($key, 'second');
+
+        $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
+    }
+
+    public function testAnOwnerReleasedByAConcurrentFlushIsNotReported(): void
+    {
+        $adapter = new RedisLeasableCache();
+        $cache = new class ($adapter) extends Cache {
+            #[\Override]
+            public function purge(string $key, string $hash = ''): bool
+            {
+                if ($hash !== '' && \str_ends_with($key, '#owners')) {
+                    $this->flush();
+                }
+
+                return parent::purge($key, $hash);
+            }
+        };
+        $queryCache = new QueryCache($cache);
+        $scope = new Scope(namespace: 'ns');
+        $key = $queryCache->getCollectionKey($scope, 'users');
+        $queryCache->blockCollection($key, 'owner');
+
+        $queryCache->activateCollection($key, 'owner');
+
+        $epoch = $adapter->load($key.'#epoch', \PHP_INT_MAX);
+        $this->assertIsString($epoch);
+        $this->assertStringStartsWith('active:', $epoch, 'An owner that a flush removed before its release must still publish a fresh epoch');
+        $this->assertNotNull($queryCache->getEntry($scope, 'users', []));
+    }
+
+    public function testGetPurgesAnEntryOfAnotherVersionAndMisses(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+
+        $cache->method('load')->willReturn(['version' => 1, 'epoch' => 'epoch', 'field' => 'field', 'documents' => []]);
+        $cache->expects($this->once())
+            ->method('purge')
+            ->with('entry-key', 'field')
+            ->willReturn(true);
+
+        $this->assertNull($queryCache->get(new Entry('entry-key', 'users', 'field', 'epoch')));
+    }
+
+    public function testInvalidationPropagatesAnOwnerRegistrationFailure(): void
+    {
+        $cache = new InvalidationCache();
+        $queryCache = new QueryCache($cache);
+        $key = $queryCache->getCollectionKey(new Scope(), 'users');
+        $cache->fail($key.'#owners');
+
+        try {
+            $queryCache->invalidateCollection(new Scope(), 'users');
+            $this->fail('An owner registration failure was not propagated');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString('Failed to register query cache owner', $error->getMessage());
+        }
+
+        $this->assertArrayNotHasKey($key.'#epoch', $cache->values, 'A write whose owner was not registered must not block the epoch');
+    }
+
+    public function testFlushFailureIsReported(): void
+    {
+        $cache = $this->createMock(Cache::class);
+        $queryCache = new QueryCache($cache);
+
+        $cache->expects($this->once())
+            ->method('flush')
+            ->willReturn(false);
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage('Failed to flush query cache');
+        $queryCache->flush();
+    }
+
     /**
      * @param  array<string>  $collections
      */

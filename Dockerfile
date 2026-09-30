@@ -12,6 +12,20 @@ RUN composer install \
     --no-scripts \
     --prefer-dist
 
+ARG UTOPIA_CACHE_VERSION=""
+
+RUN if [ -n "$UTOPIA_CACHE_VERSION" ]; then \
+    composer update utopia-php/cache \
+    --with "utopia-php/cache:$UTOPIA_CACHE_VERSION" \
+    --with-dependencies \
+    --ignore-platform-reqs \
+    --optimize-autoloader \
+    --no-interaction \
+    --no-plugins \
+    --no-scripts \
+    --prefer-dist; \
+    fi
+
 FROM php:8.5.8-cli-alpine AS compile
 
 ENV PHP_REDIS_VERSION="6.3.0" \

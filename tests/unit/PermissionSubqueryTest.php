@@ -10,6 +10,7 @@ use PHPUnit\Framework\TestCase;
 use Swoole\Database\PDOStatementProxy;
 use Utopia\Cache\Adapter\None;
 use Utopia\Cache\Cache;
+use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
@@ -22,12 +23,16 @@ use Utopia\Database\Hook\Permissions;
 use Utopia\Database\PDOStatement as DatabasePDOStatement;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Builder\Statement;
 
 /**
  * The permission check of a read is `_uid IN (SELECT _document FROM <collection>_perms …)`. IN already
  * compares against a set, so the subquery needs no DISTINCT: SQLite builds a temporary B-tree for one
  * on every restricted read.
+ *
+ * On MySQL a joined table's check carries NO_SEMIJOIN when the table is outer-joined, whatever the
+ * number of joins, and when the read has LARGE_JOIN joins or more.
  */
 final class PermissionSubqueryTest extends TestCase
 {
@@ -48,6 +53,12 @@ final class PermissionSubqueryTest extends TestCase
     private const string READER = 'alice';
 
     private const string OTHER_READER = 'other-';
+
+    private const string NO_SEMIJOIN = '/*+ NO_SEMIJOIN() */ ';
+
+    private const int LARGE_JOIN = 5;
+
+    private const string MAIN_ALIAS = 'table_main';
 
     private PDO $pdo;
 
@@ -123,6 +134,120 @@ final class PermissionSubqueryTest extends TestCase
         $ids = $this->ids($documents);
         $this->assertSame(\array_values(\array_unique($ids)), $ids, 'A document several roles may read must come back once');
         $this->assertSame($this->readableIds(), $ids);
+    }
+
+    /**
+     * @return iterable<string, array{JoinType, int, bool}>
+     */
+    public static function mySQLJoinChains(): iterable
+    {
+        foreach ([JoinType::Left, JoinType::Right] as $joinType) {
+            for ($links = 1; $links < self::LARGE_JOIN; $links++) {
+                yield $joinType->name.' join chain of '.$links => [$joinType, $links, true];
+            }
+        }
+        yield 'FullOuter join of 1' => [JoinType::FullOuter, 1, true];
+        for ($links = 1; $links < self::LARGE_JOIN; $links++) {
+            yield 'Inner join chain of '.$links => [JoinType::Inner, $links, false];
+        }
+        yield 'Inner join chain of '.self::LARGE_JOIN => [JoinType::Inner, self::LARGE_JOIN, true];
+        yield 'Left join chain of '.self::LARGE_JOIN => [JoinType::Left, self::LARGE_JOIN, true];
+    }
+
+    #[DataProvider('mySQLJoinChains')]
+    public function testMySQLJoinedChecksStaySubqueriesUnderOuterJoins(JoinType $joinType, int $links, bool $hinted): void
+    {
+        $sql = $this->mySQLFindSql(\array_map(
+            static fn (int $link): Query => self::join($joinType, 'orders'.$link, 'o'.$link),
+            \range(1, $links),
+        ));
+
+        for ($link = 1; $link <= $links; $link++) {
+            $checks = $this->checks($sql, 'o'.$link);
+            $this->assertNotSame([], $checks, 'Every joined table must be checked: '.$sql);
+            foreach ($checks as $hint) {
+                $this->assertSame($hinted, $hint, 'The check of o'.$link.' in: '.$sql);
+            }
+        }
+
+        $main = $this->checks($sql, self::MAIN_ALIAS);
+        $this->assertNotSame([], $main, 'The main table must be checked: '.$sql);
+        $this->assertNotContains(true, $main, 'The main table\'s check stays a semi-join candidate: '.$sql);
+    }
+
+    public function testMySQLMixedChainHintsOnlyTheOuterJoinedChecks(): void
+    {
+        $sql = $this->mySQLFindSql([
+            self::join(JoinType::Inner, 'orders1', 'o1'),
+            self::join(JoinType::Left, 'orders2', 'o2'),
+            self::join(JoinType::Inner, 'orders3', 'o3'),
+        ]);
+
+        $this->assertSame([false], $this->checks($sql, 'o1'), $sql);
+        $this->assertSame([true], $this->checks($sql, 'o2'), $sql);
+        $this->assertSame([false], $this->checks($sql, 'o3'), $sql);
+    }
+
+    public function testMySQLUnaliasedOuterJoinIsHinted(): void
+    {
+        $sql = $this->mySQLFindSql([Query::leftJoin('orders', '$id', 'customerId')]);
+
+        $this->assertSame(1, \substr_count($sql, self::NO_SEMIJOIN), $sql);
+    }
+
+    private static function join(JoinType $joinType, string $collection, string $alias): Query
+    {
+        return match ($joinType) {
+            JoinType::Left => Query::leftJoin($collection, '$id', 'customerId', '=', $alias),
+            JoinType::Right => Query::rightJoin($collection, '$id', 'customerId', '=', $alias),
+            JoinType::FullOuter => Query::fullOuterJoin($collection, '$id', 'customerId', '=', $alias),
+            default => Query::join($collection, '$id', 'customerId', '=', $alias),
+        };
+    }
+
+    /**
+     * @param  list<Query>  $queries
+     */
+    private function mySQLFindSql(array $queries): string
+    {
+        $statement = $this->createStub(PDOStatement::class);
+        $statement->method('bindValue')->willReturn(true);
+        $statement->method('execute')->willReturn(true);
+        $statement->method('fetchAll')->willReturn([]);
+        $statement->method('closeCursor')->willReturn(true);
+
+        $sql = '';
+        $pdo = $this->createStub(PDO::class);
+        $pdo->method('prepare')->willReturnCallback(function (string $query) use (&$sql, $statement): PDOStatement {
+            $sql = $query;
+
+            return $statement;
+        });
+
+        $adapter = new MySQL($pdo);
+        $adapter->setDatabase(self::NAMESPACE);
+        $adapter->setNamespace(self::NAMESPACE);
+        $authorization = new Authorization();
+        $authorization->addRole(Role::user(self::READER)->toString());
+        $adapter->setAuthorization($authorization);
+
+        $adapter->find(new Document(['$id' => self::COLLECTION, 'documentSecurity' => true]), $queries, limit: 25);
+
+        $this->assertNotSame('', $sql);
+
+        return $sql;
+    }
+
+    /**
+     * Whether each check of $alias in $sql carries the NO_SEMIJOIN hint.
+     *
+     * @return list<bool>
+     */
+    private function checks(string $sql, string $alias): array
+    {
+        \preg_match_all('/`'.\preg_quote($alias, '/').'`\.`_uid` IN \(SELECT (\/\*\+ NO_SEMIJOIN\(\) \*\/ )?_document /', $sql, $matches);
+
+        return \array_map(static fn (string $hint): bool => $hint !== '', $matches[1]);
     }
 
     private function database(bool $shared): Database

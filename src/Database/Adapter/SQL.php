@@ -51,6 +51,7 @@ use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\Upsert as UpsertFeature;
+use Utopia\Query\Builder\JoinType;
 use Utopia\Query\Builder\SQL as SQLBuilder;
 use Utopia\Query\Builder\Statement;
 use Utopia\Query\CursorDirection;
@@ -3282,7 +3283,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     /**
      * @param  array<string>  $roles
      */
-    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins): PermissionFilter
+    protected function newJoinPermissionHook(string $collection, array $roles, string $type, string $documentColumn, int $joins, JoinType $joinType): PermissionFilter
     {
         return $this->newPermissionHook($collection, $roles, $type, $documentColumn);
     }
@@ -4591,6 +4592,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                     $forPermission->value,
                     $join['alias'].'.'.Storage::UID,
                     \count($joinTablePrefixes),
+                    $chain->type($join['alias']),
                 );
                 if ($preserving) {
                     $permissionConditions[$join['alias']] = $permissionHook->filter($join['alias']);

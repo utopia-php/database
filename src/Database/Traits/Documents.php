@@ -4153,7 +4153,7 @@ trait Documents
 
         $joinedCollections = null;
 
-        if ($this->validate) {
+        if ($this->validate && $queries !== []) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
             $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
         }
@@ -4218,7 +4218,9 @@ trait Documents
 
         if ($this->validate) {
             $joinedCollections = $this->resolveJoinedCollections($queries);
-            $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
+            if ($queries !== []) {
+                $this->validateDocumentsQueries($collection, $queries, $joinedCollections);
+            }
             $this->validateSumAttribute($collection, $attribute, $queries, $joinedCollections);
         }
 
@@ -4759,11 +4761,10 @@ trait Documents
             );
         }
 
-        $queries = $this->convertQueries(
-            $collection,
-            \array_merge($filters, $joins),
-            $this->joinedCollectionsByAlias($joins, $joinedCollections),
-        );
+        $queries = \array_merge($filters, $joins);
+        if ($queries !== []) {
+            $queries = $this->convertQueries($collection, $queries, $this->joinedCollectionsByAlias($joins, $joinedCollections));
+        }
 
         $convertedQueries = $this->relationshipHook !== null
             ? $this->relationshipHook->convertQueries($relationships, $queries, $collection)

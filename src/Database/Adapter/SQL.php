@@ -1927,27 +1927,8 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             return $this->executeWrappedCount($innerBuilder, $name);
         }
 
-        if (
-            empty($otherQueries)
-            && $max === null
-            && ! $this->authorization->getStatus()
-            && ! $this->sharedTables
-        ) {
-            $sql = "SELECT COUNT(1) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
-
-            try {
-                $stmt = $this->prepareStatement($sql, Event::DocumentCount);
-                $this->describeStatement($stmt, [], $name);
-                $this->execute($stmt);
-            } catch (PDOException $e) {
-                throw $this->processException($e);
-            }
-
-            /** @var array<string, mixed>|false $row */
-            $row = $stmt->fetch();
-            $stmt->closeCursor();
-
-            return $this->countOf(\is_array($row) ? $row : []);
+        if ($otherQueries === []) {
+            return $this->countOf($this->fetchUnfilteredAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount));
         }
 
         $builder = $this->newBuilder($name, $alias);
@@ -2015,27 +1996,10 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $attribute = $this->filter($attribute);
 
-        if (
-            empty($otherQueries)
-            && $max === null
-            && ! $this->authorization->getStatus()
-            && ! $this->sharedTables
-        ) {
-            $sql = "SELECT SUM({$this->quote($attribute)}) AS {$this->quote('sum')} FROM {$this->getSQLTable($name)} AS {$this->quote($alias)}";
+        if ($otherQueries === []) {
+            $column = $this->quote($attribute);
 
-            try {
-                $stmt = $this->prepareStatement($sql, Event::DocumentSum);
-                $this->describeStatement($stmt, [], $name);
-                $this->execute($stmt);
-            } catch (PDOException $e) {
-                throw $this->processException($e);
-            }
-
-            /** @var array<string, mixed>|false $row */
-            $row = $stmt->fetch();
-            $stmt->closeCursor();
-
-            return $this->sumOf(\is_array($row) ? $row : []);
+            return $this->sumOf($this->fetchUnfilteredAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum));
         }
 
         $builder = $this->newBuilder($name, $alias);
@@ -2186,6 +2150,48 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $name = \substr($qualified, (int) $dot + 1);
 
         return $quote.$prefix.$quote.'.'.$quote.$name.$quote;
+    }
+
+    /**
+     * The row of a count() or sum() without queries, written out instead of built: the same
+     * statement the builder makes, with the tenant condition newBuilder() adds and the
+     * permission condition of the permission hook, each from the hook itself.
+     *
+     * @param  array<string>  $roles
+     * @return array<string, mixed>
+     */
+    private function fetchUnfilteredAggregate(Document $collection, string $name, array $roles, string $aggregate, string $column, ?int $max, Event $event): array
+    {
+        $alias = Query::DEFAULT_ALIAS;
+        $conditions = [];
+        $bindings = [];
+
+        if ($this->sharedTables) {
+            $tenant = (new TenantFilter($this->currentTenant(), Database::METADATA, $name, quoteChar: $this->getIdentifierQuoteChar()))->filter($alias);
+            $conditions[] = $tenant->expression;
+            \array_push($bindings, ...$tenant->bindings);
+        }
+
+        if ($this->authorization->getStatus() && $this->filtersPerDocument($collection)) {
+            $permission = $this->newPermissionHook($name, $roles)->filter($alias);
+            $conditions[] = $permission->expression;
+            \array_push($bindings, ...$permission->bindings);
+        }
+
+        $rows = $this->getSQLTable($name).' AS '.$this->quote($alias);
+        if ($conditions !== []) {
+            $rows .= ' WHERE '.\implode(' AND ', $conditions);
+        }
+
+        $sum = $this->quote('sum');
+        if ($max === null) {
+            $sql = "SELECT {$aggregate} AS {$sum} FROM {$rows}";
+        } else {
+            $sql = "SELECT {$aggregate} AS {$sum} FROM (SELECT {$column} FROM {$rows} LIMIT ?) AS {$this->quote('table_count')}";
+            $bindings[] = $max;
+        }
+
+        return $this->runSelect(new Statement($sql, $bindings), $event, $name)[0] ?? [];
     }
 
     private function executeWrappedCount(SQLBuilder $innerBuilder, string $collection): int
@@ -5733,6 +5739,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             throw new QueryException($e->getMessage(), $e->getCode(), $e);
         }
 
+        return $this->runSelect($result, $event, $collection);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     *
+     * @throws Exception
+     */
+    private function runSelect(Statement $result, Event $event, string $collection): array
+    {
         $stmt = null;
         $results = [];
         $exception = null;

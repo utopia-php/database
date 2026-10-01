@@ -8604,4 +8604,102 @@ trait JoinTests
             $this->cleanupAggCollections($database, [$customers, $notes]);
         }
     }
+
+    /**
+     * A left-joined read ordered by main attributes up to a unique one returns every window and every cursor page of
+     * the unpaged read: MariaDB and MySQL pick the main rows a page can reach before they join them, through main
+     * documents without a readable note, hidden main documents, ties and nulls in the main order.
+     */
+    public function testLeftJoinedPagesMatchTheUnpagedRead(): void
+    {
+        $database = static::getDatabase();
+        if (! $database->getAdapter()->supports(Capability::Joins)) {
+            $this->expectNotToPerformAssertions();
+
+            return;
+        }
+
+        $authors = 'j65_authors';
+        $notes = 'j65_notes';
+        $this->cleanupAggCollections($database, [$authors, $notes]);
+        $permissions = [Permission::create(Role::any())];
+        $database->createCollection(new Collection(
+            id: $authors,
+            attributes: [Attribute::string(key: 'name', size: 16), Attribute::integer(key: 'score', required: false)],
+            permissions: $permissions,
+            documentSecurity: true,
+        ));
+        $database->createCollection(new Collection(
+            id: $notes,
+            attributes: [Attribute::string(key: 'author', size: 16), Attribute::integer(key: 'score', required: false)],
+            permissions: $permissions,
+            documentSecurity: true,
+        ));
+
+        $readable = [Permission::read(Role::any())];
+        $hidden = [Permission::read(Role::user('j65-nobody'))];
+        foreach ([
+            'a1' => [2, true], 'a2' => [1, true], 'a3' => [null, true], 'a4' => [2, false], 'a5' => [3, true],
+            'a6' => [1, true], 'a7' => [null, false], 'a8' => [2, true], 'a9' => [4, true],
+        ] as $id => [$score, $visible]) {
+            $database->createDocument($authors, new Document(['$id' => $id, 'name' => $id, 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
+        }
+        foreach ([
+            'n1' => ['a1', 1, true], 'n2' => ['a1', 2, true], 'n3' => ['a1', 1, true], 'n4' => ['a2', 5, true],
+            'n5' => ['a3', null, true], 'n6' => ['a3', 2, false], 'n7' => ['a4', 1, true], 'n8' => ['a5', 1, false],
+            'n9' => ['a6', 3, true], 'n10' => ['a6', 3, true], 'n11' => ['a9', 1, true], 'n12' => ['zz', 1, true],
+        ] as $id => [$author, $score, $visible]) {
+            $database->createDocument($notes, new Document(['$id' => $id, 'author' => $author, 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
+        }
+
+        $join = Query::leftJoin($notes, '$id', 'author', '=', 'n');
+
+        try {
+            foreach ([
+                'default order' => [],
+                'score' => [Query::orderAsc('score')],
+                'score descending' => [Query::orderDesc('score')],
+                '$id descending' => [Query::orderDesc('$id')],
+                'score, then the joined score' => [Query::orderAsc('score'), Query::orderAsc('$sequence'), Query::orderDesc('n.score')],
+            ] as $label => $order) {
+                $queries = [$join, ...$order];
+                $all = \array_values($database->find($authors, [...$queries, Query::limit(100)]));
+                $keys = \array_map($this->joinCursorKey(...), $all);
+                $this->assertCount(10, $keys, "{$label}: every visible author with each visible note, or none");
+
+                foreach ([1, 2, 3] as $limit) {
+                    for ($offset = 0; $offset <= \count($keys); $offset++) {
+                        $this->assertSame(
+                            \array_slice($keys, $offset, $limit),
+                            \array_map($this->joinCursorKey(...), $database->find($authors, [...$queries, Query::limit($limit), Query::offset($offset)])),
+                            "{$label}: limit {$limit}, offset {$offset}",
+                        );
+                    }
+                }
+
+                foreach ($all as $index => $row) {
+                    foreach ([1, 2] as $limit) {
+                        $this->assertSame(
+                            \array_slice($keys, $index + 1, $limit),
+                            \array_map($this->joinCursorKey(...), $database->find($authors, [...$queries, Query::cursorAfter($row), Query::limit($limit)])),
+                            "{$label}: {$limit} after {$keys[$index]}",
+                        );
+                        $this->assertSame(
+                            \array_slice($keys, \max(0, $index - $limit), \min($limit, $index)),
+                            \array_map($this->joinCursorKey(...), $database->find($authors, [...$queries, Query::cursorBefore($row), Query::limit($limit)])),
+                            "{$label}: {$limit} before {$keys[$index]}",
+                        );
+                    }
+                }
+
+                $iterated = [];
+                foreach ($database->iterate($authors, [...$queries, Query::limit(2)]) as $row) {
+                    $iterated[] = $this->joinCursorKey($row);
+                }
+                $this->assertSame($keys, $iterated, "{$label}: iterate()");
+            }
+        } finally {
+            $this->cleanupAggCollections($database, [$authors, $notes]);
+        }
+    }
 }

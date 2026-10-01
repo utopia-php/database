@@ -48,8 +48,11 @@ use Utopia\Database\Validator\Authorization\Input;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\PartialStructure;
 use Utopia\Database\Validator\Permissions;
+use Utopia\Database\Validator\Queries;
+use Utopia\Database\Validator\Queries\Bounds;
 use Utopia\Database\Validator\Queries\Document as DocumentValidator;
 use Utopia\Database\Validator\Queries\Documents as DocumentsValidator;
+use Utopia\Database\Validator\Queries\Narrow;
 use Utopia\Database\Validator\Query\Aggregate;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
 use Utopia\Database\Validator\Query\JoinedCollection;
@@ -262,6 +265,8 @@ trait Documents
 
     private const int DOCUMENTS_VALIDATOR_CACHE_LIMIT = 256;
 
+    private ?Bounds $queryBounds = null;
+
     /** @var array<string, Aggregate> Aggregate validators of sums of declared attributes, by collection schema. */
     private array $sumValidatorCache = [];
 
@@ -298,6 +303,47 @@ trait Documents
         $this->documentsValidatorCache[$key] = $validator;
 
         return $validator;
+    }
+
+    /**
+     * The validator of a query list. A narrow list, of plain filters, limits, offsets, cursors and
+     * orders on the collection's own top-level attributes, is checked by those validators built
+     * from only the attributes it names, from the collection as it is passed; any other list by the
+     * collection's documents validator. Both accept the same narrow lists with the same messages.
+     *
+     * @param  array<mixed>  $queries
+     * @param  array<Document>  $joinedCollections
+     */
+    protected function getQueriesValidator(Document $collection, array $queries, array $joinedCollections = []): Queries
+    {
+        if ($joinedCollections === [] && Narrow::accepts($queries)) {
+            $attributes = $collection->getAttribute('attributes', []);
+            $narrow = \is_array($attributes) ? Narrow::of(
+                $queries,
+                $attributes,
+                $this->getQueryBounds(),
+                $this->maxQueryValues,
+                $this->adapter->supports(Capability::DefinedAttributes),
+                $this->adapter->supports(Capability::UnsignedBigInt),
+                $this->adapter->supports(Capability::OrderRandom),
+            ) : null;
+
+            if ($narrow !== null) {
+                return $narrow;
+            }
+        }
+
+        return $this->getDocumentsValidator($collection, $joinedCollections);
+    }
+
+    private function getQueryBounds(): Bounds
+    {
+        return $this->queryBounds ??= new Bounds(
+            $this->adapter->getIdAttributeType(),
+            $this->adapter->getMaxUIDLength(),
+            $this->adapter->getMinDateTime(),
+            $this->adapter->getMaxDateTime(),
+        );
     }
 
     private function createDocumentsValidator(Document $collection, bool $supportForJoins, bool $supportForAggregations): DocumentsValidator
@@ -1652,7 +1698,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = $this->getDocumentsValidator($collection);
+            $validator = $this->getQueriesValidator($collection, $queries);
 
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -2765,7 +2811,7 @@ trait Documents
         $this->checkQueryTypes($queries);
 
         if ($this->validate) {
-            $validator = $this->getDocumentsValidator($collection);
+            $validator = $this->getQueriesValidator($collection, $queries);
 
             if (! $validator->isValid($queries)) {
                 throw new QueryException($validator->getDescription());
@@ -4735,7 +4781,7 @@ trait Documents
     private function validateDocumentsQueries(Document $collection, array $queries, ?array $joinedCollections = null): void
     {
         $joinedCollections ??= $this->resolveJoinedCollections($queries);
-        $validator = $this->getDocumentsValidator($collection, $joinedCollections);
+        $validator = $this->getQueriesValidator($collection, $queries, $joinedCollections);
 
         if ($joinedCollections !== []) {
             $validator->setJoinedCollections($joinedCollections);

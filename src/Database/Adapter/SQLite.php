@@ -1634,20 +1634,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
     }
 
     /**
-     * Get SQL Index Type
-     *
-     * @throws Exception
-     */
-    protected function getSQLIndexType(IndexType $type): string
-    {
-        return match ($type) {
-            IndexType::Key => 'INDEX',
-            IndexType::Unique => 'UNIQUE INDEX',
-            default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value),
-        };
-    }
-
-    /**
      * Get SQL Index
      *
      * @param  array<string>  $attributes

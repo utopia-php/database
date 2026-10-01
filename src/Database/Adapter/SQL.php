@@ -66,7 +66,6 @@ use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema;
 use Utopia\Query\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
 use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 use Utopia\Query\Schema\Table;
@@ -3316,21 +3315,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             ColumnType::Linestring->value => "LINESTRING{$modifier}{$nullability}",
             ColumnType::Polygon->value => "POLYGON{$modifier}{$nullability}",
             default => '',
-        };
-    }
-
-    /**
-     * Get SQL Index Type
-     *
-     * @throws Exception
-     */
-    protected function getSQLIndexType(IndexType $type): string
-    {
-        return match ($type) {
-            IndexType::Key => 'INDEX',
-            IndexType::Unique => 'UNIQUE INDEX',
-            IndexType::Fulltext => 'FULLTEXT INDEX',
-            default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value),
         };
     }
 

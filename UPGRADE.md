@@ -826,7 +826,7 @@ reports, call `$adapter->capabilities()`.
   | `SQL::__construct(mixed $pdo)` | `SQL::__construct(object $pdo)`: a `Utopia\Database\PDO`, a PDO-compatible proxy or a native `PDO` |
   | `SQL::deleteAttribute(string $collection, string $id, bool $array = false)` | `deleteAttribute(string $collection, string $id)` |
   | `SQL::execute(mixed $stmt)` | `execute(mixed $stmt, ?Event $event = null)` |
-  | `SQL::getSQLType(string $type, ...)`, `getSQLIndexType(string $type)` | Take `ColumnType` and `IndexType` cases |
+  | `SQL::getSQLType(string $type, ...)` | Takes `ColumnType` cases |
   | `SQL::getOperatorSQL(string $column, Operator $operator, array &$binds)` | `getOperatorSQL(string $column, Operator $operator, int &$bindIndex)` |
 
 - `Adapter::relaxAttributeRequired(string $collection, string $id): bool` is new. The library calls it when an
@@ -884,6 +884,10 @@ calls one must drop the override or the call.
 | `Adapter::getAttributeProjection()` (abstract) and its implementations on `SQL`, `Memory`, `Redis` and `Pool` (`Mongo` keeps a private one) | protected | The query builders build the projection |
 | `getRandomOrder()` on `SQL` (abstract), `MariaDB`, `Postgres` and `SQLite` | protected | The query builders' `compileRandom()` emits `RAND()`/`RANDOM()` for `Query::orderRandom()` |
 | `SQL::getSpatialTypeFromWKT()` | public | None. The type is the text before the first `(` of the WKT, lower-cased |
+| `getSQLIndexType()` on `SQL` and `SQLite` | protected | Each adapter's `createIndex()`, which builds the whole index statement |
+| `Postgres::getSQLSchema()` | protected | `getSQLTable()`, which qualifies the table with the schema |
+| `Postgres::encodeArray()` and `Postgres::decodeArray()` | protected | None. Array attributes are `JSONB` columns |
+| `Memory::unregisterRelationshipField()` | protected | None |
 
 `escapeWildcards()` is kept, and so is the public helper `Query::isSpatialAttribute()`, even where nothing in the
 library calls it any more.

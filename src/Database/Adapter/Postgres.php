@@ -1675,18 +1675,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
     }
 
     /**
-     * Get SQL schema
-     */
-    protected function getSQLSchema(): string
-    {
-        if (! $this->supports(Capability::Schemas)) {
-            return '';
-        }
-
-        return "\"{$this->getDatabase()}\".";
-    }
-
-    /**
      * Get PDO Type
      *
      *
@@ -2237,40 +2225,6 @@ class Postgres extends SQL implements Feature\ConnectionId, Feature\Spatial, Fea
         }
 
         return parent::getOperatorBuilderExpression($column, $operator);
-    }
-
-    /**
-     * Encode array
-     *
-     *
-     * @return array<string>
-     */
-    protected function encodeArray(string $value): array
-    {
-        $string = substr($value, 1, -1);
-        if (empty($string)) {
-            return [];
-        } else {
-            return explode(',', $string);
-        }
-    }
-
-    /**
-     * Decode array
-     *
-     * @param  array<string>  $value
-     */
-    protected function decodeArray(array $value): string
-    {
-        if (empty($value)) {
-            return '{}';
-        }
-
-        foreach ($value as $index => $item) {
-            $value[$index] = '"'.str_replace(['"', '(', ')'], ['\"', '\(', '\)'], $item).'"';
-        }
-
-        return '{'.implode(',', $value).'}';
     }
 
     /**

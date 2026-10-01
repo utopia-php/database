@@ -318,6 +318,9 @@ have to make, with the 7.x and 8.0 forms side by side.
   others). See [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
 - `Mongo::getTenantQuery()`, which returned an empty string, and `SQL::getSpatialTypeFromWKT()`. Nothing in the
   library calls either. See [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
+- The protected adapter methods nothing called: `getSQLIndexType()` on `SQL` and `SQLite`,
+  `Postgres::getSQLSchema()`, `Postgres::encodeArray()`, `Postgres::decodeArray()` and
+  `Memory::unregisterRelationshipField()`. See [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
 
 ### Fixed
 

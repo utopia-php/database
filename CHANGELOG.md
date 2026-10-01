@@ -321,6 +321,9 @@ have to make, with the 7.x and 8.0 forms side by side.
 - The protected adapter methods nothing called: `getSQLIndexType()` on `SQL` and `SQLite`,
   `Postgres::getSQLSchema()`, `Postgres::encodeArray()`, `Postgres::decodeArray()` and
   `Memory::unregisterRelationshipField()`. See [Removed adapter methods](UPGRADE.md#removed-adapter-methods).
+- `Adapter\SQL::setFloatPrecision()`, `Adapter\SQLite::getEmulateMySQL()`, `Database::getInstanceFilters()`,
+  `Mirror::getWriteFilters()` and `Validator\Structure::getFormats()`, which nothing calls. See
+  [Removed unused public methods](UPGRADE.md#removed-unused-public-methods).
 
 ### Fixed
 

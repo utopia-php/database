@@ -1841,16 +1841,6 @@ class Database
     }
 
     /**
-     * Get instance filters
-     *
-     * @return array<string, array{encode: callable, decode: callable, signature: string}>
-     */
-    public function getInstanceFilters(): array
-    {
-        return $this->instanceFilters;
-    }
-
-    /**
      * Encode Document
      *
      * @param  bool  $applyDefaults  Whether to apply default values to null attributes

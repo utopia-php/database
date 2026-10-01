@@ -213,11 +213,6 @@ class SQLite extends SQL implements Feature\SchemaAttributes, Feature\SchemaInde
         return $this;
     }
 
-    public function getEmulateMySQL(): bool
-    {
-        return $this->emulateMySQL;
-    }
-
     public function setTenant(int|string|null $tenant): bool
     {
         $changed = $this->currentTenant() !== $tenant;

@@ -141,16 +141,6 @@ class Structure extends Validator
     }
 
     /**
-     * Remove a Validator
-     *
-     * @return array<string, array{callback: callable, type: string}>
-     */
-    public static function getFormats(): array
-    {
-        return self::$formats;
-    }
-
-    /**
      * Add a new Validator
      * Stores a callback and required params to create Validator
      *

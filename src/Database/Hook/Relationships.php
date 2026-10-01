@@ -225,14 +225,6 @@ class Relationships implements Hook
     }
 
     /**
-     * {@inheritDoc}
-     */
-    public function setCheckExist(bool $check): void
-    {
-        $this->checkExist->set($check);
-    }
-
-    /**
      * Run the callback with existence checks on or off for the calling coroutine and the coroutines it starts.
      *
      * @template T

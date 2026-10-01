@@ -3335,25 +3335,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * Extract the spatial geometry type name from a WKT string.
-     *
-     * @param string $wkt The Well-Known Text representation
-     * @return string The lowercase type name (e.g. "point", "polygon")
-     *
-     * @throws DatabaseException If the WKT is invalid.
-     */
-    public function getSpatialTypeFromWKT(string $wkt): string
-    {
-        $wkt = trim($wkt);
-        $pos = strpos($wkt, '(');
-        if ($pos === false) {
-            throw new DatabaseException('Invalid spatial type');
-        }
-
-        return strtolower(trim(substr($wkt, 0, $pos)));
-    }
-
-    /**
      * Generate ST_GeomFromText call with proper SRID and axis order support
      */
     protected function getSpatialGeomFromText(string $wktPlaceholder, ?int $srid = null): string
@@ -6600,14 +6581,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             'NULL' => \PDO::PARAM_NULL,
             default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
-    }
-
-    /**
-     * Get the SQL function for random ordering
-     */
-    protected function getRandomOrder(): string
-    {
-        return 'RANDOM()';
     }
 
     /**

@@ -2878,17 +2878,6 @@ class Mongo extends Adapter implements Feature\InternalCasting, Feature\Relation
     }
 
     /**
-     * Get the query to check for tenant when in shared tables mode
-     *
-     * @param  string  $collection  The collection being queried
-     * @param  string  $alias  The alias of the parent collection if in a subquery
-     */
-    public function getTenantQuery(string $collection, string $alias = ''): string
-    {
-        return '';
-    }
-
-    /**
      * Check whether the adapter supports storing non-UTF characters. MongoDB does not.
      *
      * @return bool

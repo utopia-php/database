@@ -874,7 +874,7 @@ calls one must drop the override or the call.
 | `SQLite::getLikeCondition()` | protected | The same. SQLite's `LIKE ... ESCAPE` lives in `Utopia\Database\Builder\SQLite` |
 | `getSQLPermissionsCondition()` on `SQL` and `Postgres` | protected | The permission hooks in `Utopia\Database\Hook` (`PermissionFilter` and the join filters) |
 | `getSQLVectorDistance()` on `SQL` and `Postgres` | protected | The query builder |
-| `Adapter::getTenantQuery()` (abstract) and its implementations on `SQL`, `Memory`, `Redis` and `Pool` (`Mongo` keeps its own) | public | `Hook\TenantFilter` (SQL) and `Hook\Mongo\TenantFilter` (MongoDB) |
+| `Adapter::getTenantQuery()` (abstract) and its implementations on `SQL`, `Memory`, `Redis`, `Pool` and `Mongo` | public | `Hook\TenantFilter` (SQL) and `Hook\Mongo\TenantFilter` (MongoDB) |
 | `getInsertKeyword()` on `SQL`, `Postgres` and `SQLite`, and `getInsertSuffix()` and `getInsertPermissionsSuffix()` on `SQL` and `Postgres` | protected | `SQL::insertOrIgnore(SQLBuilder $builder): Statement`, which `Postgres` overrides to name the id as the conflict target |
 | `getUpsertStatement()` on `SQL` (abstract), `MariaDB`, `Postgres` and `SQLite` | protected, public on `MariaDB` and `SQLite` | The same |
 | `SQL::registerOperatorBind()` | protected | `getOperatorSQL()` binds operator values itself |
@@ -882,9 +882,11 @@ calls one must drop the override or the call.
 | `Adapter::before()` and `Adapter::trigger()` | public, protected | `Hook\Transform`, registered with `Database::addHook()` |
 | `SQL::getLikeOperator()`, `SQL::getRegexOperator()`, `Postgres::getLikeOperator()` and `Postgres::getRegexOperator()` | public | The query builders emit `LIKE`/`ILIKE` and `REGEXP`/`~` |
 | `Adapter::getAttributeProjection()` (abstract) and its implementations on `SQL`, `Memory`, `Redis` and `Pool` (`Mongo` keeps a private one) | protected | The query builders build the projection |
+| `getRandomOrder()` on `SQL` (abstract), `MariaDB`, `Postgres` and `SQLite` | protected | The query builders' `compileRandom()` emits `RAND()`/`RANDOM()` for `Query::orderRandom()` |
+| `SQL::getSpatialTypeFromWKT()` | public | None. The type is the text before the first `(` of the WKT, lower-cased |
 
-`escapeWildcards()` is kept, and so are the public helpers `SQL::getSpatialTypeFromWKT()` and
-`Query::isSpatialAttribute()`, even where nothing in the library calls them any more.
+`escapeWildcards()` is kept, and so is the public helper `Query::isSpatialAttribute()`, even where nothing in the
+library calls it any more.
 
 ### SQLite adapter subclasses that override `createBuilder()`
 

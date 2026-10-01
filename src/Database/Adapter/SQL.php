@@ -129,6 +129,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     private ?\WeakMap $statementEvents = null;
 
     /**
+     * The metadata the comments ahead of every statement were last written for, when every value is
+     * scalar or null, so the same metadata yields the same comments.
+     *
+     * @var array<string, mixed>|null
+     */
+    private ?array $commentedMetadata = null;
+
+    private string $comments = '';
+
+    /**
      * @var \WeakMap<object, array<mixed>>|null
      */
     private ?\WeakMap $statementBindings = null;
@@ -3786,9 +3796,20 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private function comments(): string
     {
+        if ($this->commentedMetadata === $this->metadata) {
+            return $this->comments;
+        }
+
         $comments = '';
+        $scalar = true;
         foreach ($this->metadata as $key => $value) {
             $comments .= '/* '.$this->commentText($key).': '.$this->commentText($value).' */'."\n";
+            $scalar = $scalar && ($value === null || \is_scalar($value));
+        }
+
+        if ($scalar) {
+            $this->commentedMetadata = $this->metadata;
+            $this->comments = $comments;
         }
 
         return $comments;

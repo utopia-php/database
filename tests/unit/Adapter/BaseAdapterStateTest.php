@@ -12,6 +12,7 @@ use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Event;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Interceptor;
@@ -36,6 +37,25 @@ final class BaseAdapterStateTest extends TestCase
 
         $this->assertSame($adapter, $adapter->resetDebug());
         $this->assertSame([], $adapter->getDebug());
+    }
+
+    public function testAKeyThePatternEngineCannotFilterIsAnError(): void
+    {
+        $adapter = new SQLite(new PDO('sqlite::memory:'));
+        $jit = \ini_get('pcre.jit');
+        $limit = \ini_get('pcre.backtrack_limit');
+        \ini_set('pcre.jit', '0');
+        \ini_set('pcre.backtrack_limit', '0');
+
+        try {
+            $adapter->filter('unfilterable_'.\uniqid().' !@#');
+            $this->fail('a key the pattern engine fails on must not pass as filtered');
+        } catch (DatabaseException $error) {
+            $this->assertSame('Failed to filter key', $error->getMessage());
+        } finally {
+            \ini_set('pcre.jit', (string) $jit);
+            \ini_set('pcre.backtrack_limit', (string) $limit);
+        }
     }
 
     public function testTenantHookIsFoundAmongTheOtherWriteHooks(): void

@@ -18,6 +18,7 @@ use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Validator\Authorization;
+use Utopia\Query\Schema\ColumnType;
 
 final class SQLiteSchemaTest extends TestCase
 {
@@ -133,6 +134,26 @@ final class SQLiteSchemaTest extends TestCase
         $this->assertTrue($this->adapter->createCollection('codes', [Attribute::varchar('code', size: 16381)]));
 
         $this->assertSame('VARCHAR(16381)', $this->columnType('codes', 'code'));
+    }
+
+    public function testASpatialColumnIsUntypedAndKeepsItsWktAsText(): void
+    {
+        $this->assertTrue($this->adapter->createCollection('places', [Attribute::point('position')]));
+        $this->assertSame('', $this->columnType('places', 'position'));
+
+        $collection = new Document([
+            '$id' => 'places',
+            'attributes' => [
+                new Document(['$id' => 'position', 'key' => 'position', 'type' => ColumnType::Point->value]),
+            ],
+        ]);
+        $this->adapter->createDocuments($collection, [
+            new Document(['$id' => 'origin', '$permissions' => [], 'position' => 'POINT(1 2)']),
+        ]);
+
+        $statement = $this->pdo->query('SELECT `position` FROM `' . self::NAMESPACE . "_places` WHERE `_uid` = 'origin'");
+        $this->assertInstanceOf(\PDOStatement::class, $statement);
+        $this->assertSame('POINT(1 2)', $statement->fetchColumn());
     }
 
     /**

@@ -1118,6 +1118,12 @@ class MariaDB extends SQL implements Feature\ConnectionId, Feature\SchemaAttribu
     }
 
     #[\Override]
+    protected function boundsJoinedSort(): bool
+    {
+        return true;
+    }
+
+    #[\Override]
     protected function createSchemaBuilder(): MySQLSchema
     {
         return new MySQLSchema();

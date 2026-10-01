@@ -11,6 +11,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
@@ -109,6 +110,29 @@ final class SQLiteSharedFulltextTest extends TestCase
 
             return (int) $value;
         }, $statement->fetchAll(PDO::FETCH_COLUMN)));
+    }
+
+    public function testAFulltextIndexForATenantTheDriverCannotQuoteIsRefused(): void
+    {
+        $pdo = new class ('sqlite::memory:') extends PDO {
+            public function quote(string $string, int $type = PDO::PARAM_STR): string|false
+            {
+                return false;
+            }
+        };
+        $adapter = new SQLite($pdo);
+        $adapter->setDatabase(self::NAMESPACE);
+        $adapter->setNamespace(self::NAMESPACE);
+        $adapter->setSharedTables(true);
+        $adapter->setTenant('tenant-c');
+        $adapter->createCollection('notes', [Attribute::string('body', size: 128)]);
+
+        try {
+            $adapter->createIndex('notes', Index::fulltext(key: 'body_search', attributes: ['body']));
+            $this->fail('a tenant that cannot be written into the index triggers must refuse the index');
+        } catch (DatabaseException $error) {
+            $this->assertSame('Failed to quote SQLite tenant', $error->getMessage());
+        }
     }
 
     /**

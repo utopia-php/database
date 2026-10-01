@@ -137,6 +137,23 @@ class DocumentTest extends TestCase
         $this->assertEquals([], $this->empty->getPermissionsByType(Database::PERMISSION_DELETE));
     }
 
+    public function testGetCompositePermissionByType(): void
+    {
+        $document = new Document([
+            '$permissions' => [
+                Permission::read(Role::allOf([
+                    Role::member('membership-id'),
+                    Role::team('team-id', 'admin'),
+                ])),
+            ],
+        ]);
+
+        $this->assertEquals(
+            ['allOf(member:membership-id,team:team-id/admin)'],
+            $document->getRead()
+        );
+    }
+
     public function testGetPermissions(): void
     {
         $this->assertEquals([

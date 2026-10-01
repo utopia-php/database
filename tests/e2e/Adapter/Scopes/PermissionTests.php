@@ -1422,6 +1422,50 @@ trait PermissionTests
         $database->deleteCollection($collection);
     }
 
+    public function testCompositePermissionRolesAreMatchedExactly(): void
+    {
+        /** @var Database $database */
+        $database = $this->getDatabase();
+        $authorization = $database->getAuthorization();
+        $collection = 'perm_composite_' . uniqid();
+        $requiredRole = Role::allOf([
+            Role::member('membership-id'),
+            Role::team('team-id', 'admin'),
+        ]);
+
+        $database->createCollection($collection, permissions: [
+            Permission::create(Role::any()),
+        ], documentSecurity: true);
+        $database->createAttribute($collection, 'name', Database::VAR_STRING, 255, true);
+
+        $authorization->skip(function () use ($database, $collection, $requiredRole): void {
+            $database->createDocument($collection, new Document([
+                '$id' => 'protected',
+                '$permissions' => [Permission::read($requiredRole)],
+                'name' => 'Protected',
+            ]));
+        });
+
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::member('membership-id')->toString());
+        $authorization->addRole(Role::team('team-id', 'admin')->toString());
+        $this->assertSame([], $this->documentIds($database->find($collection)));
+        $this->assertTrue($database->getDocument($collection, 'protected')->isEmpty());
+
+        $authorization->addRole($requiredRole->toString());
+        $this->assertSame(['protected'], $this->documentIds($database->find($collection)));
+        $this->assertSame('protected', $database->getDocument($collection, 'protected')->getId());
+
+        $authorization->cleanRoles();
+        $authorization->addRole(Role::allOf([
+            Role::member('membership-id'),
+            Role::team('team-id', 'viewer'),
+        ])->toString());
+        $this->assertSame([], $this->documentIds($database->find($collection)));
+
+        $database->deleteCollection($collection);
+    }
+
     /**
      * @param array<Document> $documents
      * @return list<string>

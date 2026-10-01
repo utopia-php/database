@@ -1744,6 +1744,73 @@ class MirrorTest extends TestCase
         $this->assertSame([], $errors->getArrayCopy());
     }
 
+    /**
+     * @return iterable<string, array{Closure(Mirror, Database): array{mixed, mixed}, array{mixed, mixed}}>
+     */
+    public static function destinationlessReplicatedWrites(): iterable
+    {
+        yield 'createAttribute' => [
+            static fn (Mirror $mirror, Database $source): array => [
+                $mirror->createAttribute(self::COLLECTION, Attribute::string(key: 'summary', size: 64)),
+                self::attribute($source, 'summary')?->size,
+            ],
+            [true, 64],
+        ];
+        yield 'createAttributes' => [
+            static fn (Mirror $mirror, Database $source): array => [
+                $mirror->createAttributes(self::COLLECTION, [Attribute::string(key: 'summary', size: 64), Attribute::string(key: 'subtitle', size: 32)]),
+                [self::attribute($source, 'summary')?->size, self::attribute($source, 'subtitle')?->size],
+            ],
+            [true, [64, 32]],
+        ];
+        yield 'updateAttribute' => [
+            static fn (Mirror $mirror, Database $source): array => [
+                $mirror->updateAttribute(self::COLLECTION, 'title', size: 100)->getAttribute('size'),
+                self::attribute($source, 'title')?->size,
+            ],
+            [100, 100],
+        ];
+        yield 'createIndex' => [
+            static fn (Mirror $mirror, Database $source): array => [
+                $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title'])),
+                self::index($source, 'titles')?->attributes,
+            ],
+            [true, ['title']],
+        ];
+        yield 'upsertDocumentsWithIncrease' => [
+            static fn (Mirror $mirror, Database $source): array => [
+                $mirror->upsertDocumentsWithIncrease(self::COLLECTION, '', [new Document([Document::ID => 'first', 'title' => 'upserted', 'views' => 1])]),
+                self::storedTitle($source, 'first'),
+            ],
+            [1, 'upserted'],
+        ];
+    }
+
+    /**
+     * A mirror built without a destination over a source whose collection an earlier mirror upgraded writes the
+     * source only: its write filters do not run and nothing is reported.
+     *
+     * @param  Closure(Mirror, Database): array{mixed, mixed}  $write
+     * @param  array{mixed, mixed}  $expected
+     */
+    #[DataProvider('destinationlessReplicatedWrites')]
+    public function testWriteWithoutDestinationOverAnUpgradedCollectionStaysOnTheSource(Closure $write, array $expected): void
+    {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $seeded = $this->seed(new Mirror($source, self::sqlite()));
+        $mirror = (new Mirror($source, null, [self::recordingFilter($calls, static fn (string $hook, ?Document $document): ?Document => $document)]))
+            ->setDatabase($seeded->getDatabase())
+            ->setNamespace($seeded->getNamespace());
+        $errors = self::errors($mirror);
+
+        $this->assertSame('upgraded', self::upgradeStatus($mirror, self::COLLECTION));
+        $this->assertSame($expected, $write($mirror, $source));
+        $this->assertSame([], $calls->getArrayCopy());
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
     private static function storedTitle(Database $database, string $id): ?string
     {
         $title = $database->getDocument(self::COLLECTION, $id)->getAttribute('title');

@@ -12,6 +12,7 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
 use Utopia\Database\Exception as DatabaseException;
+use Utopia\Database\Exception\NotFound as NotFoundException;
 use Utopia\Database\Index;
 use Utopia\Database\RelationSide;
 use Utopia\Database\RelationType;
@@ -135,6 +136,24 @@ final class MariaDBSchemaTest extends TestCase
         $this->assertTrue($adapter->createIndex('events', new Index('happened_index', IndexType::Key, ['happened'])));
         $this->assertCount(1, $this->statements);
         $this->assertStringContainsString('`happened_index`', $this->statements[0]);
+    }
+
+    /**
+     * @param class-string<MariaDB> $class
+     */
+    #[DataProvider('engines')]
+    public function testCreateIndexOnACollectionWithoutADefinitionIsNotFound(string $class): void
+    {
+        $adapter = $this->adapterWithCollection($class);
+
+        try {
+            $adapter->createIndex('missing', new Index('happened_index', IndexType::Key, ['happened']));
+            $this->fail('An index on a collection without a definition must not be created');
+        } catch (NotFoundException $error) {
+            $this->assertSame('Collection not found', $error->getMessage());
+        }
+
+        $this->assertSame([], $this->statements);
     }
 
     private function relationship(string $key, RelationType $type, bool $twoWay, RelationSide $side): Attribute

@@ -55,6 +55,29 @@ final class JoinVectorCursorTest extends TestCase
         $this->assertSame(1, \substr_count($where, '"table_main"."_id" >'), $sql);
     }
 
+    public function testANullJoinedCursorValueIsMatchedByNullnessNotByComparison(): void
+    {
+        $cursor = [
+            'meta.score' => null,
+            'meta.$id' => 'meta-1',
+            '$sequence' => '5',
+            '$distance' => 0.25,
+        ];
+
+        $after = $this->whereClause($this->captureFindSql(['meta.score', 'meta.$id', '$sequence'], $cursor, CursorDirection::After));
+        $before = $this->whereClause($this->captureFindSql(['meta.score', 'meta.$id', '$sequence'], $cursor, CursorDirection::Before));
+
+        $this->assertSame(2, \substr_count($after, '"meta"."score" IS NULL'), $after);
+        $this->assertStringNotContainsString('"meta"."score" IS NOT NULL', $after, 'after a null, in a direction that puts nulls last, only nulls follow');
+        $this->assertStringNotContainsString('"meta"."score" =', $after);
+        $this->assertStringNotContainsString('"meta"."score" >', $after);
+
+        $this->assertSame(1, \substr_count($before, '"meta"."score" IS NOT NULL'), $before);
+        $this->assertSame(2, \substr_count($before, '"meta"."score" IS NULL'), $before);
+        $this->assertStringNotContainsString('"meta"."score" =', $before);
+        $this->assertStringNotContainsString('"meta"."score" <', $before);
+    }
+
     /**
      * @return iterable<string, array{CursorDirection}>
      */

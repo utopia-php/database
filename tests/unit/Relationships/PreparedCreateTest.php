@@ -116,7 +116,12 @@ final class PreparedCreateTest extends TestCase
         $immediate = $this->observe($engine, self::IMMEDIATE, $scenario);
 
         if (isset($immediate['thrown']) && $immediate['inputs'] !== $oneByOne['inputs']) {
-            $this->assertSame(\array_slice($immediate['given'], 1), \array_slice($immediate['inputs'], 1), 'A failed write left the related documents it was given changed');
+            $given = $immediate['given'];
+            $inputs = $immediate['inputs'];
+            if (! \is_array($given) || ! \is_array($inputs)) {
+                $this->fail('An observation lacks the documents handed in');
+            }
+            $this->assertSame(\array_slice($given, 1), \array_slice($inputs, 1), 'A failed write left the related documents it was given changed');
             unset($oneByOne['inputs'], $immediate['inputs']);
         }
 
@@ -679,7 +684,7 @@ final class PreparedCreateTest extends TestCase
             $stored = [];
             foreach ($collections as $collection) {
                 $rows = $database->find($collection, [Query::limit(1000), Query::orderAsc('$sequence')]);
-                $stored[$collection] = \array_map($this->export(...), $rows);
+                $stored[$collection] = \array_values(\array_map($this->export(...), $rows));
             }
 
             return $stored;

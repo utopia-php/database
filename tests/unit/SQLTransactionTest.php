@@ -6,6 +6,7 @@ use PDOException;
 use PHPUnit\Framework\TestCase;
 use Utopia\Database\Adapter\MySQL;
 use Utopia\Database\Adapter\Postgres;
+use Utopia\Database\Exception as DatabaseException;
 use Utopia\Database\Exception\Transaction as TransactionException;
 
 final class SQLTransactionTest extends TestCase
@@ -121,5 +122,15 @@ final class SQLTransactionTest extends TestCase
         $this->expectExceptionMessage('Failed to rollback transaction');
 
         $adapter->rollbackTransaction();
+    }
+
+    public function testAConnectionThatIsNotAPdoIsRefusedOnUse(): void
+    {
+        $adapter = new MySQL(new \stdClass());
+
+        $this->expectException(DatabaseException::class);
+        $this->expectExceptionMessage('SQL adapter requires Utopia\\Database\\PDO, Swoole\\Database\\PDOProxy, or PDO');
+
+        $adapter->reconnect();
     }
 }

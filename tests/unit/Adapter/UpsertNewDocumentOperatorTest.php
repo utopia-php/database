@@ -12,8 +12,10 @@ use Utopia\Database\Attribute;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
 use Utopia\Database\Document;
+use Utopia\Database\Exception\Unique as UniqueException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
+use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\Validator\Authorization;
 
@@ -83,5 +85,49 @@ final class UpsertNewDocumentOperatorTest extends TestCase
 
         $this->assertSame('2026-02-02T12:30:00.000+00:00', $this->database->getDocument('tasks', 'existing')->getAttribute('due'));
         $this->assertSame('2026-02-02T12:30:00.000+00:00', $this->database->getDocument('tasks', 'created')->getAttribute('due'));
+    }
+
+    public function testAnOperatorOnlyALaterDocumentOfTheBatchCarriesIsApplied(): void
+    {
+        $this->database->upsertDocuments('tasks', [
+            new Document(['$id' => 'plain', 'archived' => true]),
+            new Document(['$id' => 'toggled', 'active' => Operator::toggle()]),
+        ]);
+
+        $this->assertTrue($this->database->getDocument('tasks', 'plain')->getAttribute('active'));
+        $this->assertTrue($this->database->getDocument('tasks', 'plain')->getAttribute('archived'));
+        $this->assertFalse($this->database->getDocument('tasks', 'toggled')->getAttribute('active'));
+    }
+
+    public function testAnEmptyBatchWritesNothing(): void
+    {
+        $adapter = $this->database->getAdapter();
+        $this->assertInstanceOf(SQLite::class, $adapter);
+        $collection = $this->database->getCollection('tasks');
+
+        $this->assertSame([], $adapter->createDocuments($collection, []));
+        $this->assertSame([], $adapter->upsertDocuments($collection, '', []));
+        $this->assertSame([], $this->database->find('tasks'));
+    }
+
+    public function testAnUpsertThatBreaksAUniqueIndexIsAUniqueViolation(): void
+    {
+        $this->database->createCollection(new Collection(
+            id: 'accounts',
+            attributes: [Attribute::string('email', size: 64)],
+            indexes: [Index::unique(key: 'unique_email', attributes: ['email'])],
+            permissions: [Permission::create(Role::any()), Permission::read(Role::any()), Permission::update(Role::any())],
+            documentSecurity: false,
+        ));
+        $this->database->createDocument('accounts', new Document(['$id' => 'first', 'email' => 'shared@example.com']));
+
+        try {
+            $this->database->upsertDocument('accounts', new Document(['$id' => 'second', 'email' => 'shared@example.com']));
+            $this->fail('an upsert breaking a unique index must be refused');
+        } catch (UniqueException $error) {
+            $this->assertInstanceOf(\PDOException::class, $error->getPrevious());
+        }
+
+        $this->assertTrue($this->database->getDocument('accounts', 'second')->isEmpty());
     }
 }

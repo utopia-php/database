@@ -86,8 +86,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
     private const string FOJ_ROWS_ALIAS = 'foj_rows';
 
-    private const string JOINED_PAGE_ALIAS = 'joined_page';
-
     /**
      * MariaDB, MySQL and SQLite accept OFFSET only after a LIMIT; this one bounds nothing on any engine.
      */
@@ -5659,8 +5657,9 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
      * document together. Without inner joins and without conditions on joined attributes, every main document it
      * matches gives at least one row, so its page of `limit` rows after `offset` rows (and after the cursor) comes
      * from the first `offset + limit` main documents in that order after the cursor's own, plus the cursor's own.
-     * Those are picked in a subquery over the main table, which an index can serve up to its limit, and the join and
-     * its sort only see their rows. The rows, their order and the page are those of the read without it.
+     * The read joins from a derived table of those main rows (an index can serve its order up to its limit), so the
+     * join and its sort only see their rows. The rows, their order and the page are those of the read without it.
+     * A fulltext search needs the main table itself, so a read with one keeps the whole join.
      *
      * @param  array<BaseQuery>  $queries
      * @param  array<Query>  $adapterFilterQueries
@@ -5722,24 +5721,15 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             $filters[] = clone $query;
         }
 
-        foreach ($adapterFilterQueries as $query) {
-            if (! $this->isMainRowCondition($query, $joinAliases)) {
-                return;
-            }
+        if ($adapterFilterQueries !== []) {
+            return;
         }
 
         [$mainAttributes, $mainTypes] = $mainOrder;
-        $sequence = $alias.'.'.$this->getInternalKeyForAttribute(Document::SEQUENCE);
 
         $page = $this->newBuilder($name, $alias);
-        $page->select([$sequence]);
+        $page->select([$alias.'.*']);
         $this->applyFilters($page, $filters, $name, $alias);
-        foreach ($adapterFilterQueries as $query) {
-            $compiled = $this->compileAdapterFilter($query, $name, $alias);
-            if ($compiled !== null) {
-                $page->whereRaw($compiled['expression'], $compiled['bindings']);
-            }
-        }
 
         if (
             $this->authorization->getStatus()
@@ -5761,12 +5751,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $this->applyFindPage($page, $mainAttributes, $mainTypes, $limit + $reach, null, $cursorDirection);
 
-        $builder->filterWhereIn(
-            $sequence,
-            $this->createBuilder()
-                ->fromSub($page, self::JOINED_PAGE_ALIAS)
-                ->select([self::JOINED_PAGE_ALIAS.'.'.$this->getInternalKeyForAttribute(Document::SEQUENCE)]),
-        );
+        $builder->fromSub($page, $alias);
     }
 
     /**
@@ -5814,10 +5799,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     {
         $method = $query->getMethod();
         if (
-            ! $method->isFilter()
+            $method === Method::Search
+            || $method === Method::NotSearch
+            || (! $method->isFilter()
             && ! $method->isSpatial()
             && ! $method->isJson()
-            && ! \in_array($method, self::ROW_CONDITION_GROUPS, true)
+            && ! \in_array($method, self::ROW_CONDITION_GROUPS, true))
         ) {
             return false;
         }

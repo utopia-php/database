@@ -16,6 +16,7 @@ use Utopia\Database\Document;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Hook\Permissions;
+use Utopia\Database\Index;
 use Utopia\Database\Profiler\QueryLog;
 use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
@@ -131,6 +132,7 @@ final class BoundedJoinSortTest extends TestCase
             yield "{$mode}: notes, inner join behind a left join" => [$mode, [$notes, Query::join('tags', '$id', 'author', '=', 't')], false];
             yield "{$mode}: notes, right join" => [$mode, [Query::rightJoin('notes', '$id', 'author', '=', 'n'), Query::orderAsc('rank')], false];
             yield "{$mode}: notes, full outer join" => [$mode, [Query::fullOuterJoin('notes', '$id', 'author', '=', 'n')], false];
+            yield "{$mode}: notes, a search on a main attribute" => [$mode, [$notes, Query::search('name', 'amber')], false];
             yield "{$mode}: notes, main attributes selected" => [$mode, [$notes, Query::orderAsc('rank'), Query::select(['name', 'rank'])], false];
         }
     }
@@ -332,12 +334,11 @@ final class BoundedJoinSortTest extends TestCase
         $this->assertNotSame([], $reads);
         $read = $reads[\count($reads) - 1];
 
-        $subquery = \strpos($read->query, ' IN (SELECT ');
-        if ($subquery === false || \preg_match('/LIMIT \?\) AS [`"]?joined_page/', $read->query, $match, PREG_OFFSET_CAPTURE) !== 1) {
+        if (\preg_match('/^SELECT .+? FROM \(SELECT .+? LIMIT \?\) AS [`"]?table_main[`"]? /', $read->query, $match) !== 1) {
             return null;
         }
 
-        $placeholder = \substr_count(\substr($read->query, 0, $match[0][1]), '?');
+        $placeholder = \substr_count($match[0], '?') - 1;
         $bound = $read->bindings[$placeholder] ?? null;
         $this->assertIsInt($bound);
 
@@ -383,7 +384,13 @@ final class BoundedJoinSortTest extends TestCase
             'notes' => [Attribute::string(key: 'author', size: 16), Attribute::integer(key: 'rank', required: false)],
             'tags' => [Attribute::string(key: 'author', size: 16), Attribute::string(key: 'note', size: 16)],
         ] as $id => $attributes) {
-            $database->createCollection(new Collection(id: $id, attributes: $attributes, permissions: $permissions, documentSecurity: true));
+            $database->createCollection(new Collection(
+                id: $id,
+                attributes: $attributes,
+                indexes: $id === 'authors' ? [Index::fullText(key: 'name_search', attributes: ['name'])] : [],
+                permissions: $permissions,
+                documentSecurity: true,
+            ));
         }
 
         $tenants = $shared ? [1 => 'one', 2 => 'two'] : [0 => 'one'];

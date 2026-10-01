@@ -8642,7 +8642,7 @@ trait JoinTests
             'a1' => [2, true], 'a2' => [1, true], 'a3' => [null, true], 'a4' => [2, false], 'a5' => [3, true],
             'a6' => [1, true], 'a7' => [null, false], 'a8' => [2, true], 'a9' => [4, true],
         ] as $id => [$score, $visible]) {
-            $database->createDocument($authors, new Document(['$id' => $id, 'name' => $id, 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
+            $database->createDocument($authors, new Document(['$id' => $id, 'name' => 'author '.$id, 'score' => $score, '$permissions' => $visible ? $readable : $hidden]));
         }
         foreach ([
             'n1' => ['a1', 1, true], 'n2' => ['a1', 2, true], 'n3' => ['a1', 1, true], 'n4' => ['a2', 5, true],
@@ -8697,6 +8697,20 @@ trait JoinTests
                     $iterated[] = $this->joinCursorKey($row);
                 }
                 $this->assertSame($keys, $iterated, "{$label}: iterate()");
+            }
+
+            if ($database->getAdapter()->supports(Capability::Fulltext)) {
+                $database->createIndex($authors, Index::fullText(key: 'j65_name', attributes: ['name']));
+                $queries = [$join, Query::search('name', 'author')];
+                $keys = \array_map($this->joinCursorKey(...), \array_values($database->find($authors, [...$queries, Query::limit(100)])));
+                $this->assertCount(10, $keys, 'search: every visible author with each visible note, or none');
+                for ($offset = 0; $offset <= \count($keys); $offset++) {
+                    $this->assertSame(
+                        \array_slice($keys, $offset, 2),
+                        \array_map($this->joinCursorKey(...), $database->find($authors, [...$queries, Query::limit(2), Query::offset($offset)])),
+                        "search: limit 2, offset {$offset}",
+                    );
+                }
             }
         } finally {
             $this->cleanupAggCollections($database, [$authors, $notes]);

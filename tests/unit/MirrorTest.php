@@ -1784,6 +1784,28 @@ class MirrorTest extends TestCase
             ],
             [1, 'upserted'],
         ];
+        yield 'deleteAttribute' => [
+            static fn (Mirror $mirror, Database $source): array => [
+                $mirror->deleteAttribute(self::COLLECTION, 'views'),
+                self::attribute($source, 'views'),
+            ],
+            [true, null],
+        ];
+        yield 'deleteIndex' => [
+            static function (Mirror $mirror, Database $source): array {
+                $source->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
+
+                return [$mirror->deleteIndex(self::COLLECTION, 'titles'), self::index($source, 'titles')];
+            },
+            [true, null],
+        ];
+        yield 'updateDocument' => [
+            static fn (Mirror $mirror, Database $source): array => [
+                $mirror->updateDocument(self::COLLECTION, 'first', new Document(['title' => 'updated']))->getAttribute('title'),
+                self::storedTitle($source, 'first'),
+            ],
+            ['updated', 'updated'],
+        ];
     }
 
     /**
@@ -1808,6 +1830,28 @@ class MirrorTest extends TestCase
         $this->assertSame('upgraded', self::upgradeStatus($mirror, self::COLLECTION));
         $this->assertSame($expected, $write($mirror, $source));
         $this->assertSame([], $calls->getArrayCopy());
+        $this->assertSame([], $errors->getArrayCopy());
+    }
+
+    public function testDeleteAttributeAndIndexRunWriteFilters(): void
+    {
+        /** @var ArrayObject<int, array{string, string, mixed}> $calls */
+        $calls = new ArrayObject();
+        $source = self::sqlite();
+        $destination = self::sqlite();
+        $mirror = $this->filtered([self::recordingFilter($calls, static fn (string $hook, ?Document $document): ?Document => $document)], $source, $destination);
+        $errors = self::errors($mirror);
+        $mirror->createIndex(self::COLLECTION, Index::key(key: 'titles', attributes: ['title']));
+        $calls->exchangeArray([]);
+
+        $this->assertTrue($mirror->deleteIndex(self::COLLECTION, 'titles'));
+        $this->assertTrue($mirror->deleteAttribute(self::COLLECTION, 'views'));
+
+        $this->assertSame([
+            ['beforeDeleteIndex', self::COLLECTION, 'titles'],
+            ['beforeDeleteAttribute', self::COLLECTION, 'views'],
+        ], $calls->getArrayCopy());
+        $this->assertSame([null, null], [self::index($destination, 'titles'), self::attribute($destination, 'views')]);
         $this->assertSame([], $errors->getArrayCopy());
     }
 

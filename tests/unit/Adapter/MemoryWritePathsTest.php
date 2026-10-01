@@ -17,6 +17,8 @@ use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
 use Utopia\Database\Operator;
 use Utopia\Database\Query;
+use Utopia\Database\Validator\Authorization;
+use Utopia\Query\CursorDirection;
 
 final class MemoryWritePathsTest extends TestCase
 {
@@ -164,6 +166,22 @@ final class MemoryWritePathsTest extends TestCase
 
             $this->assertSame(10, $adapter->getDocument($this->collection(), 'home')->getAttribute('visits'), $method);
         }
+    }
+
+    public function testACursorWithoutAnOrderPagesBySequence(): void
+    {
+        $authorization = new Authorization();
+        $authorization->disable();
+        $adapter = $this->adapter();
+        $adapter->setAuthorization($authorization);
+        foreach (['first', 'second', 'third'] as $id) {
+            $this->storeAddress($adapter, $id, 'x');
+        }
+        $cursor = ['$sequence' => $adapter->getDocument($this->collection(), 'second')->getSequence()];
+        $ids = static fn (array $documents): array => \array_map(static fn (Document $document): string => $document->getId(), $documents);
+
+        $this->assertSame(['third'], $ids($adapter->find($this->collection(), cursor: $cursor)));
+        $this->assertSame(['first'], $ids($adapter->find($this->collection(), cursor: $cursor, cursorDirection: CursorDirection::Before)));
     }
 
     public function testIncrementIsANoOpWhenTheStoredValueAlreadyViolatesTheBound(): void

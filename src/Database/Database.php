@@ -2472,8 +2472,8 @@ class Database
     public function convertQueries(Document $collection, array $queries, array $joinedCollections = []): array
     {
         $attributesById = $this->buildAttributeMap($collection, $joinedCollections);
-        $isNestedQueryAttributeSupported = $this->adapter->supports(Capability::DefinedAttributes)
-            && $this->adapter->supports(Capability::Objects);
+        $isNestedQueryAttributeSupported = $this->adapter->supports(Capability::Objects)
+            && $this->adapter->supports(Capability::DefinedAttributes);
 
         $havingAttributesById = null;
         foreach ($queries as $index => $query) {
@@ -2606,8 +2606,8 @@ class Database
     public function convertQuery(Document $collection, Query $query): Query
     {
         $attributesById = $this->buildAttributeMap($collection);
-        $isNestedQueryAttributeSupported = $this->adapter->supports(Capability::DefinedAttributes)
-            && $this->adapter->supports(Capability::Objects);
+        $isNestedQueryAttributeSupported = $this->adapter->supports(Capability::Objects)
+            && $this->adapter->supports(Capability::DefinedAttributes);
 
         return $this->convertQueryWithMap($query, $attributesById, $isNestedQueryAttributeSupported);
     }

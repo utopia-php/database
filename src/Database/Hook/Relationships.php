@@ -83,9 +83,12 @@ class Relationships implements Hook
 
     /**
      * @param Database $db The database instance used for relationship operations
+     * @param bool $prepare Whether a create whose related documents are all new prepares them instead of creating
+     *                      each through createDocument(), which reads it before and after writing it
      */
     public function __construct(
         private Database $db,
+        private readonly bool $prepare = true,
     ) {
         $this->enabled = new Value(true);
         $this->checkExist = new Value(true);
@@ -393,6 +396,10 @@ class Relationships implements Hook
      */
     private function canPrepare(Document $collection, Document $document): bool
     {
+        if (! $this->prepare) {
+            return false;
+        }
+
         $adapter = $this->db->getAdapter();
         if (! $adapter->inTransaction() || $adapter->getTenantPerDocument()) {
             return false;
@@ -478,7 +485,8 @@ class Relationships implements Hook
     }
 
     /**
-     * Whether a new document's related documents are given a reference back to it, which relating them reads.
+     * Whether a new document's related documents are given a reference back to it that relating them writes
+     * through, which reads it first.
      */
     private function isReferencedBack(Document $collection, Document $document): bool
     {
@@ -491,11 +499,7 @@ class Relationships implements Hook
             }
 
             $rel = RelationshipVO::fromArray(['collection' => $collection->getId()] + $relationship->getArrayCopy());
-            if (
-                ($rel->type === RelationType::OneToOne && $rel->twoWay)
-                || ($rel->type === RelationType::OneToMany && $rel->side === RelationSide::Parent)
-                || ($rel->type === RelationType::ManyToOne && $rel->side === RelationSide::Child)
-            ) {
+            if ($rel->type === RelationType::OneToOne && $rel->twoWay) {
                 return true;
             }
         }
@@ -1920,6 +1924,10 @@ class Relationships implements Hook
         ?PreparedCreate $prepared,
     ): void {
         if ($prepared !== null) {
+            if (! $this->writesById($relationType, $twoWay, $side)) {
+                return;
+            }
+
             // One by one, a document still being prepared is written after this read, and it was not stored before.
             if ($this->checkExist->get() && isset($prepared->preparing[$relatedCollection->getId()][$relationId])) {
                 return;
@@ -1968,6 +1976,19 @@ class Relationships implements Hook
                 ));
                 break;
         }
+    }
+
+    /**
+     * Whether relating a document by id writes anything; otherwise it only reads the related document.
+     */
+    private function writesById(RelationType $relationType, bool $twoWay, RelationSide $side): bool
+    {
+        return match ($relationType) {
+            RelationType::OneToOne => $twoWay,
+            RelationType::OneToMany => $side === RelationSide::Parent,
+            RelationType::ManyToOne => $side === RelationSide::Child,
+            RelationType::ManyToMany => true,
+        };
     }
 
     private function getJunctionCollection(Document $collection, Document $relatedCollection, RelationSide $side): string

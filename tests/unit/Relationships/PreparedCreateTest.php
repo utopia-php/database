@@ -32,9 +32,9 @@ use Utopia\Query\Schema\ForeignKeyAction;
 /**
  * A create whose related documents are all new prepares them instead of reading each one first and back after:
  * with savepoints it writes them together at the end, without them each where it would have been written. Each
- * scenario runs once where the hook cannot tell the related documents are new and relates them one by one as it
- * always did, and once where it prepares them, and everything observable must match: what is stored, what is
- * returned or thrown, the events and write hooks fired, and what the write assigned to the documents handed in.
+ * scenario runs once with the hook relating one by one as it always did, and once where it prepares, and
+ * everything observable must match: what is stored, what is returned or thrown, the events and write hooks fired,
+ * and what the write assigned to the documents handed in.
  */
 final class PreparedCreateTest extends TestCase
 {
@@ -66,6 +66,7 @@ final class PreparedCreateTest extends TestCase
         'generated ids and own permissions',
         'documents mixed with ids',
         'one to many documents mixed with ids',
+        'one to one by id',
         'existence checks skipped',
         'new document then its id',
         'one collection at several depths',
@@ -281,6 +282,16 @@ final class PreparedCreateTest extends TestCase
                         new Document(['$id' => 'twice', 'name' => 'twice']),
                         new Document(['$id' => 'twice', 'name' => 'twice']),
                     ],
+                ]), $create($database, 'level0')];
+            },
+            'one to one by id' => static function (Database $database) use ($create): array {
+                self::chain($database, RelationType::OneToOne, 2);
+                $database->createDocument('level2', new Document(['$id' => 'leaf', 'name' => 'leaf']));
+
+                return [new Document([
+                    '$id' => 'root',
+                    'name' => 'root',
+                    'next' => new Document(['$id' => 'a', 'name' => 'a', 'next' => 'leaf']),
                 ]), $create($database, 'level0')];
             },
             'existence checks skipped' => static function (Database $database): array {
@@ -502,10 +513,9 @@ final class PreparedCreateTest extends TestCase
         $authorization->addRole(Role::any()->toString());
 
         $savepoints = $mode === self::ONE_BY_ONE || $mode === self::DEFERRED;
-        $sequences = $mode === self::DEFERRED || $mode === self::IMMEDIATE;
         $adapter = $engine === 'memory'
-            ? new RelationshipMemory($savepoints, $sequences)
-            : new RelationshipSQLite(new PDO('sqlite::memory:'), $savepoints, $sequences);
+            ? new RelationshipMemory($savepoints)
+            : new RelationshipSQLite(new PDO('sqlite::memory:'), $savepoints);
 
         $database = new Database($adapter, new Cache(new None()));
         $database
@@ -521,7 +531,7 @@ final class PreparedCreateTest extends TestCase
         }
 
         $database->create();
-        $database->addHook(new Relationships($database));
+        $database->addHook(new Relationships($database, prepare: $mode === self::DEFERRED || $mode === self::IMMEDIATE));
         $database->addHook(new Permissions());
 
         return $database;

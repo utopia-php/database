@@ -66,7 +66,6 @@ use Utopia\Query\Query as BaseQuery;
 use Utopia\Query\Schema;
 use Utopia\Query\Schema\Column;
 use Utopia\Query\Schema\ColumnType;
-use Utopia\Query\Schema\IndexType;
 use Utopia\Query\Schema\MySQL as MySQLSchema;
 use Utopia\Query\Schema\PostgreSQL as PostgreSQLSchema;
 use Utopia\Query\Schema\Table;
@@ -743,7 +742,7 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         } else {
             $builder = $this->newBuilder($name, $alias);
 
-            if (! empty($selections) && ! \in_array('*', $selections)) {
+            if (! \in_array('*', $selections)) {
                 $builder->select($this->mapSelectionsToColumns($selections, joinAliases: []));
             }
 
@@ -3323,40 +3322,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             ColumnType::Polygon->value => "POLYGON{$modifier}{$nullability}",
             default => '',
         };
-    }
-
-    /**
-     * Get SQL Index Type
-     *
-     * @throws Exception
-     */
-    protected function getSQLIndexType(IndexType $type): string
-    {
-        return match ($type) {
-            IndexType::Key => 'INDEX',
-            IndexType::Unique => 'UNIQUE INDEX',
-            IndexType::Fulltext => 'FULLTEXT INDEX',
-            default => throw new DatabaseException('Unknown index type: '.$type->value.'. Must be one of '.IndexType::Key->value.', '.IndexType::Unique->value.', '.IndexType::Fulltext->value),
-        };
-    }
-
-    /**
-     * Extract the spatial geometry type name from a WKT string.
-     *
-     * @param string $wkt The Well-Known Text representation
-     * @return string The lowercase type name (e.g. "point", "polygon")
-     *
-     * @throws DatabaseException If the WKT is invalid.
-     */
-    public function getSpatialTypeFromWKT(string $wkt): string
-    {
-        $wkt = trim($wkt);
-        $pos = strpos($wkt, '(');
-        if ($pos === false) {
-            throw new DatabaseException('Invalid spatial type');
-        }
-
-        return strtolower(trim(substr($wkt, 0, $pos)));
     }
 
     /**
@@ -6048,7 +6013,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         $values = $operator->getValues();
 
         switch ($method) {
-            // Numeric operators with optional limits
             case OperatorType::Increment:
             case OperatorType::Decrement:
             case OperatorType::Multiply:
@@ -6058,7 +6022,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
                 $bindIndex++;
 
-                // Bind limit if provided
                 if (isset($values[1])) {
                     $limitKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
@@ -6080,7 +6043,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $stmt->bindValue(':'.$bindKey, $value, $this->getPDOType($value));
                 $bindIndex++;
 
-                // Bind max limit if provided
                 if (isset($values[1])) {
                     $maxKey = "op_{$bindIndex}";
                     $limit = self::exactLimit($values[1]);
@@ -6089,7 +6051,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 }
                 break;
 
-                // String operators
             case OperatorType::StringConcat:
                 $value = $values[0] ?? '';
                 $bindKey = "op_{$bindIndex}";
@@ -6108,12 +6069,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $bindIndex++;
                 break;
 
-                // Boolean operators
-            case OperatorType::Toggle:
-                // No parameters to bind
-                break;
-
-                // Date operators
             case OperatorType::DateAddDays:
             case OperatorType::DateSubDays:
                 $days = $values[0] ?? 0;
@@ -6122,19 +6077,12 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $bindIndex++;
                 break;
 
-            case OperatorType::DateSetNow:
-                // No parameters to bind
-                break;
-
-                // Array operators
             case OperatorType::ArrayAppend:
             case OperatorType::ArrayPrepend:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
                 if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
                     throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.Operator::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
                 }
 
-                // Bind JSON array
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
                 $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
@@ -6151,11 +6099,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $bindIndex++;
                 break;
 
-            case OperatorType::ArrayUnique:
-                // No parameters to bind
-                break;
-
-                // Complex array operators
             case OperatorType::ArrayInsert:
                 $index = $values[0] ?? 0;
                 $value = $values[1] ?? null;
@@ -6169,7 +6112,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
             case OperatorType::ArrayIntersect:
             case OperatorType::ArrayDiff:
-                // PERFORMANCE: Validate array size to prevent memory exhaustion
                 if (\count($values) > Operator::MAX_ARRAY_OPERATOR_SIZE) {
                     throw new DatabaseException('Array size '.\count($values).' exceeds maximum allowed size of '.Operator::MAX_ARRAY_OPERATOR_SIZE.' for array operations');
                 }
@@ -6177,31 +6119,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
                 $arrayValue = json_encode($values);
                 $bindKey = "op_{$bindIndex}";
                 $stmt->bindValue(':'.$bindKey, $arrayValue, PDO::PARAM_STR);
-                $bindIndex++;
-                break;
-
-            case OperatorType::ArrayFilter:
-                $condition = \is_string($values[0] ?? null) ? $values[0] : 'equal';
-                $value = $values[1] ?? null;
-
-                $validConditions = [
-                    'equal', 'notEqual',  // Comparison
-                    'greaterThan', 'greaterThanEqual', 'lessThan', 'lessThanEqual',  // Numeric
-                    'isNull', 'isNotNull',  // Null checks
-                ];
-                if (! in_array($condition, $validConditions, true)) {
-                    throw new DatabaseException("Invalid filter condition: {$condition}. Must be one of: ".implode(', ', $validConditions));
-                }
-
-                $conditionKey = "op_{$bindIndex}";
-                $stmt->bindValue(':'.$conditionKey, $condition, PDO::PARAM_STR);
-                $bindIndex++;
-                $valueKey = "op_{$bindIndex}";
-                if ($value !== null) {
-                    $stmt->bindValue(':'.$valueKey, json_encode($value), PDO::PARAM_STR);
-                } else {
-                    $stmt->bindValue(':'.$valueKey, null, PDO::PARAM_NULL);
-                }
                 $bindIndex++;
                 break;
         }
@@ -6616,14 +6533,6 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
             'NULL' => \PDO::PARAM_NULL,
             default => throw new DatabaseException('Unknown PDO Type for ' . \gettype($value)),
         };
-    }
-
-    /**
-     * Get the SQL function for random ordering
-     */
-    protected function getRandomOrder(): string
-    {
-        return 'RANDOM()';
     }
 
     /**

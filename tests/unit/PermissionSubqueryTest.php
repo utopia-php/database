@@ -195,6 +195,67 @@ final class PermissionSubqueryTest extends TestCase
         $this->assertSame(1, \substr_count($sql, self::NO_SEMIJOIN), $sql);
     }
 
+    /**
+     * @return iterable<string, array{JoinType, int, bool}>
+     */
+    public static function mySQLJoinsOnTheJoinedId(): iterable
+    {
+        foreach ([JoinType::Left, JoinType::Right] as $joinType) {
+            for ($links = 1; $links <= self::LARGE_JOIN; $links++) {
+                yield $joinType->name.' join chain of '.$links => [$joinType, $links, true];
+            }
+        }
+        yield 'FullOuter join of 1' => [JoinType::FullOuter, 1, true];
+        for ($links = 1; $links < self::LARGE_JOIN; $links++) {
+            yield 'Inner join chain of '.$links => [JoinType::Inner, $links, false];
+        }
+        yield 'Inner join chain of '.self::LARGE_JOIN => [JoinType::Inner, self::LARGE_JOIN, true];
+    }
+
+    #[DataProvider('mySQLJoinsOnTheJoinedId')]
+    public function testMySQLJoinOnTheJoinedIdIsHintedLikeAnyOuterJoin(JoinType $joinType, int $links, bool $hinted): void
+    {
+        $sql = $this->mySQLFindSql(\array_map(
+            static fn (int $link): Query => self::joinOnId($joinType, 'orders'.$link, 'o'.$link),
+            \range(1, $links),
+        ));
+
+        for ($link = 1; $link <= $links; $link++) {
+            $checks = $this->checks($sql, 'o'.$link);
+            $this->assertNotSame([], $checks, 'Every joined table must be checked: '.$sql);
+            foreach ($checks as $hint) {
+                $this->assertSame($hinted, $hint, 'The check of o'.$link.' in: '.$sql);
+            }
+        }
+
+        $this->assertNotContains(true, $this->checks($sql, self::MAIN_ALIAS), 'The main table\'s check stays a semi-join candidate: '.$sql);
+    }
+
+    public function testMySQLMixedOuterJoinShapesHintOnlyTheOuterJoinedChecks(): void
+    {
+        $sql = $this->mySQLFindSql([
+            self::joinOnId(JoinType::Left, 'orders1', 'o1'),
+            self::join(JoinType::Left, 'orders2', 'o2'),
+            Query::leftJoin('orders3', 'o1.customerId', '$id', '=', 'o3'),
+            Query::join('orders4', 'customerId', '$id', '=', 'o4'),
+        ]);
+
+        $this->assertSame([true], $this->checks($sql, 'o1'), $sql);
+        $this->assertSame([true], $this->checks($sql, 'o2'), $sql);
+        $this->assertSame([true], $this->checks($sql, 'o3'), $sql);
+        $this->assertSame([false], $this->checks($sql, 'o4'), $sql);
+    }
+
+    private static function joinOnId(JoinType $joinType, string $collection, string $alias): Query
+    {
+        return match ($joinType) {
+            JoinType::Left => Query::leftJoin($collection, 'customerId', '$id', '=', $alias),
+            JoinType::Right => Query::rightJoin($collection, 'customerId', '$id', '=', $alias),
+            JoinType::FullOuter => Query::fullOuterJoin($collection, 'customerId', '$id', '=', $alias),
+            default => Query::join($collection, 'customerId', '$id', '=', $alias),
+        };
+    }
+
     private static function join(JoinType $joinType, string $collection, string $alias): Query
     {
         return match ($joinType) {

@@ -524,4 +524,35 @@ class IncreaseDecreaseTest extends TestCase
 
         $this->database->decreaseDocumentAttribute('testCol', 'doc1', 'counter', 0);
     }
+
+    /**
+     * @return array<string, array{bool}>
+     */
+    public static function directions(): array
+    {
+        return [
+            'increase' => [true],
+            'decrease' => [false],
+        ];
+    }
+
+    #[DataProvider('directions')]
+    public function testANotANumberChangeOfAFloatIsRefused(bool $increase): void
+    {
+        $doc = new Document([
+            '$id' => 'doc1',
+            '$collection' => 'testCol',
+            '$permissions' => [Permission::read(Role::any()), Permission::update(Role::any())],
+            'score' => 1.5,
+        ]);
+
+        $this->setupCollectionWithDocument('testCol', $doc, [$this->floatAttribute('score')]);
+
+        $this->expectException(TypeException::class);
+        $this->expectExceptionMessage('Attribute value must be a finite numeric value.');
+
+        $increase
+            ? $this->database->increaseDocumentAttribute('testCol', 'doc1', 'score', \NAN)
+            : $this->database->decreaseDocumentAttribute('testCol', 'doc1', 'score', \NAN);
+    }
 }

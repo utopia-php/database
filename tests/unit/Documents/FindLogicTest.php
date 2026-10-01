@@ -1214,4 +1214,15 @@ class FindLogicTest extends TestCase
 
         return $db;
     }
+
+    public function testGetDocumentWithJoinOnUnsupportedAdapterThrows(): void
+    {
+        $this->setupCollectionLookup('testCol');
+
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage('Join queries are not supported by this adapter');
+        $this->database->skipValidation(fn () => $this->database->getDocument('testCol', 'doc1', [
+            Query::join('other', 'fk', '$id'),
+        ]));
+    }
 }

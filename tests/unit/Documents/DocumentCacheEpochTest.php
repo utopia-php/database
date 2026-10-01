@@ -4,6 +4,7 @@ namespace Tests\Unit\Documents;
 
 use Closure;
 use PHPUnit\Framework\TestCase;
+use Tests\Unit\Cache\RacedReleaseCache;
 use Tests\Unit\Cache\RedisLeasableCache;
 use Tests\Unit\Support\CountingMemory;
 use Utopia\Cache\Adapter as CacheAdapter;
@@ -649,6 +650,26 @@ final class DocumentCacheEpochTest extends TestCase
         $database->getCollection('webhooks');
 
         $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'), 'A definition saved after a write retired its epoch must not keep serving that epoch');
+    }
+
+    public function testARegistrationReleasedJustBeforeItsOwnReleaseFinishesTheWrite(): void
+    {
+        $cache = new RacedReleaseCache();
+        $adapter = new CountingMemory();
+        $database = $this->createCountedDatabase($adapter, $cache);
+        $cache->releaseBeforeNextOwnerRelease();
+
+        $this->assertSame(1, $this->renameDocument($database, 'webhooks', 'hook', 'updated'));
+
+        [$collectionKey] = $database->getCacheKeys('webhooks', 'hook');
+        $epoch = $database->getCache()->load($collectionKey.'#epoch', Database::TTL);
+        $this->assertIsString($epoch);
+        $this->assertStringStartsWith('active:', $epoch);
+
+        $adapter->reset();
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame('updated', $database->getDocument('webhooks', 'hook')->getAttribute('name'));
+        $this->assertSame(1, $adapter->documentReads, 'A registration another worker already released is not a failed release: the write activates and reads are cached again');
     }
 
     private function createCountedDatabase(CountingMemory $adapter, CacheAdapter $cache): Database

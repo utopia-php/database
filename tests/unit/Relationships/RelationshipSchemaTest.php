@@ -541,6 +541,126 @@ final class RelationshipSchemaTest extends TestCase
         $this->assertContains('author', $this->attributeKeys($database, 'books'));
     }
 
+    public function testAFailedJunctionPurgeRestoresEveryDefinitionItCanAndReversesTheSchemaRename(): void
+    {
+        $renames = [];
+        $adapter = $this->memory([
+            'updateRelationship' => static function (Relationship $relationship, ?string $newKey) use (&$renames): ?bool {
+                $renames[] = "{$relationship->key}->{$newKey}";
+
+                return \count($renames) > 1 ? throw new RuntimeException('the schema rename could not be reversed') : null;
+            },
+        ]);
+        $failure = new RuntimeException('the junction cache could not be purged');
+        $database = new class ($adapter, new Cache(new None()), $failure) extends Database {
+            public bool $armed = false;
+
+            private int $junctionPurges = 0;
+
+            public function __construct(Adapter $adapter, Cache $cache, private readonly RuntimeException $failure)
+            {
+                parent::__construct($adapter, $cache);
+            }
+
+            public function purgeCachedCollection(string $collectionId): bool
+            {
+                if ($this->armed && \str_starts_with($collectionId, '_') && \in_array(++$this->junctionPurges, [3, 4, 5], true)) {
+                    throw $this->failure;
+                }
+
+                return parent::purgeCachedCollection($collectionId);
+            }
+
+            protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
+            {
+                if ($this->armed && $collection === 'books' && $id === 'authors_of') {
+                    throw new RuntimeException('the definition could not be restored');
+                }
+
+                return parent::updateAttributeMeta($collection, $id, $updateCallback, $triggerEvent);
+            }
+        };
+        $this->prepare($database);
+        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $junction = $this->junction($database);
+        $database->armed = true;
+
+        try {
+            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $this->fail('a failed junction purge must fail the rename');
+        } catch (RuntimeException $error) {
+            $this->assertSame($failure, $error);
+        }
+
+        $database->armed = false;
+        $this->assertSame(['writers->authors_of', 'authors_of->writers'], $renames, 'the schema rename is reversed, and its failure is not reported over the purge failure');
+        $this->assertEqualsCanonicalizing(['writers', 'works'], $this->attributeKeys($database, $junction));
+        $this->assertContains('works', $this->attributeKeys($database, 'authors'));
+        $this->assertNotContains('written', $this->attributeKeys($database, 'authors'));
+        $this->assertContains('authors_of', $this->attributeKeys($database, 'books'), 'the one restore that failed leaves its definition; the others still run');
+    }
+
+    public function testAFailedJunctionIndexRenameKeepsItsErrorWhenEveryRollbackStepFails(): void
+    {
+        $renames = [];
+        $adapter = $this->memory([
+            'updateRelationship' => static function (Relationship $relationship, ?string $newKey) use (&$renames): ?bool {
+                $renames[] = "{$relationship->key}->{$newKey}";
+
+                return \count($renames) > 1 ? throw new RuntimeException('the schema rename could not be reversed') : null;
+            },
+        ]);
+        $database = new class ($adapter, new Cache(new None())) extends Database {
+            public bool $armed = false;
+
+            /** @var list<string> */
+            public array $rollbacks = [];
+
+            public function renameIndex(string $collection, string $old, string $new): bool
+            {
+                if ($this->armed && $new === '_index_writers') {
+                    $this->rollbacks[] = "index {$old}->{$new}";
+
+                    throw new RuntimeException('the index rename could not be reversed');
+                }
+
+                return parent::renameIndex($collection, $old, $new);
+            }
+
+            protected function updateAttributeMeta(string $collection, string $id, callable $updateCallback, bool $triggerEvent = true): Attribute
+            {
+                if ($this->armed && \in_array($id, ['authors_of', 'written'], true)) {
+                    $this->rollbacks[] = (\str_starts_with($collection, '_') ? 'junction' : $collection).' '.$id;
+
+                    throw new RuntimeException('the definition could not be restored');
+                }
+
+                return parent::updateAttributeMeta($collection, $id, $updateCallback, $triggerEvent);
+            }
+        };
+        $this->prepare($database);
+        $database->createRelationship(Relationship::manyToMany(collection: 'books', relatedCollection: 'authors', twoWay: true, key: 'writers', twoWayKey: 'works'));
+        $database->deleteIndex($this->junction($database), '_index_works');
+        $database->armed = true;
+
+        try {
+            $database->updateRelationship('books', 'writers', newKey: 'authors_of', newTwoWayKey: 'written');
+            $this->fail('a rename whose second junction index is gone must fail');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to update relationship indexes for 'writers': Index not found", $error->getMessage());
+            $this->assertInstanceOf(NotFoundException::class, $error->getPrevious());
+        }
+
+        $this->assertSame(['writers->authors_of', 'authors_of->writers'], $renames);
+        $this->assertSame([
+            'index _index_authors_of->_index_writers',
+            'books authors_of',
+            'authors written',
+            'junction authors_of',
+            'junction written',
+        ], $database->rollbacks, 'every rollback step runs although each one fails');
+    }
+
     /**
      * @return list<string>
      */

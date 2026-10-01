@@ -427,6 +427,22 @@ final class RedisAdapterPathsTest extends TestCase
         $this->assertSame(['first'], $this->idsOf($adapter->find($this->notes(), cursor: $cursor, cursorDirection: CursorDirection::Before)));
     }
 
+    public function testRenamingAManyToManyKeyBetweenCollectionsWithoutDefinitionsRenamesNothing(): void
+    {
+        $adapter = $this->adapter();
+        $this->createNotes($adapter);
+        $adapter->createCollection('tags', [Attribute::string(key: 'name', size: 64)]);
+        $before = [$this->strings, $this->sets, $this->hashes];
+
+        $this->assertTrue($adapter->updateRelationship(
+            new Relationship(collection: self::NOTES, relatedCollection: 'tags', type: RelationType::ManyToMany, twoWay: true, key: 'tags', twoWayKey: 'notes', side: RelationSide::Parent),
+            'labels',
+            'entries',
+        ));
+
+        $this->assertSame($before, [$this->strings, $this->sets, $this->hashes], 'without stored definitions there is no junction to rename');
+    }
+
     private function petsDatabase(RelationType $type, string $key, string $twoWayKey, string $from = 'owners', string $to = 'pets'): Database
     {
         $database = $this->database();

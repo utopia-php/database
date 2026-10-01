@@ -14,8 +14,6 @@ use Utopia\Database\Adapter\SQL;
 use Utopia\Database\Adapter\SQLite;
 use Utopia\Database\Collection;
 use Utopia\Database\Database;
-use Utopia\Database\Document;
-use Utopia\Database\Query;
 use Utopia\Database\Validator\Authorization;
 use Utopia\Query\Builder\Statement;
 
@@ -35,15 +33,23 @@ final class UnfilteredAggregateStatementTest extends TestCase
     private array $bindings = [];
 
     /**
-     * @return iterable<string, array{Closure(PDO): SQL, string, string, bool, int|null, string, int|null}>
+     * @return iterable<string, array{Closure(PDO): (SQL&AggregateReference), string, string, bool, int|null, string, int|null}>
      */
     public static function aggregates(): iterable
     {
         $adapters = [
-            'mariadb' => static fn (PDO $pdo): SQL => new MariaDB($pdo),
-            'mysql' => static fn (PDO $pdo): SQL => new MySQL($pdo),
-            'postgres' => static fn (PDO $pdo): SQL => new Postgres($pdo),
-            'sqlite' => static fn (PDO $pdo): SQL => new SQLite($pdo),
+            'mariadb' => static fn (PDO $pdo): SQL&AggregateReference => new class ($pdo) extends MariaDB implements AggregateReference {
+                use BuildsAggregates;
+            },
+            'mysql' => static fn (PDO $pdo): SQL&AggregateReference => new class ($pdo) extends MySQL implements AggregateReference {
+                use BuildsAggregates;
+            },
+            'postgres' => static fn (PDO $pdo): SQL&AggregateReference => new class ($pdo) extends Postgres implements AggregateReference {
+                use BuildsAggregates;
+            },
+            'sqlite' => static fn (PDO $pdo): SQL&AggregateReference => new class ($pdo) extends SQLite implements AggregateReference {
+                use BuildsAggregates;
+            },
         ];
         $tables = [
             'plain' => ['books', null],
@@ -67,7 +73,7 @@ final class UnfilteredAggregateStatementTest extends TestCase
     }
 
     /**
-     * @param  Closure(PDO): SQL  $make
+     * @param  Closure(PDO): (SQL&AggregateReference)  $make
      */
     #[DataProvider('aggregates')]
     public function testAnAggregateWithoutQueriesRunsTheStatementTheBuilderMakes(
@@ -82,52 +88,21 @@ final class UnfilteredAggregateStatementTest extends TestCase
         $adapter = $this->adapter($make, $shared, $tenant, $authorization);
         $document = new Collection(id: $collection, documentSecurity: $authorization === 'document security');
 
-        $expected = $this->built($adapter, $operation, $document, $max);
+        $expected = $adapter->builtAggregate($operation, $document, [], $max);
         $result = $operation === 'count'
             ? $adapter->count($document, [], $max)
             : $adapter->sum($document, 'price', [], $max);
 
         $this->assertSame([$expected->query], $this->statements);
-        $this->assertSame($expected->bindings, $this->bindings);
+        $this->assertSame($adapter->boundValues($expected->bindings), $this->bindings);
         $this->assertSame(5, $result);
     }
 
     /**
-     * The statement the builder makes for an aggregate without queries, as count() and sum()
-     * built it before they wrote it out.
-     */
-    private function built(SQL $adapter, string $operation, Document $collection, ?int $max): Statement
-    {
-        $build = function () use ($operation, $collection, $max): Statement {
-            $name = $this->filter($collection->getId());
-            $builder = $this->newBuilder($name, Query::DEFAULT_ALIAS);
-
-            $perDocument = $collection->getAttribute('documentSecurity', false) || $collection->getId() === Database::METADATA;
-            if ($this->authorization->getStatus() && $perDocument) {
-                $builder->addHook($this->newPermissionHook($name, $this->authorization->getRoles()));
-            }
-
-            if ($max === null) {
-                $operation === 'count' ? $builder->count('1', 'sum') : $builder->sum('price', 'sum');
-
-                return $builder->build();
-            }
-
-            $operation === 'count' ? $builder->selectRaw('1') : $builder->select(['price']);
-            $builder->limit($max);
-            $outer = $this->createBuilder();
-            $outer->fromSub($builder, 'table_count');
-            $operation === 'count' ? $outer->count('1', 'sum') : $outer->sum('price', 'sum');
-
-            return $outer->build();
-        };
-
-        /** @var Statement */
-        return $build->call($adapter);
-    }
-
-    /**
-     * @param  Closure(PDO): SQL  $make
+     * @template T of SQL
+     *
+     * @param  Closure(PDO): T  $make
+     * @return T
      */
     private function adapter(Closure $make, bool $shared, ?int $tenant, string $authorization): SQL
     {

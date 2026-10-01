@@ -19,8 +19,10 @@ use Utopia\Query\Query;
  * only uses an index for a comparison made in the index's collation, so every
  * equality on an id column compares in that collation.
  */
-class SQLite extends Base
+class SQLite extends Base implements Filtering
 {
+    use CompilesFilters;
+
     public const string COLLATION = 'NOCASE';
 
     private const string COLLATE = ' COLLATE '.self::COLLATION;

@@ -12,6 +12,7 @@ use Throwable;
 use Utopia\Console;
 use Utopia\Database\Adapter;
 use Utopia\Database\Attribute;
+use Utopia\Database\Builder\Filtering;
 use Utopia\Database\Capability;
 use Utopia\Database\Change;
 use Utopia\Database\Database;
@@ -49,6 +50,7 @@ use Utopia\Database\RelationType;
 use Utopia\Database\Storage;
 use Utopia\Database\Validator\BigInt;
 use Utopia\Database\Validator\Query\Join as JoinValidator;
+use Utopia\Query\Builder\Condition;
 use Utopia\Query\Builder\Feature\FullOuterJoins as FullOuterJoinsFeature;
 use Utopia\Query\Builder\Feature\InsertOrIgnore as InsertOrIgnoreFeature;
 use Utopia\Query\Builder\Feature\MariaDB\Returning as MariaDBReturning;
@@ -1927,10 +1929,16 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         if ($otherQueries === []) {
-            return $this->countOf($this->fetchUnfilteredAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount));
+            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount));
         }
 
         $builder = $this->newBuilder($name, $alias);
+
+        $filters = $this->compileRowFilters($builder, $otherQueries);
+        if ($filters !== null) {
+            return $this->countOf($this->fetchAggregate($collectionDoc, $name, $roles, 'COUNT(1)', '1', $max, Event::DocumentCount, $filters));
+        }
+
         $this->applyFilters($builder, $otherQueries, $name, $alias);
 
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
@@ -1995,13 +2003,19 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
 
         $attribute = $this->filter($attribute);
 
-        if ($otherQueries === []) {
-            $column = $this->quote($attribute);
+        $column = $this->quote($attribute);
 
-            return $this->sumOf($this->fetchUnfilteredAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum));
+        if ($otherQueries === []) {
+            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum));
         }
 
         $builder = $this->newBuilder($name, $alias);
+
+        $filters = $this->compileRowFilters($builder, $otherQueries);
+        if ($filters !== null) {
+            return $this->sumOf($this->fetchAggregate($collectionDoc, $name, $roles, "SUM({$column})", $column, $max, Event::DocumentSum, $filters));
+        }
+
         $this->applyFilters($builder, $otherQueries, $name, $alias);
 
         if ($this->authorization->getStatus() && $this->filtersPerDocument($collectionDoc)) {
@@ -2152,18 +2166,24 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
     }
 
     /**
-     * The row of a count() or sum() without queries, written out instead of built: the same
-     * statement the builder makes, with the tenant condition newBuilder() adds and the
-     * permission condition of the permission hook, each from the hook itself.
+     * The row of a count() or sum(), written out instead of built: the same statement the builder
+     * makes, with the filters as the builder compiles them, the tenant condition newBuilder() adds
+     * and the permission condition of the permission hook, each from the hook itself, in the order
+     * the builder writes them.
      *
      * @param  array<string>  $roles
      * @return array<string, mixed>
      */
-    private function fetchUnfilteredAggregate(Document $collection, string $name, array $roles, string $aggregate, string $column, ?int $max, Event $event): array
+    private function fetchAggregate(Document $collection, string $name, array $roles, string $aggregate, string $column, ?int $max, Event $event, ?Condition $filters = null): array
     {
         $alias = Query::DEFAULT_ALIAS;
         $conditions = [];
         $bindings = [];
+
+        if ($filters !== null) {
+            $conditions[] = $filters->expression;
+            \array_push($bindings, ...$filters->bindings);
+        }
 
         if ($this->sharedTables) {
             $tenant = (new TenantFilter($this->currentTenant(), Database::METADATA, $name, quoteChar: $this->getIdentifierQuoteChar()))->filter($alias);
@@ -2233,6 +2253,34 @@ abstract class SQL extends Adapter implements Feature\RawQuery, Feature\QueryBui
         }
 
         return 0;
+    }
+
+    /**
+     * The queries of a count() or sum() as the builder compiles them into its WHERE clause, when
+     * every one only narrows the rows and the builder compiles filters on their own; null when the
+     * statement has to be built.
+     *
+     * @param  array<Query>  $queries
+     *
+     * @throws QueryException
+     */
+    private function compileRowFilters(SQLBuilder $builder, array $queries): ?Condition
+    {
+        if (! $builder instanceof Filtering || ! $this->onlyNarrowsRows($queries)) {
+            return null;
+        }
+
+        foreach ($queries as $query) {
+            if ($this->isAdapterFilterQuery($query)) {
+                return null;
+            }
+        }
+
+        try {
+            return $builder->compileFilters(\array_values($queries));
+        } catch (ValidationException|UnsupportedException $e) {
+            throw new QueryException($e->getMessage(), $e->getCode(), $e);
+        }
     }
 
     /**

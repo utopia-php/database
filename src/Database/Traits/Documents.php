@@ -841,6 +841,8 @@ trait Documents
     /**
      * The Collection model of a collection definition's cached copy, as a deep clone of the one built
      * the last time this copy was read: it is built again whenever the copy read differs in any value.
+     * The kept model has its permissions parsed, so its clones start with the parse, which each one
+     * checks against its own permissions before using it.
      * A custom document type for the metadata collection is built on every read, as its constructor
      * may do more than copy the data.
      *
@@ -862,7 +864,13 @@ trait Documents
         if (\count(self::$definitionModels) >= self::DEFINITION_MODELS_LIMIT) {
             self::$definitionModels = [];
         }
-        self::$definitionModels[$documentKey] = ['source' => $cached, 'model' => clone $model];
+        $kept = clone $model;
+        try {
+            $kept->getPermissions();
+        } catch (StructureException) {
+            // Permissions that do not parse fail where a clone's are read, as they would unparsed.
+        }
+        self::$definitionModels[$documentKey] = ['source' => $cached, 'model' => $kept];
 
         return $model;
     }

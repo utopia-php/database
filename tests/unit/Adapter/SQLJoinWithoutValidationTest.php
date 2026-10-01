@@ -84,6 +84,14 @@ final class SQLJoinWithoutValidationTest extends TestCase
         $this->assertCount(3, $rows);
     }
 
+    public function testAJoinWithoutACollectionIsAQueryError(): void
+    {
+        $this->expectException(QueryException::class);
+        $this->expectExceptionMessage("Joined collection '' not found");
+
+        $this->database->find('customers', [Query::join('', '$id', 'customerId')]);
+    }
+
     /**
      * @param list<Attribute> $attributes
      */

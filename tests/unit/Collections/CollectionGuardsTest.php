@@ -257,6 +257,51 @@ final class CollectionGuardsTest extends TestCase
         $this->assertTrue($adapter->exists('guards', 'raced'), 'the table the winner described is kept');
     }
 
+    public function testADefinitionThatCannotBeDeletedKeepsItsFailureWhenTheTableCannotBeRestored(): void
+    {
+        $adapter = new class () extends Memory {
+            public bool $failCreates = false;
+
+            public function createCollection(string $name, array $attributes = [], array $indexes = []): bool
+            {
+                if ($this->failCreates) {
+                    throw new RuntimeException('the table could not be created again');
+                }
+
+                return parent::createCollection($name, $attributes, $indexes);
+            }
+        };
+        $cause = new RuntimeException('the definition could not be deleted');
+        $database = new class ($adapter, new Cache(new None()), $cause) extends Database {
+            public function __construct(Adapter $adapter, Cache $cache, private readonly RuntimeException $cause)
+            {
+                parent::__construct($adapter, $cache);
+            }
+
+            public function deleteDocument(string $collection, string $id): bool
+            {
+                if ($collection === self::METADATA) {
+                    throw $this->cause;
+                }
+
+                return parent::deleteDocument($collection, $id);
+            }
+        };
+        $this->prepare($database);
+        $adapter->failCreates = true;
+
+        try {
+            $database->deleteCollection(self::COLLECTION);
+            $this->fail('a collection whose definition stays must not be reported deleted');
+        } catch (DatabaseException $error) {
+            $this->assertSame("Failed to persist metadata for collection deletion '".self::COLLECTION."': the definition could not be deleted", $error->getMessage());
+            $this->assertSame($cause, $error->getPrevious());
+        }
+
+        $this->assertFalse($adapter->exists('guards', self::COLLECTION), 'the table stays dropped');
+        $this->assertFalse($database->getCollection(self::COLLECTION)->isEmpty(), 'the definition stays');
+    }
+
     private function database(Adapter $adapter): Database
     {
         return $this->prepare(new Database($adapter, new Cache(new None())));

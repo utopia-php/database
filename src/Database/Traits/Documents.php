@@ -3702,7 +3702,7 @@ trait Documents
         }
 
         if (! $isAggregation && ! $distinct) {
-            [$orderAttributes, $orderTypes] = $this->addTieBreaks($orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor));
+            [$orderAttributes, $orderTypes] = $this->addTieBreaks($orderAttributes, $orderTypes, $filters, $joins, $joinedCollections, ! empty($cursor), $selects);
         }
 
         if (! empty($cursor)) {
@@ -4379,14 +4379,19 @@ trait Documents
      * A vector index answers exactly one sort key, the distance: a tie break behind it makes the ordering unanswerable
      * from the index, so tie breaks are only added when a cursor needs a stable page boundary.
      *
+     * A joined `$id` behind the main `$sequence` costs MariaDB and MySQL a sort of the whole join instead of reading
+     * the main table in index order up to the limit, so it is added only where the rows show the join or a cursor
+     * pages them (see showsJoinedRows()).
+     *
      * @param  array<string>  $orderAttributes
      * @param  array<OrderDirection>  $orderTypes
      * @param  array<Query>  $filters
      * @param  array<Query>  $joins
      * @param  array<string, Document>  $joinedCollections
+     * @param  array<Query>  $selects
      * @return array{array<string>, array<OrderDirection>}
      */
-    private function addTieBreaks(array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged): array
+    private function addTieBreaks(array $orderAttributes, array $orderTypes, array $filters, array $joins, array $joinedCollections, bool $paged, array $selects): array
     {
         $uniqueOrderBy = \in_array(Document::ID, $orderAttributes, true) || \in_array(Document::SEQUENCE, $orderAttributes, true);
 
@@ -4413,7 +4418,7 @@ trait Documents
         }
 
         $aliases = \array_keys($joinedCollections);
-        if (\count($aliases) === \count($joins)) {
+        if (\count($aliases) === \count($joins) && ($paged || $this->showsJoinedRows($selects, $joinedCollections))) {
             foreach (\array_values($joins) as $position => $join) {
                 $alias = $aliases[$position];
                 $joinedId = $alias.'.'.Document::ID;
@@ -4464,11 +4469,43 @@ trait Documents
             if ($distinct) {
                 $this->assertDistinctCursorOrder($selects, $orders);
             } else {
-                [$orders] = $this->addTieBreaks($orders, $orderTypes, $filters, $joins, $joinedCollections, true);
+                [$orders] = $this->addTieBreaks($orders, $orderTypes, $filters, $joins, $joinedCollections, true, $selects);
             }
 
             $this->assertCursorHasOrderValues($cursor, $orders);
         };
+    }
+
+    /**
+     * Whether a read's rows show anything of its joins. Rows that select only main attributes are equal for every
+     * joined row they pair the same main document with, so their order is not observable, and they lack the joined
+     * `$id` a cursor over the join has to carry.
+     *
+     * @param  array<Query>  $selects
+     * @param  array<string, Document>  $joinedCollections
+     */
+    private function showsJoinedRows(array $selects, array $joinedCollections): bool
+    {
+        if ($selects === []) {
+            return true;
+        }
+
+        foreach ($selects as $select) {
+            foreach ($select->getValues() as $value) {
+                if (! \is_string($value)) {
+                    continue;
+                }
+                if ($value === '*') {
+                    return true;
+                }
+                $dot = \strpos($value, '.');
+                if ($dot !== false && isset($joinedCollections[\substr($value, 0, $dot)])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /**

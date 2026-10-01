@@ -262,6 +262,9 @@ trait Documents
 
     private const int DOCUMENTS_VALIDATOR_CACHE_LIMIT = 256;
 
+    /** @var array<string, Aggregate> Aggregate validators of sums of declared attributes, by collection schema. */
+    private array $sumValidatorCache = [];
+
     /**
      * Return a DocumentsValidator for the given collection, building it on
      * first request and caching the instance for subsequent calls. The cache
@@ -331,14 +334,21 @@ trait Documents
      */
     private function documentsValidatorCacheKey(Document $collection, string $context, bool $supportForJoins, bool $supportForAggregations): string
     {
-        $fingerprint = \hash('xxh128', \serialize([
+        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.$this->collectionFingerprint($collection);
+    }
+
+    /**
+     * A hash of everything a query validator is built from: the collection's attributes, indexes,
+     * permissions and document security.
+     */
+    private function collectionFingerprint(Document $collection): string
+    {
+        return \hash('xxh128', \serialize([
             'attributes' => $collection->getAttribute('attributes', []),
             'indexes' => $collection->getAttribute('indexes', []),
             'permissions' => $collection->getAttribute(Document::PERMISSIONS, []),
             'documentSecurity' => (bool) $collection->getAttribute('documentSecurity', false),
         ]));
-
-        return $context.'::'.$this->maxQueryValues.'::'.(int) $supportForJoins.(int) $supportForAggregations.(int) $this->adapter->getSharedTables().'::'.$fingerprint;
     }
 
     /**
@@ -4346,9 +4356,12 @@ trait Documents
     {
         /** @var array<Document> $attributes */
         $attributes = $collection->getAttribute('attributes', []);
-        $validator = new Aggregate($attributes, $this->adapter->supports(Capability::DefinedAttributes), $this->adapter->getSharedTables());
+        $supportForAttributes = $this->adapter->supports(Capability::DefinedAttributes);
 
-        if (\str_contains($attribute, '.') || ! $this->declaresSumAttribute($collection, $attribute)) {
+        if (! \str_contains($attribute, '.') && $this->declaresSumAttribute($collection, $attribute)) {
+            $validator = $this->getSumValidator($collection, $attributes, $supportForAttributes);
+        } else {
+            $validator = new Aggregate($attributes, $supportForAttributes, $this->adapter->getSharedTables());
             $joins = [];
             foreach ($this->aliasedJoinCollections($queries, $joinedCollections) as $alias => $joined) {
                 $joins[] = JoinedCollection::of($alias, $joined);
@@ -4359,6 +4372,30 @@ trait Documents
         if (! $validator->isValid(Query::sum($attribute))) {
             throw new QueryException('Invalid query: '.$validator->getDescription());
         }
+    }
+
+    /**
+     * The aggregate validator of a sum of an attribute the collection declares, built once per
+     * collection schema like the documents validators. It is never handed joins, so no state of
+     * one sum reaches the next.
+     *
+     * @param  array<Document>  $attributes
+     */
+    private function getSumValidator(Document $collection, array $attributes, bool $supportForAttributes): Aggregate
+    {
+        $key = $this->getCollectionMetadataCacheKey($collection->getId())
+            .'::'.(int) $supportForAttributes.(int) $this->adapter->getSharedTables()
+            .'::'.$this->collectionFingerprint($collection);
+
+        if (isset($this->sumValidatorCache[$key])) {
+            return $this->sumValidatorCache[$key];
+        }
+
+        if (\count($this->sumValidatorCache) >= self::DOCUMENTS_VALIDATOR_CACHE_LIMIT) {
+            $this->sumValidatorCache = [];
+        }
+
+        return $this->sumValidatorCache[$key] = new Aggregate($attributes, $supportForAttributes, $this->adapter->getSharedTables());
     }
 
     /**

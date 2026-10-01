@@ -508,4 +508,38 @@ class AttributeModelTest extends TestCase
         $this->assertTrue(Attribute::isRelationship(new Document(['type' => ColumnType::Relationship])));
         $this->assertFalse(Attribute::isRelationship(new Document(['type' => ColumnType::String])));
     }
+
+    public function testIsRelationshipReadsAStoredTypeWithoutResolvingTheTypeProperty(): void
+    {
+        $counted = new class () extends Attribute {
+            public int $typeReads = 0;
+
+            public function __get(string $name): mixed
+            {
+                if ($name === 'type') {
+                    $this->typeReads++;
+                }
+
+                return parent::__get($name);
+            }
+        };
+
+        foreach ([ColumnType::Relationship->value, ColumnType::String->value, 'bigint', ColumnType::Relationship, ColumnType::Integer] as $type) {
+            $counted->setAttribute('type', $type);
+            $this->assertSame($type === ColumnType::Relationship->value || $type === ColumnType::Relationship, Attribute::isRelationship($counted));
+        }
+
+        $this->assertSame(0, $counted->typeReads);
+    }
+
+    public function testIsRelationshipStillResolvesATypeItCannotReadDirectly(): void
+    {
+        $attribute = Attribute::string(key: 'title');
+        $attribute->removeAttribute('type');
+        $this->assertFalse(Attribute::isRelationship($attribute));
+
+        $attribute->setAttribute('type', 'nonsense');
+        $this->expectException(\ValueError::class);
+        Attribute::isRelationship($attribute);
+    }
 }

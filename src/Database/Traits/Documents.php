@@ -4417,8 +4417,12 @@ trait Documents
                 : OrderDirection::Asc;
         }
 
+        if ($joins === [] || (! $paged && ! $this->showsJoinedRows($selects, $joinedCollections))) {
+            return [$orderAttributes, $orderTypes];
+        }
+
         $aliases = \array_keys($joinedCollections);
-        if (\count($aliases) === \count($joins) && ($paged || $this->showsJoinedRows($selects, $joinedCollections))) {
+        if (\count($aliases) === \count($joins)) {
             foreach (\array_values($joins) as $position => $join) {
                 $alias = $aliases[$position];
                 $joinedId = $alias.'.'.Document::ID;

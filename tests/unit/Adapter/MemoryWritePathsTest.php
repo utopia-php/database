@@ -15,6 +15,7 @@ use Utopia\Database\Exception\Duplicate as DuplicateException;
 use Utopia\Database\Helpers\Permission;
 use Utopia\Database\Helpers\Role;
 use Utopia\Database\Index;
+use Utopia\Database\Operator;
 use Utopia\Database\Query;
 
 final class MemoryWritePathsTest extends TestCase
@@ -132,6 +133,37 @@ final class MemoryWritePathsTest extends TestCase
         $after = $adapter->getDocument($this->collection(), 'home');
         $this->assertSame(1, $after->getAttribute('visits'));
         $this->assertSame($before->getUpdatedAt(), $after->getUpdatedAt());
+    }
+
+    public function testRollbackOfAnIncrementRemovesTheValueAndTimestampItAdded(): void
+    {
+        $adapter = $this->adapter();
+        $adapter->createDocument($this->collection(), new Document(['$id' => 'home', '$permissions' => [], 'addr' => 'x']));
+        $before = $adapter->getDocument($this->collection(), 'home');
+        $this->assertNull($before->getAttribute('visits'));
+        $this->assertNull($before->getUpdatedAt());
+
+        $adapter->startTransaction();
+        $this->assertTrue($adapter->increaseDocumentAttribute(self::COLLECTION, 'home', 'visits', 5, self::UPDATED_AT));
+        $this->assertSame(5, $adapter->getDocument($this->collection(), 'home')->getAttribute('visits'));
+        $adapter->rollbackTransaction();
+
+        $after = $adapter->getDocument($this->collection(), 'home');
+        $this->assertNull($after->getAttribute('visits'));
+        $this->assertNull($after->getUpdatedAt());
+    }
+
+    public function testADivisionOrModuloByZeroThatSkippedValidationKeepsTheValue(): void
+    {
+        $adapter = $this->adapter();
+        $this->storeAddress($adapter, 'home', 'x', 10);
+
+        foreach (['divide', 'modulo'] as $method) {
+            $operator = Operator::parse('{"method":"'.$method.'","attribute":"visits","values":[0]}');
+            $adapter->updateDocument($this->collection(), 'home', new Document(['$id' => 'home', 'visits' => $operator]), true);
+
+            $this->assertSame(10, $adapter->getDocument($this->collection(), 'home')->getAttribute('visits'), $method);
+        }
     }
 
     public function testIncrementIsANoOpWhenTheStoredValueAlreadyViolatesTheBound(): void
